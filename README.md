@@ -65,7 +65,6 @@ economy from inflating.
 | [docs/pricing-writeup.md](docs/pricing-writeup.md) | Short explainer of the two-force pricing model. |
 | [docs/craftednba-market-model.md](docs/craftednba-market-model.md) | Reverse-engineered CraftedNBA market (their parameters, verified decay, dividend tables) + our recommended improvements. |
 | [docs/PLAN.md](docs/PLAN.md) | Earlier concept-stage plan (positioning, competitive landscape, architecture sketch). Partially superseded by the build spec above. |
-| [index.html](index.html) | Interactive concept explainer / mock — open in a browser. |
 
 ## Build order
 
