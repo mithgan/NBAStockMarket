@@ -81,3 +81,23 @@ From the spec (§12 of the build plan):
 
 Data sourcing: nightly batch from public NBA stats (the installed `espn-pp-cli` covers scores,
 box scores, injuries, and news; advanced metrics need a separate source).
+
+## Prototype commands
+
+This repo now includes the Phase 0 standalone pricing simulation. It is intentionally local and
+deterministic: no network calls, no UI, no external database.
+
+Run the verifier:
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+Run the sim and write a comparison artifact:
+
+```bash
+python3 -m nba_stock_market.simulation --seed 1337 --days 45 --output output/sim-summary.json
+```
+
+The sim compares pure crowd pricing against crowd + fair-value gravity, using nine real players
+across star/mid/bench tiers and mock trader behaviors.

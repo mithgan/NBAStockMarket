@@ -1,0 +1,8 @@
+[project]
+name = "nba-stock-market"
+version = "0.1.0"
+description = "Standalone NBA player stock-market pricing simulation."
+requires-python = ">=3.11"
+
+[tool.setuptools]
+packages = ["nba_stock_market"]
