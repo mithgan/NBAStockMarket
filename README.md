@@ -1,16 +1,44 @@
 # NBA Talent Market
 
 A persistent, skill-based **fantasy stock market for NBA players**, played with in-platform
-(fake) cash. Users buy and sell shares of players; prices move with both **market demand** and
-**real on-court performance**; holding good players pays **cash dividends** tied to real NBA
-results. Everyone starts with $10,000 and competes on a leaderboard by net worth. It never
+(fake) cash. Users buy and sell shares of players; prices move with **market demand**, while
+**real on-court performance versus expectation** pays signed cash dividends tied to NBA
+results. Everyone starts with $140,000,000 and competes on a leaderboard by net worth. It never
 resets — it's a long game of being right about players before the crowd is.
 
 No real money, no cash-out — which keeps it out of gambling/securities territory entirely.
 
-## The core idea: two-force pricing
+## Economy v2
 
-A player's price is a tug-of-war between two forces:
+Engine v2 uses a **$140,000,000 virtual bankroll** and salary-like per-share prices: roughly
+$40–70M for stars, $15–30M for rotation players, and $2–12M for bench players. Each player
+still has 100 shares, each user may own at most 40%, and trading fees, flip penalties, the
+small idle-cash sink, listing grace period, inactivity decay, and a salary-scale minimum price
+floor remain in force.
+
+Price is now supply and demand plus inactivity decay. Fair-value reversion remains available
+as an experiment, but its default rate is **0**; it is not part of the v1 economy. On-court
+performance reaches holders through a daily actual-versus-expected dividend:
+
+```
+dividend_per_share = (actual_net_points - expected_net_points)
+                   × $100,000 / 100 shares
+```
+
+Exact expectation pays $0 and underperformance produces a negative dividend. The
+`NET_POINTS_TO_DOLLARS = $100,000` calibration means a +5 game creates $500,000 of value
+across all 100 shares, or $5,000 per share. For scale, two shares of a ~$50M star earning that
+payout across 82 games would add $820,000; ten shares distributed across a salary-scale
+portfolio would add $4.1M. The constant is intentionally explicit so the next backtest can tune it. The
+box-score-to-net-points model is transparent and swappable, as is the injected expectation
+source; the engine does not fetch projections itself.
+
+Award and season-end WARP dividends remain in the code for optional experiments, but are
+dormant and outside the daily Engine v2 flow.
+
+## The core idea: demand plus performance dividends
+
+A player's price responds directly to trading demand:
 
 **Force A — Demand (short-term).** Every trade moves the price. Buys push it up, sells push it
 down, scaled by the player's liquidity/depth `L` so thin names can't be cheaply manipulated:
@@ -19,16 +47,15 @@ down, scaled by the player's liquidity/depth `L` so thin names can't be cheaply 
 P ← P × exp( k × shares / L )        # +shares = buy, −shares = sell, k ≈ 0.0003
 ```
 
-**Force B — Performance gravity (long-term).** Each player has a **live fair value (FV)**
-recomputed from real basketball stats (rolling WARP, minutes, age curve, recent form). Daily,
-the price is pulled a small step toward it:
+Performance does not automatically rewrite that price. Instead, a game settles against an
+injected expectation and credits or debits current holders. Optional fair-value reversion can
+still be enabled to compare experimental economies:
 
 ```
-P ← P + λ × (FV − P)                 # λ ≈ 0.03/day
+P ← P + λ × (FV − P)                 # default λ = 0
 ```
 
-Short-term, the crowd leads. Long-term, reality wins. Being right about a player **before the
-crowd pays twice**: once when demand catches up, again when the stats confirm it.
+The crowd sets the tradable price; beating the public projection pays holders daily.
 
 ## Why this design
 
@@ -38,23 +65,24 @@ demand-driven** — performance never touches the price, `fairValue` is frozen a
 and untraded players just decay −0.5%/day. It's a popularity contest with a dividend coupon
 stapled on.
 
-Our build keeps what works (exponential impact, 1% fee, dividends, $10k equal start) and fixes
-the flaws: a **live** fair value anchors every price to reality, mean reversion replaces the
-decay hack, liquidity-scaled impact resists whale manipulation, and explicit sinks keep the
-economy from inflating.
+Engine v2 keeps exponential impact, fees, dividends, and equal starts while moving to the
+$140M salary scale. Daily surprise dividends carry the performance signal; liquidity-scaled
+impact resists whale manipulation, and explicit sinks help control inflation.
 
 ## Key mechanics at a glance
 
 | Mechanic | Rule |
 |---|---|
-| Starting bankroll | $10,000 for everyone; score = cash + (shares × price) |
+| Starting bankroll | $140,000,000 for everyone; score = cash + (shares × price) |
 | Execution | Single price, no spread; 1% fee on every buy and sell |
 | Anti-churn | Escalating flip penalty on same-player round-trips within 24h |
 | Anti-cornering | Per-user ownership cap (~40% of a player's 100 shares) |
-| Floor | `max(0.5 × FV, $25)` — tracks live value, nobody gets zeroed |
+| Price drift | Supply/demand plus inactivity decay after the listing grace period |
+| Fair-value reversion | Default off (`0`); retained only as an experiment |
+| Floor | $350,000 absolute minimum (the old $25 floor scaled by 14,000×) |
 | IPOs | Model-seeded fair value + opening auction; 7-day grace period |
-| Award dividends | Cash per share for real honors (MVP $15 … Player of Week $1) |
-| Season dividend | `(WARP + 2.15) × minutes × 0.0005102` per share |
+| Daily dividend | `(actual net points − expected net points) × $100,000 / 100` per share |
+| Award/WARP dividends | Optional/dormant; not part of the daily v1 economy |
 | Economy | Dividends are faucets; fees, flip penalties, idle-cash fee are sinks |
 
 ## Docs
@@ -70,10 +98,10 @@ economy from inflating.
 
 From the spec (§12 of the build plan):
 
-1. **Phase 0 — Engine prototype**: pure Python + SQLite. Trade execution, daily FV pass,
+1. **Phase 0 — Engine prototype**: pure Python + SQLite. Trade execution, daily performance
    dividends, and a synthetic-season simulation proving the economy is stable.
 2. **Phase 1 — API + persistence** (FastAPI/Express): players, trades, portfolio, leaderboard.
-3. **Phase 2 — Stats pipeline**: nightly real-NBA stats pull → FV inputs → daily reversion pass.
+3. **Phase 2 — Stats pipeline**: nightly real-NBA results and projected box-score inputs.
 4. **Phase 3 — Frontend**: player board, charts, trade modal, portfolio P&L, leaderboard.
 5. **Phase 4 — Dividends & seasons**: award ingestion + season-end WARP dividend run.
 6. **Phase 5 — Integrity**: wash-trade detection, dividend anti-sniping, sinks.
@@ -90,7 +118,7 @@ deterministic: no network calls, no UI, no external database.
 Run the verifier:
 
 ```bash
-python3 -m unittest discover -s tests
+python3 -m pytest -q
 ```
 
 Run the sim and write a comparison artifact:
@@ -99,5 +127,6 @@ Run the sim and write a comparison artifact:
 python3 -m nba_stock_market.simulation --seed 1337 --days 45 --output output/sim-summary.json
 ```
 
-The sim compares pure crowd pricing against crowd + fair-value gravity, using nine real players
-across star/mid/bench tiers and mock trader behaviors.
+The entrypoint compares default pure-crowd pricing with two explicitly configured
+fair-value-reversion experiments. Every variant uses deterministic fake game results and nine
+real players across star/mid/bench salary tiers; the v1/default market remains reversion-free.

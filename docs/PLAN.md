@@ -6,6 +6,34 @@ before the market does** — not by predicting box scores.
 
 > **Status:** concept stage. This document is the working plan; `index.html` is the interactive explainer/mock.
 
+## Economy v2 (current engine; overrides legacy economy notes below)
+
+The planning call moved the playable economy to NBA salary scale. Every user starts with
+**$140,000,000** in virtual cash, player shares resemble salaries (stars ~$40–70M, rotation
+players ~$15–30M, bench players ~$2–12M), and each player has 100 shares with a 40% per-user
+ownership cap. The 1% trading fee, escalating flip penalty, small idle-cash sink, seven-day
+listing grace period, inactivity decay, and a rescaled minimum price floor remain.
+
+Price is set by supply and demand plus inactivity decay. Fair-value reversion is retained as a
+configurable research knob but defaults to **0/off**. The performance signal instead settles
+after each game as a cash dividend (or debit) to holders:
+
+```
+dividend_per_share = (actual_net_points - expected_net_points)
+                   * NET_POINTS_TO_DOLLARS / 100
+NET_POINTS_TO_DOLLARS = $100,000
+```
+
+Thus exact expectation pays $0, a +5 surprise produces $500,000 across all shares ($5,000 per
+share), and a −5 surprise symmetrically removes that amount. Two shares of a ~$50M star earning
+that payout across 82 games would add $820,000, while ten shares distributed across a
+salary-scale portfolio would add $4.1M. A backtest will tune this calibration constant.
+
+The net-points model uses documented, swappable linear box-score weights. Expected net points
+or an expected box score comes from an injected expectation-source interface; the production
+source may later use Dunks & Threes, but Engine v2 makes no network call. Award and season-end
+WARP dividends remain optional/dormant and are not part of the daily v1 economy.
+
 ---
 
 ## 1. Core design decisions (locked)
