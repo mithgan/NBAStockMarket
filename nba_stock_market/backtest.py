@@ -518,7 +518,11 @@ def _build_report(
             "portfolio_size": 10,
             "seed": seed,
             "expectation_window": expectation_window,
-            "expectation_fallback_count": replay.expectation_fallback_count,
+            **(
+                {"expectation_fallback_count": replay.expectation_fallback_count}
+                if expectation_model == "dnt"
+                else {}
+            ),
             "expectation": (
                 (
                     f"mean of the player's prior {expectation_window} played games; "
