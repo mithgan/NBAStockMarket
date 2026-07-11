@@ -7,4 +7,7 @@ __pycache__/
 build/
 dist/
 *.egg-info/
-output/
+data/raw/
+output/*
+!output/backtest-2026.md
+!output/backtest-2026.json
