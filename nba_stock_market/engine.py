@@ -10,21 +10,17 @@ from typing import Protocol, Union, runtime_checkable
 STARTING_CASH = 140_000_000.0
 FEE_PCT = 0.01
 SHARES_OUT = 100
+MAX_SHARES_PER_USER_PER_PLAYER = 1
 IMPACT_K = 0.0003
 REVERSION_RATE = 0.0
-OWNERSHIP_CAP = 0.40
 IDLE_CASH_FEE = 0.0002
 MIN_PRICE_FLOOR = 350_000.0
 GRACE_DAYS = 7
 INACTIVITY_DECAY_RATE = 0.005
 
-# A five-net-point surprise creates $500,000 across all 100 shares, or
-# $5,000 per share.  Two shares of a $50M star earning that surprise in all
-# 82 games would pay $820,000; ten shares distributed across a salary-scale
-# portfolio would pay $4.1M.  The result is meaningful but remains a
-# single-digit-million season outcome for a typical portfolio.
-# Backtesting can replace this calibration without changing the dividend API.
-NET_POINTS_TO_DOLLARS = 100_000.0
+# PROVISIONAL pending Mith's NBA-12 calibration. With 100 float shares, this
+# is $40,000 per net point per holder, so a +20 surprise pays one holder $800K.
+NET_POINTS_TO_DOLLARS = 4_000_000.0
 
 DIVIDEND_OFFSET = 2.15
 DIVIDEND_SCALE = 0.0005102
@@ -263,7 +259,7 @@ class Market:
         impact_k: float = IMPACT_K,
         reversion_rate: float = REVERSION_RATE,
         fee_pct: float = FEE_PCT,
-        ownership_cap: float = OWNERSHIP_CAP,
+        max_shares_per_user_per_player: int = MAX_SHARES_PER_USER_PER_PLAYER,
         idle_cash_fee: float = IDLE_CASH_FEE,
         grace_days: int = GRACE_DAYS,
         inactivity_decay_rate: float = INACTIVITY_DECAY_RATE,
@@ -281,7 +277,19 @@ class Market:
         self.impact_k = self._finite_value("impact_k", impact_k)
         self.reversion_rate = self._rate("reversion_rate", reversion_rate)
         self.fee_pct = self._rate("fee_pct", fee_pct)
-        self.ownership_cap = self._rate("ownership_cap", ownership_cap)
+        if (
+            type(max_shares_per_user_per_player) is not int
+            or max_shares_per_user_per_player <= 0
+        ):
+            raise ValueError("max_shares_per_user_per_player must be a positive integer")
+        self.max_shares_per_user_per_player = max_shares_per_user_per_player
+        for user in self.users.values():
+            for player_id, shares in user.holdings.items():
+                if shares > self.max_shares_per_user_per_player:
+                    raise ValueError(
+                        f"holding for {player_id} exceeds per-user holding cap of "
+                        f"{self.max_shares_per_user_per_player}"
+                    )
         self.idle_cash_fee = self._rate("idle_cash_fee", idle_cash_fee)
         self.inactivity_decay_rate = self._rate("inactivity_decay_rate", inactivity_decay_rate)
         if type(grace_days) is not int or grace_days < 0:
@@ -338,9 +346,14 @@ class Market:
             fee += notional * 0.02 * (1 + self._roundtrips_last_7d(user, player_id))
 
         if normalized_side is TradeSide.BUY:
-            max_user_shares = int(self.ownership_cap * player.shares_outstanding)
-            if user.shares(player_id) + quantity > max_user_shares:
-                raise TradeError("ownership cap exceeded")
+            if (
+                user.shares(player_id) + quantity
+                > self.max_shares_per_user_per_player
+            ):
+                raise TradeError(
+                    "per-user holding cap exceeded: "
+                    f"maximum {self.max_shares_per_user_per_player} share(s) per player"
+                )
             if self.total_held_shares(player_id) + quantity > player.shares_outstanding:
                 raise TradeError("not enough remaining float")
             if user.cash < notional + fee:

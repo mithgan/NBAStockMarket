@@ -12,7 +12,8 @@ No real money, no cash-out — which keeps it out of gambling/securities territo
 
 Engine v2 uses a **$140,000,000 virtual bankroll** and salary-like per-share prices: roughly
 $40–70M for stars, $15–30M for rotation players, and $2–12M for bench players. Each player
-still has 100 shares, each user may own at most 40%, and trading fees, flip penalties, the
+has a 100-share float, but **one share represents the whole player at his listed salary** and
+each user may hold at most one share of a given player. Trading fees, flip penalties, the
 small idle-cash sink, listing grace period, inactivity decay, and a salary-scale minimum price
 floor remain in force.
 
@@ -22,14 +23,14 @@ performance reaches holders through a daily actual-versus-expected dividend:
 
 ```
 dividend_per_share = (actual_net_points - expected_net_points)
-                   × $100,000 / 100 shares
+                   × $4,000,000 / 100 shares
 ```
 
 Exact expectation pays $0 and underperformance produces a negative dividend. The
-`NET_POINTS_TO_DOLLARS = $100,000` calibration means a +5 game creates $500,000 of value
-across all 100 shares, or $5,000 per share. For scale, two shares of a ~$50M star earning that
-payout across 82 games would add $820,000; ten shares distributed across a salary-scale
-portfolio would add $4.1M. The constant is intentionally explicit so the next backtest can tune it. The
+`NET_POINTS_TO_DOLLARS = $4,000,000` means $40,000 per net point per holder, so a +20
+surprise pays that holder about $800,000. This is **PROVISIONAL pending Mith's NBA-12
+calibration**. Cached Dunks & Threes pregame projections are the canonical expectation source;
+`trailing`, `projection`, and `production` remain comparison modes. The
 box-score-to-net-points model is transparent and swappable, as is the injected expectation
 source; the engine does not fetch projections itself.
 
@@ -76,12 +77,12 @@ impact resists whale manipulation, and explicit sinks help control inflation.
 | Starting bankroll | $140,000,000 for everyone; score = cash + (shares × price) |
 | Execution | Single price, no spread; 1% fee on every buy and sell |
 | Anti-churn | Escalating flip penalty on same-player round-trips within 24h |
-| Anti-cornering | Per-user ownership cap (~40% of a player's 100 shares) |
+| Roster / anti-cornering | One whole-player share at listed salary; max one per player per user |
 | Price drift | Supply/demand plus inactivity decay after the listing grace period |
 | Fair-value reversion | Default off (`0`); retained only as an experiment |
 | Floor | $350,000 absolute minimum (the old $25 floor scaled by 14,000×) |
 | IPOs | Model-seeded fair value + opening auction; 7-day grace period |
-| Daily dividend | `(actual net points − expected net points) × $100,000 / 100` per share |
+| Daily dividend | D&T-projected vs actual; `$40,000 × surprise net points` per holder (provisional NBA-12) |
 | Award/WARP dividends | Optional/dormant; not part of the daily v1 economy |
 | Economy | Dividends are faucets; fees, flip penalties, idle-cash fee are sinks |
 

@@ -5,6 +5,7 @@ import unittest
 from datetime import date
 
 from nba_stock_market.engine import (
+    MAX_SHARES_PER_USER_PER_PLAYER,
     MIN_PRICE_FLOOR,
     NET_POINTS_TO_DOLLARS,
     REVERSION_RATE,
@@ -32,6 +33,19 @@ class PricingEngineTest(unittest.TestCase):
         self.assertEqual(STARTING_CASH, 140_000_000.0)
         self.assertEqual(User("new_user").cash, 140_000_000.0)
         self.assertEqual(SHARES_OUT, 100)
+        self.assertEqual(MAX_SHARES_PER_USER_PER_PLAYER, 1)
+
+    def test_second_share_of_same_player_is_rejected_but_sell_and_rebuy_is_legal(self) -> None:
+        market = Market(
+            [Player("jokic", "Nikola Jokic", "star", 68_000_000.0, 68_000_000.0)],
+            [User("holder")],
+        )
+        market.execute_trade("holder", "jokic", TradeSide.BUY, 1)
+        with self.assertRaisesRegex(TradeError, "per-user holding cap"):
+            market.execute_trade("holder", "jokic", TradeSide.BUY, 1)
+        market.execute_trade("holder", "jokic", TradeSide.SELL, 1)
+        market.execute_trade("holder", "jokic", TradeSide.BUY, 1)
+        self.assertEqual(market.users["holder"].shares("jokic"), 1)
 
     def test_reversion_is_off_by_default(self) -> None:
         market = Market(
@@ -91,9 +105,25 @@ class PricingEngineTest(unittest.TestCase):
         self.assertAlmostEqual(event.dividend_per_share, 0.0)
         self.assertAlmostEqual(event.total_cash_change, 0.0)
 
+    def test_provisional_dividend_pays_800k_for_twenty_point_surprise(self) -> None:
+        holder = User("holder", holdings={"p": 1})
+        market = Market(
+            [Player("p", "Holder Player", "star", 50_000_000.0, 50_000_000.0)],
+            [holder],
+        )
+        event = market.pay_daily_performance_dividend(
+            "p", actual_net_points=40.0, expected_net_points=20.0
+        )
+        self.assertEqual(event.dividend_per_share, 800_000.0)
+        self.assertEqual(holder.cash - STARTING_CASH, 800_000.0)
+
     def test_daily_dividend_positive_and_negative_results_are_symmetric(self) -> None:
         holder = User("holder", holdings={"p": 4})
-        market = Market([Player("p", "Symmetry Player", "star", 50_000_000.0, 50_000_000.0)], [holder])
+        market = Market(
+            [Player("p", "Symmetry Player", "star", 50_000_000.0, 50_000_000.0)],
+            [holder],
+            max_shares_per_user_per_player=4,
+        )
         opening_cash = holder.cash
         positive = market.pay_daily_performance_dividend(
             "p", actual_net_points=20.0, expected_net_points=15.0
@@ -111,6 +141,7 @@ class PricingEngineTest(unittest.TestCase):
         market = Market(
             [Player("p", "Proportional Player", "star", 50_000_000.0, 50_000_000.0)],
             [one_share, three_shares],
+            max_shares_per_user_per_player=3,
         )
         event = market.pay_daily_performance_dividend(
             "p", actual_net_points=22.0, expected_net_points=20.0
@@ -144,21 +175,26 @@ class PricingEngineTest(unittest.TestCase):
             [User("u")],
             grace_days=0,
         )
-        buy = market.execute_trade("u", "p", TradeSide.BUY, 5)
+        buy = market.execute_trade("u", "p", TradeSide.BUY, 1)
         self.assertGreater(buy.new_price, buy.execution_price)
-        sell = market.execute_trade("u", "p", TradeSide.SELL, 3)
+        sell = market.execute_trade("u", "p", TradeSide.SELL, 1)
         self.assertLess(sell.new_price, buy.new_price)
 
     def test_doc_price_impact_examples(self) -> None:
         shallow = Market(
             [Player("p", "Example Player", "mid", 10_000_000.0, 10_000_000.0)],
             [User("u", cash=300_000_000.0)],
+            max_shares_per_user_per_player=20,
         )
         trade = shallow.execute_trade("u", "p", TradeSide.BUY, 20)
         self.assertAlmostEqual(trade.new_price, 10_060_180.36, places=2)
 
         deep_player = Player("p", "Deep Player", "mid", 10_000_000.0, 10_000_000.0, volume_30d=80.0)
-        deep = Market([deep_player], [User("u", cash=300_000_000.0)])
+        deep = Market(
+            [deep_player],
+            [User("u", cash=300_000_000.0)],
+            max_shares_per_user_per_player=20,
+        )
         trade = deep.execute_trade("u", "p", TradeSide.BUY, 20)
         self.assertAlmostEqual(trade.new_price, 10_012_007.20, places=2)
 
@@ -263,15 +299,16 @@ class PricingEngineTest(unittest.TestCase):
         self.assertEqual(market.users["u"].cash, cash_after_buy)
         self.assertEqual(market.users["u"].shares("p"), shares_after_buy)
 
-    def test_ownership_cap_rejects_oversized_position(self) -> None:
+    def test_per_user_holding_cap_rejects_second_share(self) -> None:
         market = Market([Player("p", "Cap Player", "star", 2_000_000.0, 2_000_000.0)], [User("u")])
         with self.assertRaises(TradeError):
-            market.execute_trade("u", "p", TradeSide.BUY, 41)
+            market.execute_trade("u", "p", TradeSide.BUY, 2)
 
     def test_aggregate_float_cannot_be_oversubscribed(self) -> None:
         market = Market(
             [Player("p", "Float Player", "star", 2_000_000.0, 2_000_000.0)],
             [User("u1"), User("u2"), User("u3")],
+            max_shares_per_user_per_player=40,
         )
         market.execute_trade("u1", "p", TradeSide.BUY, 40)
         market.execute_trade("u2", "p", TradeSide.BUY, 40)
@@ -282,7 +319,7 @@ class PricingEngineTest(unittest.TestCase):
 
     def test_flip_penalty_adds_extra_fee(self) -> None:
         market = Market([Player("p", "Churn Player", "mid", 2_000_000.0, 2_000_000.0)], [User("u")])
-        market.execute_trade("u", "p", TradeSide.BUY, 10)
+        market.execute_trade("u", "p", TradeSide.BUY, 1)
         sell = market.execute_trade("u", "p", TradeSide.SELL, 1)
         self.assertGreater(sell.fee, sell.execution_price * 0.01)
 
@@ -292,7 +329,7 @@ class PricingEngineTest(unittest.TestCase):
             [User("u")],
             reversion_rate=0.0,
         )
-        market.execute_trade("u", "p", TradeSide.BUY, 10)
+        market.execute_trade("u", "p", TradeSide.BUY, 1)
         market.execute_trade("u", "p", TradeSide.SELL, 1)
         for _ in range(8):
             market.advance_day(apply_idle_fee=False)
@@ -302,7 +339,7 @@ class PricingEngineTest(unittest.TestCase):
 
     def test_portfolio_value_is_cash_plus_holdings(self) -> None:
         market = Market([Player("p", "Portfolio Player", "mid", 10_000_000.0, 10_000_000.0)], [User("u")])
-        market.execute_trade("u", "p", TradeSide.BUY, 2)
+        market.execute_trade("u", "p", TradeSide.BUY, 1)
         user = market.users["u"]
         expected = user.cash + user.shares("p") * market.players["p"].current_price
         self.assertAlmostEqual(market.portfolio_value("u"), expected)

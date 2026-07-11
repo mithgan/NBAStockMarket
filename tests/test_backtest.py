@@ -143,6 +143,16 @@ class BacktestReplayTest(unittest.TestCase):
     def test_money_rounding_canonicalizes_negative_zero(self) -> None:
         self.assertEqual(math.copysign(1.0, _round_money(-0.001)), 1.0)
 
+    def test_cli_defaults_to_dnt_expectation(self) -> None:
+        report = {"money_supply": {"net_inflation": 1.0, "final_portfolio_wealth": 2.0}}
+        with (
+            patch("sys.argv", ["backtest"]),
+            patch("nba_stock_market.backtest.run_backtest", return_value=report) as run,
+        ):
+            main()
+
+        self.assertEqual(run.call_args.kwargs["expectation_model"], "dnt")
+
     def test_cli_expectation_flag_selects_projection_source(self) -> None:
         report = {
             "money_supply": {
@@ -234,7 +244,7 @@ class BacktestReplayTest(unittest.TestCase):
 
     def test_replay_integrates_engine_dividends_and_updates_expectation_after_game(self) -> None:
         player = Player("p", "Replay Player", "star", 40_000_000, 40_000_000)
-        holder = User("holder", cash=100_000_000, holdings={"p": 2})
+        holder = User("holder", cash=100_000_000, holdings={"p": 1})
         source = TrailingMeanExpectation(window=10)
         market = Market(
             [player],
@@ -250,7 +260,7 @@ class BacktestReplayTest(unittest.TestCase):
         prior = salary_implied_net_points(player.current_price)
         expected_cash_change = (
             (20.0 - prior) + (24.0 - 20.0)
-        ) * market.net_points_to_dollars / 100 * 2
+        ) * market.net_points_to_dollars / 100
 
         summary = replay_game_records(market, games, source)
 

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from nba_stock_market.engine import (
+    MAX_SHARES_PER_USER_PER_PLAYER,
     NET_POINTS_TO_DOLLARS,
     SHARES_OUT,
     STARTING_CASH,
@@ -172,13 +173,16 @@ def build_synthetic_users(
             holdings = rng.sample(players, 10)
             invested = sum(player.salary for player in holdings)
             if invested <= STARTING_CASH:
-                users.append(
-                    User(
-                        id=f"portfolio-{index + 1:03d}",
-                        cash=STARTING_CASH - invested,
-                        holdings={player.player_id: 1 for player in holdings},
-                    )
+                user = User(
+                    id=f"portfolio-{index + 1:03d}",
+                    cash=STARTING_CASH - invested,
+                    holdings={player.player_id: 1 for player in holdings},
                 )
+                assert all(
+                    shares <= MAX_SHARES_PER_USER_PER_PLAYER
+                    for shares in user.holdings.values()
+                )
+                users.append(user)
                 break
         else:
             raise ValueError("could not construct a ten-player portfolio within the bankroll")
@@ -419,25 +423,17 @@ def _build_report(
         and item.actual_net_points > item.expected_net_points
     ]
     great_game_surprise = _percentile(star_positive_surprises, 0.90)
-    great_game_payout = great_game_surprise * NET_POINTS_TO_DOLLARS
-    calibration_distance = max(
-        great_game_payout / 800_000,
-        800_000 / great_game_payout,
-    )
-    candidate_constant = 800_000 / great_game_surprise
+    great_game_payout = great_game_surprise * NET_POINTS_TO_DOLLARS / SHARES_OUT
     calibration = {
-        "definition": "90th-percentile positive star surprise; payout is across all 100 shares",
-        "target_full_float_payout": 800_000.0,
+        "status": "PROVISIONAL pending Mith's calibration (NBA-12)",
+        "definition": "one holder receives $40,000 per net-point surprise",
+        "target_surprise_net_points": 20.0,
+        "target_per_holder_payout": 800_000.0,
         "great_game_surprise_net_points": round(great_game_surprise, 4),
         "current_net_points_to_dollars": NET_POINTS_TO_DOLLARS,
-        "current_great_game_full_float_payout": _round_money(great_game_payout),
-        "candidate_net_points_to_dollars": _round_money(candidate_constant),
-        "distance_from_target_multiple": round(calibration_distance, 4),
-        "decision": (
-            "retain current constant; empirical payout is within 2x of target"
-            if calibration_distance <= 2
-            else "calibration required; current constant is more than 2x from target"
-        ),
+        "dividend_per_net_point_per_share": NET_POINTS_TO_DOLLARS / SHARES_OUT,
+        "current_great_game_per_holder_payout": _round_money(great_game_payout),
+        "decision": "apply the team's provisional +20 NP = $800K per-holder target",
         "applied_net_points_to_dollars": NET_POINTS_TO_DOLLARS,
         "tiers": tier_metrics,
     }
@@ -516,6 +512,8 @@ def _build_report(
             "calendar_days": replay.calendar_day_count,
             "portfolio_count": len(market.users),
             "portfolio_size": 10,
+            "max_shares_per_user_per_player": MAX_SHARES_PER_USER_PER_PLAYER,
+            "expectation_model": expectation_model,
             "seed": seed,
             "expectation_window": expectation_window,
             **(
@@ -585,6 +583,11 @@ def _render_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# NBA Stock Market 2025-26 Backtest",
         "",
+        "**DECIDED DESIGN (Russ, Discord 7/12): one salary-priced share is the whole player; "
+        "each user may hold at most one share per player; dividends settle actual game logs "
+        "against cached Dunks & Threes pregame projections. The $40,000 per net point per "
+        "holder rate is PROVISIONAL pending Mith's NBA-12 calibration.**",
+        "",
         "This deterministic replay covers the 1,230-game 2025-26 NBA regular season. "
         "The universe is the top 150 players by final regular-season minutes. One hundred "
         "synthetic users each begin at $140M and hold one share of 10 unique players. "
@@ -595,7 +598,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
         "",
         f"- Actuals: {metadata['source_player_game_count']:,} played player-games from {sources['actuals']['provider']} game summaries ({metadata['source_game_count']:,} games).",
         f"- Salaries: `{sources['salaries']['primary_repository']}` `{sources['salaries']['primary_file']}` at commit `{sources['salaries']['primary_commit'][:7]}`; missing names filled from the pinned fallback snapshot.",
-        f"- Expectation: {metadata['expectation']}. A 10-game window balances recent role/form against single-game noise; before game 1 the prior is `{metadata['salary_prior_formula']}`.",
+        f"- Expectation: {metadata['expectation']}.",
         f"- Replay: {metadata['universe_player_games']:,} universe player-games on {metadata['game_days']} game days, with {metadata['calendar_days']} calendar-day idle-fee passes.",
         "- Payout conventions: per-share amounts are what one holder receives; full-float amounts are the same result across all 100 shares.",
         "",
@@ -617,7 +620,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
         "",
         "## B. Calibration",
         "",
-        f"A great game is defined before inspection as the 90th-percentile positive surprise by a star: **+{calibration['great_game_surprise_net_points']:.2f} net points**. At the current `${calibration['current_net_points_to_dollars']:,.0f}` constant that pays **{_money(calibration['current_great_game_full_float_payout'])} across the float**, versus the $800K target. The candidate exact-fit constant is `${calibration['candidate_net_points_to_dollars']:,.0f}`. Decision: **{calibration['decision']}**.",
+        f"**{calibration['status']}.** The decided provisional rate is **{_money(calibration['dividend_per_net_point_per_share'])} per net point per holder**, so a +20 surprise pays **{_money(calibration['target_per_holder_payout'])}**. The observed 90th-percentile positive star surprise is +{calibration['great_game_surprise_net_points']:.2f} NP, paying {_money(calibration['current_great_game_per_holder_payout'])} to one holder.",
         "",
         "| Tier | Players | Games | Typical absolute game / share | Typical positive game / full float | Median signed season / share | Median signed season / full float |",
         "|---|---:|---:|---:|---:|---:|---:|",
@@ -647,7 +650,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "The ranking is signed surprise versus each player's own trailing baseline, not raw scoring. Rising/outperforming players lead; slow starts, declining roles, and poor games following hot runs debit holders. Injuries themselves create no game event, but reduced post-return performance can cost holders.",
+            "The ranking is signed surprise versus Dunks & Threes pregame projections, not raw scoring. Players who outperform those projections lead; underperformance debits holders. Injuries themselves create no game event.",
             "",
             "## D. Portfolio spread",
             "",
@@ -675,7 +678,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
         [
             "## Reproduction and caveats",
             "",
-            "The data downloader caches raw provider JSON and normalized CSV under ignored `data/raw/`; the backtest itself performs no network calls. Universe selection uses final-season minutes (appropriate for economy evaluation, not a preseason trading strategy). Salary is a season-level listing anchor, prices are fixed, portfolios hold one share per name, and negative dividends may reduce cash. Dunks & Threes is intentionally not called.",
+            "All ESPN actuals and Dunks & Threes projections are cached; the backtest performs no network calls. Universe selection uses final-season minutes (appropriate for economy evaluation, not a preseason trading strategy). Salary is a season-level listing price, prices are fixed, portfolios respect the one-share-per-user-per-player cap, and negative dividends may reduce cash.",
             "",
         ]
     )
@@ -689,7 +692,7 @@ def run_backtest(
     seed: int = 2026,
     portfolio_count: int = 100,
     expectation_window: int = 10,
-    expectation_model: str = "trailing",
+    expectation_model: str = "dnt",
 ) -> dict[str, Any]:
     from nba_stock_market.historical_data import load_game_records
 
@@ -749,18 +752,11 @@ def run_backtest(
         expectation_model=expectation_model,
         source_manifest=source_manifest,
     )
-    if (
-        expectation_model == "trailing"
-        and report["calibration"]["distance_from_target_multiple"] > 2
-    ):
-        raise RuntimeError(
-            "NET_POINTS_TO_DOLLARS is more than 2x from the $800K target; update the engine constant and rerun"
-        )
     output_dir.mkdir(parents=True, exist_ok=True)
     output_stem = (
-        f"backtest-2026-{expectation_model}"
-        if expectation_model in {"dnt", "production"}
-        else "backtest-2026"
+        "backtest-2026"
+        if expectation_model == "dnt"
+        else f"backtest-2026-{expectation_model}"
     )
     (output_dir / f"{output_stem}.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",
@@ -782,7 +778,7 @@ def main() -> None:
     parser.add_argument(
         "--expectation",
         choices=("trailing", "projection", "dnt", "production"),
-        default="trailing",
+        default="dnt",
     )
     args = parser.parse_args()
     report = run_backtest(
