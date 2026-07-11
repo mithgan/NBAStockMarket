@@ -130,3 +130,25 @@ python3 -m nba_stock_market.simulation --seed 1337 --days 45 --output output/sim
 The entrypoint compares default pure-crowd pricing with two explicitly configured
 fair-value-reversion experiments. Every variant uses deterministic fake game results and nine
 real players across star/mid/bench salary tiers; the v1/default market remains reversion-free.
+
+## Backtest
+
+The historical replay covers the complete 2025-26 NBA regular season using cached ESPN
+player-game box scores and pinned public salary snapshots. Cache the inputs once (the command
+is idempotent and resumes partial downloads):
+
+```bash
+/usr/local/bin/python3 scripts/fetch_backtest_data.py
+```
+
+Then regenerate the committed Markdown and JSON reports deterministically from cached data
+with one command:
+
+```bash
+/usr/local/bin/python3 -m nba_stock_market.backtest
+```
+
+The replay selects the top 150 players by regular-season minutes, lists them at salary-derived
+prices, and evaluates 100 seeded buy-and-hold 10-player portfolios. Expectations use each
+player's prior 10 played games; only the first game uses the salary-implied cold-start prior.
+Trading and live Dunks & Threes calls are deliberately disabled.
