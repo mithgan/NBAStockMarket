@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import tempfile
 import unittest
 from datetime import date
@@ -21,7 +20,6 @@ from nba_stock_market.backtest import (
 from nba_stock_market.engine import BoxScoreLine, Market, NetPointsModel, Player, User
 from nba_stock_market.expectations import (
     DunksAndThreesExpectation,
-    NotConfigured,
     SalaryProjectionExpectation,
     TrailingMeanExpectation,
     salary_implied_net_points,
@@ -54,6 +52,14 @@ def line_with_points(points: float) -> BoxScoreLine:
 
 
 class ExpectationSourceTest(unittest.TestCase):
+    def _dnt_cache(self, directory: str) -> Path:
+        cache = Path(directory)
+        fixture = Path("tests/fixtures/dnt_predictions_2025-12-25.json")
+        (cache / "2025-12-25.json").write_text(
+            fixture.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        return cache
+
     def test_salary_projection_uses_salary_implied_value_for_every_game(self) -> None:
         player = Player("p", "Projected Player", "star", 40_000_000, 40_000_000)
         source = SalaryProjectionExpectation()
@@ -85,12 +91,43 @@ class ExpectationSourceTest(unittest.TestCase):
 
         self.assertAlmostEqual(expected, (4.0 + 8.0 + 10.0) / 3)
 
-    def test_dunks_and_threes_adapter_is_cleanly_disabled_without_key(self) -> None:
-        player = Player("p", "Projected Player", "star", 40_000_000, 40_000_000)
-        with patch.dict(os.environ, {}, clear=True):
-            source = DunksAndThreesExpectation()
-            with self.assertRaisesRegex(NotConfigured, "DNT_API_KEY"):
-                source.expected_performance(player, date(2025, 10, 21))
+    def test_dnt_maps_projection_fields_to_engine_box_score(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = DunksAndThreesExpectation(cache_dir=self._dnt_cache(directory))
+            player = Player("p", "Nikola Jokic", "star", 55_000_000, 55_000_000)
+
+            line = source.projected_box_score(player, date(2025, 12, 25))
+
+        self.assertIsNotNone(line)
+        assert line is not None
+        self.assertEqual(line.fga, 17.8)
+        self.assertEqual(line.fgm, 10.0)
+        self.assertEqual(line.three_pa, 4.7)
+        self.assertEqual(line.three_pm, 1.8)
+        self.assertEqual(line.offensive_rebounds, 3.1)
+        self.assertEqual(line.defensive_rebounds, 9.4)
+        self.assertEqual(line.minutes, 36.5)
+
+    def test_dnt_matches_normalized_player_name_and_scores_with_engine_model(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = DunksAndThreesExpectation(cache_dir=self._dnt_cache(directory))
+            player = Player("p", "Nikola Jokic", "star", 55_000_000, 55_000_000)
+
+            expected = source.expected_performance(player, date(2025, 12, 25))
+            line = source.projected_box_score(player, date(2025, 12, 25))
+
+        self.assertIsNotNone(line)
+        self.assertEqual(expected, line)
+        self.assertAlmostEqual(
+            NetPointsModel().score(expected), NetPointsModel().score(line)
+        )
+
+    def test_dnt_returns_none_for_missing_player_game(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = DunksAndThreesExpectation(cache_dir=self._dnt_cache(directory))
+            player = Player("p", "Missing Player", "star", 40_000_000, 40_000_000)
+
+            self.assertIsNone(source.expected_performance(player, date(2025, 12, 25)))
 
 
 class BacktestReplayTest(unittest.TestCase):
@@ -111,6 +148,41 @@ class BacktestReplayTest(unittest.TestCase):
             main()
 
         self.assertEqual(run.call_args.kwargs["expectation_model"], "projection")
+
+    def test_cli_expectation_flag_selects_dnt_source(self) -> None:
+        report = {"money_supply": {"net_inflation": 1.0, "final_portfolio_wealth": 2.0}}
+        with (
+            patch("sys.argv", ["backtest", "--expectation", "dnt"]),
+            patch("nba_stock_market.backtest.run_backtest", return_value=report) as run,
+        ):
+            main()
+
+        self.assertEqual(run.call_args.kwargs["expectation_model"], "dnt")
+
+    def test_replay_falls_back_to_salary_for_missing_dnt_projection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory)
+            (cache / "2025-12-25.json").write_text("[]", encoding="utf-8")
+            source = DunksAndThreesExpectation(cache_dir=cache)
+            player = Player("p", "Missing Player", "star", 40_000_000, 40_000_000)
+            market = Market(
+                [player],
+                [User("holder", holdings={"p": 1})],
+                expectation_source=source,
+                idle_cash_fee=0.0,
+                inactivity_decay_rate=0.0,
+            )
+            game = GameRecord(
+                "g1", date(2025, 12, 25), "p", player.name, "TST", line_with_points(20)
+            )
+
+            summary = replay_game_records(market, [game], source)
+
+        self.assertEqual(summary.expectation_fallback_count, 1)
+        self.assertEqual(
+            summary.evaluations[0].expected_net_points,
+            salary_implied_net_points(player.current_price),
+        )
 
     def test_replay_applies_idle_cash_sink_after_game_dividends(self) -> None:
         player = Player("p", "Replay Player", "star", 40_000_000, 40_000_000)

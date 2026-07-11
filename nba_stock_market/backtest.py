@@ -5,7 +5,6 @@ import csv
 import json
 import math
 import statistics
-import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -24,8 +23,11 @@ from nba_stock_market.engine import (
     User,
 )
 from nba_stock_market.expectations import (
+    DunksAndThreesExpectation,
     SalaryProjectionExpectation,
     TrailingMeanExpectation,
+    normalize_player_name,
+    salary_implied_net_points,
 )
 
 
@@ -77,6 +79,7 @@ class ReplaySummary:
     calendar_day_count: int
     idle_cash_sunk: float
     evaluations: tuple["GameEvaluation", ...]
+    expectation_fallback_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -184,7 +187,7 @@ def build_synthetic_users(
 def replay_game_records(
     market: Market,
     games: list[GameRecord],
-    expectation_source: TrailingMeanExpectation | SalaryProjectionExpectation,
+    expectation_source: object,
 ) -> ReplaySummary:
     ordered = sorted(games, key=lambda game: (game.game_date, game.game_id, game.player_id))
     game_day_count = 0
@@ -194,11 +197,12 @@ def replay_game_records(
         for game_date, games_on_date in groupby(ordered, key=lambda game: game.game_date)
     }
     if not ordered:
-        return ReplaySummary(0, 0, 0, 0.0, ())
+        return ReplaySummary(0, 0, 0, 0.0, (), 0)
     current_date = ordered[0].game_date
     end_date = ordered[-1].game_date
     evaluations: list[GameEvaluation] = []
     calendar_day_count = 0
+    expectation_fallback_count = 0
     while current_date <= end_date:
         calendar_day_count += 1
         games_on_date = games_by_date.get(current_date, [])
@@ -209,17 +213,27 @@ def replay_game_records(
             expected = expectation_source.expected_performance(
                 market.players[game.player_id], current_date
             )
+            if expected is None:
+                expectation_fallback_count += 1
+                expected_net_points = salary_implied_net_points(
+                    market.players[game.player_id].opening_price
+                    or market.players[game.player_id].current_price
+                )
+            elif isinstance(expected, BoxScoreLine):
+                expected_net_points = market.net_points_model.score(expected)
+            else:
+                expected_net_points = float(expected)
             event = market.pay_daily_performance_dividend(
                 game.player_id,
                 actual_net_points=actual,
-                expected_net_points=expected,
+                expected_net_points=expected_net_points,
                 game_date=current_date,
             )
             evaluations.append(
                 GameEvaluation(
                     game,
                     actual,
-                    expected,
+                    expected_net_points,
                     event.dividend_per_share,
                     event.total_cash_change,
                 )
@@ -238,12 +252,8 @@ def replay_game_records(
         calendar_day_count,
         idle_cash_sunk,
         tuple(evaluations),
+        expectation_fallback_count,
     )
-
-
-def normalize_player_name(name: str) -> str:
-    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
-    return "".join(character for character in ascii_name.lower() if character.isalnum())
 
 
 def _salary_value(raw: str | None) -> float:
@@ -507,13 +517,19 @@ def _build_report(
             "portfolio_size": 10,
             "seed": seed,
             "expectation_window": expectation_window,
+            "expectation_fallback_count": replay.expectation_fallback_count,
             "expectation": (
                 (
                     f"mean of the player's prior {expectation_window} played games; "
                     "salary-implied prior only before game 1"
                 )
                 if expectation_model == "trailing"
-                else "constant season projection from the salary-implied formula"
+                else (
+                    "Dunks & Threes pre-game box-score projection; salary-implied "
+                    "fallback for missing player-games"
+                    if expectation_model == "dnt"
+                    else "constant season projection from the salary-implied formula"
+                )
             ),
             "salary_prior_formula": "min(25, 5 + 0.3 * salary_in_millions)",
             "trading_simulation": False,
@@ -683,8 +699,10 @@ def run_backtest(
         expectation = TrailingMeanExpectation(window=expectation_window)
     elif expectation_model == "projection":
         expectation = SalaryProjectionExpectation()
+    elif expectation_model == "dnt":
+        expectation = DunksAndThreesExpectation(cache_dir=data_dir.parent / "dnt")
     else:
-        raise ValueError("expectation_model must be 'trailing' or 'projection'")
+        raise ValueError("expectation_model must be 'trailing', 'projection', or 'dnt'")
     market = Market(
         [
             Player(
@@ -726,11 +744,12 @@ def run_backtest(
             "NET_POINTS_TO_DOLLARS is more than 2x from the $800K target; update the engine constant and rerun"
         )
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "backtest-2026.json").write_text(
+    output_stem = "backtest-2026-dnt" if expectation_model == "dnt" else "backtest-2026"
+    (output_dir / f"{output_stem}.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    (output_dir / "backtest-2026.md").write_text(
+    (output_dir / f"{output_stem}.md").write_text(
         _render_markdown(report),
         encoding="utf-8",
     )
@@ -745,7 +764,7 @@ def main() -> None:
     parser.add_argument("--portfolios", type=int, default=100)
     parser.add_argument(
         "--expectation",
-        choices=("trailing", "projection"),
+        choices=("trailing", "projection", "dnt"),
         default="trailing",
     )
     args = parser.parse_args()
