@@ -1,0 +1,451 @@
+{
+  "calibration": {
+    "applied_net_points_to_dollars": 100000.0,
+    "candidate_net_points_to_dollars": 55332.69,
+    "current_great_game_full_float_payout": 1445800.0,
+    "current_net_points_to_dollars": 100000.0,
+    "decision": "retain current constant; empirical payout is within 2x of target",
+    "definition": "90th-percentile positive star surprise; payout is across all 100 shares",
+    "distance_from_target_multiple": 1.8072,
+    "great_game_surprise_net_points": 14.458,
+    "target_full_float_payout": 800000.0,
+    "tiers": {
+      "bench": {
+        "median_absolute_game_per_share": 4690.0,
+        "median_positive_game_full_float": 473000.0,
+        "median_season_full_float": 1985076.07,
+        "median_season_per_share": 19850.76,
+        "player_games": 4516,
+        "players": 61
+      },
+      "mid": {
+        "median_absolute_game_per_share": 4930.0,
+        "median_positive_game_full_float": 499000.0,
+        "median_season_full_float": 284730.03,
+        "median_season_per_share": 2847.3,
+        "player_games": 3741,
+        "players": 54
+      },
+      "star": {
+        "median_absolute_game_per_share": 5915.0,
+        "median_positive_game_full_float": 593000.0,
+        "median_season_full_float": -389306.45,
+        "median_season_per_share": -3893.06,
+        "player_games": 2432,
+        "players": 35
+      }
+    }
+  },
+  "data_sources": {
+    "actuals": {
+      "competition": "NBA regular season (NBA Cup championship excluded)",
+      "provider": "ESPN",
+      "scoreboard_endpoint": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard",
+      "summary_endpoint": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary"
+    },
+    "salaries": {
+      "fallback_file": "raw_salary.csv",
+      "fallback_url": "https://raw.githubusercontent.com/Baileyd18/NBA-Player-Impact-and-Value-Dashboard-2025-26/3b10978c55d993116964ac3ee0afce69a8f4c4e5/Data/raw_salary.csv",
+      "primary_commit": "bc583cb0188a6d5ae59d052d08ac0d6efe1b14fd",
+      "primary_file": "salary.csv",
+      "primary_repository": "https://github.com/gabriel1200/site_Data"
+    }
+  },
+  "distribution": {
+    "bottom_10": [
+      {
+        "cohort_cash_change": -343260.91,
+        "games": 64,
+        "minutes": 1819.0,
+        "name": "Nikola Vucevic",
+        "player_id": "6478",
+        "salary": 21481481.0,
+        "season_dividend_full_float": -6865218.24,
+        "season_dividend_per_share": -68652.18,
+        "tier": "mid"
+      },
+      {
+        "cohort_cash_change": -120492.84,
+        "games": 70,
+        "minutes": 2663.0,
+        "name": "Tyrese Maxey",
+        "player_id": "4431678",
+        "salary": 37958760.0,
+        "season_dividend_full_float": -6024641.77,
+        "season_dividend_per_share": -60246.42,
+        "tier": "star"
+      },
+      {
+        "cohort_cash_change": -428326.37,
+        "games": 54,
+        "minutes": 1618.0,
+        "name": "Bennedict Mathurin",
+        "player_id": "4683634",
+        "salary": 9187573.0,
+        "season_dividend_full_float": -5354079.57,
+        "season_dividend_per_share": -53540.8,
+        "tier": "bench"
+      },
+      {
+        "cohort_cash_change": -578800.16,
+        "games": 51,
+        "minutes": 1763.0,
+        "name": "Austin Reaves",
+        "player_id": "4066457",
+        "salary": 13937574.0,
+        "season_dividend_full_float": -5261819.68,
+        "season_dividend_per_share": -52618.2,
+        "tier": "mid"
+      },
+      {
+        "cohort_cash_change": -78373.23,
+        "games": 58,
+        "minutes": 1719.0,
+        "name": "Norman Powell",
+        "player_id": "2595516",
+        "salary": 20482758.0,
+        "season_dividend_full_float": -3918661.31,
+        "season_dividend_per_share": -39186.61,
+        "tier": "mid"
+      },
+      {
+        "cohort_cash_change": -114028.33,
+        "games": 57,
+        "minutes": 1697.0,
+        "name": "Jerami Grant",
+        "player_id": "2991070",
+        "salary": 32000001.0,
+        "season_dividend_full_float": -3800944.47,
+        "season_dividend_per_share": -38009.44,
+        "tier": "star"
+      },
+      {
+        "cohort_cash_change": -34502.44,
+        "games": 62,
+        "minutes": 1840.0,
+        "name": "Zion Williamson",
+        "player_id": "4395628",
+        "salary": 39446090.0,
+        "season_dividend_full_float": -3450243.81,
+        "season_dividend_per_share": -34502.44,
+        "tier": "star"
+      },
+      {
+        "cohort_cash_change": -68917.09,
+        "games": 61,
+        "minutes": 2134.0,
+        "name": "Anthony Edwards",
+        "player_id": "4594268",
+        "salary": 45550512.0,
+        "season_dividend_full_float": -3445854.65,
+        "season_dividend_per_share": -34458.55,
+        "tier": "star"
+      },
+      {
+        "cohort_cash_change": -103335.78,
+        "games": 79,
+        "minutes": 2612.0,
+        "name": "Julius Randle",
+        "player_id": "3064514",
+        "salary": 30935520.0,
+        "season_dividend_full_float": -3444525.92,
+        "season_dividend_per_share": -34445.26,
+        "tier": "star"
+      },
+      {
+        "cohort_cash_change": -167997.12,
+        "games": 81,
+        "minutes": 2695.0,
+        "name": "Mikal Bridges",
+        "player_id": "3147657",
+        "salary": 24900000.0,
+        "season_dividend_full_float": -3359942.46,
+        "season_dividend_per_share": -33599.42,
+        "tier": "mid"
+      }
+    ],
+    "top_10": [
+      {
+        "cohort_cash_change": 776771.98,
+        "games": 82,
+        "minutes": 2110.0,
+        "name": "Jeremiah Fears",
+        "player_id": "5144091",
+        "salary": 7520040.0,
+        "season_dividend_full_float": 7061563.48,
+        "season_dividend_per_share": 70615.63,
+        "tier": "bench"
+      },
+      {
+        "cohort_cash_change": 348748.43,
+        "games": 79,
+        "minutes": 2954.0,
+        "name": "Amen Thompson",
+        "player_id": "4684740",
+        "salary": 9690600.0,
+        "season_dividend_full_float": 6974968.51,
+        "season_dividend_per_share": 69749.69,
+        "tier": "bench"
+      },
+      {
+        "cohort_cash_change": 531707.0,
+        "games": 70,
+        "minutes": 2349.0,
+        "name": "Cooper Flagg",
+        "player_id": "5041939",
+        "salary": 13825920.0,
+        "season_dividend_full_float": 6646337.48,
+        "season_dividend_per_share": 66463.37,
+        "tier": "mid"
+      },
+      {
+        "cohort_cash_change": 462342.53,
+        "games": 74,
+        "minutes": 1968.0,
+        "name": "Maxime Raynaud",
+        "player_id": "4898371",
+        "salary": 1272870.0,
+        "season_dividend_full_float": 6604893.27,
+        "season_dividend_per_share": 66048.93,
+        "tier": "bench"
+      },
+      {
+        "cohort_cash_change": 442092.31,
+        "games": 78,
+        "minutes": 2603.0,
+        "name": "Nickeil Alexander-Walker",
+        "player_id": "4278039",
+        "salary": 15161800.0,
+        "season_dividend_full_float": 5526153.94,
+        "season_dividend_per_share": 55261.54,
+        "tier": "mid"
+      },
+      {
+        "cohort_cash_change": 441280.39,
+        "games": 76,
+        "minutes": 2523.0,
+        "name": "Dyson Daniels",
+        "player_id": "4869342",
+        "salary": 7707709.0,
+        "season_dividend_full_float": 5516004.84,
+        "season_dividend_per_share": 55160.05,
+        "tier": "bench"
+      },
+      {
+        "cohort_cash_change": 610962.14,
+        "games": 77,
+        "minutes": 1802.0,
+        "name": "Kyle Filipowski",
+        "player_id": "4684793",
+        "salary": 3000000.0,
+        "season_dividend_full_float": 5091351.19,
+        "season_dividend_per_share": 50913.51,
+        "tier": "bench"
+      },
+      {
+        "cohort_cash_change": 512247.44,
+        "games": 81,
+        "minutes": 2028.0,
+        "name": "Derik Queen",
+        "player_id": "4869780",
+        "salary": 5157960.0,
+        "season_dividend_full_float": 4656794.93,
+        "season_dividend_per_share": 46567.95,
+        "tier": "bench"
+      },
+      {
+        "cohort_cash_change": 323528.64,
+        "games": 67,
+        "minutes": 1617.0,
+        "name": "Bobby Portis",
+        "player_id": "3064482",
+        "salary": 13445754.0,
+        "season_dividend_full_float": 4621837.7,
+        "season_dividend_per_share": 46218.38,
+        "tier": "mid"
+      },
+      {
+        "cohort_cash_change": 137357.92,
+        "games": 76,
+        "minutes": 2261.0,
+        "name": "CJ McCollum",
+        "player_id": "2490149",
+        "salary": 30666666.0,
+        "season_dividend_full_float": 4578597.24,
+        "season_dividend_per_share": 45785.97,
+        "tier": "star"
+      }
+    ]
+  },
+  "examples": [
+    {
+      "actual_net_points": 43.6,
+      "box_score": {
+        "ast": 5.0,
+        "blk": 1.0,
+        "defensive_rebounds": 8.0,
+        "fga": 31.0,
+        "fgm": 15.0,
+        "fta": 26.0,
+        "ftm": 23.0,
+        "minutes": 45.0,
+        "offensive_rebounds": 0.0,
+        "pts": 55.0,
+        "stl": 2.0,
+        "three_pa": 7.0,
+        "three_pm": 2.0,
+        "tov": 2.0
+      },
+      "expected_net_points": 23.2,
+      "game_date": "2025-10-23",
+      "game_id": "401809236",
+      "payout_full_float": 2040000.0,
+      "payout_per_share": 20400.0,
+      "player": "Shai Gilgeous-Alexander",
+      "surprise_net_points": 20.4,
+      "team": "OKC"
+    },
+    {
+      "actual_net_points": 59.35,
+      "box_score": {
+        "ast": 15.0,
+        "blk": 2.0,
+        "defensive_rebounds": 11.0,
+        "fga": 21.0,
+        "fgm": 15.0,
+        "fta": 23.0,
+        "ftm": 22.0,
+        "minutes": 43.0,
+        "offensive_rebounds": 5.0,
+        "pts": 56.0,
+        "stl": 0.0,
+        "three_pa": 6.0,
+        "three_pm": 4.0,
+        "tov": 5.0
+      },
+      "expected_net_points": 28.37,
+      "game_date": "2025-12-25",
+      "game_id": "401809242",
+      "payout_full_float": 3098000.0,
+      "payout_per_share": 30980.0,
+      "player": "Nikola Jokic",
+      "surprise_net_points": 30.98,
+      "team": "DEN"
+    },
+    {
+      "actual_net_points": 54.45,
+      "box_score": {
+        "ast": 3.0,
+        "blk": 0.0,
+        "defensive_rebounds": 6.0,
+        "fga": 30.0,
+        "fgm": 18.0,
+        "fta": 19.0,
+        "ftm": 15.0,
+        "minutes": 38.0,
+        "offensive_rebounds": 1.0,
+        "pts": 60.0,
+        "stl": 5.0,
+        "three_pa": 17.0,
+        "three_pm": 9.0,
+        "tov": 2.0
+      },
+      "expected_net_points": 27.685,
+      "game_date": "2026-03-19",
+      "game_id": "401810865",
+      "payout_full_float": 2676500.0,
+      "payout_per_share": 26765.0,
+      "player": "Luka Doncic",
+      "surprise_net_points": 26.765,
+      "team": "LAL"
+    }
+  ],
+  "metadata": {
+    "calendar_days": 174,
+    "competition": "NBA regular season (NBA Cup championship excluded)",
+    "expectation": "mean of the player's prior 10 played games; salary-implied prior only before game 1",
+    "expectation_window": 10,
+    "fair_value_reversion": false,
+    "game_days": 164,
+    "inactivity_decay": false,
+    "portfolio_count": 100,
+    "portfolio_size": 10,
+    "salary_prior_formula": "min(25, 5 + 0.3 * salary_in_millions)",
+    "season": "2025-26",
+    "seed": 2026,
+    "source_game_count": 1230,
+    "source_player_game_count": 26547,
+    "trading_simulation": false,
+    "universe_player_games": 10689,
+    "universe_players": 150
+  },
+  "money_supply": {
+    "final_portfolio_wealth": 13942825879.83,
+    "gross_negative_dividend_debits": 203606754.03,
+    "gross_positive_dividends": 214363224.03,
+    "idle_cash_sunk": 67930590.17,
+    "initial_portfolio_wealth": 14000000000.0,
+    "net_dividends": 10756470.0,
+    "net_inflation": -57174120.17,
+    "net_inflation_pct": -0.408387,
+    "reconciliation_difference": 0.0,
+    "trade_fees": 0.0
+  },
+  "portfolio_spread": {
+    "best": {
+      "final_value": 140143941.64,
+      "holdings": [
+        "Brook Lopez",
+        "Bam Adebayo",
+        "Miles Bridges",
+        "Saddiq Bey",
+        "Max Christie",
+        "Ryan Rollins",
+        "Sion James",
+        "Dyson Daniels",
+        "Cooper Flagg",
+        "Draymond Green"
+      ],
+      "portfolio_id": "portfolio-053",
+      "profit_loss": 143941.64,
+      "return_pct": 0.1028
+    },
+    "median_example": {
+      "final_value": 139525957.48,
+      "holdings": [
+        "Myles Turner",
+        "Dillon Brooks",
+        "Russell Westbrook",
+        "Payton Pritchard",
+        "RJ Barrett",
+        "Precious Achiuwa",
+        "Cam Spencer",
+        "Jake LaRavia",
+        "Ausar Thompson",
+        "Nikola Vucevic"
+      ],
+      "portfolio_id": "portfolio-079",
+      "profit_loss": -474042.52,
+      "return_pct": -0.3386
+    },
+    "median_final_value": 139521745.69,
+    "worst": {
+      "final_value": 137374270.67,
+      "holdings": [
+        "Tim Hardaway Jr.",
+        "Kris Dunn",
+        "Tre Jones",
+        "Max Christie",
+        "Jalen Duren",
+        "Noah Clowney",
+        "Cody Williams",
+        "Brice Sensabaugh",
+        "Jarace Walker",
+        "VJ Edgecombe"
+      ],
+      "portfolio_id": "portfolio-043",
+      "profit_loss": -2625729.33,
+      "return_pct": -1.8755
+    }
+  }
+}
