@@ -75,6 +75,17 @@ class SalaryProjectionExpectation:
         del player_id, actual_net_points
 
 
+class ProductionExpectation:
+    """Reward raw game-log value by subtracting no expected performance."""
+
+    def expected_performance(self, player: Player, game_date: date) -> float:
+        del player, game_date
+        return 0.0
+
+    def observe(self, player_id: str, actual_net_points: float) -> None:
+        del player_id, actual_net_points
+
+
 class DunksAndThreesExpectation:
     """Read cached Dunks & Threes pre-game box-score projections by date/name."""
 

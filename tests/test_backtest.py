@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
+from nba_stock_market import expectations
 from nba_stock_market.backtest import (
     GameRecord,
     ListedPlayer,
@@ -72,6 +73,14 @@ class ExpectationSourceTest(unittest.TestCase):
         self.assertEqual(
             source.expected_performance(player, date(2026, 4, 12)), expected
         )
+
+    def test_production_expectation_is_zero_for_every_game(self) -> None:
+        player = Player("p", "Raw Producer", "star", 40_000_000, 40_000_000)
+        source = expectations.ProductionExpectation()
+
+        self.assertEqual(source.expected_performance(player, date(2025, 10, 21)), 0.0)
+        source.observe(player.id, 60.0)
+        self.assertEqual(source.expected_performance(player, date(2026, 4, 12)), 0.0)
 
     def test_cold_start_uses_salary_implied_prior(self) -> None:
         player = Player("p", "Cold Start", "star", 40_000_000, 40_000_000)
@@ -158,6 +167,16 @@ class BacktestReplayTest(unittest.TestCase):
             main()
 
         self.assertEqual(run.call_args.kwargs["expectation_model"], "dnt")
+
+    def test_cli_expectation_flag_selects_production_source(self) -> None:
+        report = {"money_supply": {"net_inflation": 1.0, "final_portfolio_wealth": 2.0}}
+        with (
+            patch("sys.argv", ["backtest", "--expectation", "production"]),
+            patch("nba_stock_market.backtest.run_backtest", return_value=report) as run,
+        ):
+            main()
+
+        self.assertEqual(run.call_args.kwargs["expectation_model"], "production")
 
     def test_replay_falls_back_to_salary_for_missing_dnt_projection(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

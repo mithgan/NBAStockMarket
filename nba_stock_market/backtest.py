@@ -24,6 +24,7 @@ from nba_stock_market.engine import (
 )
 from nba_stock_market.expectations import (
     DunksAndThreesExpectation,
+    ProductionExpectation,
     SalaryProjectionExpectation,
     TrailingMeanExpectation,
     normalize_player_name,
@@ -528,7 +529,11 @@ def _build_report(
                     "Dunks & Threes pre-game box-score projection; salary-implied "
                     "fallback for missing player-games"
                     if expectation_model == "dnt"
-                    else "constant season projection from the salary-implied formula"
+                    else (
+                        "zero expected net points; dividends reward raw game-log value"
+                        if expectation_model == "production"
+                        else "constant season projection from the salary-implied formula"
+                    )
                 )
             ),
             "salary_prior_formula": "min(25, 5 + 0.3 * salary_in_millions)",
@@ -701,8 +706,12 @@ def run_backtest(
         expectation = SalaryProjectionExpectation()
     elif expectation_model == "dnt":
         expectation = DunksAndThreesExpectation(cache_dir=data_dir.parent / "dnt")
+    elif expectation_model == "production":
+        expectation = ProductionExpectation()
     else:
-        raise ValueError("expectation_model must be 'trailing', 'projection', or 'dnt'")
+        raise ValueError(
+            "expectation_model must be 'trailing', 'projection', 'dnt', or 'production'"
+        )
     market = Market(
         [
             Player(
@@ -744,7 +753,11 @@ def run_backtest(
             "NET_POINTS_TO_DOLLARS is more than 2x from the $800K target; update the engine constant and rerun"
         )
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_stem = "backtest-2026-dnt" if expectation_model == "dnt" else "backtest-2026"
+    output_stem = (
+        f"backtest-2026-{expectation_model}"
+        if expectation_model in {"dnt", "production"}
+        else "backtest-2026"
+    )
     (output_dir / f"{output_stem}.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -764,7 +777,7 @@ def main() -> None:
     parser.add_argument("--portfolios", type=int, default=100)
     parser.add_argument(
         "--expectation",
-        choices=("trailing", "projection", "dnt"),
+        choices=("trailing", "projection", "dnt", "production"),
         default="trailing",
     )
     args = parser.parse_args()
