@@ -2,18 +2,30 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from datetime import date
 from enum import IntEnum
+from typing import Protocol, Union, runtime_checkable
 
 
-STARTING_CASH = 10_000.0
+STARTING_CASH = 140_000_000.0
 FEE_PCT = 0.01
 SHARES_OUT = 100
 IMPACT_K = 0.0003
-REVERSION_RATE = 0.03
+REVERSION_RATE = 0.0
 OWNERSHIP_CAP = 0.40
 IDLE_CASH_FEE = 0.0002
-MIN_PRICE_FLOOR = 25.0
+MIN_PRICE_FLOOR = 350_000.0
 GRACE_DAYS = 7
+INACTIVITY_DECAY_RATE = 0.005
+
+# A five-net-point surprise creates $500,000 across all 100 shares, or
+# $5,000 per share.  Two shares of a $50M star earning that surprise in all
+# 82 games would pay $820,000; ten shares distributed across a salary-scale
+# portfolio would pay $4.1M.  The result is meaningful but remains a
+# single-digit-million season outcome for a typical portfolio.
+# Backtesting can replace this calibration without changing the dividend API.
+NET_POINTS_TO_DOLLARS = 100_000.0
+
 DIVIDEND_OFFSET = 2.15
 DIVIDEND_SCALE = 0.0005102
 
@@ -54,6 +66,104 @@ class TradeSide(IntEnum):
     BUY = 1
 
 
+@dataclass(frozen=True)
+class BoxScoreLine:
+    """Immutable inputs needed by the default net-points model."""
+
+    pts: float
+    offensive_rebounds: float
+    defensive_rebounds: float
+    ast: float
+    stl: float
+    blk: float
+    tov: float
+    fga: float
+    fgm: float
+    three_pa: float
+    three_pm: float
+    fta: float
+    ftm: float
+    minutes: float
+
+    def __post_init__(self) -> None:
+        for name, value in self.__dict__.items():
+            if isinstance(value, bool):
+                raise ValueError(f"box score {name} must be finite")
+            try:
+                normalized = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"box score {name} must be finite") from exc
+            if not math.isfinite(normalized):
+                raise ValueError(f"box score {name} must be finite")
+            object.__setattr__(self, name, normalized)
+
+
+@dataclass(frozen=True)
+class NetPointsCoefficients:
+    """Public, swappable linear weights for :class:`NetPointsModel`.
+
+    The defaults are a deliberately simple BPM-style v1 approximation.  The
+    made/missed-shot terms are represented linearly (for example, +0.7 FGM
+    and -0.7 FGA), which keeps every coefficient explicit and calibratable.
+    """
+
+    pts: float = 1.0
+    offensive_rebounds: float = 0.7
+    defensive_rebounds: float = 0.3
+    ast: float = 0.7
+    stl: float = 1.5
+    blk: float = 1.0
+    tov: float = -1.0
+    fga: float = -0.7
+    fgm: float = 0.7
+    three_pa: float = -0.05
+    three_pm: float = 0.10
+    fta: float = -0.4
+    ftm: float = 0.4
+    minutes: float = -0.15
+
+    def __post_init__(self) -> None:
+        for name, value in self.__dict__.items():
+            if isinstance(value, bool):
+                raise ValueError(f"net-points coefficient {name} must be finite")
+            try:
+                normalized = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"net-points coefficient {name} must be finite") from exc
+            if not math.isfinite(normalized):
+                raise ValueError(f"net-points coefficient {name} must be finite")
+            object.__setattr__(self, name, normalized)
+
+
+class NetPointsModel:
+    """Convert a box score into one transparent linear performance score."""
+
+    def __init__(self, coefficients: NetPointsCoefficients | None = None) -> None:
+        self.coefficients = coefficients or NetPointsCoefficients()
+
+    def score(self, line: BoxScoreLine) -> float:
+        if not isinstance(line, BoxScoreLine):
+            raise TypeError("net-points scoring requires a BoxScoreLine")
+        result = sum(
+            getattr(line, name) * getattr(self.coefficients, name)
+            for name in line.__dataclass_fields__
+        )
+        if not math.isfinite(result):
+            raise ValueError("net-points score must be finite")
+        return result
+
+
+ExpectedPerformance = Union[BoxScoreLine, float]
+
+
+@runtime_checkable
+class ExpectationSource(Protocol):
+    """Provider boundary for projected box scores or projected net points."""
+
+    def expected_performance(self, player: "Player", game_date: date) -> ExpectedPerformance:
+        ...
+
+
 @dataclass
 class Player:
     id: str
@@ -78,7 +188,10 @@ class Player:
 
     @property
     def floor(self) -> float:
-        return max(0.5 * self.fair_value, MIN_PRICE_FLOOR)
+        # Engine v2's floor is an economy safeguard, not a fair-value signal.
+        # Tying it to fair value would reintroduce the reversion behavior that
+        # daily performance dividends replaced.
+        return MIN_PRICE_FLOOR
 
     def mark_day(self) -> None:
         self._assert_valid()
@@ -106,6 +219,14 @@ class User:
     last_trade_day_by_player: dict[str, int] = field(default_factory=dict)
     roundtrip_days_by_player: dict[str, list[int]] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if isinstance(self.cash, bool) or not math.isfinite(float(self.cash)):
+            raise ValueError("user cash must be finite")
+        self.cash = float(self.cash)
+        for player_id, shares in self.holdings.items():
+            if type(shares) is not int or shares < 0:
+                raise ValueError(f"holding for {player_id} must be a non-negative integer")
+
     def shares(self, player_id: str) -> int:
         return self.holdings.get(player_id, 0)
 
@@ -121,6 +242,18 @@ class Position:
     new_price: float
 
 
+@dataclass(frozen=True)
+class DividendEvent:
+    """Immutable record of one daily performance payout."""
+
+    player_id: str
+    game_date: date | None
+    actual_net_points: float
+    expected_net_points: float
+    dividend_per_share: float
+    total_cash_change: float
+
+
 class Market:
     def __init__(
         self,
@@ -133,19 +266,38 @@ class Market:
         ownership_cap: float = OWNERSHIP_CAP,
         idle_cash_fee: float = IDLE_CASH_FEE,
         grace_days: int = GRACE_DAYS,
+        inactivity_decay_rate: float = INACTIVITY_DECAY_RATE,
+        net_points_model: NetPointsModel | None = None,
+        expectation_source: ExpectationSource | None = None,
+        net_points_to_dollars: float = NET_POINTS_TO_DOLLARS,
     ) -> None:
         if not players:
             raise ValueError("market requires at least one player")
+        if len({player.id for player in players}) != len(players):
+            raise ValueError("player ids must be unique")
         self.players = {player.id: player for player in players}
         self.users = {user.id: user for user in users or []}
         self.day = 0
-        self.impact_k = impact_k
-        self.reversion_rate = reversion_rate
-        self.fee_pct = fee_pct
-        self.ownership_cap = ownership_cap
-        self.idle_cash_fee = idle_cash_fee
+        self.impact_k = self._finite_value("impact_k", impact_k)
+        self.reversion_rate = self._rate("reversion_rate", reversion_rate)
+        self.fee_pct = self._rate("fee_pct", fee_pct)
+        self.ownership_cap = self._rate("ownership_cap", ownership_cap)
+        self.idle_cash_fee = self._rate("idle_cash_fee", idle_cash_fee)
+        self.inactivity_decay_rate = self._rate("inactivity_decay_rate", inactivity_decay_rate)
+        if type(grace_days) is not int or grace_days < 0:
+            raise ValueError("grace_days must be a non-negative integer")
         self.grace_days = grace_days
+        self.net_points_model = net_points_model or NetPointsModel()
+        self.expectation_source = expectation_source
+        self.net_points_to_dollars = self._finite_value(
+            "net_points_to_dollars", net_points_to_dollars
+        )
+        if self.net_points_to_dollars < 0:
+            raise ValueError("net_points_to_dollars must be non-negative")
         self.trade_log: list[Position] = []
+        self.dividend_events: list[DividendEvent] = []
+        # Compatibility-friendly name for consumers that treat this as a log.
+        self.dividend_log = self.dividend_events
 
     def ensure_user(self, user_id: str) -> User:
         user = self.users.get(user_id)
@@ -224,14 +376,26 @@ class Market:
             player.current_price = max(player.current_price, player.floor)
             player._assert_valid()
 
+    def daily_inactivity_decay_pass(self) -> None:
+        """Apply the 0.5% default decay only after a player's trade grace."""
+
+        for player in self.players.values():
+            if self.day - player.last_trade_day <= self.grace_days:
+                continue
+            player.current_price *= 1 - self.inactivity_decay_rate
+            player.current_price = max(player.current_price, player.floor)
+            player._assert_valid()
+
     def daily_idle_cash_sink(self) -> None:
         for user in self.users.values():
-            user.cash *= 1 - self.idle_cash_fee
+            if user.cash > 0:
+                user.cash *= 1 - self.idle_cash_fee
 
     def advance_day(self, *, apply_reversion: bool = True, apply_idle_fee: bool = True) -> None:
         self.day += 1
         if apply_reversion:
             self.daily_fair_value_pass()
+        self.daily_inactivity_decay_pass()
         if apply_idle_fee:
             self.daily_idle_cash_sink()
         for player in self.players.values():
@@ -245,6 +409,80 @@ class Market:
         user = self.ensure_user(user_id)
         holdings_value = sum(self.players[player_id].current_price * shares for player_id, shares in user.holdings.items())
         return user.cash + holdings_value
+
+    def pay_daily_performance_dividend(
+        self,
+        player_id: str,
+        *,
+        actual_net_points: float,
+        expected_net_points: float,
+        game_date: date | None = None,
+    ) -> DividendEvent:
+        """Pay holders for actual performance relative to expectation.
+
+        Negative surprises intentionally debit holder cash.  Prices are not
+        touched: daily performance enters the economy only through this cash
+        event, leaving prices to supply/demand (plus optional experiments).
+        """
+
+        self._player_or_error(player_id)
+        actual = self._finite_value("actual_net_points", actual_net_points, TradeError)
+        expected = self._finite_value("expected_net_points", expected_net_points, TradeError)
+        dividend_per_share = (
+            (actual - expected) * self.net_points_to_dollars / SHARES_OUT
+        )
+        if not math.isfinite(dividend_per_share):
+            raise TradeError("dividend_per_share must be finite")
+
+        payouts: list[tuple[User, float]] = []
+        for user in self.users.values():
+            cash_change = max(0, user.shares(player_id)) * dividend_per_share
+            if not math.isfinite(cash_change) or not math.isfinite(user.cash + cash_change):
+                raise TradeError("dividend cash change must be finite")
+            payouts.append((user, cash_change))
+        total_cash_change = sum(cash_change for _, cash_change in payouts)
+        if not math.isfinite(total_cash_change):
+            raise TradeError("total dividend cash change must be finite")
+        for user, cash_change in payouts:
+            user.cash += cash_change
+
+        event = DividendEvent(
+            player_id=player_id,
+            game_date=game_date,
+            actual_net_points=actual,
+            expected_net_points=expected,
+            dividend_per_share=dividend_per_share,
+            total_cash_change=total_cash_change,
+        )
+        self.dividend_events.append(event)
+        return event
+
+    def apply_game_result(
+        self,
+        player_id: str,
+        *,
+        actual: ExpectedPerformance,
+        expected: ExpectedPerformance | None = None,
+        game_date: date | None = None,
+    ) -> DividendEvent:
+        """Resolve box-score/net-point inputs and apply the daily dividend."""
+
+        player = self._player_or_error(player_id)
+        if expected is None:
+            if self.expectation_source is None:
+                raise TradeError("expected performance or expectation source is required")
+            if game_date is None:
+                raise TradeError("game_date is required when using an expectation source")
+            expected = self.expectation_source.expected_performance(player, game_date)
+
+        actual_net_points = self._resolve_net_points("actual", actual)
+        expected_net_points = self._resolve_net_points("expected", expected)
+        return self.pay_daily_performance_dividend(
+            player_id,
+            actual_net_points=actual_net_points,
+            expected_net_points=expected_net_points,
+            game_date=game_date,
+        )
 
     def season_dividend_per_share(self, *, warp: float, minutes: float) -> float:
         return (warp + DIVIDEND_OFFSET) * minutes * DIVIDEND_SCALE
@@ -281,3 +519,37 @@ class Market:
         else:
             user.roundtrip_days_by_player.pop(player_id, None)
         return len(recent)
+
+    def _player_or_error(self, player_id: str) -> Player:
+        try:
+            return self.players[player_id]
+        except KeyError as exc:
+            raise TradeError(f"unknown player: {player_id}") from exc
+
+    def _resolve_net_points(self, label: str, performance: ExpectedPerformance) -> float:
+        if isinstance(performance, BoxScoreLine):
+            return self.net_points_model.score(performance)
+        return self._finite_value(f"{label} net points", performance, TradeError)
+
+    @staticmethod
+    def _finite_value(
+        name: str,
+        value: float,
+        error_type: type[ValueError] = ValueError,
+    ) -> float:
+        if isinstance(value, bool):
+            raise error_type(f"{name} must be finite")
+        try:
+            normalized = float(value)
+        except (TypeError, ValueError) as exc:
+            raise error_type(f"{name} must be finite") from exc
+        if not math.isfinite(normalized):
+            raise error_type(f"{name} must be finite")
+        return normalized
+
+    @classmethod
+    def _rate(cls, name: str, value: float) -> float:
+        rate = cls._finite_value(name, value)
+        if not 0 <= rate <= 1:
+            raise ValueError(f"{name} must be between 0 and 1")
+        return rate

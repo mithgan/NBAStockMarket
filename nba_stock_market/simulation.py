@@ -5,21 +5,21 @@ import json
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 from .engine import Market, Player, TradeError, TradeSide, User
 
 
 SAMPLE_PLAYERS = [
-    ("wembanyama", "Victor Wembanyama", "star", 760.0, 900.0),
-    ("jokic", "Nikola Jokic", "star", 820.0, 850.0),
-    ("shai", "Shai Gilgeous-Alexander", "star", 710.0, 780.0),
-    ("mobley", "Evan Mobley", "mid", 310.0, 390.0),
-    ("maxey", "Tyrese Maxey", "mid", 365.0, 330.0),
-    ("jalen_johnson", "Jalen Johnson", "mid", 210.0, 285.0),
-    ("pritchard", "Payton Pritchard", "bench", 95.0, 120.0),
-    ("lively", "Dereck Lively II", "bench", 135.0, 170.0),
-    ("hield", "Buddy Hield", "bench", 140.0, 105.0),
+    ("wembanyama", "Victor Wembanyama", "star", 58_000_000.0, 68_000_000.0),
+    ("jokic", "Nikola Jokic", "star", 68_000_000.0, 65_000_000.0),
+    ("shai", "Shai Gilgeous-Alexander", "star", 62_000_000.0, 64_000_000.0),
+    ("mobley", "Evan Mobley", "mid", 25_000_000.0, 29_000_000.0),
+    ("maxey", "Tyrese Maxey", "mid", 28_000_000.0, 25_000_000.0),
+    ("jalen_johnson", "Jalen Johnson", "mid", 21_000_000.0, 24_000_000.0),
+    ("pritchard", "Payton Pritchard", "bench", 8_000_000.0, 10_000_000.0),
+    ("lively", "Dereck Lively II", "bench", 11_000_000.0, 13_000_000.0),
+    ("hield", "Buddy Hield", "bench", 7_000_000.0, 6_000_000.0),
 ]
 
 
@@ -29,7 +29,18 @@ class SimulationConfig:
     days: int = 60
     traders: int = 48
     trades_per_day: int = 90
-    reversion_rate: float = 0.03
+    reversion_rate: float = 0.0
+    games_per_day: int = 5
+
+
+@dataclass(frozen=True)
+class SimulatedGameResult:
+    player_id: str
+    actual_net_points: float
+    expected_net_points: float
+
+
+GameResultsHook = Callable[[Market, int, random.Random], list[SimulatedGameResult]]
 
 
 class TraderStrategy(Protocol):
@@ -46,9 +57,9 @@ class ValueTrader:
         player = max(market.players.values(), key=lambda p: (p.fair_value - p.current_price) / p.current_price)
         edge = (player.fair_value - player.current_price) / player.current_price
         if edge > 0.05:
-            return player.id, TradeSide.BUY, rng.randint(1, 4)
+            return player.id, TradeSide.BUY, 1
         if edge < -0.05 and user.shares(player.id) > 0:
-            return player.id, TradeSide.SELL, min(user.shares(player.id), rng.randint(1, 3))
+            return player.id, TradeSide.SELL, 1
         return None
 
 
@@ -62,7 +73,7 @@ class HypeTrader:
             reverse=True,
         )
         player = rng.choice(candidates[:3])
-        return player.id, TradeSide.BUY, rng.randint(1, 3)
+        return player.id, TradeSide.BUY, 1
 
 
 class PanicSeller:
@@ -75,7 +86,7 @@ class PanicSeller:
             return player.id, TradeSide.BUY, 1
         player = min(held, key=lambda p: p.price_history[-1] / p.price_history[-4] if len(p.price_history) >= 4 else 1.0)
         if len(player.price_history) >= 4 and player.price_history[-1] < player.price_history[-4] * 0.99:
-            return player.id, TradeSide.SELL, min(user.shares(player.id), rng.randint(1, 2))
+            return player.id, TradeSide.SELL, 1
         return rng.choice(held).id, TradeSide.BUY, 1
 
 
@@ -85,17 +96,40 @@ class NoiseTrader:
     def choose_trade(self, market: Market, user: User, rng: random.Random) -> tuple[str, TradeSide, int] | None:
         player = rng.choice(list(market.players.values()))
         if user.shares(player.id) > 0 and rng.random() < 0.35:
-            return player.id, TradeSide.SELL, min(user.shares(player.id), rng.randint(1, 2))
-        return player.id, TradeSide.BUY, rng.randint(1, 2)
+            return player.id, TradeSide.SELL, 1
+        return player.id, TradeSide.BUY, 1
 
 
-def build_sample_market(*, reversion_rate: float = 0.03, trader_count: int = 48) -> Market:
+def build_sample_market(*, reversion_rate: float = 0.0, trader_count: int = 48) -> Market:
     players = [Player(pid, name, tier, price, fair_value) for pid, name, tier, price, fair_value in SAMPLE_PLAYERS]
     users = [User(f"trader_{idx:03d}") for idx in range(trader_count)]
     return Market(players, users, reversion_rate=reversion_rate)
 
 
-def run_simulation(config: SimulationConfig) -> dict[str, object]:
+def _fake_game_results(
+    market: Market,
+    rng: random.Random,
+    games_per_day: int,
+) -> list[SimulatedGameResult]:
+    if games_per_day <= 0:
+        return []
+    players = rng.sample(list(market.players.values()), k=min(games_per_day, len(market.players)))
+    expected_by_tier = {"star": 20.0, "mid": 12.0, "bench": 6.0}
+    return [
+        SimulatedGameResult(
+            player_id=player.id,
+            expected_net_points=expected_by_tier[player.tier],
+            actual_net_points=expected_by_tier[player.tier] + rng.gauss(0.0, 5.0),
+        )
+        for player in players
+    ]
+
+
+def run_simulation(
+    config: SimulationConfig,
+    *,
+    game_results_hook: GameResultsHook | None = None,
+) -> dict[str, object]:
     rng = random.Random(config.seed)
     market = build_sample_market(reversion_rate=config.reversion_rate, trader_count=config.traders)
     strategies: list[TraderStrategy] = [ValueTrader(), HypeTrader(), PanicSeller(), NoiseTrader()]
@@ -104,7 +138,9 @@ def run_simulation(config: SimulationConfig) -> dict[str, object]:
         for idx, user in enumerate(market.users.values())
     }
 
-    for _day in range(config.days):
+    daily_dividend_events = 0
+    daily_dividend_total_cash_change = 0.0
+    for day in range(config.days):
         for _ in range(config.trades_per_day):
             user = rng.choice(list(market.users.values()))
             strategy = strategy_by_user[user.id]
@@ -116,6 +152,19 @@ def run_simulation(config: SimulationConfig) -> dict[str, object]:
                 market.execute_trade(user.id, player_id, side, quantity)
             except TradeError:
                 continue
+        game_results = (
+            game_results_hook(market, day, rng)
+            if game_results_hook is not None
+            else _fake_game_results(market, rng, config.games_per_day)
+        )
+        for result in game_results:
+            event = market.pay_daily_performance_dividend(
+                result.player_id,
+                actual_net_points=result.actual_net_points,
+                expected_net_points=result.expected_net_points,
+            )
+            daily_dividend_events += 1
+            daily_dividend_total_cash_change += event.total_cash_change
         market.advance_day()
 
     prices = list(market.players.values())
@@ -129,6 +178,8 @@ def run_simulation(config: SimulationConfig) -> dict[str, object]:
     return {
         "config": config.__dict__,
         "total_trades": total_trades,
+        "daily_dividend_events": daily_dividend_events,
+        "daily_dividend_total_cash_change": round(daily_dividend_total_cash_change, 2),
         "avg_abs_gap_to_fair_value": round(avg_abs_gap, 2),
         "players": market.snapshot(),
         "leaderboard_top_5": [(user_id, round(value, 2)) for user_id, value in leaderboard],
