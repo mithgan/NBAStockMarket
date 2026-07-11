@@ -137,6 +137,10 @@ The historical replay covers the complete 2025-26 NBA regular season using cache
 player-game box scores and pinned public salary snapshots. Cache the inputs once (the command
 is idempotent and resumes partial downloads):
 
+Ball Don't Lie (BDL) is the canonical live-capable per-game actuals source alongside cached ESPN.
+Set `BALL_DONT_LIE_API_KEY` in the environment or `.env`; BDL pages cache under `data/raw/bdl/`.
+Run the bounded source check with `python3 -m nba_stock_market.bdl_data --smoke-jokic`.
+
 ```bash
 /usr/local/bin/python3 scripts/fetch_backtest_data.py
 ```

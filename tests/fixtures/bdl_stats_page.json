@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "id": 25638728,
+      "min": "43",
+      "fgm": 15,
+      "fga": 21,
+      "fg3m": 4,
+      "fg3a": 6,
+      "ftm": 22,
+      "fta": 23,
+      "oreb": 5,
+      "dreb": 11,
+      "ast": 15,
+      "stl": 0,
+      "blk": 2,
+      "turnover": 5,
+      "pts": 56,
+      "player": {
+        "id": 246,
+        "first_name": "Nikola",
+        "last_name": "Jokic"
+      },
+      "team": {"abbreviation": "DEN"},
+      "game": {
+        "id": 18447236,
+        "date": "2025-12-25",
+        "postseason": false
+      }
+    }
+  ],
+  "meta": {"per_page": 25}
+}
