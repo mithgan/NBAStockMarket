@@ -23,7 +23,10 @@ from nba_stock_market.engine import (
     Player,
     User,
 )
-from nba_stock_market.expectations import TrailingMeanExpectation
+from nba_stock_market.expectations import (
+    SalaryProjectionExpectation,
+    TrailingMeanExpectation,
+)
 
 
 EXPECTED_SEASON = "2025-26"
@@ -181,7 +184,7 @@ def build_synthetic_users(
 def replay_game_records(
     market: Market,
     games: list[GameRecord],
-    expectation_source: TrailingMeanExpectation,
+    expectation_source: TrailingMeanExpectation | SalaryProjectionExpectation,
 ) -> ReplaySummary:
     ordered = sorted(games, key=lambda game: (game.game_date, game.game_id, game.player_id))
     game_day_count = 0
@@ -314,7 +317,8 @@ def _percentile(values: list[float], quantile: float) -> float:
 
 
 def _round_money(value: float) -> float:
-    return round(value, 2)
+    rounded = round(value, 2)
+    return 0.0 if rounded == 0 else rounded
 
 
 def _player_row(player: ListedPlayer, per_share: float, holder_total: float) -> dict[str, Any]:
@@ -338,6 +342,7 @@ def _build_report(
     *,
     seed: int,
     expectation_window: int,
+    expectation_model: str,
     source_manifest: dict[str, Any],
 ) -> dict[str, Any]:
     listed = {player.player_id: player for player in universe}
@@ -503,8 +508,12 @@ def _build_report(
             "seed": seed,
             "expectation_window": expectation_window,
             "expectation": (
-                f"mean of the player's prior {expectation_window} played games; "
-                "salary-implied prior only before game 1"
+                (
+                    f"mean of the player's prior {expectation_window} played games; "
+                    "salary-implied prior only before game 1"
+                )
+                if expectation_model == "trailing"
+                else "constant season projection from the salary-implied formula"
             ),
             "salary_prior_formula": "min(25, 5 + 0.3 * salary_in_millions)",
             "trading_simulation": False,
@@ -655,6 +664,7 @@ def run_backtest(
     seed: int = 2026,
     portfolio_count: int = 100,
     expectation_window: int = 10,
+    expectation_model: str = "trailing",
 ) -> dict[str, Any]:
     from nba_stock_market.historical_data import load_game_records
 
@@ -669,7 +679,12 @@ def run_backtest(
     )
     universe = select_universe(games, salary_by_name, size=150)
     users = build_synthetic_users(universe, count=portfolio_count, seed=seed)
-    expectation = TrailingMeanExpectation(window=expectation_window)
+    if expectation_model == "trailing":
+        expectation = TrailingMeanExpectation(window=expectation_window)
+    elif expectation_model == "projection":
+        expectation = SalaryProjectionExpectation()
+    else:
+        raise ValueError("expectation_model must be 'trailing' or 'projection'")
     market = Market(
         [
             Player(
@@ -700,9 +715,13 @@ def run_backtest(
         replay,
         seed=seed,
         expectation_window=expectation_window,
+        expectation_model=expectation_model,
         source_manifest=source_manifest,
     )
-    if report["calibration"]["distance_from_target_multiple"] > 2:
+    if (
+        expectation_model == "trailing"
+        and report["calibration"]["distance_from_target_multiple"] > 2
+    ):
         raise RuntimeError(
             "NET_POINTS_TO_DOLLARS is more than 2x from the $800K target; update the engine constant and rerun"
         )
@@ -724,12 +743,18 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--portfolios", type=int, default=100)
+    parser.add_argument(
+        "--expectation",
+        choices=("trailing", "projection"),
+        default="trailing",
+    )
     args = parser.parse_args()
     report = run_backtest(
         args.data_dir,
         args.output_dir,
         seed=args.seed,
         portfolio_count=args.portfolios,
+        expectation_model=args.expectation,
     )
     money = report["money_supply"]
     print(

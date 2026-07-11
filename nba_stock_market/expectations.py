@@ -52,6 +52,24 @@ class TrailingMeanExpectation:
         return tuple(self._history[player_id])
 
 
+class SalaryProjectionExpectation:
+    """Placeholder season projection based on salary for every game.
+
+    The production source will be DARKO or Dunks & Threes. This temporary
+    linear salary curve caps at 25 net points, so most good players will beat
+    it and the resulting economy will be inflationary.
+    """
+
+    def expected_performance(self, player: Player, game_date: date) -> float:
+        del game_date
+        return salary_implied_net_points(player.opening_price or player.current_price)
+
+    def observe(self, player_id: str, actual_net_points: float) -> None:
+        """Ignore actuals because the season projection is intentionally constant."""
+
+        del player_id, actual_net_points
+
+
 class DunksAndThreesExpectation:
     """Stub boundary for a future Dunks & Threes projection integration.
 

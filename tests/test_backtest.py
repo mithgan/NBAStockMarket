@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 import unittest
@@ -11,14 +12,17 @@ from unittest.mock import patch
 from nba_stock_market.backtest import (
     GameRecord,
     ListedPlayer,
+    _round_money,
     build_synthetic_users,
     load_source_manifest,
+    main,
     replay_game_records,
 )
 from nba_stock_market.engine import BoxScoreLine, Market, NetPointsModel, Player, User
 from nba_stock_market.expectations import (
     DunksAndThreesExpectation,
     NotConfigured,
+    SalaryProjectionExpectation,
     TrailingMeanExpectation,
     salary_implied_net_points,
 )
@@ -50,6 +54,19 @@ def line_with_points(points: float) -> BoxScoreLine:
 
 
 class ExpectationSourceTest(unittest.TestCase):
+    def test_salary_projection_uses_salary_implied_value_for_every_game(self) -> None:
+        player = Player("p", "Projected Player", "star", 40_000_000, 40_000_000)
+        source = SalaryProjectionExpectation()
+        expected = salary_implied_net_points(40_000_000)
+
+        self.assertEqual(
+            source.expected_performance(player, date(2025, 10, 21)), expected
+        )
+        source.observe(player.id, 60.0)
+        self.assertEqual(
+            source.expected_performance(player, date(2026, 4, 12)), expected
+        )
+
     def test_cold_start_uses_salary_implied_prior(self) -> None:
         player = Player("p", "Cold Start", "star", 40_000_000, 40_000_000)
         source = TrailingMeanExpectation(window=10)
@@ -77,6 +94,24 @@ class ExpectationSourceTest(unittest.TestCase):
 
 
 class BacktestReplayTest(unittest.TestCase):
+    def test_money_rounding_canonicalizes_negative_zero(self) -> None:
+        self.assertEqual(math.copysign(1.0, _round_money(-0.001)), 1.0)
+
+    def test_cli_expectation_flag_selects_projection_source(self) -> None:
+        report = {
+            "money_supply": {
+                "net_inflation": 1.0,
+                "final_portfolio_wealth": 2.0,
+            }
+        }
+        with (
+            patch("sys.argv", ["backtest", "--expectation", "projection"]),
+            patch("nba_stock_market.backtest.run_backtest", return_value=report) as run,
+        ):
+            main()
+
+        self.assertEqual(run.call_args.kwargs["expectation_model"], "projection")
+
     def test_replay_applies_idle_cash_sink_after_game_dividends(self) -> None:
         player = Player("p", "Replay Player", "star", 40_000_000, 40_000_000)
         holder = User("holder", cash=100_000_000, holdings={"p": 1})
