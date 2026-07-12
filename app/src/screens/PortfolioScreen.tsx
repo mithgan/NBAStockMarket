@@ -35,17 +35,17 @@ export function PortfolioScreen() {
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <Text style={styles.eyebrow}>PORTFOLIO VALUE</Text>
-      <Text style={styles.total}>{formatMoney(summary.total_value)}</Text>
+      <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.total}>{formatMoney(summary.total_value)}</Text>
       <Text style={styles.subtle}>Live mock prices · one share max per player</Text>
 
       <View style={styles.statRow}>
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>CASH</Text>
-          <Text style={styles.statValue}>{formatMoney(summary.cash)}</Text>
+          <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.statValue}>{formatMoney(summary.cash)}</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>HOLDINGS</Text>
-          <Text style={styles.statValue}>{formatMoney(summary.market_value)}</Text>
+          <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.statValue}>{formatMoney(summary.market_value)}</Text>
         </View>
       </View>
 
@@ -71,7 +71,7 @@ export function PortfolioScreen() {
                 <Text style={styles.rowName}>{player.name}</Text>
                 <Text style={styles.subtle}>1 share · {player.tier.toUpperCase()}</Text>
               </View>
-              <Text style={styles.rowValue}>{formatMoney(player.listing_price)}</Text>
+              <Text adjustsFontSizeToFit minimumFontScale={0.75} numberOfLines={1} style={styles.rowValue}>{formatMoney(player.listing_price)}</Text>
             </Pressable>
           );
         })
@@ -94,6 +94,9 @@ export function PortfolioScreen() {
               </Text>
             </View>
             <Text
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+              numberOfLines={1}
               style={[
                 styles.pnl,
                 { color: event.dividend_per_holder >= 0 ? colors.green : colors.red },
@@ -126,7 +129,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 15, padding: 15 },
   rowPressed: { backgroundColor: colors.surfaceRaised },
   rowName: { color: colors.text, fontSize: 14, fontWeight: '700' },
-  rowValue: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  rowValue: { color: colors.text, flexShrink: 1, fontSize: 14, fontWeight: '700' },
   feedCard: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 16, paddingHorizontal: 15 },
   feedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingVertical: 14 },
   feedBorder: { borderBottomColor: colors.border, borderBottomWidth: 1 },

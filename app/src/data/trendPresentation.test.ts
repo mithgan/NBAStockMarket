@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { selectTrendRange, sparklineHeights, trendDirection } from './trendPresentation';
+import {
+  cumulativeValues,
+  selectHighLowPoints,
+  selectTrendRange,
+  sparklineHeights,
+  trendDirection,
+} from './trendPresentation';
 
 test('trend direction compares the first and last real dividend values', () => {
   assert.equal(trendDirection([-10, 5, 20]), 'up');
@@ -14,10 +20,22 @@ test('sparkline heights preserve relative values in a compact visible range', ()
   assert.deepEqual(sparklineHeights([8, 8]), [17.5, 17.5]);
 });
 
-test('trend range selects the most recent 5 or 15 points without mutating the series', () => {
+test('trend range selects the most recent 5, 15, or full-season points without mutating the series', () => {
   const points = Array.from({ length: 18 }, (_, index) => ({ index }));
 
   assert.deepEqual(selectTrendRange(points, 'L5').map((point) => point.index), [13, 14, 15, 16, 17]);
   assert.deepEqual(selectTrendRange(points, 'L15').map((point) => point.index), [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+  assert.deepEqual(selectTrendRange(points, 'Season').map((point) => point.index), points.map((point) => point.index));
   assert.equal(points.length, 18);
+});
+
+test('cumulative chart values and high/low points are deterministic', () => {
+  const cumulative = cumulativeValues([100, -250, 500, -50]);
+
+  assert.deepEqual(cumulative, [100, -150, 350, 300]);
+  assert.deepEqual(selectHighLowPoints(cumulative), {
+    high: { index: 2, value: 350 },
+    low: { index: 1, value: -150 },
+  });
+  assert.deepEqual(selectHighLowPoints([]), { high: null, low: null });
 });

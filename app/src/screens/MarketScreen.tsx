@@ -8,9 +8,20 @@ import {
   View,
   type GestureResponderEvent,
 } from 'react-native';
+import Svg, {
+  Circle,
+  Defs,
+  G,
+  LinearGradient,
+  Path,
+  Stop,
+  Text as SvgText,
+} from 'react-native-svg';
 
 import { players } from '../data/snapshot';
 import {
+  cumulativeValues,
+  selectHighLowPoints,
   selectTrendRange,
   sparklineHeights,
   trendDirection,
@@ -58,34 +69,83 @@ function average(points: TrendPoint[], key: 'np' | 'expected_np') {
   return points.reduce((sum, point) => sum + point[key], 0) / points.length;
 }
 
+function compactSignedMoney(value: number) {
+  const absolute = Math.abs(value);
+  const sign = value >= 0 ? '+' : '−';
+  if (absolute >= 1_000_000) return `${sign}$${(absolute / 1_000_000).toFixed(2).replace(/\.00$/, '')}M`;
+  if (absolute >= 1_000) return `${sign}$${Math.round(absolute / 1_000)}K`;
+  return `${sign}$${Math.round(absolute)}`;
+}
+
+function smoothPath(coordinates: { x: number; y: number }[]) {
+  if (coordinates.length === 0) return '';
+  return coordinates.slice(1).reduce((path, point, index) => {
+    const previous = coordinates[index];
+    const middleX = (previous.x + point.x) / 2;
+    return `${path} C ${middleX} ${previous.y}, ${middleX} ${point.y}, ${point.x} ${point.y}`;
+  }, `M ${coordinates[0].x} ${coordinates[0].y}`);
+}
+
 function DetailChart({ points }: { points: TrendPoint[] }) {
-  const values = points.map((point) => point.dividend_per_holder);
+  const [width, setWidth] = useState(0);
+  const values = cumulativeValues(points.map((point) => point.dividend_per_holder));
+  const extrema = selectHighLowPoints(values);
   const minimum = Math.min(...values);
   const maximum = Math.max(...values);
-  const span = maximum - minimum;
+  const span = maximum - minimum || 1;
+  const chartHeight = 180;
+  const horizontalInset = 10;
+  const topInset = 30;
+  const bottomInset = 24;
+  const coordinates = values.map((value, index) => ({
+    x: horizontalInset + (index / Math.max(values.length - 1, 1)) * Math.max(width - horizontalInset * 2, 0),
+    y: topInset + ((maximum - value) / span) * (chartHeight - topInset - bottomInset),
+  }));
+  const linePath = smoothPath(coordinates);
+  const color = values.at(-1)! >= 0 ? colors.green : colors.red;
+  const areaPath = coordinates.length > 0
+    ? `${linePath} L ${coordinates.at(-1)!.x} ${chartHeight - bottomInset} L ${coordinates[0].x} ${chartHeight - bottomInset} Z`
+    : '';
 
   return (
     <View
       accessible
-      accessibilityLabel={`${points.length} game dividend chart`}
+      accessibilityLabel={`${points.length} game cumulative dividend chart, high ${compactSignedMoney(extrema.high?.value ?? 0)}, low ${compactSignedMoney(extrema.low?.value ?? 0)}`}
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
       style={styles.chart}
     >
-      {points.map((point) => {
-        const height = span === 0 ? 74 : 16 + ((point.dividend_per_holder - minimum) / span) * 116;
-        return (
-          <View key={point.date} style={styles.chartBarSlot}>
-            <View
-              style={[
-                styles.chartBar,
-                {
-                  height,
-                  backgroundColor: point.dividend_per_holder >= 0 ? colors.green : colors.red,
-                },
-              ]}
-            />
-          </View>
-        );
-      })}
+      {width > 0 ? (
+        <Svg height={chartHeight} width={width}>
+          <Defs>
+            <LinearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1">
+              <Stop offset="0" stopColor={color} stopOpacity="0.25" />
+              <Stop offset="1" stopColor={color} stopOpacity="0" />
+            </LinearGradient>
+          </Defs>
+          <Path d={areaPath} fill="url(#chartFill)" />
+          <Path d={linePath} fill="none" stroke={color} strokeLinecap="round" strokeWidth={3} />
+          {([['HIGH', extrema.high], ['LOW', extrema.low]] as const).map(([label, point]) => {
+            if (!point) return null;
+            const coordinate = coordinates[point.index];
+            const isHigh = label === 'HIGH';
+            return (
+              <G key={label}>
+                <Circle cx={coordinate.x} cy={coordinate.y} fill={colors.background} r={5} stroke={color} strokeWidth={3} />
+                <SvgText
+                  fill={colors.text}
+                  fontSize={9}
+                  fontWeight="800"
+                  textAnchor={coordinate.x < 52 ? 'start' : coordinate.x > width - 52 ? 'end' : 'middle'}
+                  x={coordinate.x}
+                  y={Math.max(11, Math.min(chartHeight - 3, coordinate.y + (isHigh ? -10 : 18)))}
+                >
+                  {label} {compactSignedMoney(point.value)}
+                </SvgText>
+              </G>
+            );
+          })}
+        </Svg>
+      ) : null}
     </View>
   );
 }
@@ -137,23 +197,23 @@ export function PlayerDetail({
           </Text>
         </View>
       </View>
-      <Text style={styles.detailPrice}>{formatMoney(player.listing_price)}</Text>
+      <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.detailPrice}>{formatMoney(player.listing_price)}</Text>
       <Text style={[styles.seasonChange, rangeTotal >= 0 ? styles.positive : styles.negative]}>
-        {formatSignedMoney(rangeTotal)} Last {visiblePoints.length} games
+        {formatSignedMoney(rangeTotal)} {range === 'Season' ? 'This season' : `Last ${visiblePoints.length} games`}
       </Text>
 
       <View style={styles.chartCard}>
         <View style={styles.chartHeading}>
           <View>
             <Text style={styles.sectionEyebrow}>DIVIDEND PERFORMANCE</Text>
-            <Text style={styles.chartTitle}>Per game</Text>
+            <Text style={styles.chartTitle}>Cumulative</Text>
           </View>
           <View accessibilityRole="tablist" style={styles.rangeToggle}>
-            {(['L5', 'L15'] as const).map((option) => {
+            {(['L5', 'L15', 'Season'] as const).map((option) => {
               const selected = range === option;
               return (
                 <Pressable
-                  accessibilityLabel={`Last ${option.slice(1)} games`}
+                  accessibilityLabel={option === 'Season' ? 'Full season' : `Last ${option.slice(1)} games`}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                   hitSlop={4}
@@ -172,10 +232,6 @@ export function PlayerDetail({
           </View>
         </View>
         {visiblePoints.length > 0 ? <DetailChart points={visiblePoints} /> : <Text style={styles.emptyChart}>No game data</Text>}
-        <View style={styles.chartLegend}>
-          <Text style={styles.legendPositive}>■ Positive</Text>
-          <Text style={styles.legendNegative}>■ Negative</Text>
-        </View>
       </View>
 
       <Text style={styles.statsTitle}>Season snapshot</Text>
@@ -252,7 +308,7 @@ function MarketRow({ cash, player, held, isLast, onOpen, onTrade }: MarketRowPro
           <Text style={styles.price}>{formatMoney(player.listing_price)}</Text>
         </View>
       </View>
-      <Sparkline points={playerTrends[player.id] ?? []} />
+      <Sparkline points={selectTrendRange(playerTrends[player.id] ?? [], 'L15')} />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={held ? `Sell ${player.name}` : `Buy ${player.name} for ${formatMoney(player.listing_price)}`}
@@ -294,13 +350,13 @@ export function MarketScreen() {
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <View style={styles.headingRow}>
-        <View>
+        <View style={styles.headingCopy}>
           <Text style={styles.eyebrow}>PLAYER MARKET</Text>
           <Text style={styles.title}>Build your roster</Text>
         </View>
         <View style={styles.cashPill}>
           <Text style={styles.cashLabel}>CASH</Text>
-          <Text style={styles.cashValue}>{formatMoney(summary.cash)}</Text>
+          <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} style={styles.cashValue}>{formatMoney(summary.cash)}</Text>
         </View>
       </View>
       <Text style={styles.subtle}>Tap a player for details, or use Buy/Sell. One share maximum per player.</Text>
@@ -328,10 +384,11 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { flexGrow: 1, padding: 20, paddingBottom: 36, gap: 10 },
   headingRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  headingCopy: { flex: 1, minWidth: 0 },
   eyebrow: { color: colors.gold, fontSize: 12, fontWeight: '800', letterSpacing: 1.8 },
   title: { color: colors.text, fontSize: 28, fontWeight: '800', marginTop: 4, letterSpacing: -0.6 },
   subtle: { color: colors.muted, fontSize: 12, lineHeight: 18, marginBottom: 4 },
-  cashPill: { alignItems: 'flex-end', backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 13, paddingHorizontal: 12, paddingVertical: 9 },
+  cashPill: { alignItems: 'flex-end', alignSelf: 'flex-start', flexShrink: 0, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 13, paddingHorizontal: 12, paddingVertical: 9 },
   cashLabel: { color: colors.muted, fontSize: 8, fontWeight: '900', letterSpacing: 1.2 },
   cashValue: { color: colors.text, fontSize: 12, fontWeight: '800', marginTop: 2 },
   message: { color: colors.gold, backgroundColor: colors.goldSoft, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 12, fontWeight: '700' },
@@ -372,21 +429,16 @@ const styles = StyleSheet.create({
   positive: { color: colors.green },
   negative: { color: colors.red },
   chartCard: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 18, padding: 16, marginTop: 26 },
-  chartHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  chartHeading: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
   sectionEyebrow: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.3 },
   chartTitle: { color: colors.text, fontSize: 20, fontWeight: '800', marginTop: 3 },
-  rangeToggle: { flexDirection: 'row', backgroundColor: colors.background, borderRadius: 10, padding: 3 },
-  rangeButton: { minWidth: 44, minHeight: 44, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  rangeToggle: { flexDirection: 'row', alignSelf: 'flex-end', backgroundColor: colors.background, borderRadius: 10, padding: 3 },
+  rangeButton: { minWidth: 44, minHeight: 44, paddingHorizontal: 7, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   rangeButtonSelected: { backgroundColor: colors.surfaceRaised },
   rangeText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
   rangeTextSelected: { color: colors.gold },
-  chart: { height: 156, flexDirection: 'row', alignItems: 'flex-end', gap: 5, marginTop: 20, borderBottomColor: colors.border, borderBottomWidth: 1 },
-  chartBarSlot: { flex: 1, height: 148, alignItems: 'stretch', justifyContent: 'flex-end' },
-  chartBar: { minWidth: 5, borderTopLeftRadius: 4, borderTopRightRadius: 4, opacity: 0.92 },
-  emptyChart: { color: colors.muted, height: 156, textAlign: 'center', textAlignVertical: 'center' },
-  chartLegend: { flexDirection: 'row', gap: 14, justifyContent: 'flex-end', marginTop: 10 },
-  legendPositive: { color: colors.green, fontSize: 10, fontWeight: '700' },
-  legendNegative: { color: colors.red, fontSize: 10, fontWeight: '700' },
+  chart: { height: 180, marginTop: 16, borderBottomColor: colors.border, borderBottomWidth: 1 },
+  emptyChart: { color: colors.muted, height: 180, textAlign: 'center', textAlignVertical: 'center' },
   statsTitle: { color: colors.text, fontSize: 20, fontWeight: '800', marginTop: 26, marginBottom: 12 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   stat: { width: '48%', minHeight: 86, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: 13, justifyContent: 'space-between' },
