@@ -33,7 +33,7 @@ GAME_LOG = ROOT / "data/raw/2025-26/player_game_logs.csv"
 DNT_CACHE = ROOT / "data/raw/dnt"
 SNAPSHOT = ROOT / "app/src/data/snapshot.ts"
 DEFAULT_OUTPUT = ROOT / "app/src/data/trends.ts"
-LAST_GAME_COUNT = 15
+MIN_GAME_COUNT = 15
 PER_HOLDER_DOLLARS_PER_NP = NET_POINTS_TO_DOLLARS / SHARES_OUT
 
 SNAPSHOT_PLAYER = re.compile(
@@ -108,11 +108,11 @@ def generate() -> dict[str, Any]:
             games_by_player[player.id],
             key=lambda game: (game.game_date, game.game_id),
         )
-        if len(games) < LAST_GAME_COUNT:
+        if len(games) < MIN_GAME_COUNT:
             raise ValueError(
-                f"{player.name} has only {len(games)} cached games; need {LAST_GAME_COUNT}"
+                f"{player.name} has only {len(games)} cached games; need {MIN_GAME_COUNT}"
             )
-        trends[player.id] = [point(player, game) for game in games[-LAST_GAME_COUNT:]]
+        trends[player.id] = [point(player, game) for game in games]
 
     jokic = player_by_id["3112335"]
     christmas = next(
@@ -139,7 +139,7 @@ def render_typescript(generated: dict[str, Any]) -> str:
         "  dividend_per_holder: number;\n"
         "}\n\n"
         f"export const playerTrends: Record<string, TrendPoint[]> = {trends};\n\n"
-        "// A stable source-data spot check retained alongside the rolling last-15 series.\n"
+        "// A stable source-data spot check retained alongside the full-season series.\n"
         "export const trendSpotChecks: Record<string, Record<string, TrendPoint>> = "
         f"{spot_checks};\n"
     )
