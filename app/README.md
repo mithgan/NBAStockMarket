@@ -10,6 +10,6 @@ From `app/`, run:
 npx expo start
 ```
 
-Future application screens will live in `src/screens/`. They are intentionally not part of this scaffold.
+Application screens live in `src/screens/`; the typed mock snapshot is in `src/data/`.
 
-The app consumes engine-shaped data rather than defining a separate mobile data model. The shared `BoxScoreLine`, `DividendEvent`, and portfolio types will be introduced in card 2.
+The app consumes engine-shaped data rather than defining a separate mobile data model. Player, `DividendEvent`, holding, and portfolio types mirror the Python engine's output fields.
