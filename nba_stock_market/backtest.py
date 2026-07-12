@@ -37,6 +37,9 @@ EXPECTED_SEASON = "2025-26"
 EXPECTED_SEASON_START = date(2025, 10, 21)
 EXPECTED_SEASON_END = date(2026, 4, 12)
 EXPECTED_REGULAR_SEASON_GAMES = 1230
+DEFAULT_OPENING_PRICES_PATH = (
+    Path(__file__).resolve().parents[1] / "output/opening-prices-2026-27.csv"
+)
 REQUIRED_MANIFEST_FIELDS = {
     "season",
     "competition",
@@ -762,7 +765,7 @@ def run_backtest(
     portfolio_count: int = 100,
     expectation_window: int = 10,
     expectation_model: str = "dnt",
-    opening_prices_path: Path | None = Path("output/opening-prices-2026-27.csv"),
+    opening_prices_path: Path | None = DEFAULT_OPENING_PRICES_PATH,
 ) -> dict[str, Any]:
     from nba_stock_market.historical_data import load_game_records
 

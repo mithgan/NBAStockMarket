@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
+from nba_stock_market import backtest as backtest_module
 from nba_stock_market import expectations
 from nba_stock_market.backtest import (
     GameRecord,
@@ -19,6 +21,7 @@ from nba_stock_market.backtest import (
     load_source_manifest,
     main,
     replay_game_records,
+    run_backtest,
     select_universe,
 )
 from nba_stock_market.engine import BoxScoreLine, Market, NetPointsModel, Player, User
@@ -371,6 +374,34 @@ class BacktestReplayTest(unittest.TestCase):
 
 
 class OpeningListingLoaderTest(unittest.TestCase):
+    def test_run_backtest_default_opening_prices_path_is_cwd_independent(self) -> None:
+        expected = (
+            Path(backtest_module.__file__).resolve().parents[1]
+            / "output/opening-prices-2026-27.csv"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(directory)
+                with (
+                    patch("nba_stock_market.historical_data.load_game_records", return_value=[]),
+                    patch("nba_stock_market.backtest.load_source_manifest", return_value={}),
+                    patch("nba_stock_market.backtest.load_salary_by_name", return_value={}),
+                    patch(
+                        "nba_stock_market.backtest.load_opening_prices_by_name",
+                        return_value={},
+                    ) as load_openings,
+                    self.assertRaisesRegex(ValueError, "at least ten listed players"),
+                ):
+                    run_backtest(
+                        Path(directory) / "data",
+                        Path(directory) / "output",
+                    )
+            finally:
+                os.chdir(previous_cwd)
+
+        load_openings.assert_called_once_with(expected)
+
     def test_report_narrative_reflects_selected_listing_basis(self) -> None:
         report = json.loads(Path("output/backtest-2026.json").read_text(encoding="utf-8"))
 
