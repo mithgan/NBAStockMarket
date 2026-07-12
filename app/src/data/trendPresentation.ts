@@ -1,4 +1,9 @@
 export type TrendDirection = 'up' | 'down';
+export type TrendRange = 'L5' | 'L15';
+
+export function selectTrendRange<T>(points: readonly T[], range: TrendRange): T[] {
+  return points.slice(-Number(range.slice(1)));
+}
 
 export function trendDirection(values: number[]): TrendDirection {
   if (values.length < 2) return 'up';

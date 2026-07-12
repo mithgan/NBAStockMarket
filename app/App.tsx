@@ -45,8 +45,10 @@ function AppContent() {
             return (
               <Pressable
                 key={tab.key}
+                accessibilityLabel={tab.label}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: active }}
+                hitSlop={6}
                 onPress={() => setActiveTab(tab.key)}
                 style={({ pressed }) => [styles.tab, active && styles.activeTab, pressed && styles.pressed]}
               >
@@ -111,7 +113,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     borderTopWidth: 1,
   },
-  tab: { flex: 1, alignItems: 'center', borderRadius: 10, paddingVertical: 11 },
+  tab: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 11 },
   activeTab: { backgroundColor: colors.surfaceRaised },
   tabText: { color: colors.muted, fontSize: 12, fontWeight: '800' },
   activeTabText: { color: colors.gold },
