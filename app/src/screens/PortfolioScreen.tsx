@@ -19,7 +19,7 @@ export function PortfolioScreen() {
   const { state, summary } = usePortfolio();
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <Text style={styles.eyebrow}>PORTFOLIO VALUE</Text>
       <Text style={styles.total}>{formatMoney(summary.total_value)}</Text>
       <Text style={styles.subtle}>Live mock prices · one share max per player</Text>
@@ -89,7 +89,8 @@ export function PortfolioScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 20, paddingBottom: 36, gap: 12 },
+  scroll: { flex: 1 },
+  content: { flexGrow: 1, padding: 20, paddingBottom: 36, gap: 12 },
   eyebrow: { color: colors.gold, fontSize: 12, fontWeight: '800', letterSpacing: 1.8 },
   total: { color: colors.text, fontSize: 38, fontWeight: '800', letterSpacing: -1.4 },
   subtle: { color: colors.muted, fontSize: 12, lineHeight: 18 },

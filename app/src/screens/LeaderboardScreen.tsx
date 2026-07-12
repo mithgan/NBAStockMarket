@@ -6,7 +6,7 @@ import { colors } from '../theme';
 
 export function LeaderboardScreen() {
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <Text style={styles.eyebrow}>LEAGUE TABLE</Text>
       <Text style={styles.title}>Top portfolios</Text>
       <Text style={styles.subtle}>Mock rankings for the prototype season.</Text>
@@ -35,7 +35,8 @@ export function LeaderboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 20, paddingBottom: 36, gap: 10 },
+  scroll: { flex: 1 },
+  content: { flexGrow: 1, padding: 20, paddingBottom: 36, gap: 10 },
   eyebrow: { color: colors.gold, fontSize: 12, fontWeight: '800', letterSpacing: 1.8 },
   title: { color: colors.text, fontSize: 30, fontWeight: '800', letterSpacing: -0.8 },
   subtle: { color: colors.muted, fontSize: 12 },

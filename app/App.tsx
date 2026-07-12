@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { MarketScreen } from './src/screens/MarketScreen';
@@ -16,14 +17,15 @@ const tabs: { key: Tab; label: string }[] = [
   { key: 'leaderboard', label: 'Leaders' },
 ];
 
-export default function App() {
+function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('portfolio');
+  const insets = useSafeAreaInsets();
 
   return (
     <PortfolioProvider>
       <View style={styles.app}>
         <StatusBar style="light" />
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
           <View style={styles.mark}><Text style={styles.markText}>DB</Text></View>
           <View>
             <Text style={styles.brand}>NBA STOCK MARKET</Text>
@@ -37,7 +39,7 @@ export default function App() {
           {activeTab === 'leaderboard' && <LeaderboardScreen />}
         </View>
 
-        <View style={styles.tabBar}>
+        <View style={[styles.tabBar, { paddingBottom: insets.bottom + 12 }]}>
           {tabs.map((tab) => {
             const active = tab.key === activeTab;
             return (
@@ -58,9 +60,22 @@ export default function App() {
   );
 }
 
+export default function App() {
+  return (
+    <SafeAreaProvider style={styles.provider}>
+      <AppContent />
+    </SafeAreaProvider>
+  );
+}
+
 const styles = StyleSheet.create({
+  provider: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   app: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: colors.background,
     alignSelf: 'center',
     width: '100%',
@@ -71,7 +86,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 11,
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 38 : 18,
     paddingBottom: 14,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
@@ -87,13 +101,12 @@ const styles = StyleSheet.create({
   markText: { color: colors.background, fontSize: 12, fontWeight: '900' },
   brand: { color: colors.text, fontSize: 13, fontWeight: '900', letterSpacing: 1.3 },
   season: { color: colors.muted, fontSize: 9, fontWeight: '700', letterSpacing: 1.1, marginTop: 2 },
-  screen: { flex: 1 },
+  screen: { flex: 1, minHeight: 0 },
   tabBar: {
     flexDirection: 'row',
     gap: 7,
     paddingHorizontal: 12,
     paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 25 : 12,
     backgroundColor: colors.surface,
     borderTopColor: colors.border,
     borderTopWidth: 1,

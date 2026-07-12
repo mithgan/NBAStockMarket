@@ -9,7 +9,7 @@ export function MarketScreen() {
   const { message, owns, summary, trade } = usePortfolio();
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <View style={styles.headingRow}>
         <View>
           <Text style={styles.eyebrow}>PLAYER MARKET</Text>
@@ -62,7 +62,8 @@ export function MarketScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 20, paddingBottom: 36, gap: 10 },
+  scroll: { flex: 1 },
+  content: { flexGrow: 1, padding: 20, paddingBottom: 36, gap: 10 },
   headingRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   eyebrow: { color: colors.gold, fontSize: 12, fontWeight: '800', letterSpacing: 1.8 },
   title: { color: colors.text, fontSize: 28, fontWeight: '800', marginTop: 4, letterSpacing: -0.6 },
