@@ -102,7 +102,7 @@ function PlayerDetail({ player, onClose }: { player: Player; onClose: () => void
   const [range, setRange] = useState<TrendRange>('L15');
   const points = playerTrends[player.id] ?? [];
   const visiblePoints = selectTrendRange(points, range);
-  const seasonTotal = points.reduce((sum, point) => sum + point.dividend_per_holder, 0);
+  const rangeTotal = visiblePoints.reduce((sum, point) => sum + point.dividend_per_holder, 0);
   const bestPayout = points.length > 0
     ? Math.max(...points.map((point) => point.dividend_per_holder))
     : 0;
@@ -110,7 +110,7 @@ function PlayerDetail({ player, onClose }: { player: Player; onClose: () => void
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.detailContent}>
       <Pressable
-        accessibilityLabel="Back to player market"
+        accessibilityLabel={`Close ${player.name} details`}
         accessibilityRole="button"
         hitSlop={8}
         onPress={onClose}
@@ -129,8 +129,8 @@ function PlayerDetail({ player, onClose }: { player: Player; onClose: () => void
         </View>
       </View>
       <Text style={styles.detailPrice}>{formatMoney(player.listing_price)}</Text>
-      <Text style={[styles.seasonChange, seasonTotal >= 0 ? styles.positive : styles.negative]}>
-        {formatSignedMoney(seasonTotal)} this season
+      <Text style={[styles.seasonChange, rangeTotal >= 0 ? styles.positive : styles.negative]}>
+        {formatSignedMoney(rangeTotal)} Last {visiblePoints.length} games
       </Text>
 
       <View style={styles.chartCard}>
@@ -144,7 +144,7 @@ function PlayerDetail({ player, onClose }: { player: Player; onClose: () => void
               const selected = range === option;
               return (
                 <Pressable
-                  accessibilityLabel={`${option.slice(1)} game range`}
+                  accessibilityLabel={`Last ${option.slice(1)} games`}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                   hitSlop={4}
@@ -221,7 +221,6 @@ function MarketRow({ player, held, isLast, onOpen, onTrade }: MarketRowProps) {
 
   return (
     <Pressable
-      accessibilityHint="Opens the upcoming player detail screen"
       accessibilityLabel={`View ${player.name} details`}
       accessibilityRole="button"
       onPress={() => onOpen(player)}
@@ -244,7 +243,7 @@ function MarketRow({ player, held, isLast, onOpen, onTrade }: MarketRowProps) {
       <Sparkline points={playerTrends[player.id] ?? []} />
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${held ? 'Sell' : 'Buy'} one share of ${player.name}`}
+        accessibilityLabel={held ? `Sell ${player.name}` : `Buy ${player.name} for ${formatMoney(player.listing_price)}`}
         hitSlop={6}
         onPress={handleTrade}
         style={({ pressed }) => [
