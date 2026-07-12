@@ -75,16 +75,17 @@ P_after = P_before × exp( k × q_signed / L )
 ```
 
 - `q_signed` = number of shares traded (**positive** for a buy, **negative** for a sell)
-- `k` = base impact sensitivity — start at **0.0003** (≈0.03% price move per share at L=1)
+- `k` = base impact sensitivity — NBA-9's synthetic trader sweep selected **0.003** as the
+  provisional interactive-prototype setting; re-calibrate from observed order flow before production
 - `L` = liquidity/depth of the player — grows with recent trading volume and ownership.
   A brand-new, untraded player has `L ≈ 1`; a heavily-traded superstar has a large `L`.
 
 **Worked examples (at L = 1):**
-- Buy 1 share of a $100 player → `100 × e^(0.0003×1)` ≈ **$100.03**
-- Buy 20 shares → `100 × e^(0.0003×20)` ≈ **$100.60**
-- Sell 50 shares of a $500 player → `500 × e^(-0.0003×50)` ≈ **$492.56**
+- Buy 1 share of a $68M player → `68M × e^(0.003×1)` ≈ **$68.20M**
+- Buy 1 share of a $25M player → `25M × e^(0.003×1)` ≈ **$25.08M**
+- Sell 1 share of a $25M player → `25M × e^(-0.003×1)` ≈ **$24.93M**
 
-**Same 20-share buy on a deep player (L = 5):** `100 × e^(0.0003×20/5)` ≈ **$100.12** — moves
+**Same $68M buy on a deep player (L = 5):** `68M × e^(0.003/5)` ≈ **$68.04M** — moves
 5× less. Popularity buys stability.
 
 > **Why exponential?** It guarantees the price can never go to zero or negative from trading,
@@ -320,7 +321,7 @@ price_history(
 STARTING_CASH   = 10_000
 FEE_PCT         = 0.01
 SHARES_OUT      = 100
-K               = 0.0003     # base impact sensitivity
+K               = 0.003      # NBA-9 provisional prototype sensitivity
 LAMBDA          = 0.03       # daily mean-reversion speed toward fair value
 GRACE_DAYS      = 7
 FLIP_WINDOW_H   = 24
@@ -430,7 +431,7 @@ liquidation). Do it only once the long-only version is solid.
 | `STARTING_CASH` | 10,000 | Opening bankroll |
 | `SHARES_OUT` | 100 | Shares per player |
 | `FEE_PCT` | 0.01 | Trade fee (main sink) |
-| `K` | 0.0003 | Price sensitivity to trades |
+| `K` | 0.003 (provisional) | Price sensitivity selected by the NBA-9 synthetic trader sweep |
 | `L` formula | `1 + 0.05·vol + 0.10·own` | Depth / manipulation resistance |
 | `LAMBDA` | 0.03/day | How fast price tracks reality |
 | `w1..w4` | tune | Fair-value stat weights (your edge) |

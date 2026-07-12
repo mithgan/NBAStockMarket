@@ -45,7 +45,7 @@ A player's price responds directly to trading demand:
 down, scaled by the player's liquidity/depth `L` so thin names can't be cheaply manipulated:
 
 ```
-P ← P × exp( k × shares / L )        # +shares = buy, −shares = sell, k ≈ 0.0003
+P ← P × exp( k × shares / L )        # +shares = buy, −shares = sell, prototype k = 0.003
 ```
 
 Performance does not automatically rewrite that price. Instead, a game settles against an
@@ -122,15 +122,22 @@ Run the verifier:
 python3 -m pytest -q
 ```
 
-Run the sim and write a comparison artifact:
+Run the deterministic trader sweep and write its JSON evidence plus readable report:
 
 ```bash
-python3 -m nba_stock_market.simulation --seed 1337 --days 45 --output output/sim-summary.json
+python3 -m nba_stock_market.simulation --days 45 \
+  --seeds 7 42 1337 \
+  --candidates 0.0003 0.001 0.003 0.01 0.03 \
+  --output output/trader-simulation.json \
+  --report output/trader-simulation.md
 ```
 
-The entrypoint compares default pure-crowd pricing with two explicitly configured
-fair-value-reversion experiments. Every variant uses deterministic fake game results and nine
-real players across star/mid/bench salary tiers; the v1/default market remains reversion-free.
+The entrypoint keeps game dividends and fair-value reversion off so it can isolate supply/demand
+price impact and inactivity decay. It runs balanced, hype-heavy, and boom/bust order flows across
+fixed seeds using nine real players across star/mid/bench salary tiers. NBA-9 selected `0.003` as
+the strongest candidate that stayed below the prototype price-safety gates. The report also found
+that the current fee plus flip-penalty economy drains too much wealth under high turnover, so the
+price setting is ready for the next interactive prototype but the full economy is not production-ready.
 
 ## Backtest
 

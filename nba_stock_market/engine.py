@@ -11,7 +11,9 @@ STARTING_CASH = 140_000_000.0
 FEE_PCT = 0.01
 SHARES_OUT = 100
 MAX_SHARES_PER_USER_PER_PLAYER = 1
-IMPACT_K = 0.0003
+# Calibrated by the NBA-9 deterministic trader sweep. This remains a
+# prototype setting until real order-flow distributions are available.
+IMPACT_K = 0.003
 REVERSION_RATE = 0.0
 IDLE_CASH_FEE = 0.0002
 MIN_PRICE_FLOOR = 350_000.0
@@ -358,16 +360,28 @@ class Market:
                 raise TradeError("not enough remaining float")
             if user.cash < notional + fee:
                 raise TradeError("insufficient cash")
-            user.cash -= notional + fee
-            user.holdings[player_id] = user.shares(player_id) + quantity
         else:
             if user.shares(player_id) < quantity:
                 raise TradeError("not enough shares")
+
+        try:
+            impacted_price = price * math.exp(
+                self.impact_k * int(normalized_side) * quantity / depth
+            )
+        except OverflowError as exc:
+            raise TradeError("price impact overflow") from exc
+        new_price = max(impacted_price, player.floor)
+        if not math.isfinite(new_price):
+            raise TradeError("price impact produced a non-finite price")
+
+        if normalized_side is TradeSide.BUY:
+            user.cash -= notional + fee
+            user.holdings[player_id] = user.shares(player_id) + quantity
+        else:
             user.cash += notional - fee
             user.holdings[player_id] = user.shares(player_id) - quantity
 
-        player.current_price *= math.exp(self.impact_k * int(normalized_side) * quantity / depth)
-        player.current_price = max(player.current_price, player.floor)
+        player.current_price = new_price
         player.last_trade_day = self.day
         player.volume_30d += quantity
         player._assert_valid()

@@ -180,23 +180,36 @@ class PricingEngineTest(unittest.TestCase):
         sell = market.execute_trade("u", "p", TradeSide.SELL, 1)
         self.assertLess(sell.new_price, buy.new_price)
 
+    def test_price_impact_overflow_rejects_trade_without_mutating_user(self) -> None:
+        market = Market(
+            [Player("p", "Overflow Player", "mid", 10_000_000.0, 10_000_000.0)],
+            [User("u")],
+            impact_k=1000.0,
+        )
+        starting_cash = market.users["u"].cash
+
+        with self.assertRaisesRegex(TradeError, "price impact"):
+            market.execute_trade("u", "p", TradeSide.BUY, 1)
+
+        self.assertEqual(market.users["u"].cash, starting_cash)
+        self.assertEqual(market.users["u"].shares("p"), 0)
+        self.assertEqual(market.players["p"].current_price, 10_000_000.0)
+
     def test_doc_price_impact_examples(self) -> None:
         shallow = Market(
             [Player("p", "Example Player", "mid", 10_000_000.0, 10_000_000.0)],
-            [User("u", cash=300_000_000.0)],
-            max_shares_per_user_per_player=20,
+            [User("u")],
         )
-        trade = shallow.execute_trade("u", "p", TradeSide.BUY, 20)
-        self.assertAlmostEqual(trade.new_price, 10_060_180.36, places=2)
+        trade = shallow.execute_trade("u", "p", TradeSide.BUY, 1)
+        self.assertAlmostEqual(trade.new_price, 10_030_045.05, places=2)
 
         deep_player = Player("p", "Deep Player", "mid", 10_000_000.0, 10_000_000.0, volume_30d=80.0)
         deep = Market(
             [deep_player],
-            [User("u", cash=300_000_000.0)],
-            max_shares_per_user_per_player=20,
+            [User("u")],
         )
-        trade = deep.execute_trade("u", "p", TradeSide.BUY, 20)
-        self.assertAlmostEqual(trade.new_price, 10_012_007.20, places=2)
+        trade = deep.execute_trade("u", "p", TradeSide.BUY, 1)
+        self.assertAlmostEqual(trade.new_price, 10_006_001.80, places=2)
 
     def test_zero_trade_day_with_no_reversion_preserves_price(self) -> None:
         market = Market([Player("p", "Static Player", "mid", 10_000_000.0, 14_000_000.0)], reversion_rate=0.0)
