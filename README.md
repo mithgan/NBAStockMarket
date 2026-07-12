@@ -155,7 +155,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e . pytest
 python scripts/fetch_backtest_data.py
-read -rsp "DNT API key: " DNT_API_KEY && export DNT_API_KEY && echo
+printf "DNT API key: " && read -rs DNT_API_KEY && export DNT_API_KEY && echo
 python scripts/fetch_dnt_predictions.py
 python -m nba_stock_market.backtest
 python -m scripts.generate_expectation_comparison
