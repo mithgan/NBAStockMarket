@@ -42,33 +42,33 @@ Russell's answer: signed surprise dividends are close to self-cancelling at the 
 
 ### Top 10
 
-| Player | Tier | Listing price | Games | Season / share | Full float | Cohort cash |
-|---|---|---:|---:|---:|---:|---:|
-| Nickeil Alexander-Walker | mid | $13,376,003 | 78 | $7,363,710 | $736,371,020 | $81,000,812 |
-| Victor Wembanyama | star | $45,741,439 | 64 | $7,221,831 | $722,183,080 | $0 |
-| Nikola Jokic | star | $57,985,817 | 65 | $6,608,871 | $660,887,060 | $0 |
-| Keyonte George | bench | $7,661,869 | 54 | $6,299,079 | $629,907,920 | $62,990,792 |
-| Kevin Durant | star | $35,346,797 | 78 | $6,212,013 | $621,201,280 | $0 |
-| Luka Doncic | star | $45,513,838 | 64 | $6,115,391 | $611,539,140 | $6,115,391 |
-| Jamal Murray | mid | $29,545,167 | 75 | $6,049,323 | $604,932,300 | $0 |
-| Kawhi Leonard | star | $45,081,675 | 65 | $5,913,770 | $591,377,020 | $11,827,540 |
-| Kon Knueppel | mid | $15,952,592 | 81 | $5,798,954 | $579,895,380 | $28,994,769 |
-| Tim Hardaway Jr. | bench | $5,177,427 | 80 | $5,334,542 | $533,454,200 | $53,345,420 |
+| Player | Tier | Listing | Actual salary | Games | Season / share | Full float | Cohort cash |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Nickeil Alexander-Walker | mid | $13,376,003 | $15,161,800 | 78 | $7,363,710 | $736,371,020 | $81,000,812 |
+| Victor Wembanyama | star | $45,741,439 | $13,376,880 | 64 | $7,221,831 | $722,183,080 | $0 |
+| Nikola Jokic | star | $57,985,817 | $55,224,526 | 65 | $6,608,871 | $660,887,060 | $0 |
+| Keyonte George | bench | $7,661,869 | $4,278,960 | 54 | $6,299,079 | $629,907,920 | $62,990,792 |
+| Kevin Durant | star | $35,346,797 | $54,708,609 | 78 | $6,212,013 | $621,201,280 | $0 |
+| Luka Doncic | star | $45,513,838 | $45,999,660 | 64 | $6,115,391 | $611,539,140 | $6,115,391 |
+| Jamal Murray | mid | $29,545,167 | $46,394,100 | 75 | $6,049,323 | $604,932,300 | $0 |
+| Kawhi Leonard | star | $45,081,675 | $50,000,000 | 65 | $5,913,770 | $591,377,020 | $11,827,540 |
+| Kon Knueppel | mid | $15,952,592 | $10,015,680 | 81 | $5,798,954 | $579,895,380 | $28,994,769 |
+| Tim Hardaway Jr. | bench | $5,177,427 | $2,296,274 | 80 | $5,334,542 | $533,454,200 | $53,345,420 |
 
 ### Bottom 10
 
-| Player | Tier | Listing price | Games | Season / share | Full float | Cohort cash |
-|---|---|---:|---:|---:|---:|---:|
-| Derrick White | star | $37,706,830 | 77 | -$7,205,901 | -$720,590,060 | $0 |
-| Quentin Grimes | bench | $2,562,481 | 75 | -$3,427,356 | -$342,735,620 | -$30,846,206 |
-| Jamal Shead | bench | $9,746,697 | 82 | -$3,361,887 | -$336,188,720 | -$40,342,646 |
-| Herbert Jones | mid | $10,385,487 | 56 | -$3,281,773 | -$328,177,320 | -$26,254,186 |
-| Payton Pritchard | mid | $19,156,234 | 79 | -$3,199,724 | -$319,972,380 | -$15,998,619 |
-| Miles Bridges | mid | $18,919,025 | 77 | -$2,809,357 | -$280,935,720 | -$25,284,215 |
-| Sam Hauser | mid | $14,142,412 | 78 | -$2,475,927 | -$247,592,660 | -$24,759,266 |
-| Luguentz Dort | mid | $10,428,906 | 69 | -$2,272,013 | -$227,201,302 | -$20,448,117 |
-| Devin Booker | star | $36,223,145 | 64 | -$2,237,806 | -$223,780,620 | -$4,475,612 |
-| Onyeka Okongwu | mid | $16,928,310 | 74 | -$1,982,809 | -$198,280,900 | -$1,982,809 |
+| Player | Tier | Listing | Actual salary | Games | Season / share | Full float | Cohort cash |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Derrick White | star | $37,706,830 | $28,100,000 | 77 | -$7,205,901 | -$720,590,060 | $0 |
+| Quentin Grimes | bench | $2,562,481 | $8,741,209 | 75 | -$3,427,356 | -$342,735,620 | -$30,846,206 |
+| Jamal Shead | bench | $9,746,697 | $1,955,377 | 82 | -$3,361,887 | -$336,188,720 | -$40,342,646 |
+| Herbert Jones | mid | $10,385,487 | $13,937,574 | 56 | -$3,281,773 | -$328,177,320 | -$26,254,186 |
+| Payton Pritchard | mid | $19,156,234 | $7,232,143 | 79 | -$3,199,724 | -$319,972,380 | -$15,998,619 |
+| Miles Bridges | mid | $18,919,025 | $25,000,000 | 77 | -$2,809,357 | -$280,935,720 | -$25,284,215 |
+| Sam Hauser | mid | $14,142,412 | $10,044,644 | 78 | -$2,475,927 | -$247,592,660 | -$24,759,266 |
+| Luguentz Dort | mid | $10,428,906 | $18,222,222 | 69 | -$2,272,013 | -$227,201,302 | -$20,448,117 |
+| Devin Booker | star | $36,223,145 | $53,142,264 | 64 | -$2,237,806 | -$223,780,620 | -$4,475,612 |
+| Onyeka Okongwu | mid | $16,928,310 | $15,000,000 | 74 | -$1,982,809 | -$198,280,900 | -$1,982,809 |
 
 The ranking is signed surprise versus Dunks & Threes pregame projections, not raw scoring. Players who outperform those projections lead; underperformance debits holders. Injuries themselves create no game event.
 

@@ -383,7 +383,12 @@ def _player_row(player: ListedPlayer, per_share: float, holder_total: float) -> 
         "player_id": player.player_id,
         "name": player.name,
         "tier": player.tier,
-        "salary": _round_money(player.salary),
+        "listing_price": _round_money(player.salary),
+        "actual_salary": (
+            _round_money(player.actual_salary)
+            if player.actual_salary is not None
+            else None
+        ),
         "games": player.games,
         "minutes": round(player.minutes, 1),
         "season_dividend_per_share": _round_money(per_share),
@@ -707,16 +712,18 @@ def _render_markdown(report: dict[str, Any]) -> str:
             f"{_money(row['median_season_full_float'])} |"
         )
 
-    lines.extend(["", "## C. Player distribution", "", "### Top 10", "", "| Player | Tier | Listing price | Games | Season / share | Full float | Cohort cash |", "|---|---|---:|---:|---:|---:|---:|"])
+    lines.extend(["", "## C. Player distribution", "", "### Top 10", "", "| Player | Tier | Listing | Actual salary | Games | Season / share | Full float | Cohort cash |", "|---|---|---:|---:|---:|---:|---:|---:|"])
     for row in report["distribution"]["top_10"]:
         lines.append(
-            f"| {row['name']} | {row['tier']} | {_money(row['salary'])} | {row['games']} | "
+            f"| {row['name']} | {row['tier']} | {_money(row['listing_price'])} | "
+            f"{_money(row['actual_salary'])} | {row['games']} | "
             f"{_money(row['season_dividend_per_share'])} | {_money(row['season_dividend_full_float'])} | {_money(row['cohort_cash_change'])} |"
         )
-    lines.extend(["", "### Bottom 10", "", "| Player | Tier | Listing price | Games | Season / share | Full float | Cohort cash |", "|---|---|---:|---:|---:|---:|---:|"])
+    lines.extend(["", "### Bottom 10", "", "| Player | Tier | Listing | Actual salary | Games | Season / share | Full float | Cohort cash |", "|---|---|---:|---:|---:|---:|---:|---:|"])
     for row in report["distribution"]["bottom_10"]:
         lines.append(
-            f"| {row['name']} | {row['tier']} | {_money(row['salary'])} | {row['games']} | "
+            f"| {row['name']} | {row['tier']} | {_money(row['listing_price'])} | "
+            f"{_money(row['actual_salary'])} | {row['games']} | "
             f"{_money(row['season_dividend_per_share'])} | {_money(row['season_dividend_full_float'])} | {_money(row['cohort_cash_change'])} |"
         )
     lines.extend(

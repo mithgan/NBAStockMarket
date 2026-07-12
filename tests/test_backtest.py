@@ -14,6 +14,7 @@ from nba_stock_market import expectations
 from nba_stock_market.backtest import (
     GameRecord,
     ListedPlayer,
+    _player_row,
     _render_markdown,
     _round_money,
     build_synthetic_users,
@@ -374,6 +375,25 @@ class BacktestReplayTest(unittest.TestCase):
 
 
 class OpeningListingLoaderTest(unittest.TestCase):
+    def test_report_player_row_separates_listing_price_and_actual_salary(self) -> None:
+        row = _player_row(
+            ListedPlayer(
+                "p",
+                "Split Price Player",
+                57_985_817,
+                2_000,
+                65,
+                "star",
+                actual_salary=55_224_526,
+            ),
+            1_000,
+            2_000,
+        )
+
+        self.assertEqual(row["listing_price"], 57_985_817)
+        self.assertEqual(row["actual_salary"], 55_224_526)
+        self.assertNotIn("salary", row)
+
     def test_run_backtest_default_opening_prices_path_is_cwd_independent(self) -> None:
         expected = (
             Path(backtest_module.__file__).resolve().parents[1]

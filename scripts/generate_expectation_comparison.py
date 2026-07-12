@@ -95,7 +95,7 @@ def _top_table(rows: list[dict[str, object]]) -> list[str]:
     ]
     for rank, row in enumerate(rows, 1):
         lines.append(
-            f"| {rank} | {row['name']} | {row['tier']} | {_money(row['salary'])} | "
+            f"| {rank} | {row['name']} | {row['tier']} | {_money(row['listing_price'])} | "
             f"{row['games']} | {_money(row['season_dividend_per_share'])} | "
             f"{_money(row['season_dividend_full_float'])} |"
         )
