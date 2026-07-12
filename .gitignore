@@ -11,4 +11,5 @@ data/raw/
 output/*
 !output/backtest-2026.md
 !output/backtest-2026.json
+!output/opening-prices-2026-27.csv
 .env
