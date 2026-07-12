@@ -170,6 +170,7 @@ class Player:
     current_price: float
     fair_value: float
     opening_price: float | None = None
+    actual_salary: float | None = None
     shares_outstanding: int = SHARES_OUT
     volume_30d: float = 0.0
     listed_day: int = 0

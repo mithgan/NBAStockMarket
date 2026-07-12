@@ -29,7 +29,7 @@ from nba_stock_market.expectations import (
     SalaryProjectionExpectation,
     TrailingMeanExpectation,
     normalize_player_name,
-    salary_implied_net_points,
+    player_salary_implied_net_points,
 )
 
 
@@ -73,6 +73,7 @@ class ListedPlayer:
     games: int
     tier: str
     used_salary_fallback: bool = False
+    actual_salary: float | None = None
 
 
 @dataclass(frozen=True)
@@ -209,21 +210,24 @@ def replay_game_records(
     evaluations: list[GameEvaluation] = []
     calendar_day_count = 0
     expectation_fallback_count = 0
+    processed_settlements: set[tuple[str, str]] = set()
     while current_date <= end_date:
         calendar_day_count += 1
         games_on_date = games_by_date.get(current_date, [])
         if games_on_date:
             game_day_count += 1
         for game in games_on_date:
+            settlement = (game.player_id, game.game_id)
+            if settlement in processed_settlements:
+                continue
             actual = market.net_points_model.score(game.box_score)
             expected = expectation_source.expected_performance(
                 market.players[game.player_id], current_date
             )
             if expected is None:
                 expectation_fallback_count += 1
-                expected_net_points = salary_implied_net_points(
-                    market.players[game.player_id].opening_price
-                    or market.players[game.player_id].current_price
+                expected_net_points = player_salary_implied_net_points(
+                    market.players[game.player_id]
                 )
             elif isinstance(expected, BoxScoreLine):
                 expected_net_points = market.net_points_model.score(expected)
@@ -236,6 +240,7 @@ def replay_game_records(
                 game_date=current_date,
                 settlement_key=game.game_id,
             )
+            processed_settlements.add(settlement)
             evaluations.append(
                 GameEvaluation(
                     game,
@@ -254,7 +259,7 @@ def replay_game_records(
         current_date += timedelta(days=1)
 
     return ReplaySummary(
-        len(ordered),
+        len(evaluations),
         game_day_count,
         calendar_day_count,
         idle_cash_sunk,
@@ -347,6 +352,7 @@ def select_universe(
                 games=appearances[player_id],
                 tier=tier,
                 used_salary_fallback=opening_prices_by_name is not None and opening is None,
+                actual_salary=salary,
             )
         )
     return players
@@ -780,6 +786,7 @@ def run_backtest(
                 player.tier,
                 player.salary,
                 player.salary,
+                actual_salary=player.actual_salary,
             )
             for player in universe
         ],

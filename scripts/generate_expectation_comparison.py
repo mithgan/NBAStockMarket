@@ -67,7 +67,14 @@ def _replays() -> tuple[list[object], dict[str, object]]:
         source = _source(model)
         market = Market(
             [
-                Player(player.player_id, player.name, player.tier, player.salary, player.salary)
+                Player(
+                    player.player_id,
+                    player.name,
+                    player.tier,
+                    player.salary,
+                    player.salary,
+                    actual_salary=player.actual_salary,
+                )
                 for player in universe
             ],
             build_synthetic_users(universe, count=100, seed=2026),

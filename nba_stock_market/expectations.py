@@ -23,13 +23,24 @@ def normalize_player_name(name: str) -> str:
 
 
 def salary_implied_net_points(salary: float) -> float:
-    """Map salary-scale listing prices to a transparent cold-start prior."""
+    """Map contract salary to a transparent cold-start prior."""
 
     normalized = max(0.0, float(salary))
     return min(
         SALARY_PRIOR_CAP,
         SALARY_PRIOR_BASE + SALARY_PRIOR_PER_MILLION * normalized / 1_000_000,
     )
+
+
+def player_salary_implied_net_points(player: Player) -> float:
+    """Use contract salary for priors while preserving legacy price-only players."""
+
+    salary = (
+        player.actual_salary
+        if player.actual_salary is not None
+        else player.opening_price or player.current_price
+    )
+    return salary_implied_net_points(salary)
 
 
 class TrailingMeanExpectation:
@@ -47,7 +58,7 @@ class TrailingMeanExpectation:
         del game_date
         prior_games = self._history[player.id]
         if not prior_games:
-            return salary_implied_net_points(player.opening_price or player.current_price)
+            return player_salary_implied_net_points(player)
         return sum(prior_games) / len(prior_games)
 
     def observe(self, player_id: str, actual_net_points: float) -> None:
@@ -67,7 +78,7 @@ class SalaryProjectionExpectation:
 
     def expected_performance(self, player: Player, game_date: date) -> float:
         del game_date
-        return salary_implied_net_points(player.opening_price or player.current_price)
+        return player_salary_implied_net_points(player)
 
     def observe(self, player_id: str, actual_net_points: float) -> None:
         """Ignore actuals because the season projection is intentionally constant."""

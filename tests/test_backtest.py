@@ -76,6 +76,27 @@ class ExpectationSourceTest(unittest.TestCase):
             source.expected_performance(player, date(2026, 4, 12)), expected
         )
 
+    def test_salary_expectations_use_actual_salary_not_modeled_listing(self) -> None:
+        player = Player(
+            "p",
+            "Split Price Player",
+            "star",
+            58_000_000,
+            58_000_000,
+            actual_salary=20_000_000,
+        )
+        expected = salary_implied_net_points(20_000_000)
+
+        self.assertEqual(
+            SalaryProjectionExpectation().expected_performance(player, date(2025, 10, 21)),
+            expected,
+        )
+        self.assertEqual(
+            TrailingMeanExpectation().expected_performance(player, date(2025, 10, 21)),
+            expected,
+        )
+        self.assertEqual(player.current_price, 58_000_000)
+
     def test_production_expectation_is_zero_for_every_game(self) -> None:
         player = Player("p", "Raw Producer", "star", 40_000_000, 40_000_000)
         source = expectations.ProductionExpectation()
@@ -195,7 +216,14 @@ class BacktestReplayTest(unittest.TestCase):
             cache = Path(directory)
             (cache / "2025-12-25.json").write_text("[]", encoding="utf-8")
             source = DunksAndThreesExpectation(cache_dir=cache)
-            player = Player("p", "Missing Player", "star", 40_000_000, 40_000_000)
+            player = Player(
+                "p",
+                "Missing Player",
+                "star",
+                58_000_000,
+                58_000_000,
+                actual_salary=20_000_000,
+            )
             market = Market(
                 [player],
                 [User("holder", holdings={"p": 1})],
@@ -212,7 +240,7 @@ class BacktestReplayTest(unittest.TestCase):
         self.assertEqual(summary.expectation_fallback_count, 1)
         self.assertEqual(
             summary.evaluations[0].expected_net_points,
-            salary_implied_net_points(player.current_price),
+            salary_implied_net_points(20_000_000),
         )
 
     def test_replay_applies_idle_cash_sink_after_game_dividends(self) -> None:
@@ -275,16 +303,6 @@ class BacktestReplayTest(unittest.TestCase):
         self.assertEqual(NetPointsModel().score(games[0].box_score), 20.0)
 
     def test_replay_uses_game_id_to_make_duplicate_settlement_idempotent(self) -> None:
-        player = Player("p", "Replay Player", "star", 40_000_000, 40_000_000)
-        holder = User("holder", cash=100_000_000, holdings={"p": 1})
-        source = TrailingMeanExpectation(window=10)
-        market = Market(
-            [player],
-            [holder],
-            expectation_source=source,
-            idle_cash_fee=0.0,
-            inactivity_decay_rate=0.0,
-        )
         game = GameRecord(
             "g1",
             date(2025, 10, 21),
@@ -293,15 +311,27 @@ class BacktestReplayTest(unittest.TestCase):
             "TST",
             line_with_points(20),
         )
-        expected_change = (
-            20.0 - salary_implied_net_points(player.current_price)
-        ) * market.net_points_to_dollars / 100
 
-        summary = replay_game_records(market, [game, game], source)
+        def replay(records: list[GameRecord]) -> tuple[object, float, tuple[float, ...]]:
+            source = TrailingMeanExpectation(window=10)
+            holder = User("holder", cash=100_000_000, holdings={"p": 1})
+            market = Market(
+                [Player("p", "Replay Player", "star", 40_000_000, 40_000_000)],
+                [holder],
+                expectation_source=source,
+                idle_cash_fee=0.0,
+                inactivity_decay_rate=0.0,
+            )
+            summary = replay_game_records(market, records, source)
+            report_total = sum(item.dividend_per_share for item in summary.evaluations)
+            return summary, report_total, source.history("p")
 
-        self.assertAlmostEqual(holder.cash - 100_000_000, expected_change)
-        self.assertEqual(summary.game_count, 2)
-        self.assertEqual(len(market.dividend_events), 1)
+        deduplicated, deduplicated_total, deduplicated_history = replay([game])
+        duplicated, duplicated_total, duplicated_history = replay([game, game])
+
+        self.assertEqual(duplicated, deduplicated)
+        self.assertEqual(duplicated_total, deduplicated_total)
+        self.assertEqual(duplicated_history, deduplicated_history)
 
     def test_synthetic_portfolios_are_deterministic_diversified_and_budgeted(self) -> None:
         players = [
@@ -361,9 +391,11 @@ class OpeningListingLoaderTest(unittest.TestCase):
 
         by_id = {player.player_id: player for player in universe}
         self.assertEqual(by_id["p1"].salary, 57_985_817.0)
+        self.assertEqual(by_id["p1"].actual_salary, 55_000_000.0)
         self.assertEqual(by_id["p1"].tier, "star")
         self.assertFalse(by_id["p1"].used_salary_fallback)
         self.assertEqual(by_id["p2"].salary, 8_000_000.0)
+        self.assertEqual(by_id["p2"].actual_salary, 8_000_000.0)
         self.assertEqual(by_id["p2"].tier, "bench")
         self.assertTrue(by_id["p2"].used_salary_fallback)
 
