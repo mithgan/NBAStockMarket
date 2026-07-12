@@ -117,6 +117,49 @@ class PricingEngineTest(unittest.TestCase):
         self.assertEqual(event.dividend_per_share, 800_000.0)
         self.assertEqual(holder.cash - STARTING_CASH, 800_000.0)
 
+    def test_duplicate_settlement_returns_prior_event_without_changing_cash(self) -> None:
+        holder = User("holder", holdings={"p": 1})
+        market = Market(
+            [Player("p", "Holder Player", "star", 50_000_000.0, 50_000_000.0)],
+            [holder],
+        )
+        first = market.pay_daily_performance_dividend(
+            "p",
+            actual_net_points=40.0,
+            expected_net_points=20.0,
+            settlement_key="game-1",
+        )
+        cash_after_first = holder.cash
+
+        duplicate = market.pay_daily_performance_dividend(
+            "p",
+            actual_net_points=40.0,
+            expected_net_points=20.0,
+            settlement_key="game-1",
+        )
+
+        self.assertIs(duplicate, first)
+        self.assertEqual(holder.cash, cash_after_first)
+        self.assertEqual(market.dividend_events, [first])
+
+    def test_distinct_settlement_keys_each_pay_dividends(self) -> None:
+        holder = User("holder", holdings={"p": 1})
+        market = Market(
+            [Player("p", "Holder Player", "star", 50_000_000.0, 50_000_000.0)],
+            [holder],
+        )
+
+        for settlement_key in ("game-1", "game-2"):
+            market.pay_daily_performance_dividend(
+                "p",
+                actual_net_points=40.0,
+                expected_net_points=20.0,
+                settlement_key=settlement_key,
+            )
+
+        self.assertEqual(holder.cash - STARTING_CASH, 1_600_000.0)
+        self.assertEqual(len(market.dividend_events), 2)
+
     def test_daily_dividend_positive_and_negative_results_are_symmetric(self) -> None:
         holder = User("holder", holdings={"p": 4})
         market = Market(
@@ -168,6 +211,36 @@ class PricingEngineTest(unittest.TestCase):
         event = market.apply_game_result("p", actual=expected_line, game_date=date(2026, 1, 15))
         self.assertEqual(source.call, ("p", date(2026, 1, 15)))
         self.assertAlmostEqual(event.dividend_per_share, 0.0)
+
+    def test_game_result_forwards_settlement_key(self) -> None:
+        holder = User("holder", holdings={"p": 1})
+        market = Market(
+            [Player("p", "Result Player", "star", 50_000_000.0, 50_000_000.0)],
+            [holder],
+        )
+
+        first = market.apply_game_result(
+            "p", actual=40.0, expected=20.0, settlement_key="game-1"
+        )
+        duplicate = market.apply_game_result(
+            "p", actual=40.0, expected=20.0, settlement_key="game-1"
+        )
+
+        self.assertIs(duplicate, first)
+        self.assertEqual(holder.cash - STARTING_CASH, 800_000.0)
+
+    def test_market_rejects_preloaded_holdings_beyond_player_float(self) -> None:
+        player = Player("p", "Finite Float", "star", 50_000_000.0, 50_000_000.0)
+        users = [User(f"holder-{index}", holdings={"p": 1}) for index in range(101)]
+
+        with self.assertRaisesRegex(ValueError, "shares outstanding"):
+            Market([player], users)
+
+    def test_market_rejects_preloaded_holdings_for_unknown_player(self) -> None:
+        player = Player("p", "Known Player", "star", 50_000_000.0, 50_000_000.0)
+
+        with self.assertRaisesRegex(ValueError, "unknown player"):
+            Market([player], [User("holder", holdings={"missing": 1})])
 
     def test_buy_increases_and_sell_decreases_price(self) -> None:
         market = Market(

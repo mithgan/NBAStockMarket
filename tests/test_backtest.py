@@ -272,6 +272,35 @@ class BacktestReplayTest(unittest.TestCase):
         self.assertEqual(source.history("p"), (20.0, 24.0))
         self.assertEqual(NetPointsModel().score(games[0].box_score), 20.0)
 
+    def test_replay_uses_game_id_to_make_duplicate_settlement_idempotent(self) -> None:
+        player = Player("p", "Replay Player", "star", 40_000_000, 40_000_000)
+        holder = User("holder", cash=100_000_000, holdings={"p": 1})
+        source = TrailingMeanExpectation(window=10)
+        market = Market(
+            [player],
+            [holder],
+            expectation_source=source,
+            idle_cash_fee=0.0,
+            inactivity_decay_rate=0.0,
+        )
+        game = GameRecord(
+            "g1",
+            date(2025, 10, 21),
+            "p",
+            "Replay Player",
+            "TST",
+            line_with_points(20),
+        )
+        expected_change = (
+            20.0 - salary_implied_net_points(player.current_price)
+        ) * market.net_points_to_dollars / 100
+
+        summary = replay_game_records(market, [game, game], source)
+
+        self.assertAlmostEqual(holder.cash - 100_000_000, expected_change)
+        self.assertEqual(summary.game_count, 2)
+        self.assertEqual(len(market.dividend_events), 1)
+
     def test_synthetic_portfolios_are_deterministic_diversified_and_budgeted(self) -> None:
         players = [
             ListedPlayer(

@@ -233,6 +233,7 @@ def replay_game_records(
                 actual_net_points=actual,
                 expected_net_points=expected_net_points,
                 game_date=current_date,
+                settlement_key=game.game_id,
             )
             evaluations.append(
                 GameEvaluation(

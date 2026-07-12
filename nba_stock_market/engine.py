@@ -285,13 +285,26 @@ class Market:
         ):
             raise ValueError("max_shares_per_user_per_player must be a positive integer")
         self.max_shares_per_user_per_player = max_shares_per_user_per_player
+        aggregate_holdings = {player_id: 0 for player_id in self.players}
         for user in self.users.values():
             for player_id, shares in user.holdings.items():
+                if player_id not in self.players:
+                    raise ValueError(
+                        f"holding for unknown player {player_id}: user {user.id}"
+                    )
                 if shares > self.max_shares_per_user_per_player:
                     raise ValueError(
                         f"holding for {player_id} exceeds per-user holding cap of "
                         f"{self.max_shares_per_user_per_player}"
                     )
+                aggregate_holdings[player_id] += shares
+        for player_id, held_shares in aggregate_holdings.items():
+            shares_outstanding = self.players[player_id].shares_outstanding
+            if held_shares > shares_outstanding:
+                raise ValueError(
+                    f"aggregate holding for {player_id} exceeds "
+                    f"{shares_outstanding} shares outstanding"
+                )
         self.idle_cash_fee = self._rate("idle_cash_fee", idle_cash_fee)
         self.inactivity_decay_rate = self._rate("inactivity_decay_rate", inactivity_decay_rate)
         if type(grace_days) is not int or grace_days < 0:
@@ -308,6 +321,7 @@ class Market:
         self.dividend_events: list[DividendEvent] = []
         # Compatibility-friendly name for consumers that treat this as a log.
         self.dividend_log = self.dividend_events
+        self._settled_dividends: dict[tuple[str, str], DividendEvent] = {}
 
     def ensure_user(self, user_id: str) -> User:
         user = self.users.get(user_id)
@@ -444,15 +458,24 @@ class Market:
         actual_net_points: float,
         expected_net_points: float,
         game_date: date | None = None,
+        settlement_key: str | None = None,
     ) -> DividendEvent:
         """Pay holders for actual performance relative to expectation.
 
         Negative surprises intentionally debit holder cash.  Prices are not
         touched: daily performance enters the economy only through this cash
         event, leaving prices to supply/demand (plus optional experiments).
+
+        A settlement key is scoped to the player. Reusing it returns the
+        original event object without changing cash or appending another event.
         """
 
         self._player_or_error(player_id)
+        scoped_key = (
+            (player_id, settlement_key) if settlement_key is not None else None
+        )
+        if scoped_key is not None and scoped_key in self._settled_dividends:
+            return self._settled_dividends[scoped_key]
         actual = self._finite_value("actual_net_points", actual_net_points, TradeError)
         expected = self._finite_value("expected_net_points", expected_net_points, TradeError)
         dividend_per_share = (
@@ -482,6 +505,8 @@ class Market:
             total_cash_change=total_cash_change,
         )
         self.dividend_events.append(event)
+        if scoped_key is not None:
+            self._settled_dividends[scoped_key] = event
         return event
 
     def apply_game_result(
@@ -491,10 +516,16 @@ class Market:
         actual: ExpectedPerformance,
         expected: ExpectedPerformance | None = None,
         game_date: date | None = None,
+        settlement_key: str | None = None,
     ) -> DividendEvent:
-        """Resolve box-score/net-point inputs and apply the daily dividend."""
+        """Resolve inputs and apply an optionally idempotent daily dividend."""
 
         player = self._player_or_error(player_id)
+        scoped_key = (
+            (player_id, settlement_key) if settlement_key is not None else None
+        )
+        if scoped_key is not None and scoped_key in self._settled_dividends:
+            return self._settled_dividends[scoped_key]
         if expected is None:
             if self.expectation_source is None:
                 raise TradeError("expected performance or expectation source is required")
@@ -509,6 +540,7 @@ class Market:
             actual_net_points=actual_net_points,
             expected_net_points=expected_net_points,
             game_date=game_date,
+            settlement_key=settlement_key,
         )
 
     def season_dividend_per_share(self, *, warp: float, minutes: float) -> float:
