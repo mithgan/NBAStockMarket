@@ -85,6 +85,24 @@ Sanity notes:
 - Rebuild anytime: `python -m nba_stock_market.opening_prices` (inputs cached under
   `data/raw/opening/`, git-ignored; re-download from `gabriel1200/site_Data` master).
 
+## Validation results (see `output/fv-validation.md`)
+
+The FV backtest protocol: build prices from season N-1 data only, score against realized
+season-N WAR, across four historical season pairs. Findings:
+
+1. **Rate-only pricing loses to a naive "carry last season's WAR" baseline in all four
+   pairs** (price→WAR Spearman ~0.52–0.58 vs ~0.67–0.77). WAR carries minutes/role
+   information that a per-possession rating lacks. **Recommendation: v1.1 should add a
+   minutes/role term to `impact_implied`** (the spec's `w2` factor) — e.g. blend shrunk
+   rating with prior-season WAR — then re-run this backtest until the model at least matches
+   the naive baseline.
+2. **LEBRON and DARKO agree broadly (rating rho 0.749, 516 shared players) but diverge
+   hugely on individuals** (mean price gap $4.5M; Derrick White $18M apart). Metric choice
+   is a real gameplay decision, not a detail — the disagreement list doubles as a
+   "controversial players" preview.
+3. **EPM** slots into the same harness once the Dunks & Threes key arrives
+   (`load_epm_rows` is stubbed with the endpoint recorded).
+
 ## Open questions for the group
 
 1. **Blend weight** — is 70/30 right, or should opening lean harder into impact (more
