@@ -15,7 +15,8 @@ from nba_stock_market.backtest import (
     run_backtest,
     select_universe,
 )
-from nba_stock_market.engine import NET_POINTS_TO_DOLLARS, Market, Player
+from nba_stock_market import engine
+from nba_stock_market.engine import Market, Player
 from nba_stock_market.expectations import (
     DunksAndThreesExpectation,
     ProductionExpectation,
@@ -33,6 +34,14 @@ MODEL_LABELS = {
     "dnt": "D&T",
     "production": "Production",
 }
+
+
+def _comparison_basis() -> str:
+    per_holder = engine.NET_POINTS_TO_DOLLARS / engine.SHARES_OUT
+    return (
+        f"${per_holder:,.0f}-per-net-point per-holder and "
+        f"${engine.NET_POINTS_TO_DOLLARS:,.0f}-per-net-point full-float"
+    )
 
 
 def _source(model: str) -> object:
@@ -66,7 +75,7 @@ def _replays() -> tuple[list[object], dict[str, object]]:
             reversion_rate=0.0,
             inactivity_decay_rate=0.0,
             impact_k=0.0,
-            net_points_to_dollars=NET_POINTS_TO_DOLLARS,
+            net_points_to_dollars=engine.NET_POINTS_TO_DOLLARS,
         )
         replays[model] = replay_game_records(market, selected_games, source)
     return universe, replays
@@ -90,7 +99,10 @@ def generate() -> str:
     with tempfile.TemporaryDirectory() as directory:
         reports = {
             model: run_backtest(
-                DATA_DIR, Path(directory) / model, expectation_model=model
+                DATA_DIR,
+                Path(directory) / model,
+                expectation_model=model,
+                opening_prices_path=None,
             )
             for model in MODEL_LABELS
         }
@@ -100,8 +112,10 @@ def generate() -> str:
         "# Four-Way Expectation Model Comparison",
         "",
         "This deterministic comparison replays the same cached 2025-26 season, "
-        "150-player universe, 100 synthetic portfolios, and unchanged $100,000-per-net-point "
-        "full-float constant under `trailing`, `salary-projection`, `dnt`, and `production`. "
+        f"150-player universe, 100 synthetic portfolios, and the engine's {_comparison_basis()} "
+        "constant under `trailing`, `salary-projection`, `dnt`, and `production`. "
+        "This audit comparison intentionally remains listing-neutral: all four models use the "
+        "same salary-only listing basis. "
         "No network calls are made; D&T uses the 164 cached game dates in `data/raw/dnt`.",
         "",
         "## Net season inflation",
@@ -160,7 +174,7 @@ def generate() -> str:
         lines.append(
             f"| {label} | {evaluation.expected_net_points:.2f} | {dividend_np:+.2f} | "
             f"{_money(evaluation.dividend_per_share)} | "
-            f"{_money(evaluation.dividend_per_share * 100)} |"
+            f"{_money(evaluation.dividend_per_share * engine.SHARES_OUT)} |"
         )
 
     production_totals: defaultdict[str, float] = defaultdict(float)

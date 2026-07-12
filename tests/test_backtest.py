@@ -14,9 +14,11 @@ from nba_stock_market.backtest import (
     ListedPlayer,
     _round_money,
     build_synthetic_users,
+    load_opening_prices_by_name,
     load_source_manifest,
     main,
     replay_game_records,
+    select_universe,
 )
 from nba_stock_market.engine import BoxScoreLine, Market, NetPointsModel, Player, User
 from nba_stock_market.expectations import (
@@ -335,6 +337,35 @@ class BacktestReplayTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "100-share float"):
             build_synthetic_users(players, count=101, seed=2026)
+
+
+class OpeningListingLoaderTest(unittest.TestCase):
+    def test_normalized_match_uses_opening_price_and_missing_name_falls_back(self) -> None:
+        games = [
+            GameRecord("g1", date(2025, 10, 21), "p1", "Nikola Jokić", "DEN", line_with_points(20)),
+            GameRecord("g1", date(2025, 10, 21), "p2", "Fallback Player", "TST", line_with_points(10)),
+        ]
+        salaries = {
+            expectations.normalize_player_name("Nikola Jokic"): 55_000_000.0,
+            expectations.normalize_player_name("Fallback Player"): 8_000_000.0,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "opening.csv"
+            path.write_text(
+                "player,opening_price,tier\nnikola jokic,57985817,star\n",
+                encoding="utf-8",
+            )
+
+            openings = load_opening_prices_by_name(path)
+            universe = select_universe(games, salaries, opening_prices_by_name=openings, size=2)
+
+        by_id = {player.player_id: player for player in universe}
+        self.assertEqual(by_id["p1"].salary, 57_985_817.0)
+        self.assertEqual(by_id["p1"].tier, "star")
+        self.assertFalse(by_id["p1"].used_salary_fallback)
+        self.assertEqual(by_id["p2"].salary, 8_000_000.0)
+        self.assertEqual(by_id["p2"].tier, "bench")
+        self.assertTrue(by_id["p2"].used_salary_fallback)
 
 
 class HistoricalDataTest(unittest.TestCase):

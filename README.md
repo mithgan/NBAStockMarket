@@ -142,25 +142,29 @@ price setting is ready for the next interactive prototype but the full economy i
 ## Backtest
 
 The historical replay covers the complete 2025-26 NBA regular season using cached ESPN
-player-game box scores and pinned public salary snapshots. Cache the inputs once (the command
-is idempotent and resumes partial downloads):
+player-game box scores, pinned public salary snapshots, cached Dunks & Threes projections,
+and the committed Mith opening-price CSV. From a fresh checkout, run this complete sequence
+(`DNT_API_KEY` is required; never commit its value):
 
 Ball Don't Lie (BDL) is the canonical live-capable per-game actuals source alongside cached ESPN.
 Set `BALL_DONT_LIE_API_KEY` in the environment or `.env`; BDL pages cache under `data/raw/bdl/`.
 Run the bounded source check with `python3 -m nba_stock_market.bdl_data --smoke-jokic`.
 
 ```bash
-/usr/local/bin/python3 scripts/fetch_backtest_data.py
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e . pytest
+python scripts/fetch_backtest_data.py
+read -rsp "DNT API key: " DNT_API_KEY && export DNT_API_KEY && echo
+python scripts/fetch_dnt_predictions.py
+python -m nba_stock_market.backtest
+python -m scripts.generate_expectation_comparison
+python -m pytest -q
 ```
 
-Then regenerate the committed Markdown and JSON reports deterministically from cached data
-with one command:
-
-```bash
-/usr/local/bin/python3 -m nba_stock_market.backtest
-```
-
-The replay selects the top 150 players by regular-season minutes, lists them at salary-derived
-prices, and evaluates 100 seeded buy-and-hold 10-player portfolios. Expectations use each
-player's prior 10 played games; only the first game uses the salary-implied cold-start prior.
-Trading and live Dunks & Threes calls are deliberately disabled.
+Both fetchers are idempotent and resume their caches. Once cached, report generation makes no
+network calls. The replay selects the top 150 players by regular-season minutes, lists them from
+`output/opening-prices-2026-27.csv` using Mith's impact + salary blend (with reported salary
+fallbacks), and evaluates 100 seeded buy-and-hold 10-player portfolios. The default expectation
+model is cached Dunks & Threes; missing projection rows use the salary-implied cold-start prior.
+Trading and live Dunks & Threes calls are deliberately disabled during replay.

@@ -72,6 +72,7 @@ class ListedPlayer:
     minutes: float
     games: int
     tier: str
+    used_salary_fallback: bool = False
 
 
 @dataclass(frozen=True)
@@ -281,6 +282,25 @@ def load_salary_by_name(paths: list[Path]) -> dict[str, float]:
     return salaries
 
 
+def load_opening_prices_by_name(path: Path) -> dict[str, tuple[float, str]]:
+    """Load Mith's listings using the same normalized-name keys as salaries."""
+
+    listings: dict[str, tuple[float, str]] = {}
+    with path.open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            player_name = (row.get("player") or "").strip()
+            opening_price = _salary_value(row.get("opening_price"))
+            tier = (row.get("tier") or "").strip().lower()
+            if player_name and opening_price > 0:
+                listings.setdefault(
+                    normalize_player_name(player_name),
+                    (opening_price, tier if tier in {"star", "mid", "bench"} else _tier(opening_price)),
+                )
+    if not listings:
+        raise ValueError(f"no usable opening prices in {path}")
+    return listings
+
+
 def _tier(salary: float) -> str:
     if salary >= 30_000_000:
         return "star"
@@ -293,6 +313,7 @@ def select_universe(
     games: list[GameRecord],
     salary_by_name: dict[str, float],
     *,
+    opening_prices_by_name: dict[str, tuple[float, str]] | None = None,
     size: int = 150,
 ) -> list[ListedPlayer]:
     minutes: defaultdict[str, float] = defaultdict(float)
@@ -307,17 +328,28 @@ def select_universe(
     missing = [names[player_id] for player_id in selected_ids if normalize_player_name(names[player_id]) not in salary_by_name]
     if missing:
         raise ValueError(f"missing salaries for top-minute players: {', '.join(missing)}")
-    return [
-        ListedPlayer(
-            player_id=player_id,
-            name=names[player_id],
-            salary=salary_by_name[normalize_player_name(names[player_id])],
-            minutes=minutes[player_id],
-            games=appearances[player_id],
-            tier=_tier(salary_by_name[normalize_player_name(names[player_id])]),
+    players = []
+    for player_id in selected_ids:
+        normalized_name = normalize_player_name(names[player_id])
+        salary = salary_by_name[normalized_name]
+        opening = (
+            opening_prices_by_name.get(normalized_name)
+            if opening_prices_by_name is not None
+            else None
         )
-        for player_id in selected_ids
-    ]
+        listing_price, tier = opening if opening is not None else (salary, _tier(salary))
+        players.append(
+            ListedPlayer(
+                player_id=player_id,
+                name=names[player_id],
+                salary=listing_price,
+                minutes=minutes[player_id],
+                games=appearances[player_id],
+                tier=tier,
+                used_salary_fallback=opening_prices_by_name is not None and opening is None,
+            )
+        )
+    return players
 
 
 def _percentile(values: list[float], quantile: float) -> float:
@@ -517,6 +549,13 @@ def _build_report(
             "expectation_model": expectation_model,
             "seed": seed,
             "expectation_window": expectation_window,
+            "listing_basis": "Mith opening-price model (impact + salary blend)",
+            "listing_salary_fallback_count": sum(
+                player.used_salary_fallback for player in universe
+            ),
+            "listing_salary_fallback_players": [
+                player.name for player in universe if player.used_salary_fallback
+            ],
             **(
                 {"expectation_fallback_count": replay.expectation_fallback_count}
                 if expectation_model == "dnt"
@@ -584,21 +623,23 @@ def _render_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# NBA Stock Market 2025-26 Backtest",
         "",
-        "**DECIDED DESIGN (Russ, Discord 7/12): one salary-priced share is the whole player; "
+        "**DECIDED DESIGN (Russ, Discord 7/12): one opening-price-model share is the whole player; "
         "each user may hold at most one share per player; dividends settle actual game logs "
         "against cached Dunks & Threes pregame projections. The $40,000 per net point per "
-        "holder rate is PROVISIONAL pending Mith's NBA-12 calibration.**",
+        "holder rate is PROVISIONAL pending Mith's NBA-12 calibration. Listings use Mith's "
+        "impact + salary blend.**",
         "",
         "This deterministic replay covers the 1,230-game 2025-26 NBA regular season. "
         "The universe is the top 150 players by final regular-season minutes. One hundred "
         "synthetic users each begin at $140M and hold one share of 10 unique players. "
-        "Trading and inactivity decay are off; prices stay at salary-derived listings, so "
+        "Trading and inactivity decay are off; prices stay at opening-price-model listings, so "
         "the measured economy is dividends minus the daily idle-cash sink.",
         "",
         "## Method",
         "",
         f"- Actuals: {metadata['source_player_game_count']:,} played player-games from {sources['actuals']['provider']} game summaries ({metadata['source_game_count']:,} games).",
         f"- Salaries: `{sources['salaries']['primary_repository']}` `{sources['salaries']['primary_file']}` at commit `{sources['salaries']['primary_commit'][:7]}`; missing names filled from the pinned fallback snapshot.",
+        f"- Listings: Mith's committed impact + salary blend; {metadata['listing_salary_fallback_count']} of {metadata['universe_players']} players fall back to salary ({', '.join(metadata['listing_salary_fallback_players']) or 'none'}).",
         f"- Expectation: {metadata['expectation']}.",
         f"- Replay: {metadata['universe_player_games']:,} universe player-games on {metadata['game_days']} game days, with {metadata['calendar_days']} calendar-day idle-fee passes.",
         "- Payout conventions: per-share amounts are what one holder receives; full-float amounts are the same result across all 100 shares.",
@@ -636,13 +677,13 @@ def _render_markdown(report: dict[str, Any]) -> str:
             f"{_money(row['median_season_full_float'])} |"
         )
 
-    lines.extend(["", "## C. Player distribution", "", "### Top 10", "", "| Player | Tier | Salary | Games | Season / share | Full float | Cohort cash |", "|---|---|---:|---:|---:|---:|---:|"])
+    lines.extend(["", "## C. Player distribution", "", "### Top 10", "", "| Player | Tier | Listing price | Games | Season / share | Full float | Cohort cash |", "|---|---|---:|---:|---:|---:|---:|"])
     for row in report["distribution"]["top_10"]:
         lines.append(
             f"| {row['name']} | {row['tier']} | {_money(row['salary'])} | {row['games']} | "
             f"{_money(row['season_dividend_per_share'])} | {_money(row['season_dividend_full_float'])} | {_money(row['cohort_cash_change'])} |"
         )
-    lines.extend(["", "### Bottom 10", "", "| Player | Tier | Salary | Games | Season / share | Full float | Cohort cash |", "|---|---|---:|---:|---:|---:|---:|"])
+    lines.extend(["", "### Bottom 10", "", "| Player | Tier | Listing price | Games | Season / share | Full float | Cohort cash |", "|---|---|---:|---:|---:|---:|---:|"])
     for row in report["distribution"]["bottom_10"]:
         lines.append(
             f"| {row['name']} | {row['tier']} | {_money(row['salary'])} | {row['games']} | "
@@ -679,7 +720,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
         [
             "## Reproduction and caveats",
             "",
-            "All ESPN actuals and Dunks & Threes projections are cached; the backtest performs no network calls. Universe selection uses final-season minutes (appropriate for economy evaluation, not a preseason trading strategy). Salary is a season-level listing price, prices are fixed, portfolios respect the one-share-per-user-per-player cap, and negative dividends may reduce cash.",
+            "All ESPN actuals and Dunks & Threes projections are cached; the backtest performs no network calls. Universe selection uses final-season minutes (appropriate for economy evaluation, not a preseason trading strategy). Mith's impact + salary blend is the season-level listing price (salary is used only for reported fallbacks), prices are fixed, portfolios respect the one-share-per-user-per-player cap, and negative dividends may reduce cash.",
             "",
         ]
     )
@@ -694,6 +735,7 @@ def run_backtest(
     portfolio_count: int = 100,
     expectation_window: int = 10,
     expectation_model: str = "dnt",
+    opening_prices_path: Path | None = Path("output/opening-prices-2026-27.csv"),
 ) -> dict[str, Any]:
     from nba_stock_market.historical_data import load_game_records
 
@@ -706,7 +748,17 @@ def run_backtest(
     salary_by_name = load_salary_by_name(
         [data_dir / "salaries.csv", data_dir / "salaries-fallback.csv"]
     )
-    universe = select_universe(games, salary_by_name, size=150)
+    opening_prices = (
+        load_opening_prices_by_name(opening_prices_path)
+        if opening_prices_path is not None
+        else None
+    )
+    universe = select_universe(
+        games,
+        salary_by_name,
+        opening_prices_by_name=opening_prices,
+        size=150,
+    )
     users = build_synthetic_users(universe, count=portfolio_count, seed=seed)
     if expectation_model == "trailing":
         expectation = TrailingMeanExpectation(window=expectation_window)
