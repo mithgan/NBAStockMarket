@@ -29,6 +29,21 @@ from nba_stock_market.simulation import (
 
 
 class PricingEngineTest(unittest.TestCase):
+    def test_player_preserves_legacy_positional_optional_arguments(self) -> None:
+        player = Player(
+            "p",
+            "Positional Player",
+            "mid",
+            20_000_000,
+            21_000_000,
+            19_000_000,
+            77,
+        )
+
+        self.assertEqual(player.opening_price, 19_000_000)
+        self.assertEqual(player.shares_outstanding, 77)
+        self.assertIsNone(player.actual_salary)
+
     def test_engine_v2_uses_salary_cap_bankroll(self) -> None:
         self.assertEqual(STARTING_CASH, 140_000_000.0)
         self.assertEqual(User("new_user").cash, 140_000_000.0)

@@ -12,6 +12,7 @@ from nba_stock_market import expectations
 from nba_stock_market.backtest import (
     GameRecord,
     ListedPlayer,
+    _render_markdown,
     _round_money,
     build_synthetic_users,
     load_opening_prices_by_name,
@@ -370,6 +371,18 @@ class BacktestReplayTest(unittest.TestCase):
 
 
 class OpeningListingLoaderTest(unittest.TestCase):
+    def test_report_narrative_reflects_selected_listing_basis(self) -> None:
+        report = json.loads(Path("output/backtest-2026.json").read_text(encoding="utf-8"))
+
+        opening_text = _render_markdown(report)
+        report["metadata"]["listing_basis"] = "salary-only listings"
+        salary_text = _render_markdown(report)
+
+        self.assertIn("Listings use Mith's impact + salary blend", opening_text)
+        self.assertIn("Listings use a salary-only basis", salary_text)
+        self.assertIn("prices stay at salary-only listings", salary_text)
+        self.assertNotIn("Mith's committed impact + salary blend", salary_text)
+
     def test_normalized_match_uses_opening_price_and_missing_name_falls_back(self) -> None:
         games = [
             GameRecord("g1", date(2025, 10, 21), "p1", "Nikola Jokić", "DEN", line_with_points(20)),

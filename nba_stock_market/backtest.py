@@ -398,6 +398,7 @@ def _build_report(
     expectation_window: int,
     expectation_model: str,
     source_manifest: dict[str, Any],
+    listing_basis: str,
 ) -> dict[str, Any]:
     listed = {player.player_id: player for player in universe}
     per_share_by_player: defaultdict[str, float] = defaultdict(float)
@@ -555,7 +556,7 @@ def _build_report(
             "expectation_model": expectation_model,
             "seed": seed,
             "expectation_window": expectation_window,
-            "listing_basis": "Mith opening-price model (impact + salary blend)",
+            "listing_basis": listing_basis,
             "listing_salary_fallback_count": sum(
                 player.used_salary_fallback for player in universe
             ),
@@ -626,26 +627,46 @@ def _render_markdown(report: dict[str, Any]) -> str:
     money = report["money_supply"]
     calibration = report["calibration"]
     portfolio = report["portfolio_spread"]
+    modeled_listings = metadata["listing_basis"].startswith("Mith ")
+    if modeled_listings:
+        share_design = "one opening-price-model share is the whole player"
+        listing_statement = "Listings use Mith's impact + salary blend."
+        fixed_price_basis = "opening-price-model listings"
+        listing_method = (
+            "Mith's committed impact + salary blend; "
+            f"{metadata['listing_salary_fallback_count']} of {metadata['universe_players']} "
+            "players fall back to salary "
+            f"({', '.join(metadata['listing_salary_fallback_players']) or 'none'})."
+        )
+        listing_caveat = (
+            "Mith's impact + salary blend is the season-level listing price "
+            "(salary is used only for reported fallbacks)"
+        )
+    else:
+        share_design = "one salary-priced share is the whole player"
+        listing_statement = "Listings use a salary-only basis."
+        fixed_price_basis = "salary-only listings"
+        listing_method = "salary-only listing prices; no opening-price model is applied."
+        listing_caveat = "Contract salary is the season-level listing price"
     lines = [
         "# NBA Stock Market 2025-26 Backtest",
         "",
-        "**DECIDED DESIGN (Russ, Discord 7/12): one opening-price-model share is the whole player; "
+        f"**DECIDED DESIGN (Russ, Discord 7/12): {share_design}; "
         "each user may hold at most one share per player; dividends settle actual game logs "
         "against cached Dunks & Threes pregame projections. The $40,000 per net point per "
-        "holder rate is PROVISIONAL pending Mith's NBA-12 calibration. Listings use Mith's "
-        "impact + salary blend.**",
+        f"holder rate is PROVISIONAL pending Mith's NBA-12 calibration. {listing_statement}**",
         "",
         "This deterministic replay covers the 1,230-game 2025-26 NBA regular season. "
         "The universe is the top 150 players by final regular-season minutes. One hundred "
         "synthetic users each begin at $140M and hold one share of 10 unique players. "
-        "Trading and inactivity decay are off; prices stay at opening-price-model listings, so "
+        f"Trading and inactivity decay are off; prices stay at {fixed_price_basis}, so "
         "the measured economy is dividends minus the daily idle-cash sink.",
         "",
         "## Method",
         "",
         f"- Actuals: {metadata['source_player_game_count']:,} played player-games from {sources['actuals']['provider']} game summaries ({metadata['source_game_count']:,} games).",
         f"- Salaries: `{sources['salaries']['primary_repository']}` `{sources['salaries']['primary_file']}` at commit `{sources['salaries']['primary_commit'][:7]}`; missing names filled from the pinned fallback snapshot.",
-        f"- Listings: Mith's committed impact + salary blend; {metadata['listing_salary_fallback_count']} of {metadata['universe_players']} players fall back to salary ({', '.join(metadata['listing_salary_fallback_players']) or 'none'}).",
+        f"- Listings: {listing_method}",
         f"- Expectation: {metadata['expectation']}.",
         f"- Replay: {metadata['universe_player_games']:,} universe player-games on {metadata['game_days']} game days, with {metadata['calendar_days']} calendar-day idle-fee passes.",
         "- Payout conventions: per-share amounts are what one holder receives; full-float amounts are the same result across all 100 shares.",
@@ -726,7 +747,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
         [
             "## Reproduction and caveats",
             "",
-            "All ESPN actuals and Dunks & Threes projections are cached; the backtest performs no network calls. Universe selection uses final-season minutes (appropriate for economy evaluation, not a preseason trading strategy). Mith's impact + salary blend is the season-level listing price (salary is used only for reported fallbacks), prices are fixed, portfolios respect the one-share-per-user-per-player cap, and negative dividends may reduce cash.",
+            f"All ESPN actuals and Dunks & Threes projections are cached; the backtest performs no network calls. Universe selection uses final-season minutes (appropriate for economy evaluation, not a preseason trading strategy). {listing_caveat}, prices are fixed, portfolios respect the one-share-per-user-per-player cap, and negative dividends may reduce cash.",
             "",
         ]
     )
@@ -811,6 +832,11 @@ def run_backtest(
         expectation_window=expectation_window,
         expectation_model=expectation_model,
         source_manifest=source_manifest,
+        listing_basis=(
+            "Mith opening-price model (impact + salary blend)"
+            if opening_prices is not None
+            else "salary-only listings"
+        ),
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     output_stem = (
