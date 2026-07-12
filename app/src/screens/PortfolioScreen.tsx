@@ -1,9 +1,12 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { dividendEvents, players } from '../data/snapshot';
+import type { Player } from '../data/types';
 import { formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
 import { colors } from '../theme';
+import { PlayerDetail } from './MarketScreen';
 
 const playerById = new Map(players.map((player) => [player.id, player]));
 
@@ -17,6 +20,17 @@ function feedName(playerId: string) {
 
 export function PortfolioScreen() {
   const { state, summary } = usePortfolio();
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+
+  if (selectedPlayer) {
+    return (
+      <PlayerDetail
+        backLabel="Portfolio"
+        onClose={() => setSelectedPlayer(null)}
+        player={selectedPlayer}
+      />
+    );
+  }
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
@@ -46,13 +60,19 @@ export function PortfolioScreen() {
           const player = playerById.get(holding.player_id);
           if (!player) return null;
           return (
-            <View key={holding.player_id} style={styles.row}>
+            <Pressable
+              accessibilityLabel={`View ${player.name} details`}
+              accessibilityRole="button"
+              key={holding.player_id}
+              onPress={() => setSelectedPlayer(player)}
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            >
               <View>
                 <Text style={styles.rowName}>{player.name}</Text>
                 <Text style={styles.subtle}>1 share · {player.tier.toUpperCase()}</Text>
               </View>
               <Text style={styles.rowValue}>{formatMoney(player.listing_price)}</Text>
-            </View>
+            </Pressable>
           );
         })
       )}
@@ -104,6 +124,7 @@ const styles = StyleSheet.create({
   emptyCard: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 16, padding: 18, gap: 4 },
   emptyTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 15, padding: 15 },
+  rowPressed: { backgroundColor: colors.surfaceRaised },
   rowName: { color: colors.text, fontSize: 14, fontWeight: '700' },
   rowValue: { color: colors.text, fontSize: 14, fontWeight: '700' },
   feedCard: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 16, paddingHorizontal: 15 },

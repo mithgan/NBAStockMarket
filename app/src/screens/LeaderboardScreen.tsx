@@ -1,10 +1,15 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { leaderboard } from '../data/snapshot';
+import { leaderboardRivals } from '../data/snapshot';
 import { formatMoney } from '../format';
+import { usePortfolio } from '../state/PortfolioContext';
+import { rankLeaderboard } from '../state/portfolio';
 import { colors } from '../theme';
 
 export function LeaderboardScreen() {
+  const { summary } = usePortfolio();
+  const leaderboard = rankLeaderboard(leaderboardRivals, summary.total_value);
+
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <Text style={styles.eyebrow}>LEAGUE TABLE</Text>
@@ -15,7 +20,9 @@ export function LeaderboardScreen() {
         <Text style={styles.crown}>01</Text>
         <Text style={styles.winner}>{leaderboard[0].name}</Text>
         <Text style={styles.winnerValue}>{formatMoney(leaderboard[0].value)}</Text>
-        <Text style={styles.winnerReturn}>+{leaderboard[0].returnPct.toFixed(2)}%</Text>
+        <Text style={[styles.winnerReturn, { color: leaderboard[0].returnPct >= 0 ? colors.green : colors.red }]}>
+          {leaderboard[0].returnPct >= 0 ? '+' : ''}{leaderboard[0].returnPct.toFixed(2)}%
+        </Text>
       </View>
 
       <View style={styles.table}>

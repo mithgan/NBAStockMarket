@@ -14,10 +14,38 @@ export interface TradeResult {
   error: string | null;
 }
 
+export interface LeaderboardEntry {
+  rank: number;
+  name: string;
+  value: number;
+  returnPct: number;
+}
+
+type LeaderboardRival = Omit<LeaderboardEntry, 'rank'>;
+
 export const initialPortfolioState: PortfolioState = {
   cash: STARTING_CASH,
   holdings: [],
 };
+
+export function getPurchaseShortfall(cash: number, listingPrice: number) {
+  return Math.max(0, listingPrice - cash);
+}
+
+export function rankLeaderboard(
+  rivals: LeaderboardRival[],
+  portfolioTotalValue: number,
+): LeaderboardEntry[] {
+  const you: LeaderboardRival = {
+    name: 'You',
+    value: portfolioTotalValue,
+    returnPct: (portfolioTotalValue / STARTING_CASH - 1) * 100,
+  };
+
+  return [...rivals, you]
+    .sort((left, right) => right.value - left.value)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
 
 export function executeTrade(
   state: PortfolioState,

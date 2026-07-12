@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { executeTrade, initialPortfolioState } from './portfolio';
+import {
+  executeTrade,
+  getPortfolioSummary,
+  getPurchaseShortfall,
+  initialPortfolioState,
+  rankLeaderboard,
+} from './portfolio';
 
 const jokic = {
   id: '3112335',
@@ -30,4 +36,32 @@ test('buying is blocked when cash is below the listing price', () => {
 
   assert.equal(result.error, 'Not enough cash');
   assert.equal(result.state.cash, 1_000);
+});
+
+test('purchase shortfall reports affordability and exact cash needed', () => {
+  assert.equal(getPurchaseShortfall(58_000_000, jokic.listing_price), 0);
+  assert.equal(getPurchaseShortfall(50_000_000, jokic.listing_price), 7_985_817);
+});
+
+test('live You row reflects a purchased holding and re-ranks against rivals', () => {
+  const purchase = executeTrade(initialPortfolioState, jokic, 'buy');
+  const repricedJokic = { ...jokic, listing_price: 90_000_000 };
+  const summary = getPortfolioSummary(purchase.state, [repricedJokic]);
+  const ranked = rankLeaderboard(
+    [
+      { name: 'Top Rival', value: 168_000_000, returnPct: 20 },
+      { name: 'Second Rival', value: 161_000_000, returnPct: 15 },
+    ],
+    summary.total_value,
+  );
+
+  assert.equal(summary.total_value, 172_014_183);
+  assert.deepEqual(ranked[0], {
+    rank: 1,
+    name: 'You',
+    value: 172_014_183,
+    returnPct: (172_014_183 / 140_000_000 - 1) * 100,
+  });
+  assert.equal(ranked[1].name, 'Top Rival');
+  assert.equal(ranked[1].rank, 2);
 });

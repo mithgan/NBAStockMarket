@@ -46,10 +46,9 @@ export const dividendEvents: DividendEvent[] = [
   { player_id: '3945274', game_date: '2025-10-24', actual_net_points: 42.45, expected_net_points: 20.39128, dividend_per_holder: 882_348.8 },
 ];
 
-export const leaderboard = [
+export const leaderboardRivals = [
   { rank: 1, name: 'portfolio-048', value: 168_604_261, returnPct: 20.43 },
   { rank: 2, name: 'Buckets & Bonds', value: 161_280_440, returnPct: 15.2 },
   { rank: 3, name: 'The Sixth Trader', value: 156_890_020, returnPct: 12.06 },
   { rank: 4, name: 'Midrange Capital', value: 151_422_700, returnPct: 8.16 },
-  { rank: 5, name: 'You', value: 140_000_000, returnPct: 0 },
 ];

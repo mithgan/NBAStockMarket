@@ -20,6 +20,7 @@ import { playerTrends, type TrendPoint } from '../data/trends';
 import type { Player } from '../data/types';
 import { formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
+import { getPurchaseShortfall } from '../state/portfolio';
 import { colors } from '../theme';
 
 function initials(name: string) {
@@ -98,7 +99,15 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PlayerDetail({ player, onClose }: { player: Player; onClose: () => void }) {
+export function PlayerDetail({
+  player,
+  onClose,
+  backLabel = 'Market',
+}: {
+  player: Player;
+  onClose: () => void;
+  backLabel?: string;
+}) {
   const [range, setRange] = useState<TrendRange>('L15');
   const points = playerTrends[player.id] ?? [];
   const visiblePoints = selectTrendRange(points, range);
@@ -116,7 +125,7 @@ function PlayerDetail({ player, onClose }: { player: Player; onClose: () => void
         onPress={onClose}
         style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
       >
-        <Text style={styles.backText}>‹  Market</Text>
+        <Text style={styles.backText}>‹  {backLabel}</Text>
       </Pressable>
 
       <View style={styles.detailHeader}>
@@ -206,6 +215,7 @@ function Sparkline({ points }: { points: TrendPoint[] }) {
 }
 
 interface MarketRowProps {
+  cash: number;
   player: Player;
   held: boolean;
   isLast: boolean;
@@ -213,7 +223,9 @@ interface MarketRowProps {
   onTrade: (player: Player, side: 'buy' | 'sell') => void;
 }
 
-function MarketRow({ player, held, isLast, onOpen, onTrade }: MarketRowProps) {
+function MarketRow({ cash, player, held, isLast, onOpen, onTrade }: MarketRowProps) {
+  const shortfall = held ? 0 : getPurchaseShortfall(cash, player.listing_price);
+  const unaffordable = !held && shortfall > 0;
   const handleTrade = (event: GestureResponderEvent) => {
     event.stopPropagation();
     onTrade(player, held ? 'sell' : 'buy');
@@ -244,17 +256,28 @@ function MarketRow({ player, held, isLast, onOpen, onTrade }: MarketRowProps) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={held ? `Sell ${player.name}` : `Buy ${player.name} for ${formatMoney(player.listing_price)}`}
+        accessibilityHint={unaffordable ? `Needs ${formatMoney(shortfall)} more` : undefined}
+        accessibilityState={{ disabled: unaffordable }}
+        disabled={unaffordable}
         hitSlop={6}
         onPress={handleTrade}
         style={({ pressed }) => [
           styles.tradeButton,
           held ? styles.sellButton : styles.buyButton,
+          unaffordable && styles.unaffordableButton,
           pressed && styles.pressed,
         ]}
       >
-        <Text style={[styles.tradeText, held ? styles.sellText : styles.buyText]}>
-          {held ? 'SELL' : 'BUY'}
-        </Text>
+        {unaffordable ? (
+          <>
+            <Text style={[styles.tradeText, styles.unaffordableText]}>NEEDS</Text>
+            <Text style={styles.shortfallText}>{formatMoney(shortfall)}</Text>
+          </>
+        ) : (
+          <Text style={[styles.tradeText, held ? styles.sellText : styles.buyText]}>
+            {held ? 'SELL' : 'BUY'}
+          </Text>
+        )}
       </Pressable>
     </Pressable>
   );
@@ -287,6 +310,7 @@ export function MarketScreen() {
       <View style={styles.marketList}>
         {players.map((player, index) => (
           <MarketRow
+            cash={summary.cash}
             held={owns(player.id)}
             isLast={index === players.length - 1}
             key={player.id}
@@ -329,10 +353,13 @@ const styles = StyleSheet.create({
   sparkBar: { width: 2, borderRadius: 2, opacity: 0.9 },
   tradeButton: { minWidth: 56, alignItems: 'center', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 9, borderWidth: 1 },
   buyButton: { borderColor: colors.green, backgroundColor: '#123b2b' },
+  unaffordableButton: { borderColor: colors.muted, backgroundColor: colors.surfaceRaised, opacity: 0.48 },
   sellButton: { borderColor: colors.red, backgroundColor: '#402027' },
   tradeText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   buyText: { color: colors.green },
   sellText: { color: colors.red },
+  unaffordableText: { color: colors.muted, fontSize: 8 },
+  shortfallText: { color: colors.muted, fontSize: 8, fontWeight: '800', marginTop: 1 },
   pressed: { opacity: 0.65 },
   detailContent: { padding: 20, paddingBottom: 40 },
   backButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingRight: 16 },
@@ -354,7 +381,7 @@ const styles = StyleSheet.create({
   rangeText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
   rangeTextSelected: { color: colors.gold },
   chart: { height: 156, flexDirection: 'row', alignItems: 'flex-end', gap: 5, marginTop: 20, borderBottomColor: colors.border, borderBottomWidth: 1 },
-  chartBarSlot: { flex: 1, height: 148, maxWidth: 28, alignItems: 'stretch', justifyContent: 'flex-end' },
+  chartBarSlot: { flex: 1, height: 148, alignItems: 'stretch', justifyContent: 'flex-end' },
   chartBar: { minWidth: 5, borderTopLeftRadius: 4, borderTopRightRadius: 4, opacity: 0.92 },
   emptyChart: { color: colors.muted, height: 156, textAlign: 'center', textAlignVertical: 'center' },
   chartLegend: { flexDirection: 'row', gap: 14, justifyContent: 'flex-end', marginTop: 10 },
