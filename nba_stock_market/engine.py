@@ -273,6 +273,7 @@ class Market:
         net_points_model: NetPointsModel | None = None,
         expectation_source: ExpectationSource | None = None,
         net_points_to_dollars: float = NET_POINTS_TO_DOLLARS,
+        expectation_bias: float = 0.0,
     ) -> None:
         if not players:
             raise ValueError("market requires at least one player")
@@ -322,6 +323,9 @@ class Market:
         )
         if self.net_points_to_dollars < 0:
             raise ValueError("net_points_to_dollars must be non-negative")
+        self.expectation_bias = self._finite_value(
+            "expectation_bias", expectation_bias
+        )
         self.trade_log: list[Position] = []
         self.dividend_events: list[DividendEvent] = []
         # Compatibility-friendly name for consumers that treat this as a log.
@@ -488,6 +492,9 @@ class Market:
             return self._settled_dividends[scoped_key]
         actual = self._finite_value("actual_net_points", actual_net_points, TradeError)
         expected = self._finite_value("expected_net_points", expected_net_points, TradeError)
+        expected += self.expectation_bias
+        if not math.isfinite(expected):
+            raise TradeError("biased expected_net_points must be finite")
         dividend_per_share = (
             (actual - expected) * self.net_points_to_dollars / SHARES_OUT
         )

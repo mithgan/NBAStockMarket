@@ -248,7 +248,7 @@ def replay_game_records(
                 GameEvaluation(
                     game,
                     actual,
-                    expected_net_points,
+                    event.expected_net_points,
                     event.dividend_per_share,
                     event.total_cash_change,
                 )
@@ -269,6 +269,61 @@ def replay_game_records(
         tuple(evaluations),
         expectation_fallback_count,
     )
+
+
+def compute_league_mean_surprise(
+    market: Market,
+    games: list[GameRecord],
+    expectation_source: object,
+) -> float:
+    """Return mean actual-minus-expected NP over a deterministic replay universe."""
+
+    surprises: list[float] = []
+    for game in sorted(games, key=lambda item: (item.game_date, item.game_id, item.player_id)):
+        actual = market.net_points_model.score(game.box_score)
+        expected = expectation_source.expected_performance(
+            market.players[game.player_id], game.game_date
+        )
+        if expected is None:
+            expected_net_points = player_salary_implied_net_points(
+                market.players[game.player_id]
+            )
+        elif isinstance(expected, BoxScoreLine):
+            expected_net_points = market.net_points_model.score(expected)
+        else:
+            expected_net_points = float(expected)
+        surprise = actual - expected_net_points
+        if not math.isfinite(surprise):
+            raise ValueError("league surprise must be finite")
+        surprises.append(surprise)
+        expectation_source.observe(game.player_id, actual)
+    if not surprises:
+        raise ValueError("cannot compute expectation bias from an empty replay")
+    return statistics.fmean(surprises)
+
+
+def inflation_option_row(
+    option: str,
+    dollars_per_net_point_per_holder: float,
+    expectation_bias: float,
+    report: dict[str, Any],
+) -> dict[str, Any]:
+    """Extract the decision metrics for one inflation-calibration option."""
+
+    examples = {
+        (item["player"], item["game_date"]): item for item in report["examples"]
+    }
+    return {
+        "option": option,
+        "dollars_per_net_point_per_holder": dollars_per_net_point_per_holder,
+        "expectation_bias": expectation_bias,
+        "net_inflation": report["money_supply"]["net_inflation"],
+        "net_inflation_pct": report["money_supply"]["net_inflation_pct"],
+        "sga_payout": examples[("Shai Gilgeous-Alexander", "2025-10-23")]["payout_per_share"],
+        "jokic_payout": examples[("Nikola Jokic", "2025-12-25")]["payout_per_share"],
+        "star_game_p90_payout": report["calibration"]["current_great_game_per_holder_payout"],
+        "median_portfolio_final_value": report["portfolio_spread"]["median_final_value"],
+    }
 
 
 def _salary_value(raw: str | None) -> float:
@@ -471,18 +526,18 @@ def _build_report(
         and item.actual_net_points > item.expected_net_points
     ]
     great_game_surprise = _percentile(star_positive_surprises, 0.90)
-    great_game_payout = great_game_surprise * NET_POINTS_TO_DOLLARS / SHARES_OUT
+    great_game_payout = great_game_surprise * market.net_points_to_dollars / SHARES_OUT
     calibration = {
         "status": "PROVISIONAL pending Mith's calibration (NBA-12)",
         "definition": "one holder receives $40,000 per net-point surprise",
         "target_surprise_net_points": 20.0,
         "target_per_holder_payout": 800_000.0,
         "great_game_surprise_net_points": round(great_game_surprise, 4),
-        "current_net_points_to_dollars": NET_POINTS_TO_DOLLARS,
-        "dividend_per_net_point_per_share": NET_POINTS_TO_DOLLARS / SHARES_OUT,
+        "current_net_points_to_dollars": market.net_points_to_dollars,
+        "dividend_per_net_point_per_share": market.net_points_to_dollars / SHARES_OUT,
         "current_great_game_per_holder_payout": _round_money(great_game_payout),
         "decision": "apply the team's provisional +20 NP = $800K per-holder target",
-        "applied_net_points_to_dollars": NET_POINTS_TO_DOLLARS,
+        "applied_net_points_to_dollars": market.net_points_to_dollars,
         "tiers": tier_metrics,
     }
 
@@ -564,6 +619,11 @@ def _build_report(
             "expectation_model": expectation_model,
             "seed": seed,
             "expectation_window": expectation_window,
+            **(
+                {"expectation_bias_net_points": market.expectation_bias}
+                if market.expectation_bias != 0.0
+                else {}
+            ),
             "listing_basis": listing_basis,
             "listing_salary_fallback_count": sum(
                 player.used_salary_fallback for player in universe
@@ -773,6 +833,9 @@ def run_backtest(
     expectation_window: int = 10,
     expectation_model: str = "dnt",
     opening_prices_path: Path | None = DEFAULT_OPENING_PRICES_PATH,
+    expectation_bias: float | str = 0.0,
+    net_points_to_dollars: float = NET_POINTS_TO_DOLLARS,
+    write_outputs: bool = True,
 ) -> dict[str, Any]:
     from nba_stock_market.historical_data import load_game_records
 
@@ -796,21 +859,41 @@ def run_backtest(
         opening_prices_by_name=opening_prices,
         size=150,
     )
-    users = build_synthetic_users(universe, count=portfolio_count, seed=seed)
-    if expectation_model == "trailing":
-        expectation = TrailingMeanExpectation(window=expectation_window)
-    elif expectation_model == "projection":
-        expectation = SalaryProjectionExpectation()
-    elif expectation_model == "dnt":
-        expectation = DunksAndThreesExpectation(cache_dir=data_dir.parent / "dnt")
-    elif expectation_model == "production":
-        expectation = ProductionExpectation()
-    else:
+    def make_expectation() -> object:
+        if expectation_model == "trailing":
+            return TrailingMeanExpectation(window=expectation_window)
+        if expectation_model == "projection":
+            return SalaryProjectionExpectation()
+        if expectation_model == "dnt":
+            return DunksAndThreesExpectation(cache_dir=data_dir.parent / "dnt")
+        if expectation_model == "production":
+            return ProductionExpectation()
         raise ValueError(
             "expectation_model must be 'trailing', 'projection', 'dnt', or 'production'"
         )
-    market = Market(
-        [
+
+    users = build_synthetic_users(universe, count=portfolio_count, seed=seed)
+    universe_ids = {player.player_id for player in universe}
+    universe_games = [game for game in games if game.player_id in universe_ids]
+    market_players = [
+        Player(
+            player.player_id,
+            player.name,
+            player.tier,
+            player.salary,
+            player.salary,
+            actual_salary=player.actual_salary,
+        )
+        for player in universe
+    ]
+    if expectation_bias == "auto":
+        if expectation_model != "dnt":
+            raise ValueError("automatic expectation bias requires the dnt expectation model")
+        calibration_market = Market(market_players, inactivity_decay_rate=0.0)
+        applied_expectation_bias = compute_league_mean_surprise(
+            calibration_market, universe_games, make_expectation()
+        )
+        market_players = [
             Player(
                 player.player_id,
                 player.name,
@@ -820,18 +903,25 @@ def run_backtest(
                 actual_salary=player.actual_salary,
             )
             for player in universe
-        ],
+        ]
+    else:
+        applied_expectation_bias = float(expectation_bias)
+        if not math.isfinite(applied_expectation_bias):
+            raise ValueError("expectation_bias must be finite")
+    expectation = make_expectation()
+    market = Market(
+        market_players,
         users,
         expectation_source=expectation,
         reversion_rate=0.0,
         inactivity_decay_rate=0.0,
         impact_k=0.0,
-        net_points_to_dollars=NET_POINTS_TO_DOLLARS,
+        net_points_to_dollars=net_points_to_dollars,
+        expectation_bias=applied_expectation_bias,
     )
-    universe_ids = {player.player_id for player in universe}
     replay = replay_game_records(
         market,
-        [game for game in games if game.player_id in universe_ids],
+        universe_games,
         expectation,
     )
     report = _build_report(
@@ -848,6 +938,8 @@ def run_backtest(
             else "salary-only listings"
         ),
     )
+    if not write_outputs:
+        return report
     output_dir.mkdir(parents=True, exist_ok=True)
     output_stem = (
         "backtest-2026"
@@ -876,6 +968,11 @@ def main() -> None:
         choices=("trailing", "projection", "dnt", "production"),
         default="dnt",
     )
+    parser.add_argument(
+        "--expectation-bias",
+        default="0",
+        help="net points added to every expectation, or 'auto' for league mean surprise",
+    )
     args = parser.parse_args()
     report = run_backtest(
         args.data_dir,
@@ -883,6 +980,9 @@ def main() -> None:
         seed=args.seed,
         portfolio_count=args.portfolios,
         expectation_model=args.expectation,
+        expectation_bias=(
+            "auto" if args.expectation_bias == "auto" else float(args.expectation_bias)
+        ),
     )
     money = report["money_supply"]
     print(

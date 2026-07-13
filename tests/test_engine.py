@@ -30,6 +30,24 @@ from nba_stock_market.simulation import (
 
 
 class PricingEngineTest(unittest.TestCase):
+    def test_expectation_bias_shifts_expected_net_points_before_dividend(self) -> None:
+        player = Player("p1", "Bias Player", "star", 10_000_000, 10_000_000)
+        holder = User("holder", cash=0, holdings={"p1": 1})
+        market = Market(
+            [player],
+            [holder],
+            expectation_bias=2.5,
+            net_points_to_dollars=100.0,
+        )
+
+        event = market.pay_daily_performance_dividend(
+            "p1", actual_net_points=15.0, expected_net_points=10.0
+        )
+
+        self.assertEqual(event.expected_net_points, 12.5)
+        self.assertEqual(event.dividend_per_share, 2.5)
+        self.assertEqual(holder.cash, 2.5)
+
     def test_player_preserves_legacy_positional_optional_arguments(self) -> None:
         player = Player(
             "p",

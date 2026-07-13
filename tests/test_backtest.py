@@ -18,6 +18,8 @@ from nba_stock_market.backtest import (
     _render_markdown,
     _round_money,
     build_synthetic_users,
+    compute_league_mean_surprise,
+    inflation_option_row,
     load_opening_prices_by_name,
     load_source_manifest,
     main,
@@ -168,6 +170,46 @@ class ExpectationSourceTest(unittest.TestCase):
 
 
 class BacktestReplayTest(unittest.TestCase):
+    def test_auto_bias_is_finite_league_mean_surprise(self) -> None:
+        class FixedExpectation:
+            def expected_performance(self, player: Player, game_date: date) -> float:
+                return 10.0
+
+            def observe(self, player_id: str, actual: float) -> None:
+                pass
+
+        player = Player("p", "Bias Player", "star", 40_000_000, 40_000_000)
+        market = Market([player], idle_cash_fee=0.0, inactivity_decay_rate=0.0)
+        games = [
+            GameRecord("g1", date(2025, 10, 21), "p", player.name, "TST", line_with_points(12)),
+            GameRecord("g2", date(2025, 10, 22), "p", player.name, "TST", line_with_points(14)),
+        ]
+
+        bias = compute_league_mean_surprise(market, games, FixedExpectation())
+
+        self.assertTrue(math.isfinite(bias))
+        self.assertEqual(bias, 3.0)
+
+    def test_inflation_option_row_uses_requested_report_math(self) -> None:
+        report = {
+            "money_supply": {"net_inflation": 7.0, "net_inflation_pct": 0.5},
+            "calibration": {"current_great_game_per_holder_payout": 90.0},
+            "portfolio_spread": {"median_final_value": 140.0},
+            "examples": [
+                {"player": "Shai Gilgeous-Alexander", "game_date": "2025-10-23", "payout_per_share": 80.0},
+                {"player": "Nikola Jokic", "game_date": "2025-12-25", "payout_per_share": 120.0},
+            ],
+        }
+
+        row = inflation_option_row("B", 40_000.0, 1.25, report)
+
+        self.assertEqual(row["net_inflation"], 7.0)
+        self.assertEqual(row["net_inflation_pct"], 0.5)
+        self.assertEqual(row["sga_payout"], 80.0)
+        self.assertEqual(row["jokic_payout"], 120.0)
+        self.assertEqual(row["star_game_p90_payout"], 90.0)
+        self.assertEqual(row["median_portfolio_final_value"], 140.0)
+
     def test_money_rounding_canonicalizes_negative_zero(self) -> None:
         self.assertEqual(math.copysign(1.0, _round_money(-0.001)), 1.0)
 
@@ -195,6 +237,16 @@ class BacktestReplayTest(unittest.TestCase):
             main()
 
         self.assertEqual(run.call_args.kwargs["expectation_model"], "projection")
+
+    def test_cli_expectation_bias_accepts_auto(self) -> None:
+        report = {"money_supply": {"net_inflation": 1.0, "final_portfolio_wealth": 2.0}}
+        with (
+            patch("sys.argv", ["backtest", "--expectation-bias", "auto"]),
+            patch("nba_stock_market.backtest.run_backtest", return_value=report) as run,
+        ):
+            main()
+
+        self.assertEqual(run.call_args.kwargs["expectation_bias"], "auto")
 
     def test_cli_expectation_flag_selects_dnt_source(self) -> None:
         report = {"money_supply": {"net_inflation": 1.0, "final_portfolio_wealth": 2.0}}
