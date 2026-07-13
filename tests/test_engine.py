@@ -5,6 +5,7 @@ import unittest
 from datetime import date
 
 from nba_stock_market.engine import (
+    FEE_PCT,
     MAX_SHARES_PER_USER_PER_PLAYER,
     MIN_PRICE_FLOOR,
     NET_POINTS_TO_DOLLARS,
@@ -49,6 +50,7 @@ class PricingEngineTest(unittest.TestCase):
         self.assertEqual(User("new_user").cash, 140_000_000.0)
         self.assertEqual(SHARES_OUT, 100)
         self.assertEqual(MAX_SHARES_PER_USER_PER_PLAYER, 1)
+        self.assertEqual(FEE_PCT, 0.0025)
 
     def test_second_share_of_same_player_is_rejected_but_sell_and_rebuy_is_legal(self) -> None:
         market = Market(
@@ -418,11 +420,38 @@ class PricingEngineTest(unittest.TestCase):
         with self.assertRaises(TradeError):
             market.execute_trade("u3", "p", TradeSide.BUY, 1)
 
-    def test_flip_penalty_adds_extra_fee(self) -> None:
+    def test_base_trade_fee_is_quarter_percent_of_notional(self) -> None:
+        market = Market([Player("p", "Fee Player", "mid", 2_000_000.0, 2_000_000.0)], [User("u")])
+
+        buy = market.execute_trade("u", "p", TradeSide.BUY, 1)
+
+        self.assertAlmostEqual(buy.fee, buy.execution_price * 0.0025, places=8)
+
+    def test_flip_penalty_adds_half_percent_surcharge(self) -> None:
         market = Market([Player("p", "Churn Player", "mid", 2_000_000.0, 2_000_000.0)], [User("u")])
         market.execute_trade("u", "p", TradeSide.BUY, 1)
         sell = market.execute_trade("u", "p", TradeSide.SELL, 1)
-        self.assertGreater(sell.fee, sell.execution_price * 0.01)
+        self.assertAlmostEqual(sell.fee, sell.execution_price * 0.0075, places=8)
+
+    def test_flip_penalty_surcharge_caps_at_one_and_a_half_percent(self) -> None:
+        market = Market([Player("p", "Capped Churn Player", "mid", 2_000_000.0, 2_000_000.0)], [User("u")])
+        market.execute_trade("u", "p", TradeSide.BUY, 1)
+        market.execute_trade("u", "p", TradeSide.SELL, 1)
+        market.execute_trade("u", "p", TradeSide.BUY, 1)
+        first_capped_trade = market.execute_trade("u", "p", TradeSide.SELL, 1)
+        next_capped_trade = market.execute_trade("u", "p", TradeSide.BUY, 1)
+
+        expected_total_fee_rate = FEE_PCT + 0.015
+        self.assertAlmostEqual(
+            first_capped_trade.fee,
+            first_capped_trade.execution_price * expected_total_fee_rate,
+            places=8,
+        )
+        self.assertAlmostEqual(
+            next_capped_trade.fee,
+            next_capped_trade.execution_price * expected_total_fee_rate,
+            places=8,
+        )
 
     def test_flip_penalty_roundtrip_count_expires_after_seven_days(self) -> None:
         market = Market(
@@ -436,7 +465,7 @@ class PricingEngineTest(unittest.TestCase):
             market.advance_day(apply_idle_fee=False)
         market.execute_trade("u", "p", TradeSide.BUY, 1)
         sell = market.execute_trade("u", "p", TradeSide.SELL, 1)
-        self.assertAlmostEqual(sell.fee, sell.execution_price * 0.03, places=8)
+        self.assertAlmostEqual(sell.fee, sell.execution_price * 0.0075, places=8)
 
     def test_portfolio_value_is_cash_plus_holdings(self) -> None:
         market = Market([Player("p", "Portfolio Player", "mid", 10_000_000.0, 10_000_000.0)], [User("u")])

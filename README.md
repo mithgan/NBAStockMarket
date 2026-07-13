@@ -75,8 +75,8 @@ impact resists whale manipulation, and explicit sinks help control inflation.
 | Mechanic | Rule |
 |---|---|
 | Starting bankroll | $140,000,000 for everyone; score = cash + (shares × price) |
-| Execution | Single price, no spread; 1% fee on every buy and sell |
-| Anti-churn | Escalating flip penalty on same-player round-trips within 24h |
+| Execution | Single price, no spread; 0.25% fee on every buy and sell |
+| Anti-churn | 0.5% escalating flip surcharge on same-player round-trips within 24h, capped at 1.5% |
 | Roster / anti-cornering | One whole-player share at listed salary; max one per player per user |
 | Price drift | Supply/demand plus inactivity decay after the listing grace period |
 | Fair-value reversion | Default off (`0`); retained only as an experiment |
@@ -136,8 +136,8 @@ The entrypoint keeps game dividends and fair-value reversion off so it can isola
 price impact and inactivity decay. It runs balanced, hype-heavy, and boom/bust order flows across
 fixed seeds using nine real players across star/mid/bench salary tiers. NBA-9 selected `0.003` as
 the strongest candidate that stayed below the prototype price-safety gates. The report also found
-that the current fee plus flip-penalty economy drains too much wealth under high turnover, so the
-price setting is ready for the next interactive prototype but the full economy is not production-ready.
+the fee decision lowers the base fee to 0.25% and caps the softened flip surcharge at 1.5%, keeping
+anti-churn friction while sharply reducing wealth destruction under high turnover.
 
 ## Backtest
 

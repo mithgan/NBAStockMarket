@@ -653,7 +653,8 @@ def render_impact_report(sweep: dict[str, object]) -> str:
             "",
             "## Economy finding",
             "",
-            "The stress run also checks whether the existing 1% trade fee and escalating same-player flip penalty "
+            "The stress run also checks whether the existing 0.25% trade fee and 0.5%-step same-player flip "
+            "penalty capped at 1.5% "
             "drain user wealth at the simulated turnover rate. A price-safe `IMPACT_K` does not make the full economy "
             "production-ready if the worst scenario destroys more than 25% of starting wealth. Treat that as a "
             "separate fee/turnover calibration task; do not raise `IMPACT_K` to compensate for cash sinks.",

@@ -12,7 +12,7 @@ The planning call moved the playable economy to NBA salary scale. Every user sta
 **$140,000,000** in virtual cash, player shares resemble salaries (stars ~$40–70M, rotation
 players ~$15–30M, bench players ~$2–12M). One share is the whole player at his listed salary;
 the float remains 100 shares, multiple users may own the player, and each user may hold at most
-one share per player. The 1% trading fee, escalating flip penalty, small idle-cash sink, seven-day
+one share per player. The 0.25% trading fee, capped escalating flip penalty, small idle-cash sink, seven-day
 listing grace period, inactivity decay, and a rescaled minimum price floor remain.
 
 Price is set by supply and demand plus inactivity decay. Fair-value reversion is retained as a

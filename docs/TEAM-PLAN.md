@@ -26,8 +26,9 @@ $140M salary-cap bankroll, ~10-player portfolios, 100 shares/player with 40% own
    trailing-mean to opponent-aware projected box scores). Re-run backtest, compare economies.
 3. ~~**Market mechanics validation**~~ ✅: deterministic balanced/hype/boom-bust sweep selected
    provisional `IMPACT_K = 0.003`; all price and ownership invariants held. See
-   `output/trader-simulation.md`. Follow-up required before production: the current 1% fee plus
-   escalating flip surcharge removed 49–52% of wealth in the hype stress runs.
+   `output/trader-simulation.md`. NBA-17 lowers the base fee to 0.25% and makes the flip surcharge
+   0.5% per recent round-trip, capped at 1.5%, to preserve anti-churn friction without the prior
+   49–52% hype-run wealth destruction.
 4. **App scaffold** (after economy sign-off): Expo/React Native, Robinhood-style portfolio UI,
    daily P&L feed, leaderboard.
 

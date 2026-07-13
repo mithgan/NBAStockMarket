@@ -44,8 +44,8 @@ game without an algorithm automatically changing either market price.
 - A user may own at most one share of a player.
 - Prices also decay 0.5% per inactive day after the seven-day grace period.
 - The absolute price floor is $350K.
-- Every trade has a 1% fee; reversing the same player within 24 hours adds an escalating flip fee.
+- Every trade has a 0.25% fee; reversing the same player within 24 hours adds a 0.5% escalating flip surcharge capped at 1.5%.
 
-NBA-9 found that `k = 0.003` stayed inside the prototype price guardrails, but the current fee and
-flip schedule removed too much wealth under high-turnover stress. Price-impact calibration and fee
-calibration therefore remain separate decisions; see `output/trader-simulation.md`.
+NBA-9 found that `k = 0.003` stayed inside the prototype price guardrails. NBA-17 then softened the
+fee and flip schedule after high-turnover stress exposed excessive wealth destruction. See
+`output/trader-simulation.md` for the regenerated evidence.

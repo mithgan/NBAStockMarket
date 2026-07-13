@@ -8,7 +8,11 @@ from typing import Protocol, Union, runtime_checkable
 
 
 STARTING_CASH = 140_000_000.0
-FEE_PCT = 0.01
+# NBA-17 fee calibration: 0.25% base plus a repeat-flip surcharge that
+# increases by 0.5 percentage points and stops at 1.5%.
+FEE_PCT = 0.0025
+FLIP_SURCHARGE_PCT = 0.005
+FLIP_SURCHARGE_CAP_PCT = 0.015
 SHARES_OUT = 100
 MAX_SHARES_PER_USER_PER_PLAYER = 1
 # Calibrated by the NBA-9 deterministic trader sweep. This remains a
@@ -360,7 +364,12 @@ class Market:
         depth = self.liquidity(player_id)
         is_roundtrip = self._is_fast_roundtrip(user, player_id, normalized_side)
         if is_roundtrip:
-            fee += notional * 0.02 * (1 + self._roundtrips_last_7d(user, player_id))
+            recent_roundtrips = self._roundtrips_last_7d(user, player_id)
+            surcharge_rate = min(
+                FLIP_SURCHARGE_PCT * (1 + recent_roundtrips),
+                FLIP_SURCHARGE_CAP_PCT,
+            )
+            fee += notional * surcharge_rate
 
         if normalized_side is TradeSide.BUY:
             if (

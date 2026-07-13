@@ -128,6 +128,8 @@ def test_impact_report_explains_recommendation_and_safety() -> None:
     assert "hype" in report
     assert "boom_bust" in report
     assert "fair-value reversion remains off" in report
+    assert "existing 0.25% trade fee" in report
+    assert "0.5%-step same-player flip penalty capped at 1.5%" in report
     assert "Economy finding" in report
     assert "production-ready" in report
 
