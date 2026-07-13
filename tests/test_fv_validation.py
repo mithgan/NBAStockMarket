@@ -5,12 +5,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nba_stock_market.expectations import NotConfigured
+from nba_stock_market.epm_data import EPMRow, load_epm_rows, write_snapshot
 from nba_stock_market.fv_validation import (
+    backtest_external_rows,
     backtest_season_pair,
     compare_metrics,
     load_darko_rows,
-    load_epm_rows,
     spearman,
 )
 from tests.test_opening_prices import impact_row
@@ -62,10 +62,41 @@ class DarkoLoaderTest(unittest.TestCase):
                 load_darko_rows(path)
 
 
-class EpmStubTest(unittest.TestCase):
-    def test_epm_is_blocked_on_api_key(self) -> None:
-        with self.assertRaises(NotConfigured):
-            load_epm_rows()
+class EpmLoaderTest(unittest.TestCase):
+    def test_snapshot_round_trips_to_impact_rows(self) -> None:
+        rows = [
+            EPMRow("1", "Nikola Jokic", "2026-04-12", 8.1, 6.2, 1.9),
+            EPMRow("2", "Bench Guy", "2026-04-10", -1.4, -0.9, -0.5),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "epm_2026.csv"
+            write_snapshot(rows, path)
+            loaded = load_epm_rows(path)
+        self.assertEqual(len(loaded), 2)
+        self.assertEqual(loaded[0].player, "Nikola Jokic")
+        self.assertAlmostEqual(loaded[0].rating, 8.1)
+
+    def test_empty_snapshot_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "epm_2026.csv"
+            path.write_text("player_id,player_name,game_dt,epm,oepm,depm\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_epm_rows(path)
+
+
+class ExternalBacktestTest(unittest.TestCase):
+    def test_external_rows_score_against_realized_war(self) -> None:
+        train = [impact_row(f"P{i}", i * 0.3) for i in range(12)]
+        test = [impact_row(f"P{i}", 0.0, war=float(i)) for i in range(12)]
+        result = backtest_external_rows("EPM", train, test, 2025, 2026)
+        self.assertEqual(result.players, 12)
+        self.assertAlmostEqual(result.price_spearman, 1.0)
+
+    def test_requires_minimum_overlap(self) -> None:
+        train = [impact_row("Solo", 1.0)]
+        test = [impact_row("Solo", 1.0)]
+        with self.assertRaises(ValueError):
+            backtest_external_rows("EPM", train, test, 2025, 2026)
 
 
 class CompareMetricsTest(unittest.TestCase):
