@@ -8,23 +8,28 @@ from typing import Protocol, Union, runtime_checkable
 
 
 STARTING_CASH = 140_000_000.0
-FEE_PCT = 0.01
+# NBA-17 fee calibration: 0.25% base plus a repeat-flip surcharge that
+# increases by 0.5 percentage points and stops at 1.5%.
+FEE_PCT = 0.0025
+FLIP_SURCHARGE_PCT = 0.005
+FLIP_SURCHARGE_CAP_PCT = 0.015
 SHARES_OUT = 100
-IMPACT_K = 0.0003
+MAX_SHARES_PER_USER_PER_PLAYER = 1
+# Calibrated by the NBA-9 deterministic trader sweep. This remains a
+# prototype setting until real order-flow distributions are available.
+IMPACT_K = 0.003
 REVERSION_RATE = 0.0
-OWNERSHIP_CAP = 0.40
 IDLE_CASH_FEE = 0.0002
 MIN_PRICE_FLOOR = 350_000.0
 GRACE_DAYS = 7
 INACTIVITY_DECAY_RATE = 0.005
 
-# A five-net-point surprise creates $500,000 across all 100 shares, or
-# $5,000 per share.  Two shares of a $50M star earning that surprise in all
-# 82 games would pay $820,000; ten shares distributed across a salary-scale
-# portfolio would pay $4.1M.  The result is meaningful but remains a
-# single-digit-million season outcome for a typical portfolio.
-# Backtesting can replace this calibration without changing the dividend API.
-NET_POINTS_TO_DOLLARS = 100_000.0
+# DECIDED 2026-07-14 (Mith, Discord 7/14). With 100 float shares, this is
+# $40,000 per net point per holder, so a +20 surprise pays one holder $800K.
+NET_POINTS_TO_DOLLARS = 4_000_000.0
+# The deterministic D&T replay's league-mean actual-minus-expected surprise.
+# Adding it to expectations removes the systematic projection faucet.
+EXPECTATION_BIAS_NET_POINTS = 0.43586494964917194
 
 DIVIDEND_OFFSET = 2.15
 DIVIDEND_SCALE = 0.0005102
@@ -172,6 +177,7 @@ class Player:
     current_price: float
     fair_value: float
     opening_price: float | None = None
+    actual_salary: float | None = field(default=None, kw_only=True)
     shares_outstanding: int = SHARES_OUT
     volume_30d: float = 0.0
     listed_day: int = 0
@@ -263,13 +269,14 @@ class Market:
         impact_k: float = IMPACT_K,
         reversion_rate: float = REVERSION_RATE,
         fee_pct: float = FEE_PCT,
-        ownership_cap: float = OWNERSHIP_CAP,
+        max_shares_per_user_per_player: int = MAX_SHARES_PER_USER_PER_PLAYER,
         idle_cash_fee: float = IDLE_CASH_FEE,
         grace_days: int = GRACE_DAYS,
         inactivity_decay_rate: float = INACTIVITY_DECAY_RATE,
         net_points_model: NetPointsModel | None = None,
         expectation_source: ExpectationSource | None = None,
         net_points_to_dollars: float = NET_POINTS_TO_DOLLARS,
+        expectation_bias: float = EXPECTATION_BIAS_NET_POINTS,
     ) -> None:
         if not players:
             raise ValueError("market requires at least one player")
@@ -281,7 +288,32 @@ class Market:
         self.impact_k = self._finite_value("impact_k", impact_k)
         self.reversion_rate = self._rate("reversion_rate", reversion_rate)
         self.fee_pct = self._rate("fee_pct", fee_pct)
-        self.ownership_cap = self._rate("ownership_cap", ownership_cap)
+        if (
+            type(max_shares_per_user_per_player) is not int
+            or max_shares_per_user_per_player <= 0
+        ):
+            raise ValueError("max_shares_per_user_per_player must be a positive integer")
+        self.max_shares_per_user_per_player = max_shares_per_user_per_player
+        aggregate_holdings = {player_id: 0 for player_id in self.players}
+        for user in self.users.values():
+            for player_id, shares in user.holdings.items():
+                if player_id not in self.players:
+                    raise ValueError(
+                        f"holding for unknown player {player_id}: user {user.id}"
+                    )
+                if shares > self.max_shares_per_user_per_player:
+                    raise ValueError(
+                        f"holding for {player_id} exceeds per-user holding cap of "
+                        f"{self.max_shares_per_user_per_player}"
+                    )
+                aggregate_holdings[player_id] += shares
+        for player_id, held_shares in aggregate_holdings.items():
+            shares_outstanding = self.players[player_id].shares_outstanding
+            if held_shares > shares_outstanding:
+                raise ValueError(
+                    f"aggregate holding for {player_id} exceeds "
+                    f"{shares_outstanding} shares outstanding"
+                )
         self.idle_cash_fee = self._rate("idle_cash_fee", idle_cash_fee)
         self.inactivity_decay_rate = self._rate("inactivity_decay_rate", inactivity_decay_rate)
         if type(grace_days) is not int or grace_days < 0:
@@ -294,10 +326,14 @@ class Market:
         )
         if self.net_points_to_dollars < 0:
             raise ValueError("net_points_to_dollars must be non-negative")
+        self.expectation_bias = self._finite_value(
+            "expectation_bias", expectation_bias
+        )
         self.trade_log: list[Position] = []
         self.dividend_events: list[DividendEvent] = []
         # Compatibility-friendly name for consumers that treat this as a log.
         self.dividend_log = self.dividend_events
+        self._settled_dividends: dict[tuple[str, str], DividendEvent] = {}
 
     def ensure_user(self, user_id: str) -> User:
         user = self.users.get(user_id)
@@ -335,26 +371,48 @@ class Market:
         depth = self.liquidity(player_id)
         is_roundtrip = self._is_fast_roundtrip(user, player_id, normalized_side)
         if is_roundtrip:
-            fee += notional * 0.02 * (1 + self._roundtrips_last_7d(user, player_id))
+            recent_roundtrips = self._roundtrips_last_7d(user, player_id)
+            surcharge_rate = min(
+                FLIP_SURCHARGE_PCT * (1 + recent_roundtrips),
+                FLIP_SURCHARGE_CAP_PCT,
+            )
+            fee += notional * surcharge_rate
 
         if normalized_side is TradeSide.BUY:
-            max_user_shares = int(self.ownership_cap * player.shares_outstanding)
-            if user.shares(player_id) + quantity > max_user_shares:
-                raise TradeError("ownership cap exceeded")
+            if (
+                user.shares(player_id) + quantity
+                > self.max_shares_per_user_per_player
+            ):
+                raise TradeError(
+                    "per-user holding cap exceeded: "
+                    f"maximum {self.max_shares_per_user_per_player} share(s) per player"
+                )
             if self.total_held_shares(player_id) + quantity > player.shares_outstanding:
                 raise TradeError("not enough remaining float")
             if user.cash < notional + fee:
                 raise TradeError("insufficient cash")
-            user.cash -= notional + fee
-            user.holdings[player_id] = user.shares(player_id) + quantity
         else:
             if user.shares(player_id) < quantity:
                 raise TradeError("not enough shares")
+
+        try:
+            impacted_price = price * math.exp(
+                self.impact_k * int(normalized_side) * quantity / depth
+            )
+        except OverflowError as exc:
+            raise TradeError("price impact overflow") from exc
+        new_price = max(impacted_price, player.floor)
+        if not math.isfinite(new_price):
+            raise TradeError("price impact produced a non-finite price")
+
+        if normalized_side is TradeSide.BUY:
+            user.cash -= notional + fee
+            user.holdings[player_id] = user.shares(player_id) + quantity
+        else:
             user.cash += notional - fee
             user.holdings[player_id] = user.shares(player_id) - quantity
 
-        player.current_price *= math.exp(self.impact_k * int(normalized_side) * quantity / depth)
-        player.current_price = max(player.current_price, player.floor)
+        player.current_price = new_price
         player.last_trade_day = self.day
         player.volume_30d += quantity
         player._assert_valid()
@@ -417,17 +475,29 @@ class Market:
         actual_net_points: float,
         expected_net_points: float,
         game_date: date | None = None,
+        settlement_key: str | None = None,
     ) -> DividendEvent:
         """Pay holders for actual performance relative to expectation.
 
         Negative surprises intentionally debit holder cash.  Prices are not
         touched: daily performance enters the economy only through this cash
         event, leaving prices to supply/demand (plus optional experiments).
+
+        A settlement key is scoped to the player. Reusing it returns the
+        original event object without changing cash or appending another event.
         """
 
         self._player_or_error(player_id)
+        scoped_key = (
+            (player_id, settlement_key) if settlement_key is not None else None
+        )
+        if scoped_key is not None and scoped_key in self._settled_dividends:
+            return self._settled_dividends[scoped_key]
         actual = self._finite_value("actual_net_points", actual_net_points, TradeError)
         expected = self._finite_value("expected_net_points", expected_net_points, TradeError)
+        expected += self.expectation_bias
+        if not math.isfinite(expected):
+            raise TradeError("biased expected_net_points must be finite")
         dividend_per_share = (
             (actual - expected) * self.net_points_to_dollars / SHARES_OUT
         )
@@ -455,6 +525,8 @@ class Market:
             total_cash_change=total_cash_change,
         )
         self.dividend_events.append(event)
+        if scoped_key is not None:
+            self._settled_dividends[scoped_key] = event
         return event
 
     def apply_game_result(
@@ -464,10 +536,16 @@ class Market:
         actual: ExpectedPerformance,
         expected: ExpectedPerformance | None = None,
         game_date: date | None = None,
+        settlement_key: str | None = None,
     ) -> DividendEvent:
-        """Resolve box-score/net-point inputs and apply the daily dividend."""
+        """Resolve inputs and apply an optionally idempotent daily dividend."""
 
         player = self._player_or_error(player_id)
+        scoped_key = (
+            (player_id, settlement_key) if settlement_key is not None else None
+        )
+        if scoped_key is not None and scoped_key in self._settled_dividends:
+            return self._settled_dividends[scoped_key]
         if expected is None:
             if self.expectation_source is None:
                 raise TradeError("expected performance or expectation source is required")
@@ -482,6 +560,7 @@ class Market:
             actual_net_points=actual_net_points,
             expected_net_points=expected_net_points,
             game_date=game_date,
+            settlement_key=settlement_key,
         )
 
     def season_dividend_per_share(self, *, warp: float, minutes: float) -> float:

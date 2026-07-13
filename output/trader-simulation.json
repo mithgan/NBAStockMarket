@@ -1,0 +1,2305 @@
+{
+  "candidate_summaries": [
+    {
+      "all_invariants_hold": true,
+      "has_trade_evidence": true,
+      "impact_k": 0.0003,
+      "median_abs_return_pct": 0.3213,
+      "median_trade_move_pct": 0.0029,
+      "minimum_execution_rate": 1.0,
+      "passes_safety_gate": true,
+      "selection_penalty": 0.76497,
+      "worst_max_daily_move_pct": 0.5,
+      "worst_max_drawdown_pct": 17.3435,
+      "worst_max_price_multiple": 1.0044,
+      "worst_wealth_loss_pct": 10.6041
+    },
+    {
+      "all_invariants_hold": true,
+      "has_trade_evidence": true,
+      "impact_k": 0.001,
+      "median_abs_return_pct": 1.0839,
+      "median_trade_move_pct": 0.0096,
+      "minimum_execution_rate": 1.0,
+      "passes_safety_gate": true,
+      "selection_penalty": 0.68201,
+      "worst_max_daily_move_pct": 1.379,
+      "worst_max_drawdown_pct": 17.3435,
+      "worst_max_price_multiple": 1.0146,
+      "worst_wealth_loss_pct": 11.6045
+    },
+    {
+      "all_invariants_hold": true,
+      "has_trade_evidence": true,
+      "impact_k": 0.003,
+      "median_abs_return_pct": 3.2737,
+      "median_trade_move_pct": 0.0279,
+      "minimum_execution_rate": 1.0,
+      "passes_safety_gate": true,
+      "selection_penalty": 0.4721,
+      "worst_max_daily_move_pct": 4.1945,
+      "worst_max_drawdown_pct": 17.3435,
+      "worst_max_price_multiple": 1.0444,
+      "worst_wealth_loss_pct": 11.0003
+    },
+    {
+      "all_invariants_hold": true,
+      "has_trade_evidence": true,
+      "impact_k": 0.01,
+      "median_abs_return_pct": 11.0052,
+      "median_trade_move_pct": 0.0957,
+      "minimum_execution_rate": 1.0,
+      "passes_safety_gate": false,
+      "selection_penalty": null,
+      "worst_max_daily_move_pct": 14.6785,
+      "worst_max_drawdown_pct": 20.1728,
+      "worst_max_price_multiple": 1.1559,
+      "worst_wealth_loss_pct": 10.2032
+    },
+    {
+      "all_invariants_hold": true,
+      "has_trade_evidence": true,
+      "impact_k": 0.03,
+      "median_abs_return_pct": 27.969,
+      "median_trade_move_pct": 0.3173,
+      "minimum_execution_rate": 1.0,
+      "passes_safety_gate": false,
+      "selection_penalty": null,
+      "worst_max_daily_move_pct": 50.8155,
+      "worst_max_drawdown_pct": 32.6466,
+      "worst_max_price_multiple": 1.5445,
+      "worst_wealth_loss_pct": 3.0984
+    }
+  ],
+  "method": {
+    "days": 45,
+    "fair_value_reversion": 0.0,
+    "safety_gate": {
+      "max_daily_move_pct": 10.0,
+      "max_drawdown_pct": 50.0,
+      "max_price_multiple": 2.0
+    },
+    "scenarios": [
+      "balanced",
+      "hype",
+      "boom_bust"
+    ],
+    "seeds": [
+      7,
+      42,
+      1337
+    ],
+    "target_median_trade_move_pct": 0.5,
+    "traders": 48,
+    "trades_per_day": 90
+  },
+  "ready_for_production": true,
+  "recommended_impact_k": 0.003,
+  "runs": [
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 174889956.67,
+        "ending_cash": 1716781783.65,
+        "ending_holdings_value": 4557132737.63,
+        "ending_wealth": 6273914521.27,
+        "fees_paid_per_trader": 9088769.27,
+        "flip_surcharges_paid": 261370968.5,
+        "notional_per_trader": 1457416305.55,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -446085478.73,
+        "wealth_change_pct": -6.6382
+      },
+      "impact_k": 0.0003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 36.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 2144084.25,
+        "minimum_portfolio_value": 112956183.13,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3055,
+        "executed": 3055,
+        "execution_rate": 1.0,
+        "fees_paid": 436260925.17,
+        "median_trade_move_pct": 0.002923,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 69955982666.46
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 0.3844,
+        "max_daily_move_pct": 0.2267,
+        "max_drawdown_pct": 0.0899,
+        "max_price_multiple": 1.00405,
+        "median_abs_return_pct": 0.3213,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 212243951.64,
+        "ending_cash": 1533071106.38,
+        "ending_holdings_value": 4476204576.2,
+        "ending_wealth": 6009275682.58,
+        "fees_paid_per_trader": 14603457.25,
+        "flip_surcharges_paid": 488721996.15,
+        "notional_per_trader": 1768699597.03,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -710724317.42,
+        "wealth_change_pct": -10.5763
+      },
+      "impact_k": 0.0003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 43.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 2910146.6,
+        "minimum_portfolio_value": 112339990.63,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 700965947.8,
+        "median_trade_move_pct": 0.00243,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 84897580657.2
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 0.381,
+        "max_daily_move_pct": 0.304,
+        "max_drawdown_pct": 0.1084,
+        "max_price_multiple": 1.004206,
+        "median_abs_return_pct": 0.3212,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 13489004.11,
+        "ending_cash": 6471137664.8,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6471137664.8,
+        "fees_paid_per_trader": 281020.92,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 112408367.58,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -248862335.2,
+        "wealth_change_pct": -3.7033
+      },
+      "impact_k": 0.0003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 134702740.46,
+        "minimum_portfolio_value": 134702740.46,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 13489004.11,
+        "median_trade_move_pct": 0.005483,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 5395601643.91
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 0.5,
+        "max_drawdown_pct": 17.3435,
+        "max_price_multiple": 1.004357,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 176381347.23,
+        "ending_cash": 1423961294.12,
+        "ending_holdings_value": 4853810167.06,
+        "ending_wealth": 6277771461.17,
+        "fees_paid_per_trader": 9006975.47,
+        "flip_surcharges_paid": 255953475.11,
+        "notional_per_trader": 1469844560.26,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -442228538.83,
+        "wealth_change_pct": -6.5808
+      },
+      "impact_k": 0.0003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 38.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 2893654.37,
+        "minimum_portfolio_value": 114093901.91,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3101,
+        "executed": 3101,
+        "execution_rate": 1.0,
+        "fees_paid": 432334822.34,
+        "median_trade_move_pct": 0.002874,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 70552538892.4
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 0.3862,
+        "max_daily_move_pct": 0.2248,
+        "max_drawdown_pct": 0.0802,
+        "max_price_multiple": 1.004052,
+        "median_abs_return_pct": 0.3186,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 213520629.87,
+        "ending_cash": 1537856747.74,
+        "ending_holdings_value": 4469546871.85,
+        "ending_wealth": 6007403619.59,
+        "fees_paid_per_trader": 14660146.36,
+        "flip_surcharges_paid": 490166395.48,
+        "notional_per_trader": 1779338582.27,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -712596380.41,
+        "wealth_change_pct": -10.6041
+      },
+      "impact_k": 0.0003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 38.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 6116204.28,
+        "minimum_portfolio_value": 113892199.17,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 703687025.35,
+        "median_trade_move_pct": 0.002344,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 85408251948.89
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 0.3696,
+        "max_daily_move_pct": 0.2645,
+        "max_drawdown_pct": 0.1357,
+        "max_price_multiple": 1.004141,
+        "median_abs_return_pct": 0.303,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 13521718.55,
+        "ending_cash": 6484067259.95,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6484067259.95,
+        "fees_paid_per_trader": 281702.47,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 112680987.89,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -235932740.05,
+        "wealth_change_pct": -3.5109
+      },
+      "impact_k": 0.0003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 134947721.58,
+        "minimum_portfolio_value": 134947721.58,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 13521718.55,
+        "median_trade_move_pct": 0.005483,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 5408687418.73
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 0.5,
+        "max_drawdown_pct": 17.3435,
+        "max_price_multiple": 1.004357,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 174098888.98,
+        "ending_cash": 1499455022.72,
+        "ending_holdings_value": 4743428124.51,
+        "ending_wealth": 6242883147.22,
+        "fees_paid_per_trader": 9732903.8,
+        "flip_surcharges_paid": 293080493.33,
+        "notional_per_trader": 1450824074.81,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -477116852.78,
+        "wealth_change_pct": -7.1
+      },
+      "impact_k": 0.0003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 39.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 8198401.75,
+        "minimum_portfolio_value": 114147895.6,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3131,
+        "executed": 3131,
+        "execution_rate": 1.0,
+        "fees_paid": 467179382.31,
+        "median_trade_move_pct": 0.00287,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 69639555590.87
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 0.3787,
+        "max_daily_move_pct": 0.2639,
+        "max_drawdown_pct": 0.0952,
+        "max_price_multiple": 1.003983,
+        "median_abs_return_pct": 0.3081,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 202996264.03,
+        "ending_cash": 1517936991.92,
+        "ending_holdings_value": 4541749459.23,
+        "ending_wealth": 6059686451.15,
+        "fees_paid_per_trader": 13555186.95,
+        "flip_surcharges_paid": 447652709.34,
+        "notional_per_trader": 1691635533.56,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -660313548.85,
+        "wealth_change_pct": -9.8261
+      },
+      "impact_k": 0.0003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 43.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 5753656.69,
+        "minimum_portfolio_value": 117463017.27,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 650648973.37,
+        "median_trade_move_pct": 0.002258,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 81198505610.97
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 0.3903,
+        "max_daily_move_pct": 0.2638,
+        "max_drawdown_pct": 0.1532,
+        "max_price_multiple": 1.00412,
+        "median_abs_return_pct": 0.3316,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 13521703.03,
+        "ending_cash": 6484150531.8,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6484150531.8,
+        "fees_paid_per_trader": 281702.15,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 112680858.6,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -235849468.2,
+        "wealth_change_pct": -3.5097
+      },
+      "impact_k": 0.0003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 134928394.45,
+        "minimum_portfolio_value": 134928394.45,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 13521703.03,
+        "median_trade_move_pct": 0.005485,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 5408681212.76
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 0.5,
+        "max_drawdown_pct": 17.3435,
+        "max_price_multiple": 1.004356,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 175430003.57,
+        "ending_cash": 1487521071.91,
+        "ending_holdings_value": 4810703248.41,
+        "ending_wealth": 6298224320.31,
+        "fees_paid_per_trader": 8942642.91,
+        "flip_surcharges_paid": 253816856.33,
+        "notional_per_trader": 1461916696.42,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -421775679.69,
+        "wealth_change_pct": -6.2764
+      },
+      "impact_k": 0.001,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 38.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 3551331.83,
+        "minimum_portfolio_value": 110688072.39,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3055,
+        "executed": 3055,
+        "execution_rate": 1.0,
+        "fees_paid": 429246859.9,
+        "median_trade_move_pct": 0.009602,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 70172001427.96
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 1.2818,
+        "max_daily_move_pct": 0.7576,
+        "max_drawdown_pct": 0.2796,
+        "max_price_multiple": 1.013572,
+        "median_abs_return_pct": 1.0446,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 218223526.06,
+        "ending_cash": 1503131353.29,
+        "ending_holdings_value": 4530346789.3,
+        "ending_wealth": 6033478142.59,
+        "fees_paid_per_trader": 14470715.89,
+        "flip_surcharges_paid": 476370836.83,
+        "notional_per_trader": 1818529383.82,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -686521857.41,
+        "wealth_change_pct": -10.2161
+      },
+      "impact_k": 0.001,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 44.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 2797584.08,
+        "minimum_portfolio_value": 108763469.92,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 694594362.89,
+        "median_trade_move_pct": 0.007796,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 87289410423.31
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 1.2796,
+        "max_daily_move_pct": 1.0171,
+        "max_drawdown_pct": 0.4204,
+        "max_price_multiple": 1.013838,
+        "median_abs_return_pct": 1.0839,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 13584460.38,
+        "ending_cash": 6471918893.43,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6471918893.43,
+        "fees_paid_per_trader": 283009.59,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 113203836.5,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -248081106.57,
+        "wealth_change_pct": -3.6917
+      },
+      "impact_k": 0.001,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 134422051.5,
+        "minimum_portfolio_value": 134422051.5,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 13584460.38,
+        "median_trade_move_pct": 0.018275,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 5433784151.84
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 1.3205,
+        "max_drawdown_pct": 17.3435,
+        "max_price_multiple": 1.014596,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 178312260.28,
+        "ending_cash": 1538248377.06,
+        "ending_holdings_value": 4727714884.53,
+        "ending_wealth": 6265963261.59,
+        "fees_paid_per_trader": 9604678.24,
+        "flip_surcharges_paid": 282712295.39,
+        "notional_per_trader": 1485935502.36,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -454036738.41,
+        "wealth_change_pct": -6.7565
+      },
+      "impact_k": 0.001,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 37.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 8458478.15,
+        "minimum_portfolio_value": 116397918.09,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3080,
+        "executed": 3080,
+        "execution_rate": 1.0,
+        "fees_paid": 461024555.68,
+        "median_trade_move_pct": 0.009593,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 71324904113.37
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 1.2577,
+        "max_daily_move_pct": 0.7514,
+        "max_drawdown_pct": 0.2946,
+        "max_price_multiple": 1.013575,
+        "median_abs_return_pct": 1.0367,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 232295457.55,
+        "ending_cash": 1376333659.0,
+        "ending_holdings_value": 4563843004.44,
+        "ending_wealth": 5940176663.43,
+        "fees_paid_per_trader": 16392782.6,
+        "flip_surcharges_paid": 554558107.2,
+        "notional_per_trader": 1935795479.58,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -779823336.57,
+        "wealth_change_pct": -11.6045
+      },
+      "impact_k": 0.001,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 39.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 1697611.29,
+        "minimum_portfolio_value": 110324689.63,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 786853564.75,
+        "median_trade_move_pct": 0.008044,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 92918183019.68
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 1.2489,
+        "max_daily_move_pct": 0.8842,
+        "max_drawdown_pct": 0.3791,
+        "max_price_multiple": 1.013895,
+        "median_abs_return_pct": 1.1198,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 13617432.47,
+        "ending_cash": 6484952165.93,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6484952165.93,
+        "fees_paid_per_trader": 283696.51,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 113478603.95,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -235047834.07,
+        "wealth_change_pct": -3.4977
+      },
+      "impact_k": 0.001,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 134667981.42,
+        "minimum_portfolio_value": 134667981.42,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 13617432.47,
+        "median_trade_move_pct": 0.018275,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 5446972989.47
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 1.3504,
+        "max_drawdown_pct": 17.3435,
+        "max_price_multiple": 1.014596,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 169284316.0,
+        "ending_cash": 1588721128.8,
+        "ending_holdings_value": 4709178495.94,
+        "ending_wealth": 6297899624.74,
+        "fees_paid_per_trader": 8944601.87,
+        "flip_surcharges_paid": 260056573.72,
+        "notional_per_trader": 1410702633.37,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -422100375.26,
+        "wealth_change_pct": -6.2813
+      },
+      "impact_k": 0.001,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 41.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 7150096.0,
+        "minimum_portfolio_value": 118982216.42,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3134,
+        "executed": 3134,
+        "execution_rate": 1.0,
+        "fees_paid": 429340889.73,
+        "median_trade_move_pct": 0.008889,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 67713726401.93
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 1.2966,
+        "max_daily_move_pct": 0.8823,
+        "max_drawdown_pct": 0.2858,
+        "max_price_multiple": 1.01346,
+        "median_abs_return_pct": 1.0336,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 217872900.09,
+        "ending_cash": 1845566992.45,
+        "ending_holdings_value": 4129837580.48,
+        "ending_wealth": 5975404572.93,
+        "fees_paid_per_trader": 15661222.06,
+        "flip_surcharges_paid": 533865758.7,
+        "notional_per_trader": 1815607500.73,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -744595427.07,
+        "wealth_change_pct": -11.0803
+      },
+      "impact_k": 0.001,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 44.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 11035563.36,
+        "minimum_portfolio_value": 112387984.84,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 751738658.79,
+        "median_trade_move_pct": 0.007832,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 87149160035.15
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 1.2545,
+        "max_daily_move_pct": 0.8822,
+        "max_drawdown_pct": 0.5045,
+        "max_price_multiple": 1.013582,
+        "median_abs_return_pct": 1.055,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 13617380.42,
+        "ending_cash": 6485023004.07,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6485023004.07,
+        "fees_paid_per_trader": 283695.43,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 113478170.15,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -234976995.93,
+        "wealth_change_pct": -3.4967
+      },
+      "impact_k": 0.001,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 134579423.34,
+        "minimum_portfolio_value": 134579423.34,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 13617380.42,
+        "median_trade_move_pct": 0.018283,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 5446952167.2
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 1.379,
+        "max_drawdown_pct": 17.3435,
+        "max_price_multiple": 1.014593,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 180193565.55,
+        "ending_cash": 1746027598.54,
+        "ending_holdings_value": 4608541598.04,
+        "ending_wealth": 6354569196.57,
+        "fees_paid_per_trader": 8775575.45,
+        "flip_surcharges_paid": 241034056.18,
+        "notional_per_trader": 1501613046.25,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -365430803.43,
+        "wealth_change_pct": -5.438
+      },
+      "impact_k": 0.003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 38.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 3321705.4,
+        "minimum_portfolio_value": 116107866.42,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3077,
+        "executed": 3077,
+        "execution_rate": 1.0,
+        "fees_paid": 421227621.73,
+        "median_trade_move_pct": 0.028493,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 72077426219.81
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 3.9351,
+        "max_daily_move_pct": 2.3908,
+        "max_drawdown_pct": 1.059,
+        "max_price_multiple": 1.041303,
+        "median_abs_return_pct": 2.9067,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 224486218.47,
+        "ending_cash": 1702240560.3,
+        "ending_holdings_value": 4319062201.3,
+        "ending_wealth": 6021302761.6,
+        "fees_paid_per_trader": 15743279.76,
+        "flip_surcharges_paid": 531191210.21,
+        "notional_per_trader": 1870718487.22,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -698697238.4,
+        "wealth_change_pct": -10.3973
+      },
+      "impact_k": 0.003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 43.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 3051768.36,
+        "minimum_portfolio_value": 113084687.07,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 755677428.68,
+        "median_trade_move_pct": 0.023955,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 89794487386.44
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 3.667,
+        "max_daily_move_pct": 3.0824,
+        "max_drawdown_pct": 1.1988,
+        "max_price_multiple": 1.041336,
+        "median_abs_return_pct": 3.2737,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 13861333.29,
+        "ending_cash": 6474193997.76,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6474193997.76,
+        "fees_paid_per_trader": 288777.78,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 115511110.75,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -245806002.24,
+        "wealth_change_pct": -3.6578
+      },
+      "impact_k": 0.003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 133584313.19,
+        "minimum_portfolio_value": 133584313.19,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 13861333.29,
+        "median_trade_move_pct": 0.054815,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 5544533316.22
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 4.014,
+        "max_drawdown_pct": 17.3435,
+        "max_price_multiple": 1.044431,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 181707314.43,
+        "ending_cash": 1547818446.52,
+        "ending_holdings_value": 4743617426.12,
+        "ending_wealth": 6291435872.64,
+        "fees_paid_per_trader": 10049548.09,
+        "flip_surcharges_paid": 300670994.01,
+        "notional_per_trader": 1514227620.27,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -428564127.36,
+        "wealth_change_pct": -6.3774
+      },
+      "impact_k": 0.003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 39.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 5835505.03,
+        "minimum_portfolio_value": 115815907.69,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3080,
+        "executed": 3080,
+        "execution_rate": 1.0,
+        "fees_paid": 482378308.44,
+        "median_trade_move_pct": 0.027638,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 72682925772.87
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 3.9006,
+        "max_daily_move_pct": 2.2711,
+        "max_drawdown_pct": 0.7789,
+        "max_price_multiple": 1.041273,
+        "median_abs_return_pct": 3.0817,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 228736481.82,
+        "ending_cash": 1509420669.37,
+        "ending_holdings_value": 4471361649.68,
+        "ending_wealth": 5980782319.05,
+        "fees_paid_per_trader": 16646255.82,
+        "flip_surcharges_paid": 570283797.35,
+        "notional_per_trader": 1906137348.53,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -739217680.95,
+        "wealth_change_pct": -11.0003
+      },
+      "impact_k": 0.003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 41.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 5901130.19,
+        "minimum_portfolio_value": 107925444.59,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 799020279.18,
+        "median_trade_move_pct": 0.022226,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 91494592729.55
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 3.8358,
+        "max_daily_move_pct": 2.5963,
+        "max_drawdown_pct": 1.2127,
+        "max_price_multiple": 1.042346,
+        "median_abs_return_pct": 3.2706,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 13895052.81,
+        "ending_cash": 6487528136.75,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6487528136.75,
+        "fees_paid_per_trader": 289480.27,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 115792106.77,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -232471863.25,
+        "wealth_change_pct": -3.4594
+      },
+      "impact_k": 0.003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 133846834.67,
+        "minimum_portfolio_value": 133846834.67,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 13895052.81,
+        "median_trade_move_pct": 0.054814,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 5558021124.94
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 4.1061,
+        "max_drawdown_pct": 17.3435,
+        "max_price_multiple": 1.044431,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 172515277.92,
+        "ending_cash": 1689280149.64,
+        "ending_holdings_value": 4690314195.51,
+        "ending_wealth": 6379594345.15,
+        "fees_paid_per_trader": 8276053.65,
+        "flip_surcharges_paid": 224735297.43,
+        "notional_per_trader": 1437627315.99,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -340405654.85,
+        "wealth_change_pct": -5.0656
+      },
+      "impact_k": 0.003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 42.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 5568163.67,
+        "minimum_portfolio_value": 124711267.74,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3101,
+        "executed": 3101,
+        "execution_rate": 1.0,
+        "fees_paid": 397250575.35,
+        "median_trade_move_pct": 0.02788,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 69006111167.29
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 4.0347,
+        "max_daily_move_pct": 2.7579,
+        "max_drawdown_pct": 1.0212,
+        "max_price_multiple": 1.041983,
+        "median_abs_return_pct": 3.1146,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 222186563.27,
+        "ending_cash": 1743728114.02,
+        "ending_holdings_value": 4264628226.45,
+        "ending_wealth": 6008356340.47,
+        "fees_paid_per_trader": 16030740.09,
+        "flip_surcharges_paid": 547288960.83,
+        "notional_per_trader": 1851554693.91,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -711643659.53,
+        "wealth_change_pct": -10.5899
+      },
+      "impact_k": 0.003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 43.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 7109379.06,
+        "minimum_portfolio_value": 114863257.62,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 769475524.1,
+        "median_trade_move_pct": 0.023029,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 88874625307.49
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 3.7412,
+        "max_daily_move_pct": 2.6699,
+        "max_drawdown_pct": 1.3901,
+        "max_price_multiple": 1.041759,
+        "median_abs_return_pct": 3.5506,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 13894893.7,
+        "ending_cash": 6487562580.83,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6487562580.83,
+        "fees_paid_per_trader": 289476.95,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 115790780.81,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -232437419.17,
+        "wealth_change_pct": -3.4589
+      },
+      "impact_k": 0.003,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 133555283.61,
+        "minimum_portfolio_value": 133555283.61,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 13894893.7,
+        "median_trade_move_pct": 0.054839,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 5557957478.89
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 4.1945,
+        "max_drawdown_pct": 17.3435,
+        "max_price_multiple": 1.04442,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 192712451.79,
+        "ending_cash": 1698649966.8,
+        "ending_holdings_value": 4709368596.13,
+        "ending_wealth": 6408018562.93,
+        "fees_paid_per_trader": 11128866.67,
+        "flip_surcharges_paid": 341473148.57,
+        "notional_per_trader": 1605937098.24,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -311981437.07,
+        "wealth_change_pct": -4.6426
+      },
+      "impact_k": 0.01,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 36.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 5631907.01,
+        "minimum_portfolio_value": 114614421.19,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3052,
+        "executed": 3052,
+        "execution_rate": 1.0,
+        "fees_paid": 534185600.36,
+        "median_trade_move_pct": 0.095678,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 77084980715.48
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 13.798,
+        "max_daily_move_pct": 8.2124,
+        "max_drawdown_pct": 2.2975,
+        "max_price_multiple": 1.143936,
+        "median_abs_return_pct": 10.9416,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 259288094.85,
+        "ending_cash": 1563314054.78,
+        "ending_holdings_value": 4471033044.69,
+        "ending_wealth": 6034347099.47,
+        "fees_paid_per_trader": 19037232.96,
+        "flip_surcharges_paid": 654499087.0,
+        "notional_per_trader": 2160734123.73,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -685652900.53,
+        "wealth_change_pct": -10.2032
+      },
+      "impact_k": 0.01,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 43.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 870471.3,
+        "minimum_portfolio_value": 112712529.13,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 913787181.85,
+        "median_trade_move_pct": 0.078844,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 103715237938.96
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 13.9981,
+        "max_daily_move_pct": 9.8325,
+        "max_drawdown_pct": 4.1816,
+        "max_price_multiple": 1.145547,
+        "median_abs_return_pct": 10.7069,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 14880578.83,
+        "ending_cash": 6482674847.73,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6482674847.73,
+        "fees_paid_per_trader": 310012.06,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 124004823.57,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -237325152.27,
+        "wealth_change_pct": -3.5316
+      },
+      "impact_k": 0.01,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 130403414.89,
+        "minimum_portfolio_value": 130403414.89,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 14880578.83,
+        "median_trade_move_pct": 0.182708,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 5952231531.36
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 14.0176,
+        "max_drawdown_pct": 20.1728,
+        "max_price_multiple": 1.155933,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 189684311.4,
+        "ending_cash": 1696527511.95,
+        "ending_holdings_value": 4736711331.27,
+        "ending_wealth": 6433238843.23,
+        "fees_paid_per_trader": 10572567.23,
+        "flip_surcharges_paid": 317798915.87,
+        "notional_per_trader": 1580702595.01,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -286761156.77,
+        "wealth_change_pct": -4.2673
+      },
+      "impact_k": 0.01,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 40.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 3807191.56,
+        "minimum_portfolio_value": 118456776.19,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3070,
+        "executed": 3070,
+        "execution_rate": 1.0,
+        "fees_paid": 507483227.27,
+        "median_trade_move_pct": 0.094257,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 75873724560.29
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 14.0189,
+        "max_daily_move_pct": 6.6463,
+        "max_drawdown_pct": 2.8198,
+        "max_price_multiple": 1.145202,
+        "median_abs_return_pct": 11.0052,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 230925397.36,
+        "ending_cash": 1412101105.09,
+        "ending_holdings_value": 4779309822.34,
+        "ending_wealth": 6191410927.44,
+        "fees_paid_per_trader": 15959723.26,
+        "flip_surcharges_paid": 535141319.25,
+        "notional_per_trader": 1924378311.35,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -528589072.56,
+        "wealth_change_pct": -7.8659
+      },
+      "impact_k": 0.01,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 40.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 4029204.15,
+        "minimum_portfolio_value": 118406206.62,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 766066716.61,
+        "median_trade_move_pct": 0.078475,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 92370158944.63
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 12.6196,
+        "max_daily_move_pct": 8.6255,
+        "max_drawdown_pct": 3.8654,
+        "max_price_multiple": 1.145984,
+        "median_abs_return_pct": 12.0626,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 14917050.75,
+        "ending_cash": 6497118339.58,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6497118339.58,
+        "fees_paid_per_trader": 310771.89,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 124308756.27,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -222881660.42,
+        "wealth_change_pct": -3.3167
+      },
+      "impact_k": 0.01,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 130703809.96,
+        "minimum_portfolio_value": 130703809.96,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 14917050.75,
+        "median_trade_move_pct": 0.182707,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 5966820300.73
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 14.3547,
+        "max_drawdown_pct": 19.7518,
+        "max_price_multiple": 1.155934,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 186450953.82,
+        "ending_cash": 1492056049.56,
+        "ending_holdings_value": 4979824087.59,
+        "ending_wealth": 6471880137.15,
+        "fees_paid_per_trader": 9971277.84,
+        "flip_surcharges_paid": 292170382.73,
+        "notional_per_trader": 1553757948.5,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -248119862.85,
+        "wealth_change_pct": -3.6923
+      },
+      "impact_k": 0.01,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 36.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 4969562.32,
+        "minimum_portfolio_value": 124613902.7,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3107,
+        "executed": 3107,
+        "execution_rate": 1.0,
+        "fees_paid": 478621336.55,
+        "median_trade_move_pct": 0.0957,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 74580381528.13
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 13.3715,
+        "max_daily_move_pct": 8.8814,
+        "max_drawdown_pct": 3.0085,
+        "max_price_multiple": 1.143672,
+        "median_abs_return_pct": 10.8254,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 237620495.58,
+        "ending_cash": 1477457264.55,
+        "ending_holdings_value": 4618764822.76,
+        "ending_wealth": 6096222087.31,
+        "fees_paid_per_trader": 17748967.49,
+        "flip_surcharges_paid": 614329944.17,
+        "notional_per_trader": 1980170796.52,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -623777912.69,
+        "wealth_change_pct": -9.2824
+      },
+      "impact_k": 0.01,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 44.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 4136044.27,
+        "minimum_portfolio_value": 113067400.73,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 851950439.75,
+        "median_trade_move_pct": 0.075401,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 95048198233.11
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 14.1048,
+        "max_daily_move_pct": 8.9101,
+        "max_drawdown_pct": 3.6974,
+        "max_price_multiple": 1.145219,
+        "median_abs_return_pct": 10.8521,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 14916484.36,
+        "ending_cash": 6497014785.27,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6497014785.27,
+        "fees_paid_per_trader": 310760.09,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 124304036.33,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -222985214.73,
+        "wealth_change_pct": -3.3182
+      },
+      "impact_k": 0.01,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 129637910.28,
+        "minimum_portfolio_value": 129637910.28,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 14916484.36,
+        "median_trade_move_pct": 0.182749,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 5966593743.87
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 14.6785,
+        "max_drawdown_pct": 19.7719,
+        "max_price_multiple": 1.155893,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 214923613.91,
+        "ending_cash": 3573026143.45,
+        "ending_holdings_value": 3081116350.55,
+        "ending_wealth": 6654142494.0,
+        "fees_paid_per_trader": 12185260.01,
+        "flip_surcharges_paid": 369968866.59,
+        "notional_per_trader": 1791030115.93,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -65857506.0,
+        "wealth_change_pct": -0.98
+      },
+      "impact_k": 0.03,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 24.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 4712071.98,
+        "minimum_portfolio_value": 123788389.13,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3012,
+        "executed": 3012,
+        "execution_rate": 1.0,
+        "fees_paid": 584892480.5,
+        "median_trade_move_pct": 0.33612,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 85969445564.8
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 35.6588,
+        "max_daily_move_pct": 24.097,
+        "max_drawdown_pct": 10.3512,
+        "max_price_multiple": 1.400925,
+        "median_abs_return_pct": 27.969,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 273348669.39,
+        "ending_cash": 1522046511.16,
+        "ending_holdings_value": 5037997900.07,
+        "ending_wealth": 6560044411.23,
+        "fees_paid_per_trader": 18882887.55,
+        "flip_surcharges_paid": 633029933.11,
+        "notional_per_trader": 2277905578.26,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -159955588.77,
+        "wealth_change_pct": -2.3803
+      },
+      "impact_k": 0.03,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 39.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 1925758.04,
+        "minimum_portfolio_value": 123787908.75,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 906378602.5,
+        "median_trade_move_pct": 0.238734,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 109339467756.29
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 41.2365,
+        "max_daily_move_pct": 27.9481,
+        "max_drawdown_pct": 10.1749,
+        "max_price_multiple": 1.499882,
+        "median_abs_return_pct": 36.7223,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 18275801.34,
+        "ending_cash": 6511784838.82,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6511784838.82,
+        "fees_paid_per_trader": 380745.86,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 152298344.52,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -208215161.18,
+        "wealth_change_pct": -3.0984
+      },
+      "impact_k": 0.03,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 118853911.5,
+        "minimum_portfolio_value": 118853911.5,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 18275801.34,
+        "median_trade_move_pct": 0.548117,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 7310320537.02
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 48.2231,
+        "max_drawdown_pct": 32.6466,
+        "max_price_multiple": 1.544534,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 7
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 201760330.04,
+        "ending_cash": 3036068616.04,
+        "ending_holdings_value": 3651175645.05,
+        "ending_wealth": 6687244261.1,
+        "fees_paid_per_trader": 11363680.46,
+        "flip_surcharges_paid": 343696332.02,
+        "notional_per_trader": 1681336083.65,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -32755738.9,
+        "wealth_change_pct": -0.4874
+      },
+      "impact_k": 0.03,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 25.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 2581631.74,
+        "minimum_portfolio_value": 125913705.5,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3050,
+        "executed": 3050,
+        "execution_rate": 1.0,
+        "fees_paid": 545456662.06,
+        "median_trade_move_pct": 0.317272,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 80704132015.4
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 34.5424,
+        "max_daily_move_pct": 19.8406,
+        "max_drawdown_pct": 9.2195,
+        "max_price_multiple": 1.395385,
+        "median_abs_return_pct": 29.3358,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 277527309.07,
+        "ending_cash": 1764392725.59,
+        "ending_holdings_value": 4774880065.63,
+        "ending_wealth": 6539272791.22,
+        "fees_paid_per_trader": 19389745.08,
+        "flip_surcharges_paid": 653180454.84,
+        "notional_per_trader": 2312727575.62,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -180727208.78,
+        "wealth_change_pct": -2.6894
+      },
+      "impact_k": 0.03,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 38.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 2057174.7,
+        "minimum_portfolio_value": 119397923.16,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 930707763.91,
+        "median_trade_move_pct": 0.227083,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 111010923629.79
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 44.0606,
+        "max_daily_move_pct": 22.8868,
+        "max_drawdown_pct": 10.1358,
+        "max_price_multiple": 1.532701,
+        "median_abs_return_pct": 36.2238,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 18321445.96,
+        "ending_cash": 6529940319.34,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6529940319.34,
+        "fees_paid_per_trader": 381696.79,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 152678716.37,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -190059680.66,
+        "wealth_change_pct": -2.8283
+      },
+      "impact_k": 0.03,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 119027166.8,
+        "minimum_portfolio_value": 119027166.8,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 18321445.96,
+        "median_trade_move_pct": 0.548114,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 7328578385.91
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 49.5418,
+        "max_drawdown_pct": 32.2579,
+        "max_price_multiple": 1.544539,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 42
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 201318956.99,
+        "ending_cash": 3014158557.84,
+        "ending_holdings_value": 3709369727.08,
+        "ending_wealth": 6723528284.92,
+        "fees_paid_per_trader": 11055615.61,
+        "flip_surcharges_paid": 329350592.5,
+        "notional_per_trader": 1677657974.88,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": 3528284.92,
+        "wealth_change_pct": 0.0525
+      },
+      "impact_k": 0.03,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 29.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 2292821.46,
+        "minimum_portfolio_value": 129386526.24,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 3086,
+        "executed": 3086,
+        "execution_rate": 1.0,
+        "fees_paid": 530669549.48,
+        "median_trade_move_pct": 0.308229,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 80527582794.16
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 36.7414,
+        "max_daily_move_pct": 25.3086,
+        "max_drawdown_pct": 8.2897,
+        "max_price_multiple": 1.400407,
+        "median_abs_return_pct": 27.6181,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "balanced",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 262392087.73,
+        "ending_cash": 1242668886.89,
+        "ending_holdings_value": 5371280945.21,
+        "ending_wealth": 6613949832.1,
+        "fees_paid_per_trader": 17952732.96,
+        "flip_surcharges_paid": 599339094.39,
+        "notional_per_trader": 2186600731.08,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -106050167.9,
+        "wealth_change_pct": -1.5781
+      },
+      "impact_k": 0.03,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 37.0,
+        "maximum_user_player_holding": 1,
+        "minimum_cash": 1382675.14,
+        "minimum_portfolio_value": 114385382.35,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 4050,
+        "executed": 4050,
+        "execution_rate": 1.0,
+        "fees_paid": 861731182.12,
+        "median_trade_move_pct": 0.228027,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 104956835091.91
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 42.1458,
+        "max_daily_move_pct": 26.7158,
+        "max_drawdown_pct": 11.1921,
+        "max_price_multiple": 1.488378,
+        "median_abs_return_pct": 32.8292,
+        "minimum_price_ratio": 1.0
+      },
+      "reversion_rate": 0.0,
+      "scenario": "hype",
+      "seed": 1337
+    },
+    {
+      "all_invariants_hold": true,
+      "economy_metrics": {
+        "base_fees_paid": 18319391.91,
+        "ending_cash": 6529337875.6,
+        "ending_holdings_value": 0.0,
+        "ending_wealth": 6529337875.6,
+        "fees_paid_per_trader": 381654.0,
+        "flip_surcharges_paid": 0.0,
+        "notional_per_trader": 152661599.22,
+        "starting_wealth": 6720000000.0,
+        "wealth_change": -190662124.4,
+        "wealth_change_pct": -2.8372
+      },
+      "impact_k": 0.03,
+      "market_health": {
+        "all_invariants_hold": true,
+        "finite_values": true,
+        "float_respected": true,
+        "holding_cap_respected": true,
+        "maximum_player_ownership_pct": 0.0,
+        "maximum_user_player_holding": 0,
+        "minimum_cash": 115105136.5,
+        "minimum_portfolio_value": 115105136.5,
+        "non_negative_cash": true,
+        "positive_prices": true
+      },
+      "order_metrics": {
+        "attempted": 96,
+        "executed": 96,
+        "execution_rate": 1.0,
+        "fees_paid": 18319391.91,
+        "median_trade_move_pct": 0.548239,
+        "rejected": 0,
+        "rejection_reasons": {},
+        "total_notional": 7327756762.38
+      },
+      "price_metrics": {
+        "max_abs_return_pct": 17.3435,
+        "max_daily_move_pct": 50.8155,
+        "max_drawdown_pct": 32.3087,
+        "max_price_multiple": 1.544374,
+        "median_abs_return_pct": 17.3435,
+        "minimum_price_ratio": 0.826565
+      },
+      "reversion_rate": 0.0,
+      "scenario": "boom_bust",
+      "seed": 1337
+    }
+  ]
+}

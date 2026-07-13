@@ -1,79 +1,51 @@
 # How Pricing Works
 
-A player's price is a tug-of-war between two forces: **what traders do** (short-term) and
-**how the player actually performs** (long-term). Neither one alone sets the price — they pull
-against each other every day.
+The market separates two signals instead of forcing them into one number:
 
----
+1. **Trading demand moves the player price.**
+2. **Performance versus the pregame projection moves holder cash through a daily dividend.**
 
-## Force A — Demand (moves the price minute to minute)
+Fair-value reversion is off. A strong game does not directly rewrite the market price; traders
+decide whether that performance makes the player worth buying or selling.
 
-Every trade moves the price. Buying pushes it up, selling pushes it down. The more shares in the
-trade, the bigger the move:
+## Demand moves price
 
-```
-new_price = price × exp( k × shares / L )     # +shares = buy, −shares = sell
-```
-
-- `k ≈ 0.0003` — base sensitivity (~0.03% per share)
-- `L` — the player's **liquidity/depth**, which grows with how actively they're traded
-
-**Why the `L`?** A superstar everyone trades is "deep" — hard to move. An ignored player is
-"thin" — moves fast. This stops someone from cheaply walking an obscure player's price up and
-down to game it.
-
-**Feel of it:**
-- Buy 20 shares of a lightly-traded $100 player → ~$100.60
-- Buy the same 20 shares of a heavily-traded player → ~$100.12 (moves 5× less)
-
-This is what makes being **early** pay: if you buy before the crowd, later buyers push your
-position up.
-
----
-
-## Force B — Performance (pulls the price toward reality)
-
-Each player has a **live fair value (FV)** computed from real basketball stats — not a number
-someone typed once and forgot:
+Every trade moves the price multiplicatively:
 
 ```
-FV = talent tier + rolling performance (WARP) + minutes/availability + age curve + recent form
+new_price = price × exp(k × signed_quantity / liquidity)
 ```
 
-Every day, the price is nudged a small step toward FV:
+- `signed_quantity` is positive for a buy and negative for a sell.
+- `k = 0.003` is the provisional interactive-prototype setting selected by NBA-9's deterministic
+  trader sweep. Re-run that sweep against observed order flow before production.
+- `liquidity` grows with recent volume and ownership, so established markets move less per trade.
+
+At minimum liquidity, one buy moves a price about 0.3%. A $68M player moves to roughly $68.20M.
+At liquidity 5, the same buy moves that player to roughly $68.04M.
+
+## Performance moves cash
+
+After a game, every holder receives or loses virtual cash based on actual performance versus the
+pregame Dunks & Threes projection:
 
 ```
-price ← price + λ × (FV − price)      # λ ≈ 0.03 per day
+dividend_per_holder = (actual_net_points - expected_net_points) × $40,000
 ```
 
-- Player plays great → FV rises → price gets pulled **up**, even with no buyers.
-- Hyped player underperforms → FV falls → price drifts **down**.
+Exact expectation pays $0. A positive surprise pays holders; underperformance debits them. This is
+why an unexpected Collin Sexton 30-point game can pay more than an expected Luka Doncic 30-point
+game without an algorithm automatically changing either market price.
 
-`λ` is small, so the market still leads day to day — but a price can never stay divorced from
-reality forever. This replaces the old "decay" idea: an ignored, overpriced player naturally
-sinks toward FV; an ignored, underpriced one rises toward it.
+## Other rules
 
-There's a **floor** so no one gets zeroed:
+- Everyone starts with $140M in virtual cash.
+- One share represents the whole player at his salary-like listed price.
+- A user may own at most one share of a player.
+- Prices also decay 0.5% per inactive day after the seven-day grace period.
+- The absolute price floor is $350K.
+- Every trade has a 0.25% fee; reversing the same player within 24 hours adds a 0.5% escalating flip surcharge capped at 1.5%.
 
-```
-floor = max( 0.5 × FV , $25 )
-```
-
----
-
-## Putting it together
-
-- **Short term**, price = crowd conviction and speculation (fun, tradeable).
-- **Long term**, price = actual on-court value (skill-rewarding, self-correcting).
-- Being **right about a player before the crowd pays twice**: once when demand catches up
-  (Force A lifts the price), and again when the stats confirm it (Force B locks it in).
-
-## Costs
-
-- **1% fee** on every buy and sell.
-- **Flip penalty** if you reverse a trade on the same player within 24h (escalates if you keep
-  churning) — discourages self-pumping.
-
----
-
-*Starting bankroll is $10,000 for everyone. Your net worth = cash + (shares × current price).*
+NBA-9 found that `k = 0.003` stayed inside the prototype price guardrails. NBA-17 then softened the
+fee and flip schedule after high-turnover stress exposed excessive wealth destruction. See
+`output/trader-simulation.md` for the regenerated evidence.

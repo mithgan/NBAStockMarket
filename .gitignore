@@ -13,4 +13,6 @@ output/*
 !output/backtest-2026.json
 !output/opening-prices-2026-27.csv
 !output/fv-validation.md
+!output/trader-simulation.md
+!output/trader-simulation.json
 .env

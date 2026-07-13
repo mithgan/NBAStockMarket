@@ -9,7 +9,7 @@ $140M salary-cap bankroll, ~10-player portfolios, 100 shares/player with 40% own
 
 - **Engine v2 is built and committed** (`nba_stock_market/engine.py`): $140M economy, daily
   performance dividend = (actual − expected net points) × $100K across the float, negative
-  dividends allowed, reversion off, fees/decay/ownership caps, 44 passing tests.
+  dividends allowed, reversion off, fees/decay/ownership caps, and a tested provider boundary.
 - **Full 2025-26 backtest is done** (`output/backtest-2026.md`): 1,230 games, 26,547 player-games
   replayed. Headlines: season economy is slightly deflationary (−0.41%); a 90th-percentile star
   game pays ~$1.4M across the float (target was ~$800K — kept, within 2×); **trailing-baseline
@@ -24,8 +24,11 @@ $140M salary-cap bankroll, ~10-player portfolios, 100 shares/player with 40% own
 2. **Dunks & Threes adapter**: wire `DunksAndThreesExpectation` to the real
    `game-predictions-box` endpoint the moment Russ sends the API key (upgrade from
    trailing-mean to opponent-aware projected box scores). Re-run backtest, compare economies.
-3. **Market mechanics validation**: trader simulation against backtest prices (does pure
-   supply/demand + decay behave sanely at $M scale?); tune price-impact constant.
+3. ~~**Market mechanics validation**~~ ✅: deterministic balanced/hype/boom-bust sweep selected
+   provisional `IMPACT_K = 0.003`; all price and ownership invariants held. See
+   `output/trader-simulation.md`. NBA-17 lowers the base fee to 0.25% and makes the flip surcharge
+   0.5% per recent round-trip, capped at 1.5%, to preserve anti-churn friction without the prior
+   49–52% hype-run wealth destruction.
 4. **App scaffold** (after economy sign-off): Expo/React Native, Robinhood-style portfolio UI,
    daily P&L feed, leaderboard.
 

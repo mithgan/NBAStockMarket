@@ -1,0 +1,21 @@
+[
+  {
+    "game_id": 12345,
+    "player_id": 777,
+    "player_name": "Nikola Jokić",
+    "p_mp": 36.5,
+    "p_pts": 29.4,
+    "p_fg2m": 8.2,
+    "p_fg2a": 13.1,
+    "p_fg3m": 1.8,
+    "p_fg3a": 4.7,
+    "p_ftm": 7.6,
+    "p_fta": 8.7,
+    "p_ast": 10.3,
+    "p_tov": 3.4,
+    "p_orb": 3.1,
+    "p_drb": 9.4,
+    "p_stl": 1.4,
+    "p_blk": 0.8
+  }
+]

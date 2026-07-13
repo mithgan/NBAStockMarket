@@ -434,12 +434,13 @@ meaningless, prices inflate, and the leaderboard rewards longevity over skill.
 
 ```python
 STARTING_CASH = 10_000
-FEE_PCT       = 0.01
+FEE_PCT       = 0.0025
 K             = 0.0003     # base impact sensitivity
 LAMBDA        = 0.03       # daily mean-reversion speed toward fair value
 GRACE_DAYS    = 7
 FLIP_WINDOW_H = 24
-FLIP_PENALTY  = 0.02       # escalates with repeat round-trips (see note)
+FLIP_SURCHARGE = 0.005      # escalates with repeat round-trips
+FLIP_CAP       = 0.015      # maximum total flip surcharge
 
 import math, time
 
@@ -453,7 +454,8 @@ def execute_trade(user, player, qty, side):            # side: +1 buy, -1 sell
     fee = notional * FEE_PCT
     # escalating flip penalty: scale with round-trips on this name in last N days
     if reversed_within(user, player, FLIP_WINDOW_H):
-        fee += notional * FLIP_PENALTY * (1 + user.roundtrips_7d.get(player.id, 0))
+        flip_rate = min(FLIP_SURCHARGE * (1 + user.roundtrips_7d.get(player.id, 0)), FLIP_CAP)
+        fee += notional * flip_rate
     if side > 0:
         user.cash -= notional + fee; user.shares[player.id] += qty
     else:

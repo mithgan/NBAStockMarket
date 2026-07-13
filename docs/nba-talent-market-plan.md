@@ -75,16 +75,17 @@ P_after = P_before × exp( k × q_signed / L )
 ```
 
 - `q_signed` = number of shares traded (**positive** for a buy, **negative** for a sell)
-- `k` = base impact sensitivity — start at **0.0003** (≈0.03% price move per share at L=1)
+- `k` = base impact sensitivity — NBA-9's synthetic trader sweep selected **0.003** as the
+  provisional interactive-prototype setting; re-calibrate from observed order flow before production
 - `L` = liquidity/depth of the player — grows with recent trading volume and ownership.
   A brand-new, untraded player has `L ≈ 1`; a heavily-traded superstar has a large `L`.
 
 **Worked examples (at L = 1):**
-- Buy 1 share of a $100 player → `100 × e^(0.0003×1)` ≈ **$100.03**
-- Buy 20 shares → `100 × e^(0.0003×20)` ≈ **$100.60**
-- Sell 50 shares of a $500 player → `500 × e^(-0.0003×50)` ≈ **$492.56**
+- Buy 1 share of a $68M player → `68M × e^(0.003×1)` ≈ **$68.20M**
+- Buy 1 share of a $25M player → `25M × e^(0.003×1)` ≈ **$25.08M**
+- Sell 1 share of a $25M player → `25M × e^(-0.003×1)` ≈ **$24.93M**
 
-**Same 20-share buy on a deep player (L = 5):** `100 × e^(0.0003×20/5)` ≈ **$100.12** — moves
+**Same $68M buy on a deep player (L = 5):** `68M × e^(0.003/5)` ≈ **$68.04M** — moves
 5× less. Popularity buys stability.
 
 > **Why exponential?** It guarantees the price can never go to zero or negative from trading,
@@ -141,19 +142,20 @@ simple (WARP + minutes only) and add terms as you validate them.
 - Then the price moves per Force A (above).
 
 ### Fees (the primary economic sink)
-A flat **1% fee** on the notional value of every trade, both buy and sell:
+A flat **0.25% fee** on the notional value of every trade, both buy and sell:
 ```
-Buy  n shares:  cost      = n × P × 1.01
-Sell n shares:  proceeds  = n × P × 0.99
+Buy  n shares:  cost      = n × P × 1.0025
+Sell n shares:  proceeds  = n × P × 0.9975
 ```
-Round-trip friction ≈ 2% plus whatever the price moved against you.
+Base round-trip friction ≈ 0.5% plus whatever the price moved against you.
 
 ### Anti-churn: escalating flip penalty
 A buy-then-sell (or sell-then-buy) on the **same player within 24 hours** adds an **extra
-penalty** on top of the 1% fee. Make it **escalate** with repeated round-trips so persistent
-churners/self-pumpers pay progressively more:
+penalty** on top of the 0.25% fee. It escalates with repeated round-trips but caps at 1.5%
+so persistent churners/self-pumpers pay more without unbounded wealth destruction:
 ```
-extra_fee = notional × FLIP_PENALTY × (1 + roundtrips_last_7d)   # FLIP_PENALTY ≈ 0.02
+extra_rate = min(0.005 × (1 + roundtrips_last_7d), 0.015)
+extra_fee = notional × extra_rate
 ```
 
 ### Ownership cap
@@ -231,7 +233,7 @@ over skill. **You must keep these roughly balanced.**
 
 | Faucets (add money) | Sinks (remove money) |
 |---|---|
-| Award dividends | 1% trade fee |
+| Award dividends | 0.25% trade fee |
 | Season-end performance dividends | Flip / churn penalties |
 | IPO paper gains | Idle-cash fee (see below) |
 | | Listing/creation fees (optional) |
@@ -318,13 +320,14 @@ price_history(
 
 ```python
 STARTING_CASH   = 10_000
-FEE_PCT         = 0.01
+FEE_PCT         = 0.0025
 SHARES_OUT      = 100
-K               = 0.0003     # base impact sensitivity
+K               = 0.003      # NBA-9 provisional prototype sensitivity
 LAMBDA          = 0.03       # daily mean-reversion speed toward fair value
 GRACE_DAYS      = 7
 FLIP_WINDOW_H   = 24
-FLIP_PENALTY    = 0.02
+FLIP_SURCHARGE  = 0.005
+FLIP_CAP        = 0.015
 OWNERSHIP_CAP   = 0.40
 IDLE_CASH_FEE   = 0.0002     # per day
 DIV_OFFSET      = 2.15
@@ -340,7 +343,8 @@ def execute_trade(user, p, qty, side):          # side: +1 buy, -1 sell
     notional = qty * P
     fee = notional * FEE_PCT
     if reversed_within(user, p, FLIP_WINDOW_H):
-        fee += notional * FLIP_PENALTY * (1 + user.roundtrips_7d.get(p.id, 0))
+        flip_rate = min(FLIP_SURCHARGE * (1 + user.roundtrips_7d.get(p.id, 0)), FLIP_CAP)
+        fee += notional * flip_rate
 
     if side > 0:
         assert user.cash >= notional + fee, "insufficient cash"
@@ -429,13 +433,13 @@ liquidation). Do it only once the long-only version is solid.
 |---|---|---|
 | `STARTING_CASH` | 10,000 | Opening bankroll |
 | `SHARES_OUT` | 100 | Shares per player |
-| `FEE_PCT` | 0.01 | Trade fee (main sink) |
-| `K` | 0.0003 | Price sensitivity to trades |
+| `FEE_PCT` | 0.0025 | Trade fee (main sink) |
+| `K` | 0.003 (provisional) | Price sensitivity selected by the NBA-9 synthetic trader sweep |
 | `L` formula | `1 + 0.05·vol + 0.10·own` | Depth / manipulation resistance |
 | `LAMBDA` | 0.03/day | How fast price tracks reality |
 | `w1..w4` | tune | Fair-value stat weights (your edge) |
 | `GRACE_DAYS` | 7 | New-player protection |
-| `FLIP_PENALTY` | 0.02 | Anti-churn |
+| `FLIP_SURCHARGE` / `FLIP_CAP` | 0.005 / 0.015 | Capped anti-churn surcharge |
 | `OWNERSHIP_CAP` | 0.40 | Anti-cornering |
 | `IDLE_CASH_FEE` | 0.0002/day | Inflation sink |
 | `DIV_OFFSET` / `DIV_SCALE` | 2.15 / 0.0005102 | Season dividend size |
@@ -448,7 +452,7 @@ liquidation). Do it only once the long-only version is solid.
 - Fake-money market where NBA players are tradeable shares; everyone starts equal; never resets.
 - **Price = two forces:** demand (`P ×= exp(k·q/L)` on each trade) + performance gravity
   (`P += λ·(FV − P)` daily, where FV comes from real stats).
-- **1% fee** both sides; escalating flip penalty; ownership cap.
+- **0.25% fee** both sides; 0.5%-step flip surcharge capped at 1.5%; ownership cap.
 - **Dividends** pay cash for real results: an award table + a season-end
   `(WARP + 2.15) × minutes × 0.0005102` per share.
 - **IPOs** via model-seed + auction, with a 7-day grace period.
