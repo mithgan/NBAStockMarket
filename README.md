@@ -24,12 +24,15 @@ performance reaches holders through a daily actual-versus-expected dividend:
 ```
 dividend_per_share = (actual_net_points - expected_net_points)
                    × $4,000,000 / 100 shares
+expected_net_points = D&T projection + 0.43586494964917194 NP league-bias correction
 ```
 
-Exact expectation pays $0 and underperformance produces a negative dividend. The
+Exact bias-corrected expectation pays $0 and underperformance produces a negative dividend. The
 `NET_POINTS_TO_DOLLARS = $4,000,000` means $40,000 per net point per holder, so a +20
-surprise pays that holder about $800,000. This is **PROVISIONAL pending Mith's NBA-12
-calibration**. Cached Dunks & Threes pregame projections are the canonical expectation source;
+surprise pays that holder about $800,000. **Option B was decided by Mith on Discord 7/14:** the
+constant stays fixed and the deterministic league-mean expectation-bias correction is on by
+default, leaving near-zero season inflation by design (about −1.5% from the idle-cash sink).
+Cached Dunks & Threes pregame projections are the canonical expectation source;
 `trailing`, `projection`, and `production` remain comparison modes. The
 box-score-to-net-points model is transparent and swappable, as is the injected expectation
 source; the engine does not fetch projections itself.
@@ -82,9 +85,9 @@ impact resists whale manipulation, and explicit sinks help control inflation.
 | Fair-value reversion | Default off (`0`); retained only as an experiment |
 | Floor | $350,000 absolute minimum (the old $25 floor scaled by 14,000×) |
 | IPOs | Model-seeded fair value + opening auction; 7-day grace period |
-| Daily dividend | D&T-projected vs actual; `$40,000 × surprise net points` per holder (provisional NBA-12) |
+| Daily dividend | D&T-projected vs actual; `$40,000 × bias-corrected surprise net points` per holder |
 | Award/WARP dividends | Optional/dormant; not part of the daily v1 economy |
-| Economy | Dividends are faucets; fees, flip penalties, idle-cash fee are sinks |
+| Economy | League-bias correction targets zero net dividends; fees, flip penalties, and idle cash are sinks |
 
 ## Docs
 

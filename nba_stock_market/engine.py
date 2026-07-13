@@ -24,9 +24,12 @@ MIN_PRICE_FLOOR = 350_000.0
 GRACE_DAYS = 7
 INACTIVITY_DECAY_RATE = 0.005
 
-# PROVISIONAL pending Mith's NBA-12 calibration. With 100 float shares, this
-# is $40,000 per net point per holder, so a +20 surprise pays one holder $800K.
+# DECIDED 2026-07-14 (Mith, Discord 7/14). With 100 float shares, this is
+# $40,000 per net point per holder, so a +20 surprise pays one holder $800K.
 NET_POINTS_TO_DOLLARS = 4_000_000.0
+# The deterministic D&T replay's league-mean actual-minus-expected surprise.
+# Adding it to expectations removes the systematic projection faucet.
+EXPECTATION_BIAS_NET_POINTS = 0.43586494964917194
 
 DIVIDEND_OFFSET = 2.15
 DIVIDEND_SCALE = 0.0005102
@@ -273,7 +276,7 @@ class Market:
         net_points_model: NetPointsModel | None = None,
         expectation_source: ExpectationSource | None = None,
         net_points_to_dollars: float = NET_POINTS_TO_DOLLARS,
-        expectation_bias: float = 0.0,
+        expectation_bias: float = EXPECTATION_BIAS_NET_POINTS,
     ) -> None:
         if not players:
             raise ValueError("market requires at least one player")

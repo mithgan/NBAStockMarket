@@ -460,6 +460,7 @@ def _build_report(
     seed: int,
     expectation_window: int,
     expectation_model: str,
+    expectation_bias_mode: str,
     source_manifest: dict[str, Any],
     listing_basis: str,
 ) -> dict[str, Any]:
@@ -528,7 +529,7 @@ def _build_report(
     great_game_surprise = _percentile(star_positive_surprises, 0.90)
     great_game_payout = great_game_surprise * market.net_points_to_dollars / SHARES_OUT
     calibration = {
-        "status": "PROVISIONAL pending Mith's calibration (NBA-12)",
+        "status": "DECIDED 2026-07-14 (Mith, Discord 7/14)",
         "definition": "one holder receives $40,000 per net-point surprise",
         "target_surprise_net_points": 20.0,
         "target_per_holder_payout": 800_000.0,
@@ -536,7 +537,10 @@ def _build_report(
         "current_net_points_to_dollars": market.net_points_to_dollars,
         "dividend_per_net_point_per_share": market.net_points_to_dollars / SHARES_OUT,
         "current_great_game_per_holder_payout": _round_money(great_game_payout),
-        "decision": "apply the team's provisional +20 NP = $800K per-holder target",
+        "decision": (
+            "Option B: keep $40K per net point per holder and apply the "
+            "league-mean expectation-bias correction"
+        ),
         "applied_net_points_to_dollars": market.net_points_to_dollars,
         "tiers": tier_metrics,
     }
@@ -617,6 +621,7 @@ def _build_report(
             "portfolio_size": 10,
             "max_shares_per_user_per_player": MAX_SHARES_PER_USER_PER_PLAYER,
             "expectation_model": expectation_model,
+            "expectation_bias_mode": expectation_bias_mode,
             "seed": seed,
             "expectation_window": expectation_window,
             **(
@@ -695,6 +700,13 @@ def _render_markdown(report: dict[str, Any]) -> str:
     money = report["money_supply"]
     calibration = report["calibration"]
     portfolio = report["portfolio_spread"]
+    bias = metadata.get("expectation_bias_net_points", 0.0)
+    bias_statement = (
+        f" Expectations include the automatically computed +{bias:.17g} NP/player-game "
+        "league-mean surprise correction."
+        if metadata.get("expectation_bias_mode") == "auto"
+        else ""
+    )
     modeled_listings = metadata["listing_basis"].startswith("Mith ")
     if modeled_listings:
         share_design = "one opening-price-model share is the whole player"
@@ -721,8 +733,9 @@ def _render_markdown(report: dict[str, Any]) -> str:
         "",
         f"**DECIDED DESIGN (Russ, Discord 7/12): {share_design}; "
         "each user may hold at most one share per player; dividends settle actual game logs "
-        "against cached Dunks & Threes pregame projections. The $40,000 per net point per "
-        f"holder rate is PROVISIONAL pending Mith's NBA-12 calibration. {listing_statement}**",
+        "against cached Dunks & Threes pregame projections. The decided economy keeps $40,000 "
+        f"per net point per holder and applies the league-mean expectation-bias correction. "
+        f"{listing_statement}**",
         "",
         "This deterministic replay covers the 1,230-game 2025-26 NBA regular season. "
         "The universe is the top 150 players by final regular-season minutes. One hundred "
@@ -735,7 +748,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
         f"- Actuals: {metadata['source_player_game_count']:,} played player-games from {sources['actuals']['provider']} game summaries ({metadata['source_game_count']:,} games).",
         f"- Salaries: `{sources['salaries']['primary_repository']}` `{sources['salaries']['primary_file']}` at commit `{sources['salaries']['primary_commit'][:7]}`; missing names filled from the pinned fallback snapshot.",
         f"- Listings: {listing_method}",
-        f"- Expectation: {metadata['expectation']}.",
+        f"- Expectation: {metadata['expectation']}.{bias_statement}",
         f"- Replay: {metadata['universe_player_games']:,} universe player-games on {metadata['game_days']} game days, with {metadata['calendar_days']} calendar-day idle-fee passes.",
         "- Payout conventions: per-share amounts are what one holder receives; full-float amounts are the same result across all 100 shares.",
         "",
@@ -752,12 +765,14 @@ def _render_markdown(report: dict[str, Any]) -> str:
         f"| **Net inflation** | **{_money(money['net_inflation'])} ({money['net_inflation_pct']:.4f}%)** |",
         f"| Ending cohort wealth | {_money(money['final_portfolio_wealth'])} |",
         "",
-        "Russell's answer: signed surprise dividends are close to self-cancelling at the player level, while portfolio ownership and the idle fee determine cohort inflation. The reconciliation difference is "
+        "The league-mean correction removes systematic projection inflation by design; the "
+        "remaining cohort deflation reflects non-uniform ownership and the intended idle-cash "
+        "sink. The reconciliation difference is "
         f"{_money(money['reconciliation_difference'])} (rounding only).",
         "",
         "## B. Calibration",
         "",
-        f"**{calibration['status']}.** The decided provisional rate is **{_money(calibration['dividend_per_net_point_per_share'])} per net point per holder**, so a +20 surprise pays **{_money(calibration['target_per_holder_payout'])}**. The observed 90th-percentile positive star surprise is +{calibration['great_game_surprise_net_points']:.2f} NP, paying {_money(calibration['current_great_game_per_holder_payout'])} to one holder.",
+        f"**{calibration['status']}.** The decided rate is **{_money(calibration['dividend_per_net_point_per_share'])} per net point per holder**, so a +20 surprise pays **{_money(calibration['target_per_holder_payout'])}**. The observed 90th-percentile positive star surprise is +{calibration['great_game_surprise_net_points']:.2f} NP, paying {_money(calibration['current_great_game_per_holder_payout'])} to one holder.",
         "",
         "| Tier | Players | Games | Typical absolute game / share | Typical positive game / full float | Median signed season / share | Median signed season / full float |",
         "|---|---:|---:|---:|---:|---:|---:|",
@@ -833,7 +848,7 @@ def run_backtest(
     expectation_window: int = 10,
     expectation_model: str = "dnt",
     opening_prices_path: Path | None = DEFAULT_OPENING_PRICES_PATH,
-    expectation_bias: float | str = 0.0,
+    expectation_bias: float | str = "auto",
     net_points_to_dollars: float = NET_POINTS_TO_DOLLARS,
     write_outputs: bool = True,
 ) -> dict[str, Any]:
@@ -931,6 +946,7 @@ def run_backtest(
         seed=seed,
         expectation_window=expectation_window,
         expectation_model=expectation_model,
+        expectation_bias_mode="auto" if expectation_bias == "auto" else "override",
         source_manifest=source_manifest,
         listing_basis=(
             "Mith opening-price model (impact + salary blend)"
@@ -970,8 +986,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--expectation-bias",
-        default="0",
-        help="net points added to every expectation, or 'auto' for league mean surprise",
+        default="auto",
+        help=(
+            "net points added to every expectation; defaults to 'auto' for the D&T league "
+            "mean surprise (pass 0 to opt out)"
+        ),
     )
     args = parser.parse_args()
     report = run_backtest(

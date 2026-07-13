@@ -223,6 +223,16 @@ class BacktestReplayTest(unittest.TestCase):
 
         self.assertEqual(run.call_args.kwargs["expectation_model"], "dnt")
 
+    def test_cli_defaults_to_auto_expectation_bias(self) -> None:
+        report = {"money_supply": {"net_inflation": 1.0, "final_portfolio_wealth": 2.0}}
+        with (
+            patch("sys.argv", ["backtest"]),
+            patch("nba_stock_market.backtest.run_backtest", return_value=report) as run,
+        ):
+            main()
+
+        self.assertEqual(run.call_args.kwargs["expectation_bias"], "auto")
+
     def test_cli_expectation_flag_selects_projection_source(self) -> None:
         report = {
             "money_supply": {
@@ -297,7 +307,7 @@ class BacktestReplayTest(unittest.TestCase):
         self.assertEqual(summary.expectation_fallback_count, 1)
         self.assertEqual(
             summary.evaluations[0].expected_net_points,
-            salary_implied_net_points(20_000_000),
+            salary_implied_net_points(20_000_000) + market.expectation_bias,
         )
 
     def test_replay_applies_idle_cash_sink_after_game_dividends(self) -> None:
@@ -320,7 +330,7 @@ class BacktestReplayTest(unittest.TestCase):
             line_with_points(20),
         )
         dividend = (
-            20.0 - salary_implied_net_points(player.current_price)
+            20.0 - salary_implied_net_points(player.current_price) - market.expectation_bias
         ) * market.net_points_to_dollars / 100
         cash_before_sink = 100_000_000 + dividend
 
@@ -346,7 +356,8 @@ class BacktestReplayTest(unittest.TestCase):
         ]
         prior = salary_implied_net_points(player.current_price)
         expected_cash_change = (
-            (20.0 - prior) + (24.0 - 20.0)
+            (20.0 - prior - market.expectation_bias)
+            + (24.0 - 20.0 - market.expectation_bias)
         ) * market.net_points_to_dollars / 100
 
         summary = replay_game_records(market, games, source)
@@ -355,7 +366,10 @@ class BacktestReplayTest(unittest.TestCase):
         self.assertEqual(summary.game_count, 2)
         self.assertEqual(summary.game_day_count, 2)
         self.assertEqual(len(market.dividend_events), 2)
-        self.assertEqual(market.dividend_events[1].expected_net_points, 20.0)
+        self.assertEqual(
+            market.dividend_events[1].expected_net_points,
+            20.0 + market.expectation_bias,
+        )
         self.assertEqual(source.history("p"), (20.0, 24.0))
         self.assertEqual(NetPointsModel().score(games[0].box_score), 20.0)
 

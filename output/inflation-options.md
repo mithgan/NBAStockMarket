@@ -1,6 +1,8 @@
+DECIDED: Option B (Mith, 7/14) — now the default.
+
 # NBA-12 inflation calibration options
 
-Decision owner: **Mith picks**. The engine and backtest defaults remain Option A until that decision is made.
+Decision owner: **Mith**. Option B is implemented as the engine and backtest default.
 
 The natural expectation-bias candidate is **+0.43586494964917194 net points per player-game**, the deterministic league mean of `actual - expected` across all **10,689** Dunks & Threes player-games in the listed-universe replay. Bias is added to every expectation before settlement: `adjusted expectation = D&T expectation + bias`.
 
@@ -15,4 +17,4 @@ All payout columns are per holder (one share). Every row uses the same cached se
 
 Option B removes the systematic projection faucet while retaining the large individual moments: the SGA payout is 97.9% of status quo and the Jokic payout is 98.7%. Its remaining -1.55% cohort deflation reflects non-uniform ownership and the already-existing idle-cash sink; the unweighted league-wide surprise component is zero by construction.
 
-Option C lowers every surprise payout by 25%, including the moments the team wants to preserve. Option D combines both levers. No option changes fees, and this menu does not change the default constant or default zero bias.
+Option C lowers every surprise payout by 25%, including the moments the team wants to preserve. Option D combines both levers. No option changes fees.

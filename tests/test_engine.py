@@ -48,6 +48,13 @@ class PricingEngineTest(unittest.TestCase):
         self.assertEqual(event.dividend_per_share, 2.5)
         self.assertEqual(holder.cash, 2.5)
 
+    def test_engine_defaults_to_decided_league_expectation_bias(self) -> None:
+        market = Market(
+            [Player("p", "Default Bias Player", "star", 10_000_000, 10_000_000)]
+        )
+
+        self.assertEqual(market.expectation_bias, 0.43586494964917194)
+
     def test_player_preserves_legacy_positional_optional_arguments(self) -> None:
         player = Player(
             "p",
@@ -132,22 +139,26 @@ class PricingEngineTest(unittest.TestCase):
         self.assertTrue(math.isfinite(model.score(line)))
         self.assertGreater(model.score(line), 0.0)
 
-    def test_daily_dividend_is_zero_at_exact_expectation(self) -> None:
+    def test_daily_dividend_is_zero_at_exact_bias_corrected_expectation(self) -> None:
         market = Market([Player("p", "Expected Player", "star", 50_000_000.0, 50_000_000.0)])
         event = market.pay_daily_performance_dividend(
-            "p", actual_net_points=17.25, expected_net_points=17.25
+            "p",
+            actual_net_points=17.25 + market.expectation_bias,
+            expected_net_points=17.25,
         )
         self.assertAlmostEqual(event.dividend_per_share, 0.0)
         self.assertAlmostEqual(event.total_cash_change, 0.0)
 
-    def test_provisional_dividend_pays_800k_for_twenty_point_surprise(self) -> None:
+    def test_decided_dividend_pays_800k_for_bias_corrected_twenty_point_surprise(self) -> None:
         holder = User("holder", holdings={"p": 1})
         market = Market(
             [Player("p", "Holder Player", "star", 50_000_000.0, 50_000_000.0)],
             [holder],
         )
         event = market.pay_daily_performance_dividend(
-            "p", actual_net_points=40.0, expected_net_points=20.0
+            "p",
+            actual_net_points=40.0 + market.expectation_bias,
+            expected_net_points=20.0,
         )
         self.assertEqual(event.dividend_per_share, 800_000.0)
         self.assertEqual(holder.cash - STARTING_CASH, 800_000.0)
@@ -187,7 +198,7 @@ class PricingEngineTest(unittest.TestCase):
         for settlement_key in ("game-1", "game-2"):
             market.pay_daily_performance_dividend(
                 "p",
-                actual_net_points=40.0,
+                actual_net_points=40.0 + market.expectation_bias,
                 expected_net_points=20.0,
                 settlement_key=settlement_key,
             )
@@ -204,10 +215,14 @@ class PricingEngineTest(unittest.TestCase):
         )
         opening_cash = holder.cash
         positive = market.pay_daily_performance_dividend(
-            "p", actual_net_points=20.0, expected_net_points=15.0
+            "p",
+            actual_net_points=20.0 + market.expectation_bias,
+            expected_net_points=15.0,
         )
         negative = market.pay_daily_performance_dividend(
-            "p", actual_net_points=10.0, expected_net_points=15.0
+            "p",
+            actual_net_points=10.0 + market.expectation_bias,
+            expected_net_points=15.0,
         )
         self.assertEqual(positive.dividend_per_share, -negative.dividend_per_share)
         self.assertEqual(positive.total_cash_change, -negative.total_cash_change)
@@ -222,7 +237,9 @@ class PricingEngineTest(unittest.TestCase):
             max_shares_per_user_per_player=3,
         )
         event = market.pay_daily_performance_dividend(
-            "p", actual_net_points=22.0, expected_net_points=20.0
+            "p",
+            actual_net_points=22.0 + market.expectation_bias,
+            expected_net_points=20.0,
         )
         expected_per_share = 2.0 * NET_POINTS_TO_DOLLARS / SHARES_OUT
         self.assertEqual(event.dividend_per_share, expected_per_share)
@@ -242,6 +259,7 @@ class PricingEngineTest(unittest.TestCase):
         market = Market(
             [Player("p", "Projected Player", "star", 50_000_000.0, 50_000_000.0)],
             expectation_source=source,
+            expectation_bias=0.0,
         )
         event = market.apply_game_result("p", actual=expected_line, game_date=date(2026, 1, 15))
         self.assertEqual(source.call, ("p", date(2026, 1, 15)))
@@ -255,10 +273,16 @@ class PricingEngineTest(unittest.TestCase):
         )
 
         first = market.apply_game_result(
-            "p", actual=40.0, expected=20.0, settlement_key="game-1"
+            "p",
+            actual=40.0 + market.expectation_bias,
+            expected=20.0,
+            settlement_key="game-1",
         )
         duplicate = market.apply_game_result(
-            "p", actual=40.0, expected=20.0, settlement_key="game-1"
+            "p",
+            actual=40.0 + market.expectation_bias,
+            expected=20.0,
+            settlement_key="game-1",
         )
 
         self.assertIs(duplicate, first)

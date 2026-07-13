@@ -26,7 +26,10 @@ NET_POINTS_TO_DOLLARS = $4,000,000
 ```
 
 Thus exact expectation pays $0 and a +20 surprise pays one holder about $800,000 ($40,000 per
-net point per share). This constant is **PROVISIONAL pending Mith's NBA-12 calibration**.
+net point per share). **Option B is decided (Mith, Discord 7/14):** keep this constant and add the
+deterministic +0.43586494964917194 NP/player-game league-bias correction to D&T expectations by
+default. This removes systematic projection inflation; the intended idle-cash sink leaves the
+replayed season near zero at about −1.5% net inflation.
 
 The net-points model uses documented, swappable linear box-score weights. Expected net points
 or an expected box score comes from an injected expectation-source interface. Cached Dunks &
