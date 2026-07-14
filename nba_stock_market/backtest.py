@@ -701,25 +701,52 @@ def _render_markdown(report: dict[str, Any]) -> str:
     calibration = report["calibration"]
     portfolio = report["portfolio_spread"]
     bias = metadata.get("expectation_bias_net_points", 0.0)
-    bias_statement = (
-        f" Expectations include the automatically computed +{bias:.17g} NP/player-game "
-        "league-mean surprise correction."
-        if metadata.get("expectation_bias_mode") == "auto"
-        else ""
-    )
-    modeled_listings = metadata["listing_basis"].startswith("Mith ")
+    if metadata.get("expectation_bias_mode") == "auto":
+        bias_statement = (
+            f" Expectations include the automatically computed {bias:+.17g} NP/player-game "
+            "league-mean surprise correction."
+        )
+        bias_design = (
+            f"applies the automatically computed {bias:+.17g} NP/player-game "
+            "league-mean surprise correction"
+        )
+        inflation_statement = (
+            "The league-mean correction removes systematic projection inflation by design; "
+            "the remaining cohort deflation reflects non-uniform ownership and the intended "
+            "idle-cash sink."
+        )
+    elif bias == 0.0:
+        bias_statement = " No expectation-bias correction is applied."
+        bias_design = "does not apply an expectation-bias correction"
+        inflation_statement = (
+            "No expectation-bias correction is applied; net inflation therefore reflects the "
+            "selected expectation, non-uniform ownership, and the intended idle-cash sink."
+        )
+    else:
+        bias_statement = (
+            f" Expectations include an explicit {bias:+.17g} NP/player-game "
+            "expectation-bias adjustment."
+        )
+        bias_design = (
+            f"applies an explicit {bias:+.17g} NP/player-game expectation-bias adjustment"
+        )
+        inflation_statement = (
+            f"The explicit {bias:+.17g} NP/player-game expectation-bias adjustment affects net "
+            "inflation alongside non-uniform ownership and the intended idle-cash sink."
+        )
+    modeled_listings = metadata["listing_basis"] != "salary-only listings"
     if modeled_listings:
         share_design = "one opening-price-model share is the whole player"
-        listing_statement = "Listings use Mith's impact + salary blend."
+        listing_statement = "Listings use projected-WAR FV plus 10% salary."
         fixed_price_basis = "opening-price-model listings"
         listing_method = (
-            "Mith's committed impact + salary blend; "
+            "projected-WAR FV plus 10% salary; "
             f"{metadata['listing_salary_fallback_count']} of {metadata['universe_players']} "
             "players fall back to salary "
             f"({', '.join(metadata['listing_salary_fallback_players']) or 'none'})."
         )
         listing_caveat = (
-            "Mith's impact + salary blend is the season-level listing price "
+            "Projected-WAR FV plus 10% salary is the season-level listing price "
             "(salary is used only for reported fallbacks)"
         )
     else:
@@ -733,8 +760,8 @@ def _render_markdown(report: dict[str, Any]) -> str:
         "",
         f"**DECIDED DESIGN (Russ, Discord 7/12): {share_design}; "
         "each user may hold at most one share per player; dividends settle actual game logs "
-        "against cached Dunks & Threes pregame projections. The decided economy keeps $40,000 "
-        f"per net point per holder and applies the league-mean expectation-bias correction. "
+        f"against {metadata['expectation']}. This replay keeps $40,000 per net point per holder "
+        f"and {bias_design}. "
         f"{listing_statement}**",
         "",
         "This deterministic replay covers the 1,230-game 2025-26 NBA regular season. "
@@ -765,9 +792,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
         f"| **Net inflation** | **{_money(money['net_inflation'])} ({money['net_inflation_pct']:.4f}%)** |",
         f"| Ending cohort wealth | {_money(money['final_portfolio_wealth'])} |",
         "",
-        "The league-mean correction removes systematic projection inflation by design; the "
-        "remaining cohort deflation reflects non-uniform ownership and the intended idle-cash "
-        "sink. The reconciliation difference is "
+        f"{inflation_statement} The reconciliation difference is "
         f"{_money(money['reconciliation_difference'])} (rounding only).",
         "",
         "## B. Calibration",
@@ -804,7 +829,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "The ranking is signed surprise versus Dunks & Threes pregame projections, not raw scoring. Players who outperform those projections lead; underperformance debits holders. Injuries themselves create no game event.",
+            "The ranking is signed actual-minus-expected net points, not raw scoring. Players who outperform the selected expectation lead; underperformance debits holders. Injuries themselves create no game event.",
             "",
             "## D. Portfolio spread",
             "",
@@ -832,7 +857,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
         [
             "## Reproduction and caveats",
             "",
-            f"All ESPN actuals and Dunks & Threes projections are cached; the backtest performs no network calls. Universe selection uses final-season minutes (appropriate for economy evaluation, not a preseason trading strategy). {listing_caveat}, prices are fixed, portfolios respect the one-share-per-user-per-player cap, and negative dividends may reduce cash.",
+            f"All declared replay inputs are cached; the backtest performs no network calls. Universe selection uses final-season minutes (appropriate for economy evaluation, not a preseason trading strategy). {listing_caveat}, prices are fixed, portfolios respect the one-share-per-user-per-player cap, and negative dividends may reduce cash.",
             "",
         ]
     )
@@ -949,7 +974,7 @@ def run_backtest(
         expectation_bias_mode="auto" if expectation_bias == "auto" else "override",
         source_manifest=source_manifest,
         listing_basis=(
-            "Mith opening-price model (impact + salary blend)"
+            "projected-WAR FV plus 10% salary"
             if opening_prices is not None
             else "salary-only listings"
         ),

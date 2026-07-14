@@ -398,6 +398,8 @@ class ProjectedWarModel:
         ]
 
     def fair_value(self, projected_war: float) -> float:
+        if not math.isfinite(projected_war):
+            raise ValueError("projected_war must be finite")
         return self.min_salary + projected_war * self.dollars_per_win
 
     def opening_price(self, fair_value: float, actual_salary: float | None) -> float:

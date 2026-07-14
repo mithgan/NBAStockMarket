@@ -219,6 +219,13 @@ class ProjectedWarModelTest(unittest.TestCase):
         self.assertAlmostEqual(model.fair_value(0.0), 1_200_000.0)
         self.assertAlmostEqual(model.fair_value(10.0), 51_200_000.0)
 
+    def test_fair_value_rejects_non_finite_projected_war(self) -> None:
+        model = ProjectedWarModel()
+        for projected_war in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(projected_war=projected_war):
+                with self.assertRaisesRegex(ValueError, "projected_war"):
+                    model.fair_value(projected_war)
+
     def test_opening_price_blends_ninety_ten(self) -> None:
         model = ProjectedWarModel()
         self.assertAlmostEqual(

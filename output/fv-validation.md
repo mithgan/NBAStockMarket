@@ -67,14 +67,17 @@ Models use season N-1 data only and are scored against realized season-N
 defined by the train season; players absent in season N receive zero WAR.
 The Projected WAR column validates the model's fair-value ranking before the 10%
 salary blend; its baseline uses the exact same LEBRON/EPM player cohort.
-These are retrospective model-selection windows, not untouched holdouts. The WAR
-mapping was refit on all 1,200 corrected player-seasons:
+These are retrospective model-selection windows, not untouched holdouts. Each
+historical window's WAR conversion excludes both that window and any successor
+window that reuses its realized WAR as a prior-WAR input. The production WAR
+mapping is then refit on all
+1,200 corrected player-seasons:
 `projected_WAR = 1.4821 + 2.5605 × blend`
 
 | Train → Test | LEBRON rate-only rho (n) | EPM rate-only rho (n) | Projected WAR FV rho (n) | Same-cohort prior WAR rho (n) |
 |---|---:|---:|---:|---:|
-| 2021-22 → 2022-23 | 0.648 (300) | 0.655 (300) | 0.751 (300) | 0.712 (300) |
-| 2022-23 → 2023-24 | 0.691 (300) | 0.691 (300) | 0.772 (300) | 0.749 (300) |
+| 2021-22 → 2022-23 | 0.648 (300) | 0.655 (300) | 0.752 (300) | 0.712 (300) |
+| 2022-23 → 2023-24 | 0.691 (300) | 0.691 (300) | 0.773 (300) | 0.749 (300) |
 | 2023-24 → 2024-25 | 0.650 (300) | 0.689 (300) | 0.768 (300) | 0.725 (300) |
 | 2024-25 → 2025-26 | 0.576 (300) | 0.607 (300) | 0.655 (300) | 0.610 (300) |
 
@@ -93,7 +96,7 @@ mapping was refit on all 1,200 corrected player-seasons:
 | 9 | $2,129,477 | 1.12 |
 | 10 | $2,000,000 | 0.40 |
 
-Reading: decile 1 = the ten percent of players listed most expensive. A good FV
-model shows monotonically falling realized WAR down the deciles and a price→WAR
-correlation at or above the naive baseline (which gets minutes information for
-free via prior WAR; clearing it with a rate-based price is the bar).
+Reading: decile 1 = the ten percent of players listed most expensive. A useful FV
+model should show generally declining realized WAR down the deciles, but individual
+adjacent buckets can reverse. The primary test is price→WAR correlation at or above
+the naive baseline (which gets minutes information for free via prior WAR).

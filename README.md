@@ -170,12 +170,12 @@ python -m scripts.generate_expectation_comparison
 python -m pytest -q
 ```
 
-The fetchers are idempotent and resume their caches. `prepare_fv_inputs.py` copies mutable
-DARKO/EPM inputs from committed snapshots and verifies every input against
+The fetchers are idempotent and resume their caches. `prepare_fv_inputs.py` copies every FV
+input from an exact committed snapshot and verifies it against
 `data/manifests/fv-inputs.json`; `--refresh` checks live providers separately and reports drift.
 Once cached,
 report generation makes no network calls. The replay selects the top 150 players by regular-season minutes, lists them from
-`output/opening-prices-2026-27.csv` using Mith's impact + salary blend (with reported salary
-fallbacks), and evaluates 100 seeded buy-and-hold 10-player portfolios. The default expectation
+`output/opening-prices-2026-27.csv` using projected-WAR fair value plus a 10% salary blend
+(with reported salary fallbacks), and evaluates 100 seeded buy-and-hold 10-player portfolios. The default expectation
 model is cached Dunks & Threes; missing projection rows use the salary-implied cold-start prior.
 Trading and live Dunks & Threes calls are deliberately disabled during replay.

@@ -23,7 +23,7 @@ The production verifier now defines eligibility from the train season, takes the
 by minutes that production lists, and assigns zero WAR to players absent the next season. It
 also evaluates the v2 fair-value component, not a rate-only proxy, on the exact same cohort as
 its prior-WAR baseline. The canonical result is in `output/fv-validation.md`: the FV component
-scores 0.751/0.772/0.768/0.655 and beats the same-cohort prior-WAR baseline in all four windows.
+scores 0.752/0.773/0.768/0.655 and beats the same-cohort prior-WAR baseline in all four windows.
 Intermediate numbers below are retained as the research trail where noted; only the generated
 report is acceptance evidence.
 
@@ -160,7 +160,7 @@ DARKO's public sheet is current-only, so it could join (a) but not (b).
 - Prediction on the shared production cohort: **EPM matched or beat LEBRON in all four
   corrected season pairs** — ρ 0.655/0.691/0.689/0.607 vs
   0.648/0.691/0.650/0.576. The full v2 formula then scored
-  0.751/0.772/0.768/0.655, beating same-cohort prior WAR in every pair.
+  0.752/0.773/0.768/0.655, beating same-cohort prior WAR in every pair.
 - Bonus finding: blending LEBRON *into* EPM made it worse (0.711 < 0.718). No ensemble gain.
 
 **Decision: EPM is the core rating.** DARKO (free, public, 0.83 agreement) is the designated
@@ -329,6 +329,11 @@ with established quality.
 
 ## 9. Test: the impact-vs-salary blend sweep (historical)
 
+**Reproducibility note.** This section records an exploratory run whose
+`nba_salaries_master.csv` input was not preserved in the repository. The table is useful
+directional context, but it is not part of the reproducible headline verifier and should not be
+treated as independently confirmed evidence for the exact 90/10 weight.
+
 **Why.** The listing formula blends model value with the player's actual contract, originally
 70/30 on intuition ("salary anchors fan expectations"). The weight is measurable: does salary
 *add information* about future value, or just familiarity?
@@ -351,9 +356,10 @@ per-season).
 Salary adds ~nothing at 10% weight and destroys accuracy beyond it. Salary-only pricing (0.562)
 is worse than every model variant — real contracts encode agent leverage, cap timing, and sunk
 legacy deals, not value. The 70/30 v1 sat barely above the naive baseline (0.763); the sweep
-caught a real calibration miss. **Decision: 90/10** — the empirical peak, keeping a whisper of
-real-world anchoring. (Product may consciously pay ~0.015 ρ for heavier salary flavor; now the
-price of that choice is known.)
+caught a likely calibration miss. **Product decision: 90/10** — keep a whisper of real-world
+anchoring while the exact sweep remains provisional until its historical salary panel and
+reproducer are pinned. Heavier salary flavor can still be chosen deliberately, but the exact
+accuracy cost should not be claimed as reproducible yet.
 
 ---
 
@@ -366,8 +372,10 @@ payroll ÷ ≈880 marginal wins). How does our formula relate?
 **How.** Two steps. (a) Recognize their formula ranks players identically to last season's
 WAR — meaning it *is* our naive baseline, already measured. (b) Fit our blend score to WAR
 units by regression on 1,200 listed player-seasons, including players who disappeared the
-following year (`projected_WAR = 1.4821 + 2.5605 × blend`), so both formulas can be written in
-the same economic units and compared against the same realized outcomes.
+following year (`projected_WAR = 1.4821 + 2.5605 × blend`). That pooled fit is the production
+mapping; historical scoring excludes both the evaluated window and any successor window that
+reuses its realized WAR as a prior-WAR input. Both formulas can therefore be written in the
+same economic units without using the scored window's outcomes for its own clamp thresholds.
 
 **Result.**
 

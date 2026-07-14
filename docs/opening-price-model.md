@@ -26,16 +26,17 @@ Players missing a salary row (mostly rookie-scale deals) list at fair value alon
 | EPM core (40%) | Matched or beat LEBRON on the same 300-player cohort in all four corrected backtest season pairs; agrees most with DARKO (0.83). Blending LEBRON in made it *worse* in the exploratory sweep. |
 | Prior WAR + minutes (35% + 15%) | A rate-only price lost to the naive "carry last WAR" baseline every year — role size is a coach's decision that persists and a per-possession rating can't see. |
 | Youth (10%) | Small, consistent gain (+0.01-0.02 rho) in every configuration tested. Kept small to avoid double-counting the dividend economy's improver rewards. |
-| `1.4821 + 2.5605x` fit | Converts the blend to WAR units. It is fit on the same top-300-by-minutes cohort that production lists, while full-pool z-scores are retained. |
+| `1.4821 + 2.5605x` fit | Converts the blend to WAR units. The production mapping is fit on all four historical top-300 cohorts; each reported historical window excludes both its own calibration rows and the successor window that reuses its realized WAR as a prior-WAR input. Full-pool z-scores are retained. |
 | $1.2M + $5M/win | The standard sports-economics scale (~$4.5B above-replacement payroll / ~880 marginal wins). Independently reproduces our hand-calibrated anchors (average player ≈ $11M; Jokic ≈ supermax) and self-updates as the cap grows. |
-| 90/10 salary blend | The historical sweep was monotonic: salary adds ~nothing at 10% weight and destroys accuracy beyond it (salary-only rho 0.56). 90/10 is the empirical peak; the shipped v1 70/30 was measurably too salary-heavy. |
+| 90/10 salary blend | Product choice informed by an exploratory historical sweep in which heavier salary weights reduced rank accuracy. That sweep's historical salary panel is not pinned in this repository, so it is directional evidence rather than part of the reproducible headline validation. |
 | $2M floor / $70M cap | Min contract and above-supermax. Note: the cap provably erases ranking information among the very top players — it is a legibility choice with a known cost. |
 
 **Headline validation:** retrospective model-selection evidence across four season pairs
 (2021-22→2022-23 through 2024-25→2025-26, 300 listed players each), Spearman rho
-0.655-0.772 (mean 0.737) vs realized next-season WAR, beating the same-cohort naive
+0.655-0.773 (mean 0.737) vs realized next-season WAR, beating the same-cohort naive
 carry-forward baseline (mean 0.699) in **every** pair. These are not untouched holdouts: the
-weights and WAR mapping were selected using these windows. The cohort is defined entirely by
+weights were selected using these windows, while each scored window's WAR conversion excludes
+its own rows and any successor window that reuses its outcome. The cohort is defined entirely by
 the train season; players absent the following season receive
 zero WAR, so retirement and washout risk are counted instead of filtered away. The weights
 sit on a broad plateau — defend the structure (quality + role + trajectory, converted to
@@ -43,7 +44,8 @@ wins, priced at market rate), not the digits.
 
 The historical table validates the fair-value ranking before the 10% salary blend because a
 complete season-aligned salary panel is not part of the reproducible verifier. The 90/10 blend
-is supported by the separate historical salary sweep; it is not included in the headline rho.
+is a product choice informed by a separate unpinned historical salary sweep; it is not included
+in the headline rho and should not be treated as independently reproduced evidence.
 
 ## Metric choice: EPM primary, DARKO fallback
 
@@ -92,8 +94,8 @@ fair-value-vs-salary surplus ("most underpaid players") is readable straight off
 Rebuild anytime: `python scripts/prepare_fv_inputs.py` then
 `python -m nba_stock_market.opening_prices`. Raw inputs remain git-ignored, while
 `data/manifests/fv-inputs.json` pins the site_Data commit and content hashes every public/EPM
-snapshot. Mutable DARKO/EPM bytes are archived under `data/snapshots/fv/`; live refresh is a
-separate explicit check, so provider drift cannot make a historical rebuild impossible.
+snapshot. Exact bytes for all inputs are archived under `data/snapshots/fv/`; live refresh is a
+separate explicit check, so provider drift or network availability cannot block a historical rebuild.
 
 ## Open questions for the group
 

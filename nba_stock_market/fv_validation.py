@@ -97,6 +97,8 @@ def spearman(xs: list[float], ys: list[float]) -> float:
         raise ValueError("series must be the same length")
     if len(xs) < 3:
         raise ValueError("need at least three points")
+    if any(not math.isfinite(value) for value in xs + ys):
+        raise ValueError("series values must be finite")
 
     def ranks(values: list[float]) -> list[float]:
         order = sorted(range(len(values)), key=values.__getitem__)
@@ -147,6 +149,42 @@ def fit_war_calibration(blends: list[float], realized_wars: list[float]) -> WarC
         intercept=mean_war - slope * mean_blend,
         slope=slope,
     )
+
+
+def fit_war_calibrations_by_pair(
+    pair_rows: list[tuple[list[float], list[float]]],
+    season_pairs: tuple[tuple[int, int], ...],
+) -> tuple[WarCalibration, tuple[WarCalibration, ...]]:
+    """Fit the pooled production map and outcome-isolated validation maps."""
+
+    if len(pair_rows) < 2:
+        raise ValueError("at least two season pairs are required for validation")
+    if len(pair_rows) != len(season_pairs):
+        raise ValueError("calibration rows and season pairs must have the same length")
+    pooled = fit_war_calibration(
+        [blend for blends, _ in pair_rows for blend in blends],
+        [war for _, realized_wars in pair_rows for war in realized_wars],
+    )
+    historical = []
+    for held_out, (_, held_out_test_year) in enumerate(season_pairs):
+        # A held-out outcome becomes `prior_war` in its successor window. Exclude
+        # that window too so the scored season's labels cannot affect calibration.
+        included = [
+            index
+            for index, (train_year, _) in enumerate(season_pairs)
+            if index != held_out and train_year != held_out_test_year
+        ]
+        if not included:
+            raise ValueError(
+                "each historical window needs at least one outcome-isolated calibration pair"
+            )
+        historical.append(
+            fit_war_calibration(
+                [blend for index in included for blend in pair_rows[index][0]],
+                [war for index in included for war in pair_rows[index][1]],
+            )
+        )
+    return pooled, tuple(historical)
 
 
 def load_darko_rows(path: Path) -> list[ImpactRow]:
@@ -417,6 +455,25 @@ def load_all_seasons(path: Path, years: set[int]) -> dict[int, list[ImpactRow]]:
     return dict(rows_by_year)
 
 
+def require_backtest_epm_snapshots(
+    season_pairs: tuple[tuple[int, int], ...],
+    cache_dir: Path,
+) -> dict[int, Path]:
+    """Resolve all configured train snapshots or report the missing set."""
+
+    paths = {
+        train_year: snapshot_path(train_year, cache_dir)
+        for train_year, _ in season_pairs
+    }
+    missing = [path for path in paths.values() if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(
+            "missing historical EPM snapshots: "
+            + ", ".join(str(path) for path in missing)
+        )
+    return paths
+
+
 def _season_label(train_year: int, test_year: int) -> str:
     return (
         f"{train_year - 1}-{str(train_year)[2:]} → {test_year - 1}-{str(test_year)[2:]}"
@@ -478,8 +535,11 @@ def write_report(
         "defined by the train season; players absent in season N receive zero WAR.",
         "The Projected WAR column validates the model's fair-value ranking before the 10%",
         "salary blend; its baseline uses the exact same LEBRON/EPM player cohort.",
-        "These are retrospective model-selection windows, not untouched holdouts. The WAR",
-        f"mapping was refit on all {calibration.players:,} corrected player-seasons:",
+        "These are retrospective model-selection windows, not untouched holdouts. Each",
+        "historical window's WAR conversion excludes both that window and any successor",
+        "window that reuses its realized WAR as a prior-WAR input. The production WAR",
+        "mapping is then refit on all",
+        f"{calibration.players:,} corrected player-seasons:",
         f"`projected_WAR = {calibration.intercept:.4f} + {calibration.slope:.4f} × blend`",
         "",
         "| Train → Test | LEBRON rate-only rho (n) | EPM rate-only rho (n) "
@@ -525,10 +585,10 @@ def write_report(
         lines.append(f"| {decile} | ${mean_price:,.0f} | {mean_war:.2f} |")
     lines += [
         "",
-        "Reading: decile 1 = the ten percent of players listed most expensive. A good FV",
-        "model shows monotonically falling realized WAR down the deciles and a price→WAR",
-        "correlation at or above the naive baseline (which gets minutes information for",
-        "free via prior WAR; clearing it with a rate-based price is the bar).",
+        "Reading: decile 1 = the ten percent of players listed most expensive. A useful FV",
+        "model should show generally declining realized WAR down the deciles, but individual",
+        "adjacent buckets can reverse. The primary test is price→WAR correlation at or above",
+        "the naive baseline (which gets minutes information for free via prior WAR).",
         "",
     ]
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -558,15 +618,16 @@ def main() -> None:
         ),
     ]
 
+    historical_epm_paths = require_backtest_epm_snapshots(
+        BACKTEST_SEASON_PAIRS,
+        args.epm_cache,
+    )
     years = {year for pair in BACKTEST_SEASON_PAIRS for year in pair}
     rows_by_year = load_all_seasons(args.lebron_file, years)
     pair_inputs: list[tuple[int, int, list[ImpactRow], tuple[str, ...]]] = []
-    calibration_blends: list[float] = []
-    calibration_realized: list[float] = []
+    calibration_rows_by_pair: list[tuple[list[float], list[float]]] = []
     for train_year, test_year in BACKTEST_SEASON_PAIRS:
-        train_path = snapshot_path(train_year, args.epm_cache)
-        if not train_path.exists():
-            continue
+        train_path = historical_epm_paths[train_year]
         train_epm_rows = load_epm_rows(train_path)
         eligible_keys = listing_cohort_keys(
             rows_by_year[train_year],
@@ -579,18 +640,26 @@ def main() -> None:
             rows_by_year[test_year],
             eligible_keys=eligible_keys,
         )
-        calibration_blends.extend(pair_blends)
-        calibration_realized.extend(pair_realized)
+        calibration_rows_by_pair.append((pair_blends, pair_realized))
 
-    calibration = fit_war_calibration(calibration_blends, calibration_realized)
-    calibrated_model = ProjectedWarModel(
-        war_intercept=calibration.intercept,
-        war_slope=calibration.slope,
+    calibration, historical_calibrations = fit_war_calibrations_by_pair(
+        calibration_rows_by_pair,
+        BACKTEST_SEASON_PAIRS,
     )
     backtests: list[SeasonBacktest] = []
     epm_backtests: list[ExternalBacktest] = []
     projected_backtests: list[ExternalBacktest] = []
-    for train_year, test_year, train_epm_rows, eligible_keys in pair_inputs:
+    for pair_index, (
+        train_year,
+        test_year,
+        train_epm_rows,
+        eligible_keys,
+    ) in enumerate(pair_inputs):
+        pair_calibration = historical_calibrations[pair_index]
+        calibrated_model = ProjectedWarModel(
+            war_intercept=pair_calibration.intercept,
+            war_slope=pair_calibration.slope,
+        )
         backtests.append(
             backtest_season_pair(
                 rows_by_year,

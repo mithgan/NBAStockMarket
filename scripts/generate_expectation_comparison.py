@@ -34,6 +34,7 @@ MODEL_LABELS = {
     "dnt": "D&T",
     "production": "Production",
 }
+COMPARISON_EXPECTATION_BIAS = 0.0
 
 
 def _comparison_basis() -> str:
@@ -54,7 +55,7 @@ def _source(model: str) -> object:
     return ProductionExpectation()
 
 
-def _replays() -> tuple[list[object], dict[str, object]]:
+def _replays(*, expectation_bias: float) -> tuple[list[object], dict[str, object]]:
     games = load_game_records(DATA_DIR / "player_game_logs.csv")
     salaries = load_salary_by_name(
         [DATA_DIR / "salaries.csv", DATA_DIR / "salaries-fallback.csv"]
@@ -83,6 +84,7 @@ def _replays() -> tuple[list[object], dict[str, object]]:
             inactivity_decay_rate=0.0,
             impact_k=0.0,
             net_points_to_dollars=engine.NET_POINTS_TO_DOLLARS,
+            expectation_bias=expectation_bias,
         )
         replays[model] = replay_game_records(market, selected_games, source)
     return universe, replays
@@ -110,10 +112,11 @@ def generate() -> str:
                 Path(directory) / model,
                 expectation_model=model,
                 opening_prices_path=None,
+                expectation_bias=COMPARISON_EXPECTATION_BIAS,
             )
             for model in MODEL_LABELS
         }
-    universe, replays = _replays()
+    universe, replays = _replays(expectation_bias=COMPARISON_EXPECTATION_BIAS)
 
     lines = [
         "# Four-Way Expectation Model Comparison",

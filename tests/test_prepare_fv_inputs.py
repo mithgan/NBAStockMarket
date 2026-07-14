@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.prepare_fv_inputs import prepare_inputs, verify_file
+from scripts.prepare_fv_inputs import DEFAULT_MANIFEST, prepare_inputs, verify_file
 
 
 def _digest(content: bytes) -> str:
@@ -110,6 +110,28 @@ def test_prepare_uses_archived_mutable_input_without_network(tmp_path: Path) -> 
     )
 
     assert (output / "input.csv").read_bytes() == content
+
+
+def test_real_manifest_materializes_all_inputs_without_network(tmp_path: Path) -> None:
+    output = tmp_path / "raw"
+
+    prepared = prepare_inputs(
+        DEFAULT_MANIFEST,
+        output,
+        download=lambda *_args: (_ for _ in ()).throw(AssertionError("network used")),
+    )
+
+    assert [path.name for path in prepared] == [
+        "lebron.csv",
+        "salary.csv",
+        "darko_current.csv",
+        "epm_2022.csv",
+        "epm_2023.csv",
+        "epm_2024.csv",
+        "epm_2025.csv",
+        "epm_2026.csv",
+    ]
+    assert all(path.is_file() for path in prepared)
 
 
 def test_refresh_checks_live_source_instead_of_archive(tmp_path: Path) -> None:

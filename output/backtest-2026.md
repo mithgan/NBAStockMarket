@@ -1,6 +1,6 @@
 # NBA Stock Market 2025-26 Backtest
 
-**DECIDED DESIGN (Russ, Discord 7/12): one opening-price-model share is the whole player; each user may hold at most one share per player; dividends settle actual game logs against cached Dunks & Threes pregame projections. The decided economy keeps $40,000 per net point per holder and applies the league-mean expectation-bias correction. Listings use Mith's impact + salary blend.**
+**DECIDED DESIGN (Russ, Discord 7/12): one opening-price-model share is the whole player; each user may hold at most one share per player; dividends settle actual game logs against Dunks & Threes pre-game box-score projection; salary-implied fallback for missing player-games. This replay keeps $40,000 per net point per holder and applies the automatically computed +0.43586494964917194 NP/player-game league-mean surprise correction. Listings use projected-WAR FV plus 10% salary.**
 
 This deterministic replay covers the 1,230-game 2025-26 NBA regular season. The universe is the top 150 players by final regular-season minutes. One hundred synthetic users each begin at $140M and hold one share of 10 unique players. Trading and inactivity decay are off; prices stay at opening-price-model listings, so the measured economy is dividends minus the daily idle-cash sink.
 
@@ -8,7 +8,7 @@ This deterministic replay covers the 1,230-game 2025-26 NBA regular season. The 
 
 - Actuals: 26,547 played player-games from ESPN game summaries (1,230 games).
 - Salaries: `https://github.com/gabriel1200/site_Data` `salary.csv` at commit `bc583cb`; missing names filled from the pinned fallback snapshot.
-- Listings: Mith's committed impact + salary blend; 0 of 150 players fall back to salary (none).
+- Listings: projected-WAR FV plus 10% salary; 0 of 150 players fall back to salary (none).
 - Expectation: Dunks & Threes pre-game box-score projection; salary-implied fallback for missing player-games. Expectations include the automatically computed +0.43586494964917194 NP/player-game league-mean surprise correction.
 - Replay: 10,689 universe player-games on 164 game days, with 174 calendar-day idle-fee passes.
 - Payout conventions: per-share amounts are what one holder receives; full-float amounts are the same result across all 100 shares.
@@ -70,7 +70,7 @@ The league-mean correction removes systematic projection inflation by design; th
 | Devin Booker | star | $33,011,461 | $53,142,264 | 64 | -$3,353,620 | -$335,362,047 | -$3,353,620 |
 | Onyeka Okongwu | mid | $20,893,727 | $15,000,000 | 74 | -$3,272,969 | -$327,296,925 | -$16,364,846 |
 
-The ranking is signed surprise versus Dunks & Threes pregame projections, not raw scoring. Players who outperform those projections lead; underperformance debits holders. Injuries themselves create no game event.
+The ranking is signed actual-minus-expected net points, not raw scoring. Players who outperform the selected expectation lead; underperformance debits holders. Injuries themselves create no game event.
 
 ## D. Portfolio spread
 
@@ -96,4 +96,4 @@ The ranking is signed surprise versus Dunks & Threes pregame projections, not ra
 
 ## Reproduction and caveats
 
-All ESPN actuals and Dunks & Threes projections are cached; the backtest performs no network calls. Universe selection uses final-season minutes (appropriate for economy evaluation, not a preseason trading strategy). Mith's impact + salary blend is the season-level listing price (salary is used only for reported fallbacks), prices are fixed, portfolios respect the one-share-per-user-per-player cap, and negative dividends may reduce cash.
+All declared replay inputs are cached; the backtest performs no network calls. Universe selection uses final-season minutes (appropriate for economy evaluation, not a preseason trading strategy). Projected-WAR FV plus 10% salary is the season-level listing price (salary is used only for reported fallbacks), prices are fixed, portfolios respect the one-share-per-user-per-player cap, and negative dividends may reduce cash.

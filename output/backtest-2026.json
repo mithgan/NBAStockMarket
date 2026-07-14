@@ -393,7 +393,7 @@
     "fair_value_reversion": false,
     "game_days": 164,
     "inactivity_decay": false,
-    "listing_basis": "Mith opening-price model (impact + salary blend)",
+    "listing_basis": "projected-WAR FV plus 10% salary",
     "listing_salary_fallback_count": 0,
     "listing_salary_fallback_players": [],
     "max_shares_per_user_per_player": 1,

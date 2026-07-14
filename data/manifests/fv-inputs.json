@@ -6,12 +6,14 @@
       "filename": "lebron.csv",
       "provider": "gabriel1200/site_Data",
       "url": "https://raw.githubusercontent.com/gabriel1200/site_Data/bc583cb0188a6d5ae59d052d08ac0d6efe1b14fd/lebron.csv",
+      "archive": "../snapshots/fv/lebron.csv",
       "sha256": "2af91254a60c7177a203c083ed2e391d9b463a32d254818b860a27673a7dc852"
     },
     {
       "filename": "salary.csv",
       "provider": "gabriel1200/site_Data",
       "url": "https://raw.githubusercontent.com/gabriel1200/site_Data/bc583cb0188a6d5ae59d052d08ac0d6efe1b14fd/salary.csv",
+      "archive": "../snapshots/fv/salary.csv",
       "sha256": "dceb86ef9c288b540ae2ff1e16fc5a88819b7b70a8dd4b8bbbd58fbeb012cec3"
     },
     {

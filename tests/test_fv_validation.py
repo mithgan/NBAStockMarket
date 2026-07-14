@@ -12,9 +12,11 @@ from nba_stock_market.fv_validation import (
     backtest_season_pair,
     compare_metrics,
     fit_war_calibration,
+    fit_war_calibrations_by_pair,
     listing_cohort_keys,
     load_darko_rows,
     projected_war_calibration_rows,
+    require_backtest_epm_snapshots,
     spearman,
 )
 from tests.test_opening_prices import impact_row
@@ -43,12 +45,47 @@ class SpearmanTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             spearman([1.0, 1.0, 1.0], [1.0, 2.0, 3.0])
 
+    def test_rejects_non_finite_values_in_either_series(self) -> None:
+        finite = [1.0, 2.0, 3.0]
+        for bad_value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(series="xs", bad_value=bad_value):
+                with self.assertRaisesRegex(ValueError, "finite"):
+                    spearman([1.0, 2.0, bad_value], finite)
+            with self.subTest(series="ys", bad_value=bad_value):
+                with self.assertRaisesRegex(ValueError, "finite"):
+                    spearman(finite, [1.0, 2.0, bad_value])
+
     def test_war_calibration_recovers_linear_mapping(self) -> None:
         result = fit_war_calibration([-1.0, 0.0, 1.0], [-1.0, 2.0, 5.0])
 
         self.assertEqual(result.players, 3)
         self.assertAlmostEqual(result.intercept, 2.0)
         self.assertAlmostEqual(result.slope, 3.0)
+
+    def test_historical_calibrations_exclude_scored_pair_and_successor(self) -> None:
+        pair_rows = [
+            ([-1.0, 1.0], [98.0, 102.0]),
+            ([-1.0, 1.0], [-12.0, -8.0]),
+            ([-1.0, 1.0], [8.0, 12.0]),
+        ]
+        season_pairs = ((2022, 2023), (2023, 2024), (2024, 2025))
+
+        pooled, historical = fit_war_calibrations_by_pair(pair_rows, season_pairs)
+
+        self.assertEqual(pooled.players, 6)
+        self.assertAlmostEqual(pooled.intercept, 100.0 / 3.0)
+        self.assertEqual([result.players for result in historical], [2, 2, 4])
+        self.assertEqual(
+            [result.intercept for result in historical],
+            [10.0, 100.0, 45.0],
+        )
+
+    def test_historical_calibration_rejects_mismatched_pair_metadata(self) -> None:
+        with self.assertRaisesRegex(ValueError, "same length"):
+            fit_war_calibrations_by_pair(
+                [([-1.0, 1.0], [0.0, 1.0]), ([-1.0, 1.0], [2.0, 3.0])],
+                ((2022, 2023),),
+            )
 
 
 class DarkoLoaderTest(unittest.TestCase):
@@ -93,6 +130,15 @@ class EpmLoaderTest(unittest.TestCase):
             path.write_text("player_id,player_name,game_dt,epm,oepm,depm\n", encoding="utf-8")
             with self.assertRaises(ValueError):
                 load_epm_rows(path)
+
+    def test_missing_historical_snapshots_are_rejected_as_a_set(self) -> None:
+        pairs = ((2022, 2023), (2023, 2024), (2024, 2025))
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_dir = Path(tmp)
+            (cache_dir / "epm_2022.csv").touch()
+
+            with self.assertRaisesRegex(FileNotFoundError, "2023.*2024"):
+                require_backtest_epm_snapshots(pairs, cache_dir)
 
 
 class ExternalBacktestTest(unittest.TestCase):

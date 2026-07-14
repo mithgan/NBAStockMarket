@@ -495,10 +495,32 @@ class OpeningListingLoaderTest(unittest.TestCase):
         report["metadata"]["listing_basis"] = "salary-only listings"
         salary_text = _render_markdown(report)
 
-        self.assertIn("Listings use Mith's impact + salary blend", opening_text)
+        self.assertIn("Listings use projected-WAR FV plus 10% salary", opening_text)
+        self.assertIn("projected-WAR FV plus 10% salary", opening_text)
         self.assertIn("Listings use a salary-only basis", salary_text)
         self.assertIn("prices stay at salary-only listings", salary_text)
-        self.assertNotIn("Mith's committed impact + salary blend", salary_text)
+        self.assertNotIn("projected-WAR FV plus 10% salary", salary_text)
+
+    def test_report_narrative_reflects_selected_expectation_and_zero_bias(self) -> None:
+        report = json.loads(Path("output/backtest-2026.json").read_text(encoding="utf-8"))
+        report["metadata"].update(
+            {
+                "expectation_model": "production",
+                "expectation": "zero expected net points; dividends reward raw game-log value",
+                "expectation_bias_mode": "override",
+            }
+        )
+        report["metadata"].pop("expectation_bias_net_points", None)
+
+        text = _render_markdown(report)
+
+        self.assertIn(
+            "dividends settle actual game logs against zero expected net points; "
+            "dividends reward raw game-log value",
+            text,
+        )
+        self.assertIn("No expectation-bias correction is applied.", text)
+        self.assertNotIn("against cached Dunks & Threes pregame projections", text)
 
     def test_normalized_match_uses_opening_price_and_missing_name_falls_back(self) -> None:
         games = [
