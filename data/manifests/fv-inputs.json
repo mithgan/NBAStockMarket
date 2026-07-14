@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "site_data_commit": "bc583cb0188a6d5ae59d052d08ac0d6efe1b14fd",
+  "files": [
+    {
+      "filename": "lebron.csv",
+      "provider": "gabriel1200/site_Data",
+      "url": "https://raw.githubusercontent.com/gabriel1200/site_Data/bc583cb0188a6d5ae59d052d08ac0d6efe1b14fd/lebron.csv",
+      "sha256": "2af91254a60c7177a203c083ed2e391d9b463a32d254818b860a27673a7dc852"
+    },
+    {
+      "filename": "salary.csv",
+      "provider": "gabriel1200/site_Data",
+      "url": "https://raw.githubusercontent.com/gabriel1200/site_Data/bc583cb0188a6d5ae59d052d08ac0d6efe1b14fd/salary.csv",
+      "sha256": "dceb86ef9c288b540ae2ff1e16fc5a88819b7b70a8dd4b8bbbd58fbeb012cec3"
+    },
+    {
+      "filename": "darko_current.csv",
+      "provider": "DARKO public sheet",
+      "url": "https://docs.google.com/spreadsheets/d/1mhwOLqPu2F9026EQiVxFPIN1t9RGafGpl-dokaIsm9c/export?format=csv",
+      "archive": "../snapshots/fv/darko_current.csv",
+      "sha256": "1f99f198ee9a7cca4063fd37580b02fd7e9f05d08126055c9a77107aa0851b6f"
+    }
+  ],
+  "epm_snapshots": [
+    {
+      "season_year": 2022,
+      "archive": "../snapshots/fv/epm_2022.csv",
+      "sha256": "051d163c83c1e61e0bbd6dc7d420e49c635ebb56eb884070ff6e47c435de0a07"
+    },
+    {
+      "season_year": 2023,
+      "archive": "../snapshots/fv/epm_2023.csv",
+      "sha256": "d9183d9354a545332752db340fe4471df962b5ff032a1cca96c4e62e4e9fa0ea"
+    },
+    {
+      "season_year": 2024,
+      "archive": "../snapshots/fv/epm_2024.csv",
+      "sha256": "c036a909a600f06388b21f44f8bb1299278f04baaa7d020f198a0cf9fadf9bdd"
+    },
+    {
+      "season_year": 2025,
+      "archive": "../snapshots/fv/epm_2025.csv",
+      "sha256": "991ce38b90615dfd3d9043671ac895e78ac5dc32b5e9f9e30ab58cc371e37596"
+    },
+    {
+      "season_year": 2026,
+      "archive": "../snapshots/fv/epm_2026.csv",
+      "sha256": "1d2e9848f53032db0f3b028f7881acafecd13a2357132be20dd07f527321210b"
+    }
+  ]
+}

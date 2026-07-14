@@ -32,12 +32,13 @@ from nba_stock_market.historical_data import load_game_records
 GAME_LOG = ROOT / "data/raw/2025-26/player_game_logs.csv"
 DNT_CACHE = ROOT / "data/raw/dnt"
 SNAPSHOT = ROOT / "app/src/data/snapshot.ts"
+BACKTEST = ROOT / "output/backtest-2026.json"
 DEFAULT_OUTPUT = ROOT / "app/src/data/trends.ts"
 MIN_GAME_COUNT = 15
 PER_HOLDER_DOLLARS_PER_NP = NET_POINTS_TO_DOLLARS / SHARES_OUT
 
 SNAPSHOT_PLAYER = re.compile(
-    r"\{ id: '([^']+)', name: '([^']+)', tier: '([^']+)', "
+    r'\{ id: "([^"]+)", name: "([^"]+)", tier: "([^"]+)", '
     r"listing_price: ([\d_]+), actual_salary: ([\d_]+) \}"
 )
 
@@ -74,6 +75,10 @@ def generate() -> dict[str, Any]:
         )
 
     players = _snapshot_players()
+    report = json.loads(BACKTEST.read_text(encoding="utf-8"))
+    expectation_bias = float(
+        report.get("metadata", {}).get("expectation_bias_net_points", 0.0)
+    )
     player_by_id = {player.id: player for player in players}
     games_by_player: defaultdict[str, list[Any]] = defaultdict(list)
     for game in load_game_records(GAME_LOG):
@@ -93,12 +98,13 @@ def generate() -> dict[str, Any]:
             if isinstance(projected, BoxScoreLine)
             else float(projected)
         )
+        bias_corrected_expected_np = expected_np + expectation_bias
         return {
             "date": game.game_date.isoformat(),
             "np": _rounded(np, 5),
-            "expected_np": _rounded(expected_np, 5),
+            "expected_np": _rounded(bias_corrected_expected_np, 5),
             "dividend_per_holder": _rounded(
-                (np - expected_np) * PER_HOLDER_DOLLARS_PER_NP, 2
+                (np - bias_corrected_expected_np) * PER_HOLDER_DOLLARS_PER_NP, 2
             ),
         }
 

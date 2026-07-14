@@ -12,10 +12,20 @@ number the market opens at before supply and demand take over.
 
 ```
 blend         = 0.40·z(EPM) + 0.35·z(prior WAR) + 0.15·z(minutes) + 0.10·z(25 − age)
-projected_WAR = 1.98 + 2.42 × blend
+projected_WAR = 1.4821 + 2.5605 × blend
 FV            = $1.2M + projected_WAR × $5M
 listing       = 0.9 × FV + 0.1 × actual salary,  clamped [$2M, $70M]
 ```
+
+**Post-review correction (2026-07-14).** The first exploratory notebook evaluated only
+players who appeared in both the train and test seasons. That introduced survivorship bias.
+The production verifier now defines eligibility from the train season, takes the same top 300
+by minutes that production lists, and assigns zero WAR to players absent the next season. It
+also evaluates the v2 fair-value component, not a rate-only proxy, on the exact same cohort as
+its prior-WAR baseline. The canonical result is in `output/fv-validation.md`: the FV component
+scores 0.751/0.772/0.768/0.655 and beats the same-cohort prior-WAR baseline in all four windows.
+Intermediate numbers below are retained as the research trail where noted; only the generated
+report is acceptance evidence.
 
 ---
 
@@ -78,8 +88,8 @@ that peeks at the season being predicted is worthless.
 4. Look up each player's **realized WAR in 2025-26** (the season the formula never saw).
 5. Compute Spearman ρ between the predicted ordering and the realized ordering.
 6. Repeat for four season pairs — 2021-22→2022-23, 2022-23→2023-24, 2023-24→2024-25,
-   2024-25→2025-26 — so one weird season can't decide the answer. ~410-460 players join per
-   pair (a player must appear in both seasons to be scored).
+   2024-25→2025-26 — so one weird season can't decide the answer. Eligibility comes only from
+   the train season; a player absent in the test season receives zero WAR.
 
 **What "realized WAR" is and why it's the target.** WAR = wins above replacement: one number
 for "how much winning did this player actually produce," combining per-minute impact AND
@@ -90,10 +100,11 @@ see tests 6 and 7, where we attacked it.)
 
 **The mandatory baseline.** Every formula competes against **naive WAR carry-forward**: predict
 that each player produces exactly what he produced last season. It's the dumbest defensible
-forecast. Anything below it is worse than doing nothing clever. Its scores: ρ = 0.722 / 0.773 /
-0.771 / 0.667 across the four pairs (mean ≈ 0.732).
+forecast. Anything below it is worse than doing nothing clever. On the exact production listing
+cohort its scores are ρ = 0.712 / 0.749 / 0.725 / 0.610 (mean 0.699).
 
-**Data sources** (all cached under `data/raw/opening/`, all free/public except EPM):
+**Data sources** (all cached under `data/raw/opening/`, all free/public except EPM; exact
+sources and SHA-256 hashes are pinned in `data/manifests/fv-inputs.json`):
 - `lebron.csv` (gabriel1200/site_Data) — LEBRON rating, WAR, minutes, age; 17 seasons.
 - `darko_current.csv` (darko.app public sheet) — DARKO DPM, current snapshot only.
 - `epm_2022.csv` … `epm_2026.csv` — Dunks & Threes EPM via API (key in `.env`), built by
@@ -146,8 +157,10 @@ DARKO's public sheet is current-only, so it could join (a) but not (b).
   outlier** — it systematically loves defense-first bigs and low-usage connectors (Derrick
   White, Queta, Clingan, Duren priced $12-18M richer) while DARKO/EPM favor shot creators
   (Anthony Edwards $17M richer under DARKO, Jamal Murray, Brunson, OG).
-- Prediction: **EPM beat LEBRON in all four season pairs** — ρ 0.670/0.725/0.725/0.686 vs
-  0.577/0.575/0.537/0.519 — and beat the naive baseline outright in the most recent pair.
+- Prediction on the shared production cohort: **EPM matched or beat LEBRON in all four
+  corrected season pairs** — ρ 0.655/0.691/0.689/0.607 vs
+  0.648/0.691/0.650/0.576. The full v2 formula then scored
+  0.751/0.772/0.768/0.655, beating same-cohort prior WAR in every pair.
 - Bonus finding: blending LEBRON *into* EPM made it worse (0.711 < 0.718). No ensemble gain.
 
 **Decision: EPM is the core rating.** DARKO (free, public, 0.83 agreement) is the designated
@@ -352,19 +365,18 @@ payroll ÷ ≈880 marginal wins). How does our formula relate?
 
 **How.** Two steps. (a) Recognize their formula ranks players identically to last season's
 WAR — meaning it *is* our naive baseline, already measured. (b) Fit our blend score to WAR
-units by regression on 1,743 player-seasons (`projected_WAR = 1.98 + 2.42 × blend`), so both
-formulas can be written in the same shape and plotted on the same axes against the same
-realized outcomes, including OLS slopes against the perfect-forecast diagonal (y = x).
+units by regression on 1,200 listed player-seasons, including players who disappeared the
+following year (`projected_WAR = 1.4821 + 2.5605 × blend`), so both formulas can be written in
+the same economic units and compared against the same realized outcomes.
 
 **Result.**
 
 - Same skeleton, one different part: they price **last season's realized WAR**; we price
-  **projected next-season WAR**. Head-to-head: theirs 0.732-0.763, ours 0.771-0.792.
-- The scatter comparison makes the difference visible: their fitted slope vs reality is
-  **0.67** — that flatness *is* regression to the mean, drawn in data; a 10-WAR season
-  predicts ~7.3 next year, so last-WAR pricing systematically overprices the top and
-  underprices the bottom. Our slope is **0.90**, close to the diagonal: the projection bakes
-  the regression in, so a $30M listing means ~6 expected wins for every archetype.
+  **projected next-season WAR**. On the exact v2 listing cohort, prior WAR averages 0.699 rho
+  while the FV component averages 0.737 and wins all four season pairs.
+- The refit makes the blend dollar-calibrated on the corrected train-defined cohorts. Its
+  purpose is absolute scale; rank validation is reported separately. These windows are
+  retrospective model-selection evidence, not untouched holdouts.
 - We adopted their best part: the **economically-derived $5M/win scale** (it independently
   reproduced our hand-calibrated prices — average player ≈ $11M vs our $12M anchor; Jokić ≈
   supermax). Their two caveats map to our design: the max-contract distortion is why our cap
@@ -409,8 +421,10 @@ A research log that only records wins is marketing. The standing limitations:
 2. **The target is LEBRON-flavored.** "Realized WAR" comes from the LEBRON dataset, so ground
    truth is itself a model output. This plausibly *understates* EPM's edge (it won while being
    graded by a rival's ruler), but a second target family would strengthen the claim.
-3. **Survivorship.** Only players appearing in both seasons are scored. Washouts — the worst
-   holder outcome — are invisible to the protocol.
+3. **Washouts are counted as zero, but the reason is ambiguous.** The train-season cohort
+   includes players who disappear the following year and assigns them zero WAR. That captures
+   the holder loss, but cannot distinguish retirement, overseas play, injury, or a true talent
+   collapse without a separate availability model.
 4. **Rookies are out of scope by construction** (no N−1 season), and they were the old
    economy's biggest earners. They need the separate IPO/auction path.
 5. **Weights are a plateau, partly target-shaped** (tests 5 and 6). Defend the structure, not
@@ -435,5 +449,7 @@ A research log that only records wins is marketing. The standing limitations:
 | `output/fv-validation.md` | Generated three-way metric + backtest report |
 | `docs/opening-price-model.md` | The production formula spec + census design |
 | `tests/test_opening_prices.py`, `tests/test_fv_validation.py` | The instrument tests |
-| `data/raw/opening/` (git-ignored) | LEBRON history, DARKO sheet, EPM snapshots, salaries |
+| `data/manifests/fv-inputs.json` | Pinned source versions and SHA-256 checks for every FV input |
+| `scripts/prepare_fv_inputs.py` | Rebuilds the git-ignored raw-input directory and rejects provider drift |
+| `data/raw/opening/` (git-ignored) | Verified LEBRON history, DARKO sheet, EPM snapshots, salaries |
 | `data/raw/2025-26/` (git-ignored) | Full ESPN season cache for the dividend replay |

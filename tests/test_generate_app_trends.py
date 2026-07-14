@@ -36,6 +36,12 @@ def test_generator_emits_full_season_real_games_for_snapshot_players(tmp_path: P
     assert len(jokic) > 50
     assert [point["date"] for point in jokic] == sorted(point["date"] for point in jokic)
     assert next(point for point in jokic if point["date"] == "2025-12-25")["np"] == 59.35
+    assert next(point for point in jokic if point["date"] == "2025-12-25")[
+        "expected_np"
+    ] == 25.98312
+    assert next(point for point in jokic if point["date"] == "2025-12-25")[
+        "dividend_per_holder"
+    ] == 1_334_675.2
     assert generated["spot_checks"]["3112335"]["2025-12-25"]["np"] == 59.35
 
     first = output.read_bytes()

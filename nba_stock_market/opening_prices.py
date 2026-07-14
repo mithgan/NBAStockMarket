@@ -3,13 +3,14 @@
 Production model (v2, validated in docs/fv-research-log.md):
 
     blend         = 0.40*z(EPM) + 0.35*z(prior WAR) + 0.15*z(minutes) + 0.10*z(25 - age)
-    projected_WAR = 1.98 + 2.42 * blend
+    projected_WAR = 1.4821 + 2.5605 * blend
     fair_value    = $1.2M (min salary) + projected_WAR * $5M (price of a win)
     listing       = clamp(0.9 * fair_value + 0.1 * actual_salary, $2M, $70M)
 
-Backtested out-of-sample against four historical season pairs: mean Spearman
-rho 0.77-0.79 vs realized next-season WAR, beating the naive carry-forward
-baseline (0.73) in every pair.  See ``ProjectedWarModel``.
+Retrospectively validated against four historical season pairs on the exact
+300-player listing cohort: Spearman rho 0.66-0.77 (mean 0.737) vs realized
+next-season WAR, beating the same-cohort naive carry-forward baseline (mean
+0.699) in every pair. See ``ProjectedWarModel``.
 
 The earlier linear single-metric pricer (``OpeningPriceModel``) is retained:
 it is the comparison pricer used by ``fv_validation`` and the fallback when
@@ -40,8 +41,8 @@ UNIVERSE_SIZE = 300
 STAR_PRICE = 30_000_000.0
 MID_PRICE = 10_000_000.0
 
-WAR_INTERCEPT = 1.98
-WAR_SLOPE = 2.42
+WAR_INTERCEPT = 1.482138268727
+WAR_SLOPE = 2.560459930502
 BLEND_W_EPM = 0.40
 BLEND_W_PRIOR_WAR = 0.35
 BLEND_W_MINUTES = 0.15
@@ -109,6 +110,10 @@ class OpeningPriceModel:
     def shrunk_rating(self, rating: float, minutes: float) -> float:
         """Pull small-sample ratings toward zero (a league-average prior)."""
 
+        if not math.isfinite(rating):
+            raise ValueError("rating must be finite")
+        if not math.isfinite(minutes):
+            raise ValueError("minutes must be finite")
         if minutes < 0:
             raise ValueError("minutes must be non-negative")
         if minutes == 0 and self.shrinkage_minutes == 0:
@@ -122,6 +127,12 @@ class OpeningPriceModel:
         )
 
     def opening_price(self, rating: float, minutes: float, actual_salary: float | None) -> float:
+        if not math.isfinite(rating):
+            raise ValueError("rating must be finite")
+        if actual_salary is not None and (
+            not math.isfinite(actual_salary) or actual_salary < 0
+        ):
+            raise ValueError("actual_salary must be finite and non-negative")
         implied = self.impact_implied_price(rating, minutes)
         if actual_salary is None or actual_salary <= 0:
             blended = implied
@@ -205,9 +216,10 @@ def _salary_value(raw: str | float | None) -> float:
     if raw is None:
         return 0.0
     try:
-        return float(str(raw).replace("$", "").replace(",", ""))
+        value = float(str(raw).replace("$", "").replace(",", ""))
     except ValueError:
         return 0.0
+    return value if math.isfinite(value) and value >= 0 else 0.0
 
 
 def build_opening_listings(
@@ -269,7 +281,7 @@ def write_listings_csv(listings: list[OpeningListing], path: Path) -> None:
         "tier",
     ]
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(fields)
         for listing in listings:
             writer.writerow(
@@ -324,6 +336,8 @@ class ProjectedListing:
 
 
 def _zscores(values: list[float]) -> list[float]:
+    if not values or any(not math.isfinite(value) for value in values):
+        raise ValueError("z-score inputs must be non-empty and finite")
     mean = sum(values) / len(values)
     variance = sum((value - mean) ** 2 for value in values) / len(values)
     deviation = math.sqrt(variance) or 1.0
@@ -365,6 +379,8 @@ class ProjectedWarModel:
 
         if not features:
             raise ValueError("at least one player is required")
+        for row in features:
+            _validate_player_features(row)
         z_epm = _zscores([row.epm for row in features])
         z_war = _zscores([row.prior_war for row in features])
         z_minutes = _zscores([row.minutes for row in features])
@@ -385,6 +401,12 @@ class ProjectedWarModel:
         return self.min_salary + projected_war * self.dollars_per_win
 
     def opening_price(self, fair_value: float, actual_salary: float | None) -> float:
+        if not math.isfinite(fair_value):
+            raise ValueError("fair_value must be finite")
+        if actual_salary is not None and (
+            not math.isfinite(actual_salary) or actual_salary < 0
+        ):
+            raise ValueError("actual_salary must be finite and non-negative")
         if actual_salary is None or actual_salary <= 0:
             blended = fair_value
         else:
@@ -408,38 +430,51 @@ def load_epm_by_name(path: Path) -> dict[str, float]:
     return ratings
 
 
+def _validate_player_features(row: PlayerFeatures) -> None:
+    values = {
+        "epm": row.epm,
+        "prior_war": row.prior_war,
+        "minutes": row.minutes,
+        "games": row.games,
+        "age": row.age,
+    }
+    for field, value in values.items():
+        if not math.isfinite(value):
+            raise ValueError(f"{row.player}: {field} must be finite")
+    if row.minutes < 0 or row.minutes > 5_000:
+        raise ValueError(f"{row.player}: minutes must be between 0 and 5000")
+    if row.games < 0 or row.games > 100:
+        raise ValueError(f"{row.player}: games must be between 0 and 100")
+    if row.age < 15 or row.age > 60:
+        raise ValueError(f"{row.player}: age must be between 15 and 60")
+
+
 def build_player_features(
     impact_rows: list[ImpactRow],
     epm_by_name: dict[str, float],
-    *,
-    universe_size: int = UNIVERSE_SIZE,
 ) -> tuple[list[PlayerFeatures], int]:
-    """Top players by minutes with EPM coverage; returns (features, skipped)."""
+    """Full season pool with EPM coverage; returns (features, skipped)."""
 
-    if universe_size <= 0:
-        raise ValueError("universe_size must be positive")
     universe = sorted(impact_rows, key=lambda row: (-row.minutes, row.player))
     features: list[PlayerFeatures] = []
     skipped = 0
     for row in universe:
-        if len(features) >= universe_size:
-            break
         epm = epm_by_name.get(normalize_player_name(row.player))
         if epm is None:
             skipped += 1
             continue
-        features.append(
-            PlayerFeatures(
-                player=row.player,
-                team=row.team,
-                position=row.position,
-                age=row.age,
-                minutes=row.minutes,
-                games=row.games,
-                epm=epm,
-                prior_war=row.war,
-            )
+        features_row = PlayerFeatures(
+            player=row.player,
+            team=row.team,
+            position=row.position,
+            age=row.age,
+            minutes=row.minutes,
+            games=row.games,
+            epm=epm,
+            prior_war=row.war,
         )
+        _validate_player_features(features_row)
+        features.append(features_row)
     if not features:
         raise ValueError("no players with both impact and EPM data")
     return features, skipped
@@ -450,11 +485,20 @@ def build_projected_listings(
     salaries: dict[str, float],
     *,
     model: ProjectedWarModel | None = None,
+    universe_size: int = UNIVERSE_SIZE,
 ) -> list[ProjectedListing]:
+    if universe_size <= 0:
+        raise ValueError("universe_size must be positive")
     model = model or ProjectedWarModel()
     projected = model.projected_wars(features)
+    projected_by_player = {
+        normalize_player_name(row.player): projected_war
+        for row, projected_war in zip(features, projected)
+    }
+    universe = sorted(features, key=lambda row: (-row.minutes, row.player))[:universe_size]
     listings: list[ProjectedListing] = []
-    for row, projected_war in zip(features, projected):
+    for row in universe:
+        projected_war = projected_by_player[normalize_player_name(row.player)]
         fair_value = model.fair_value(projected_war)
         actual_salary = salaries.get(normalize_player_name(row.player))
         price = model.opening_price(fair_value, actual_salary)
@@ -502,7 +546,7 @@ def write_projected_listings_csv(listings: list[ProjectedListing], path: Path) -
         "tier",
     ]
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(fields)
         for listing in listings:
             writer.writerow(
@@ -553,9 +597,11 @@ def main() -> None:
 
     epm_by_name = load_epm_by_name(args.epm_file)
     features, skipped = build_player_features(
-        impact_rows, epm_by_name, universe_size=args.universe_size
+        impact_rows, epm_by_name
     )
-    listings = build_projected_listings(features, salaries)
+    listings = build_projected_listings(
+        features, salaries, universe_size=args.universe_size
+    )
     priced_from_salary = sum(1 for listing in listings if listing.actual_salary > 0)
     write_projected_listings_csv(listings, args.output)
     print(

@@ -10,6 +10,7 @@ from nba_stock_market.opening_prices import (
     OpeningPriceModel,
     PlayerFeatures,
     ProjectedWarModel,
+    WAR_INTERCEPT,
     build_opening_listings,
     build_player_features,
     build_projected_listings,
@@ -85,6 +86,17 @@ class OpeningPriceModelTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             OpeningPriceModel(min_listing_price=5.0, max_listing_price=1.0)
 
+    def test_non_finite_rating_or_minutes_are_rejected(self) -> None:
+        model = OpeningPriceModel()
+        for rating, minutes in (
+            (float("nan"), 1000.0),
+            (float("inf"), 1000.0),
+            (1.0, float("nan")),
+            (1.0, float("inf")),
+        ):
+            with self.assertRaises(ValueError):
+                model.impact_implied_price(rating, minutes)
+
     def test_tiers_match_engine_thresholds(self) -> None:
         self.assertEqual(tier_for_price(45_000_000.0), "star")
         self.assertEqual(tier_for_price(15_000_000.0), "mid")
@@ -142,11 +154,13 @@ class OpeningPriceIoTest(unittest.TestCase):
                 writer.writerow(["Player", "2025-26", "2026-27"])
                 writer.writerow(["Has Next", "10000000", "12000000"])
                 writer.writerow(["Expiring", "9000000", "0.0"])
+                writer.writerow(["Invalid", "NaN", "Infinity"])
                 writer.writerow(["Dead Cap", "5000000", "5000000"])
             salaries = load_salaries(path)
         self.assertEqual(salaries["hasnext"], 12_000_000.0)
         self.assertEqual(salaries["expiring"], 9_000_000.0)
         self.assertNotIn("deadcap", salaries)
+        self.assertNotIn("invalid", salaries)
 
     def test_written_csv_round_trips(self) -> None:
         rows = [impact_row("Round Trip", 2.0)]
@@ -198,7 +212,7 @@ class ProjectedWarModelTest(unittest.TestCase):
         identical = [player_features(f"P{i}", 2.0) for i in range(4)]
         projected = ProjectedWarModel().projected_wars(identical)
         for value in projected:
-            self.assertAlmostEqual(value, 1.98)
+            self.assertAlmostEqual(value, WAR_INTERCEPT)
 
     def test_fair_value_is_min_salary_plus_wins(self) -> None:
         model = ProjectedWarModel()
@@ -218,6 +232,12 @@ class ProjectedWarModelTest(unittest.TestCase):
         self.assertEqual(model.opening_price(-3_000_000.0, None), 2_000_000.0)
         self.assertEqual(model.opening_price(90_000_000.0, None), 70_000_000.0)
 
+    def test_non_finite_or_negative_salary_is_rejected(self) -> None:
+        model = ProjectedWarModel()
+        for salary in (float("nan"), float("inf"), -1.0):
+            with self.assertRaisesRegex(ValueError, "actual_salary"):
+                model.opening_price(20_000_000.0, salary)
+
     def test_weights_must_sum_to_one(self) -> None:
         with self.assertRaises(ValueError):
             ProjectedWarModel(w_epm=0.5, w_prior_war=0.5, w_minutes=0.5, w_youth=0.5)
@@ -225,6 +245,11 @@ class ProjectedWarModelTest(unittest.TestCase):
     def test_empty_pool_rejected(self) -> None:
         with self.assertRaises(ValueError):
             ProjectedWarModel().projected_wars([])
+
+    def test_non_finite_feature_rejected_before_z_scoring(self) -> None:
+        bad = player_features("Bad EPM", float("nan"))
+        with self.assertRaisesRegex(ValueError, "Bad EPM.*epm"):
+            ProjectedWarModel().projected_wars([bad])
 
 
 class ProjectedPipelineTest(unittest.TestCase):
@@ -235,9 +260,14 @@ class ProjectedPipelineTest(unittest.TestCase):
             impact_row("Also Has", 1.0, minutes=2200.0),
         ]
         epm = {"hasepm": 2.5, "alsohas": 0.5}
-        features, skipped = build_player_features(rows, epm, universe_size=3)
+        features, skipped = build_player_features(rows, epm)
         self.assertEqual([f.player for f in features], ["Has Epm", "Also Has"])
         self.assertEqual(skipped, 1)
+
+    def test_features_reject_missing_age_before_z_scoring(self) -> None:
+        rows = [impact_row("Missing Age", 2.0, age=0.0)]
+        with self.assertRaisesRegex(ValueError, "Missing Age.*age"):
+            build_player_features(rows, {"missingage": 2.5})
 
     def test_listings_rank_by_price_and_round_trip(self) -> None:
         features = [
@@ -257,6 +287,20 @@ class ProjectedPipelineTest(unittest.TestCase):
         self.assertEqual(len(written), 3)
         self.assertEqual(written[0]["player"], "Alpha")
         self.assertIn("projected_war", written[0])
+
+    def test_output_size_does_not_change_a_players_projection(self) -> None:
+        features = [
+            player_features("Alpha", 5.0, prior_war=9.0, minutes=2500.0, age=25.0),
+            player_features("Beta", 2.0, prior_war=5.0, minutes=2200.0, age=27.0),
+            player_features("Gamma", 0.0, prior_war=2.0, minutes=1800.0, age=29.0),
+            player_features("Delta", -2.0, prior_war=0.5, minutes=900.0, age=32.0),
+        ]
+        full = build_projected_listings(features, {}, universe_size=4)
+        small = build_projected_listings(features, {}, universe_size=2)
+        projected_full = {row.player: row.projected_war for row in full}
+        projected_small = {row.player: row.projected_war for row in small}
+        self.assertAlmostEqual(projected_full["Alpha"], projected_small["Alpha"])
+        self.assertAlmostEqual(projected_full["Beta"], projected_small["Beta"])
 
 
 if __name__ == "__main__":

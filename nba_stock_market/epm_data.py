@@ -16,6 +16,7 @@ import argparse
 import csv
 import json
 import os
+import ssl
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -73,7 +74,17 @@ def _load_key() -> str:
 
 def _default_request_json(url: str) -> list[dict[str, Any]]:
     request = urllib.request.Request(url, headers={"Authorization": _load_key()})
-    with urllib.request.urlopen(request, timeout=30) as response:
+    system_ca = Path("/etc/ssl/cert.pem")
+    if system_ca.exists():
+        tls_context = ssl.create_default_context(cafile=str(system_ca))
+    else:
+        try:
+            import certifi
+        except ImportError:
+            tls_context = ssl.create_default_context()
+        else:
+            tls_context = ssl.create_default_context(cafile=certifi.where())
+    with urllib.request.urlopen(request, timeout=30, context=tls_context) as response:
         payload = json.loads(response.read().decode("utf-8"))
     if not isinstance(payload, list):
         raise ValueError(f"unexpected EPM payload for {url}: {str(payload)[:120]}")

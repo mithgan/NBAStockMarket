@@ -10,7 +10,7 @@ is `docs/fv-research-log.md`.
 ```
 blend         = 0.40*z(EPM) + 0.35*z(prior WAR) + 0.15*z(minutes) + 0.10*z(25 - age)
 
-projected_WAR = 1.98 + 2.42 * blend        # fitted on 1,743 player-seasons
+projected_WAR = 1.4821 + 2.5605 * blend    # refit on 1,200 listed player-seasons
 
 fair_value    = $1.2M + projected_WAR * $5M
                 (min salary)   (market price of one win above replacement)
@@ -23,19 +23,27 @@ Players missing a salary row (mostly rookie-scale deals) list at fair value alon
 
 | Component | Why (each earned its seat by measurement) |
 |---|---|
-| EPM core (40%) | Beat LEBRON in all four backtest season pairs (rho 0.67-0.73 vs 0.52-0.58); agrees most with DARKO (0.83). Blending LEBRON in made it *worse*. |
+| EPM core (40%) | Matched or beat LEBRON on the same 300-player cohort in all four corrected backtest season pairs; agrees most with DARKO (0.83). Blending LEBRON in made it *worse* in the exploratory sweep. |
 | Prior WAR + minutes (35% + 15%) | A rate-only price lost to the naive "carry last WAR" baseline every year — role size is a coach's decision that persists and a per-possession rating can't see. |
 | Youth (10%) | Small, consistent gain (+0.01-0.02 rho) in every configuration tested. Kept small to avoid double-counting the dividend economy's improver rewards. |
-| `1.98 + 2.42x` fit | Converts the blend to WAR units so the price is *calibrated*: fitted slope vs reality 0.90 (vs 0.67 for last-WAR pricing, which overprices the top and underprices the bottom by ignoring regression to the mean). |
+| `1.4821 + 2.5605x` fit | Converts the blend to WAR units. It is fit on the same top-300-by-minutes cohort that production lists, while full-pool z-scores are retained. |
 | $1.2M + $5M/win | The standard sports-economics scale (~$4.5B above-replacement payroll / ~880 marginal wins). Independently reproduces our hand-calibrated anchors (average player ≈ $11M; Jokic ≈ supermax) and self-updates as the cap grows. |
 | 90/10 salary blend | The historical sweep was monotonic: salary adds ~nothing at 10% weight and destroys accuracy beyond it (salary-only rho 0.56). 90/10 is the empirical peak; the shipped v1 70/30 was measurably too salary-heavy. |
 | $2M floor / $70M cap | Min contract and above-supermax. Note: the cap provably erases ranking information among the very top players — it is a legibility choice with a known cost. |
 
-**Headline validation:** out-of-sample across four season pairs (2021-22→2022-23 through
-2024-25→2025-26, ~440 players each), mean Spearman rho 0.77-0.79 vs realized next-season WAR,
-beating the naive carry-forward baseline (0.73) in **every** pair, with a leave-one-out check
-on the weights. The weights sit on a broad plateau — defend the structure (quality + role +
-trajectory, converted to wins, priced at market rate), not the digits.
+**Headline validation:** retrospective model-selection evidence across four season pairs
+(2021-22→2022-23 through 2024-25→2025-26, 300 listed players each), Spearman rho
+0.655-0.772 (mean 0.737) vs realized next-season WAR, beating the same-cohort naive
+carry-forward baseline (mean 0.699) in **every** pair. These are not untouched holdouts: the
+weights and WAR mapping were selected using these windows. The cohort is defined entirely by
+the train season; players absent the following season receive
+zero WAR, so retirement and washout risk are counted instead of filtered away. The weights
+sit on a broad plateau — defend the structure (quality + role + trajectory, converted to
+wins, priced at market rate), not the digits.
+
+The historical table validates the fair-value ranking before the 10% salary blend because a
+complete season-aligned salary panel is not part of the reproducible verifier. The 90/10 blend
+is supported by the separate historical salary sweep; it is not included in the headline rho.
 
 ## Metric choice: EPM primary, DARKO fallback
 
@@ -76,13 +84,16 @@ model CSV → census pass → final listing CSV.
 ## Current output (2026-27 listings)
 
 `output/opening-prices-2026-27.csv`: 300 players, full EPM coverage, ranked by opening price.
-Top of board: SGA $45.7M, Jokic $45.0M, Wembanyama $44.6M, Luka $41.6M, Kawhi $36.9M. Columns
-include `epm`, `prior_war`, `projected_war`, and `fair_value` next to the listing price, so the
+It is the canonical source for the current top-of-board prices; the app snapshot is generated
+from it rather than maintaining a second manual list. Columns include `epm`, `prior_war`,
+`projected_war`, and `fair_value` next to the listing price, so the
 fair-value-vs-salary surplus ("most underpaid players") is readable straight off the file.
 
-Rebuild anytime: `python -m nba_stock_market.opening_prices` (inputs cached under
-`data/raw/opening/`, git-ignored; LEBRON/salary re-download from `gabriel1200/site_Data`,
-EPM via `python -m nba_stock_market.epm_data` with the key configured).
+Rebuild anytime: `python scripts/prepare_fv_inputs.py` then
+`python -m nba_stock_market.opening_prices`. Raw inputs remain git-ignored, while
+`data/manifests/fv-inputs.json` pins the site_Data commit and content hashes every public/EPM
+snapshot. Mutable DARKO/EPM bytes are archived under `data/snapshots/fv/`; live refresh is a
+separate explicit check, so provider drift cannot make a historical rebuild impossible.
 
 ## Open questions for the group
 

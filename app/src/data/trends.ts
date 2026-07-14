@@ -13,11130 +13,12798 @@ export const playerTrends: Record<string, TrendPoint[]> = {
     {
       "date": "2025-10-23",
       "np": 15.3,
-      "expected_np": 18.98454,
-      "dividend_per_holder": -147381.6
+      "expected_np": 19.4204,
+      "dividend_per_holder": -164816.2
     },
     {
       "date": "2025-10-25",
       "np": 21.55,
-      "expected_np": 23.02931,
-      "dividend_per_holder": -59172.6
+      "expected_np": 23.46518,
+      "dividend_per_holder": -76607.2
     },
     {
       "date": "2025-10-27",
       "np": 35.0,
-      "expected_np": 20.54903,
-      "dividend_per_holder": 578038.8
+      "expected_np": 20.98489,
+      "dividend_per_holder": 560604.2
     },
     {
       "date": "2025-10-29",
       "np": 25.7,
-      "expected_np": 22.44447,
-      "dividend_per_holder": 130221.4
+      "expected_np": 22.88033,
+      "dividend_per_holder": 112786.8
     },
     {
       "date": "2025-10-31",
       "np": 24.4,
-      "expected_np": 20.68721,
-      "dividend_per_holder": 148511.6
+      "expected_np": 21.12307,
+      "dividend_per_holder": 131077.0
     },
     {
       "date": "2025-11-03",
       "np": 42.2,
-      "expected_np": 21.75631,
-      "dividend_per_holder": 817747.8
+      "expected_np": 22.19217,
+      "dividend_per_holder": 800313.2
     },
     {
       "date": "2025-11-05",
       "np": 42.0,
-      "expected_np": 23.76671,
-      "dividend_per_holder": 729331.4
+      "expected_np": 24.20258,
+      "dividend_per_holder": 711896.8
     },
     {
       "date": "2025-11-07",
       "np": 29.55,
-      "expected_np": 24.14396,
-      "dividend_per_holder": 216241.6
+      "expected_np": 24.57982,
+      "dividend_per_holder": 198807.0
     },
     {
       "date": "2025-11-08",
       "np": 33.55,
-      "expected_np": 23.39714,
-      "dividend_per_holder": 406114.2
+      "expected_np": 23.83301,
+      "dividend_per_holder": 388679.6
     },
     {
       "date": "2025-11-11",
       "np": 38.95,
-      "expected_np": 23.12875,
-      "dividend_per_holder": 632850.0
+      "expected_np": 23.56461,
+      "dividend_per_holder": 615415.4
     },
     {
       "date": "2025-11-12",
       "np": 54.9,
-      "expected_np": 22.06824,
-      "dividend_per_holder": 1313270.2
+      "expected_np": 22.50411,
+      "dividend_per_holder": 1295835.6
     },
     {
       "date": "2025-11-15",
       "np": 27.05,
-      "expected_np": 24.1888,
-      "dividend_per_holder": 114448.0
+      "expected_np": 24.62466,
+      "dividend_per_holder": 97013.4
     },
     {
       "date": "2025-11-17",
       "np": 36.5,
-      "expected_np": 27.18668,
-      "dividend_per_holder": 372533.0
+      "expected_np": 27.62254,
+      "dividend_per_holder": 355098.4
     },
     {
       "date": "2025-11-19",
       "np": 21.2,
-      "expected_np": 28.99149,
-      "dividend_per_holder": -311659.8
+      "expected_np": 29.42736,
+      "dividend_per_holder": -329094.4
     },
     {
       "date": "2025-11-21",
       "np": 32.95,
-      "expected_np": 25.52658,
-      "dividend_per_holder": 296936.8
+      "expected_np": 25.96244,
+      "dividend_per_holder": 279502.2
     },
     {
       "date": "2025-11-22",
       "np": 39.25,
-      "expected_np": 29.90304,
-      "dividend_per_holder": 373878.6
+      "expected_np": 30.3389,
+      "dividend_per_holder": 356444.0
     },
     {
       "date": "2025-11-24",
       "np": 23.4,
-      "expected_np": 28.99435,
-      "dividend_per_holder": -223774.2
+      "expected_np": 29.43022,
+      "dividend_per_holder": -241208.8
     },
     {
       "date": "2025-11-28",
       "np": 21.75,
-      "expected_np": 26.89627,
-      "dividend_per_holder": -205850.8
+      "expected_np": 27.33213,
+      "dividend_per_holder": -223285.4
     },
     {
       "date": "2025-11-29",
       "np": 26.95,
-      "expected_np": 26.53188,
-      "dividend_per_holder": 16725.0
+      "expected_np": 26.96774,
+      "dividend_per_holder": -709.6
     },
     {
       "date": "2025-12-01",
       "np": 31.25,
-      "expected_np": 25.5511,
-      "dividend_per_holder": 227955.8
+      "expected_np": 25.98697,
+      "dividend_per_holder": 210521.2
     },
     {
       "date": "2025-12-03",
       "np": 21.95,
-      "expected_np": 26.85048,
-      "dividend_per_holder": -196019.0
+      "expected_np": 27.28634,
+      "dividend_per_holder": -213453.6
     },
     {
       "date": "2025-12-05",
       "np": 34.4,
-      "expected_np": 25.90185,
-      "dividend_per_holder": 339925.8
+      "expected_np": 26.33772,
+      "dividend_per_holder": 322491.2
     },
     {
       "date": "2025-12-07",
       "np": 26.75,
-      "expected_np": 27.93377,
-      "dividend_per_holder": -47351.0
+      "expected_np": 28.36964,
+      "dividend_per_holder": -64785.6
     },
     {
       "date": "2025-12-11",
       "np": 41.55,
-      "expected_np": 27.5877,
-      "dividend_per_holder": 558492.2
+      "expected_np": 28.02356,
+      "dividend_per_holder": 541057.6
     },
     {
       "date": "2025-12-15",
       "np": 34.85,
-      "expected_np": 23.47056,
-      "dividend_per_holder": 455177.8
+      "expected_np": 23.90642,
+      "dividend_per_holder": 437743.2
     },
     {
       "date": "2025-12-18",
       "np": 21.7,
-      "expected_np": 27.66621,
-      "dividend_per_holder": -238648.2
+      "expected_np": 28.10207,
+      "dividend_per_holder": -256082.8
     },
     {
       "date": "2025-12-20",
       "np": 13.85,
-      "expected_np": 27.00048,
-      "dividend_per_holder": -526019.0
+      "expected_np": 27.43634,
+      "dividend_per_holder": -543453.6
     },
     {
       "date": "2025-12-22",
       "np": 25.7,
-      "expected_np": 27.6907,
-      "dividend_per_holder": -79628.2
+      "expected_np": 28.12657,
+      "dividend_per_holder": -97062.8
     },
     {
       "date": "2025-12-23",
       "np": 31.7,
-      "expected_np": 24.46679,
-      "dividend_per_holder": 289328.2
+      "expected_np": 24.90266,
+      "dividend_per_holder": 271893.6
     },
     {
       "date": "2025-12-25",
       "np": 59.35,
-      "expected_np": 25.54725,
-      "dividend_per_holder": 1352109.8
+      "expected_np": 25.98312,
+      "dividend_per_holder": 1334675.2
     },
     {
       "date": "2025-12-27",
       "np": 35.2,
-      "expected_np": 27.74886,
-      "dividend_per_holder": 298045.4
+      "expected_np": 28.18473,
+      "dividend_per_holder": 280610.8
     },
     {
       "date": "2025-12-29",
       "np": 20.05,
-      "expected_np": 29.58438,
-      "dividend_per_holder": -381375.2
+      "expected_np": 30.02024,
+      "dividend_per_holder": -398809.8
     },
     {
       "date": "2026-01-30",
       "np": 35.0,
-      "expected_np": 22.68637,
-      "dividend_per_holder": 492545.2
+      "expected_np": 23.12223,
+      "dividend_per_holder": 475110.6
     },
     {
       "date": "2026-02-01",
       "np": 13.15,
-      "expected_np": 20.77054,
-      "dividend_per_holder": -304821.4
+      "expected_np": 21.2064,
+      "dividend_per_holder": -322256.0
     },
     {
       "date": "2026-02-03",
       "np": 20.0,
-      "expected_np": 21.38102,
-      "dividend_per_holder": -55240.8
+      "expected_np": 21.81688,
+      "dividend_per_holder": -72675.4
     },
     {
       "date": "2026-02-04",
       "np": 23.6,
-      "expected_np": 21.83913,
-      "dividend_per_holder": 70434.6
+      "expected_np": 22.275,
+      "dividend_per_holder": 53000.0
     },
     {
       "date": "2026-02-07",
       "np": 33.45,
-      "expected_np": 26.74086,
-      "dividend_per_holder": 268365.6
+      "expected_np": 27.17672,
+      "dividend_per_holder": 250931.0
     },
     {
       "date": "2026-02-09",
       "np": 22.35,
-      "expected_np": 26.35573,
-      "dividend_per_holder": -160229.2
+      "expected_np": 26.79159,
+      "dividend_per_holder": -177663.8
     },
     {
       "date": "2026-02-11",
       "np": 18.2,
-      "expected_np": 26.66258,
-      "dividend_per_holder": -338503.4
+      "expected_np": 27.09845,
+      "dividend_per_holder": -355938.0
     },
     {
       "date": "2026-02-19",
       "np": 10.1,
-      "expected_np": 25.02143,
-      "dividend_per_holder": -596857.2
+      "expected_np": 25.45729,
+      "dividend_per_holder": -614291.8
     },
     {
       "date": "2026-02-20",
       "np": 35.45,
-      "expected_np": 27.85519,
-      "dividend_per_holder": 303792.4
+      "expected_np": 28.29105,
+      "dividend_per_holder": 286357.8
     },
     {
       "date": "2026-02-22",
       "np": 40.6,
-      "expected_np": 25.1528,
-      "dividend_per_holder": 617888.0
+      "expected_np": 25.58866,
+      "dividend_per_holder": 600453.4
     },
     {
       "date": "2026-02-25",
       "np": 19.7,
-      "expected_np": 26.58061,
-      "dividend_per_holder": -275224.4
+      "expected_np": 27.01647,
+      "dividend_per_holder": -292659.0
     },
     {
       "date": "2026-02-27",
       "np": 18.15,
-      "expected_np": 25.39162,
-      "dividend_per_holder": -289664.8
+      "expected_np": 25.82748,
+      "dividend_per_holder": -307099.4
     },
     {
       "date": "2026-03-01",
       "np": 31.55,
-      "expected_np": 30.01624,
-      "dividend_per_holder": 61350.4
+      "expected_np": 30.4521,
+      "dividend_per_holder": 43915.8
     },
     {
       "date": "2026-03-02",
       "np": 19.6,
-      "expected_np": 31.96988,
-      "dividend_per_holder": -494795.2
+      "expected_np": 32.40574,
+      "dividend_per_holder": -512229.8
     },
     {
       "date": "2026-03-05",
       "np": 26.15,
-      "expected_np": 29.72582,
-      "dividend_per_holder": -143032.6
+      "expected_np": 30.16168,
+      "dividend_per_holder": -160467.2
     },
     {
       "date": "2026-03-06",
       "np": 34.1,
-      "expected_np": 27.92659,
-      "dividend_per_holder": 246936.4
+      "expected_np": 28.36245,
+      "dividend_per_holder": 229501.8
     },
     {
       "date": "2026-03-09",
       "np": 32.4,
-      "expected_np": 25.10503,
-      "dividend_per_holder": 291799.0
+      "expected_np": 25.54089,
+      "dividend_per_holder": 274364.4
     },
     {
       "date": "2026-03-11",
       "np": 24.6,
-      "expected_np": 28.13213,
-      "dividend_per_holder": -141285.2
+      "expected_np": 28.56799,
+      "dividend_per_holder": -158719.8
     },
     {
       "date": "2026-03-12",
       "np": 38.55,
-      "expected_np": 25.33112,
-      "dividend_per_holder": 528755.4
+      "expected_np": 25.76698,
+      "dividend_per_holder": 511320.8
     },
     {
       "date": "2026-03-14",
       "np": 31.05,
-      "expected_np": 27.57094,
-      "dividend_per_holder": 139162.6
+      "expected_np": 28.0068,
+      "dividend_per_holder": 121728.0
     },
     {
       "date": "2026-03-17",
       "np": 9.0,
-      "expected_np": 28.66934,
-      "dividend_per_holder": -786773.4
+      "expected_np": 29.1052,
+      "dividend_per_holder": -804208.0
     },
     {
       "date": "2026-03-18",
       "np": 22.15,
-      "expected_np": 25.05027,
-      "dividend_per_holder": -116010.8
+      "expected_np": 25.48613,
+      "dividend_per_holder": -133445.4
     },
     {
       "date": "2026-03-20",
       "np": 22.15,
-      "expected_np": 25.39161,
-      "dividend_per_holder": -129664.4
+      "expected_np": 25.82747,
+      "dividend_per_holder": -147099.0
     },
     {
       "date": "2026-03-22",
       "np": 25.15,
-      "expected_np": 26.58754,
-      "dividend_per_holder": -57501.6
+      "expected_np": 27.0234,
+      "dividend_per_holder": -74936.2
     },
     {
       "date": "2026-03-24",
       "np": 28.2,
-      "expected_np": 24.60057,
-      "dividend_per_holder": 143977.0
+      "expected_np": 25.03644,
+      "dividend_per_holder": 126542.4
     },
     {
       "date": "2026-03-25",
       "np": 30.35,
-      "expected_np": 26.98827,
-      "dividend_per_holder": 134469.2
+      "expected_np": 27.42413,
+      "dividend_per_holder": 117034.6
     },
     {
       "date": "2026-03-27",
       "np": 32.95,
-      "expected_np": 29.27542,
-      "dividend_per_holder": 146983.2
+      "expected_np": 29.71128,
+      "dividend_per_holder": 129548.6
     },
     {
       "date": "2026-03-29",
       "np": 23.4,
-      "expected_np": 27.52221,
-      "dividend_per_holder": -164888.2
+      "expected_np": 27.95807,
+      "dividend_per_holder": -182322.8
     },
     {
       "date": "2026-04-01",
       "np": 14.2,
-      "expected_np": 28.35437,
-      "dividend_per_holder": -566174.8
+      "expected_np": 28.79023,
+      "dividend_per_holder": -583609.4
     },
     {
       "date": "2026-04-04",
       "np": 38.95,
-      "expected_np": 24.17204,
-      "dividend_per_holder": 591118.4
+      "expected_np": 24.6079,
+      "dividend_per_holder": 573683.8
     },
     {
       "date": "2026-04-06",
       "np": 36.8,
-      "expected_np": 27.89416,
-      "dividend_per_holder": 356233.6
+      "expected_np": 28.33002,
+      "dividend_per_holder": 338799.0
     },
     {
       "date": "2026-04-08",
       "np": 21.2,
-      "expected_np": 30.04969,
-      "dividend_per_holder": -353987.8
+      "expected_np": 30.48556,
+      "dividend_per_holder": -371422.4
     },
     {
       "date": "2026-04-12",
       "np": 22.5,
-      "expected_np": 24.03223,
-      "dividend_per_holder": -61289.0
+      "expected_np": 24.46809,
+      "dividend_per_holder": -78723.6
     }
   ],
   "4278073": [
     {
       "date": "2025-10-21",
       "np": 23.2,
-      "expected_np": 20.03567,
-      "dividend_per_holder": 126573.2
+      "expected_np": 20.47153,
+      "dividend_per_holder": 109138.6
     },
     {
       "date": "2025-10-23",
       "np": 43.6,
-      "expected_np": 22.81289,
-      "dividend_per_holder": 831484.4
+      "expected_np": 23.24875,
+      "dividend_per_holder": 814049.8
     },
     {
       "date": "2025-10-25",
       "np": 27.95,
-      "expected_np": 26.01255,
-      "dividend_per_holder": 77498.0
+      "expected_np": 26.44841,
+      "dividend_per_holder": 60063.4
     },
     {
       "date": "2025-10-27",
       "np": 13.6,
-      "expected_np": 23.83492,
-      "dividend_per_holder": -409396.8
+      "expected_np": 24.27078,
+      "dividend_per_holder": -426831.4
     },
     {
       "date": "2025-10-28",
       "np": 26.05,
-      "expected_np": 24.33292,
-      "dividend_per_holder": 68683.0
+      "expected_np": 24.76879,
+      "dividend_per_holder": 51248.4
     },
     {
       "date": "2025-10-30",
       "np": 27.15,
-      "expected_np": 26.75803,
-      "dividend_per_holder": 15678.8
+      "expected_np": 27.19389,
+      "dividend_per_holder": -1755.8
     },
     {
       "date": "2025-11-02",
       "np": 25.15,
-      "expected_np": 24.85334,
-      "dividend_per_holder": 11866.6
+      "expected_np": 25.2892,
+      "dividend_per_holder": -5568.0
     },
     {
       "date": "2025-11-04",
       "np": 32.5,
-      "expected_np": 21.53585,
-      "dividend_per_holder": 438566.0
+      "expected_np": 21.97171,
+      "dividend_per_holder": 421131.4
     },
     {
       "date": "2025-11-05",
       "np": 24.05,
-      "expected_np": 23.17137,
-      "dividend_per_holder": 35145.4
+      "expected_np": 23.60723,
+      "dividend_per_holder": 17710.8
     },
     {
       "date": "2025-11-07",
       "np": 25.35,
-      "expected_np": 25.18921,
-      "dividend_per_holder": 6431.4
+      "expected_np": 25.62508,
+      "dividend_per_holder": -11003.2
     },
     {
       "date": "2025-11-09",
       "np": 30.2,
-      "expected_np": 24.67558,
-      "dividend_per_holder": 220976.8
+      "expected_np": 25.11144,
+      "dividend_per_holder": 203542.2
     },
     {
       "date": "2025-11-11",
       "np": 29.5,
-      "expected_np": 25.00241,
-      "dividend_per_holder": 179903.6
+      "expected_np": 25.43827,
+      "dividend_per_holder": 162469.0
     },
     {
       "date": "2025-11-12",
       "np": 29.3,
-      "expected_np": 23.4836,
-      "dividend_per_holder": 232656.0
+      "expected_np": 23.91946,
+      "dividend_per_holder": 215221.4
     },
     {
       "date": "2025-11-15",
       "np": 32.25,
-      "expected_np": 25.54718,
-      "dividend_per_holder": 268112.8
+      "expected_np": 25.98304,
+      "dividend_per_holder": 250678.2
     },
     {
       "date": "2025-11-17",
       "np": 25.0,
-      "expected_np": 24.49442,
-      "dividend_per_holder": 20223.0
+      "expected_np": 24.93029,
+      "dividend_per_holder": 2788.4
     },
     {
       "date": "2025-11-19",
       "np": 23.65,
-      "expected_np": 24.27777,
-      "dividend_per_holder": -25111.0
+      "expected_np": 24.71364,
+      "dividend_per_holder": -42545.6
     },
     {
       "date": "2025-11-21",
       "np": 29.05,
-      "expected_np": 26.17542,
-      "dividend_per_holder": 114983.2
+      "expected_np": 26.61128,
+      "dividend_per_holder": 97548.6
     },
     {
       "date": "2025-11-23",
       "np": 38.25,
-      "expected_np": 24.81954,
-      "dividend_per_holder": 537218.4
+      "expected_np": 25.2554,
+      "dividend_per_holder": 519783.8
     },
     {
       "date": "2025-11-26",
       "np": 38.25,
-      "expected_np": 24.54474,
-      "dividend_per_holder": 548210.4
+      "expected_np": 24.9806,
+      "dividend_per_holder": 530775.8
     },
     {
       "date": "2025-11-28",
       "np": 30.45,
-      "expected_np": 25.96433,
-      "dividend_per_holder": 179427.0
+      "expected_np": 26.40019,
+      "dividend_per_holder": 161992.4
     },
     {
       "date": "2025-11-30",
       "np": 18.35,
-      "expected_np": 26.93596,
-      "dividend_per_holder": -343438.4
+      "expected_np": 27.37182,
+      "dividend_per_holder": -360873.0
     },
     {
       "date": "2025-12-02",
       "np": 31.2,
-      "expected_np": 25.80729,
-      "dividend_per_holder": 215708.2
+      "expected_np": 26.24316,
+      "dividend_per_holder": 198273.6
     },
     {
       "date": "2025-12-05",
       "np": 31.65,
-      "expected_np": 27.4889,
-      "dividend_per_holder": 166444.0
+      "expected_np": 27.92476,
+      "dividend_per_holder": 149009.4
     },
     {
       "date": "2025-12-10",
       "np": 27.45,
-      "expected_np": 24.32375,
-      "dividend_per_holder": 125049.8
+      "expected_np": 24.75962,
+      "dividend_per_holder": 107615.2
     },
     {
       "date": "2025-12-13",
       "np": 16.2,
-      "expected_np": 22.11248,
-      "dividend_per_holder": -236499.2
+      "expected_np": 22.54834,
+      "dividend_per_holder": -253933.8
     },
     {
       "date": "2025-12-18",
       "np": 30.15,
-      "expected_np": 25.3218,
-      "dividend_per_holder": 193128.0
+      "expected_np": 25.75766,
+      "dividend_per_holder": 175693.4
     },
     {
       "date": "2025-12-19",
       "np": 28.0,
-      "expected_np": 22.77318,
-      "dividend_per_holder": 209072.8
+      "expected_np": 23.20904,
+      "dividend_per_holder": 191638.2
     },
     {
       "date": "2025-12-22",
       "np": 30.0,
-      "expected_np": 26.85193,
-      "dividend_per_holder": 125923.0
+      "expected_np": 27.28779,
+      "dividend_per_holder": 108488.4
     },
     {
       "date": "2025-12-23",
       "np": 26.4,
-      "expected_np": 25.65456,
-      "dividend_per_holder": 29817.6
+      "expected_np": 26.09042,
+      "dividend_per_holder": 12383.0
     },
     {
       "date": "2025-12-25",
       "np": 14.1,
-      "expected_np": 26.1813,
-      "dividend_per_holder": -483252.2
+      "expected_np": 26.61717,
+      "dividend_per_holder": -500686.8
     },
     {
       "date": "2025-12-28",
       "np": 25.75,
-      "expected_np": 26.49802,
-      "dividend_per_holder": -29920.8
+      "expected_np": 26.93388,
+      "dividend_per_holder": -47355.4
     },
     {
       "date": "2025-12-29",
       "np": 33.65,
-      "expected_np": 25.35961,
-      "dividend_per_holder": 331615.8
+      "expected_np": 25.79547,
+      "dividend_per_holder": 314181.2
     },
     {
       "date": "2025-12-31",
       "np": 33.65,
-      "expected_np": 26.91365,
-      "dividend_per_holder": 269454.0
+      "expected_np": 27.34951,
+      "dividend_per_holder": 252019.4
     },
     {
       "date": "2026-01-02",
       "np": 21.05,
-      "expected_np": 23.69725,
-      "dividend_per_holder": -105889.8
+      "expected_np": 24.13311,
+      "dividend_per_holder": -123324.4
     },
     {
       "date": "2026-01-04",
       "np": 10.45,
-      "expected_np": 23.38995,
-      "dividend_per_holder": -517597.8
+      "expected_np": 23.82581,
+      "dividend_per_holder": -535032.4
     },
     {
       "date": "2026-01-05",
       "np": 10.3,
-      "expected_np": 25.74779,
-      "dividend_per_holder": -617911.8
+      "expected_np": 26.18366,
+      "dividend_per_holder": -635346.4
     },
     {
       "date": "2026-01-07",
       "np": 38.7,
-      "expected_np": 26.54061,
-      "dividend_per_holder": 486375.8
+      "expected_np": 26.97647,
+      "dividend_per_holder": 468941.2
     },
     {
       "date": "2026-01-11",
       "np": 24.0,
-      "expected_np": 26.82438,
-      "dividend_per_holder": -112975.2
+      "expected_np": 27.26024,
+      "dividend_per_holder": -130409.8
     },
     {
       "date": "2026-01-13",
       "np": 26.6,
-      "expected_np": 25.3505,
-      "dividend_per_holder": 49980.0
+      "expected_np": 25.78636,
+      "dividend_per_holder": 32545.4
     },
     {
       "date": "2026-01-15",
       "np": 11.5,
-      "expected_np": 23.45816,
-      "dividend_per_holder": -478326.2
+      "expected_np": 23.89402,
+      "dividend_per_holder": -495760.8
     },
     {
       "date": "2026-01-17",
       "np": 32.35,
-      "expected_np": 24.20545,
-      "dividend_per_holder": 325782.2
+      "expected_np": 24.64131,
+      "dividend_per_holder": 308347.6
     },
     {
       "date": "2026-01-19",
       "np": 25.1,
-      "expected_np": 24.94646,
-      "dividend_per_holder": 6141.6
+      "expected_np": 25.38232,
+      "dividend_per_holder": -11293.0
     },
     {
       "date": "2026-01-21",
       "np": 42.75,
-      "expected_np": 24.86307,
-      "dividend_per_holder": 715477.2
+      "expected_np": 25.29893,
+      "dividend_per_holder": 698042.6
     },
     {
       "date": "2026-01-23",
       "np": 39.85,
-      "expected_np": 26.36735,
-      "dividend_per_holder": 539306.0
+      "expected_np": 26.80321,
+      "dividend_per_holder": 521871.4
     },
     {
       "date": "2026-01-25",
       "np": 22.4,
-      "expected_np": 26.0585,
-      "dividend_per_holder": -146340.0
+      "expected_np": 26.49436,
+      "dividend_per_holder": -163774.6
     },
     {
       "date": "2026-01-27",
       "np": 15.25,
-      "expected_np": 27.24648,
-      "dividend_per_holder": -479859.2
+      "expected_np": 27.68234,
+      "dividend_per_holder": -497293.8
     },
     {
       "date": "2026-01-29",
       "np": 25.05,
-      "expected_np": 24.7884,
-      "dividend_per_holder": 10464.0
+      "expected_np": 25.22426,
+      "dividend_per_holder": -6970.6
     },
     {
       "date": "2026-02-01",
       "np": 35.75,
-      "expected_np": 23.27336,
-      "dividend_per_holder": 499065.8
+      "expected_np": 23.70922,
+      "dividend_per_holder": 481631.2
     },
     {
       "date": "2026-02-03",
       "np": 14.55,
-      "expected_np": 24.48487,
-      "dividend_per_holder": -397394.8
+      "expected_np": 24.92073,
+      "dividend_per_holder": -414829.4
     },
     {
       "date": "2026-02-27",
       "np": 29.65,
-      "expected_np": 22.63417,
-      "dividend_per_holder": 280633.2
+      "expected_np": 23.07003,
+      "dividend_per_holder": 263198.6
     },
     {
       "date": "2026-03-01",
       "np": 26.6,
-      "expected_np": 24.07583,
-      "dividend_per_holder": 100966.8
+      "expected_np": 24.51169,
+      "dividend_per_holder": 83532.2
     },
     {
       "date": "2026-03-04",
       "np": 20.9,
-      "expected_np": 23.11578,
-      "dividend_per_holder": -88631.2
+      "expected_np": 23.55164,
+      "dividend_per_holder": -106065.8
     },
     {
       "date": "2026-03-07",
       "np": 18.45,
-      "expected_np": 25.31387,
-      "dividend_per_holder": -274554.8
+      "expected_np": 25.74973,
+      "dividend_per_holder": -291989.4
     },
     {
       "date": "2026-03-09",
       "np": 40.3,
-      "expected_np": 24.90933,
-      "dividend_per_holder": 615626.8
+      "expected_np": 25.34519,
+      "dividend_per_holder": 598192.2
     },
     {
       "date": "2026-03-12",
       "np": 35.7,
-      "expected_np": 24.79313,
-      "dividend_per_holder": 436274.8
+      "expected_np": 25.22899,
+      "dividend_per_holder": 418840.2
     },
     {
       "date": "2026-03-15",
       "np": 15.45,
-      "expected_np": 26.87899,
-      "dividend_per_holder": -457159.6
+      "expected_np": 27.31485,
+      "dividend_per_holder": -474594.2
     },
     {
       "date": "2026-03-17",
       "np": 30.65,
-      "expected_np": 25.03052,
-      "dividend_per_holder": 224779.4
+      "expected_np": 25.46638,
+      "dividend_per_holder": 207344.8
     },
     {
       "date": "2026-03-18",
       "np": 25.0,
-      "expected_np": 26.15691,
-      "dividend_per_holder": -46276.6
+      "expected_np": 26.59278,
+      "dividend_per_holder": -63711.2
     },
     {
       "date": "2026-03-21",
       "np": 31.7,
-      "expected_np": 24.99609,
-      "dividend_per_holder": 268156.4
+      "expected_np": 25.43195,
+      "dividend_per_holder": 250721.8
     },
     {
       "date": "2026-03-23",
       "np": 18.25,
-      "expected_np": 23.76389,
-      "dividend_per_holder": -220555.4
+      "expected_np": 24.19975,
+      "dividend_per_holder": -237990.0
     },
     {
       "date": "2026-03-25",
       "np": 32.55,
-      "expected_np": 20.0104,
-      "dividend_per_holder": 501584.2
+      "expected_np": 20.44626,
+      "dividend_per_holder": 484149.6
     },
     {
       "date": "2026-03-27",
       "np": 13.85,
-      "expected_np": 25.45663,
-      "dividend_per_holder": -464265.0
+      "expected_np": 25.89249,
+      "dividend_per_holder": -481699.6
     },
     {
       "date": "2026-03-29",
       "np": 17.8,
-      "expected_np": 22.47353,
-      "dividend_per_holder": -186941.2
+      "expected_np": 22.90939,
+      "dividend_per_holder": -204375.8
     },
     {
       "date": "2026-03-30",
       "np": 37.8,
-      "expected_np": 22.93787,
-      "dividend_per_holder": 594485.2
+      "expected_np": 23.37373,
+      "dividend_per_holder": 577050.6
     },
     {
       "date": "2026-04-02",
       "np": 21.1,
-      "expected_np": 24.88361,
-      "dividend_per_holder": -151344.6
+      "expected_np": 25.31948,
+      "dividend_per_holder": -168779.2
     },
     {
       "date": "2026-04-05",
       "np": 18.55,
-      "expected_np": 26.39175,
-      "dividend_per_holder": -313669.8
+      "expected_np": 26.82761,
+      "dividend_per_holder": -331104.4
     },
     {
       "date": "2026-04-07",
       "np": 23.7,
-      "expected_np": 21.98702,
-      "dividend_per_holder": 68519.2
+      "expected_np": 22.42288,
+      "dividend_per_holder": 51084.6
     },
     {
       "date": "2026-04-08",
       "np": 16.9,
-      "expected_np": 19.98035,
-      "dividend_per_holder": -123214.2
-    }
-  ],
-  "4432166": [
-    {
-      "date": "2025-10-22",
-      "np": 13.3,
-      "expected_np": 15.799,
-      "dividend_per_holder": -99959.8
-    },
-    {
-      "date": "2025-10-24",
-      "np": 10.15,
-      "expected_np": 15.20247,
-      "dividend_per_holder": -202098.8
-    },
-    {
-      "date": "2025-10-26",
-      "np": 13.75,
-      "expected_np": 17.59197,
-      "dividend_per_holder": -153679.0
-    },
-    {
-      "date": "2025-10-27",
-      "np": 0.4,
-      "expected_np": 17.74452,
-      "dividend_per_holder": -693781.0
-    },
-    {
-      "date": "2025-10-29",
-      "np": 32.65,
-      "expected_np": 16.31726,
-      "dividend_per_holder": 653309.6
-    },
-    {
-      "date": "2025-11-01",
-      "np": 25.85,
-      "expected_np": 18.36139,
-      "dividend_per_holder": 299544.6
-    },
-    {
-      "date": "2025-11-03",
-      "np": 25.05,
-      "expected_np": 19.05823,
-      "dividend_per_holder": 239670.6
-    },
-    {
-      "date": "2025-11-05",
-      "np": 21.6,
-      "expected_np": 20.44756,
-      "dividend_per_holder": 46097.4
-    },
-    {
-      "date": "2025-11-07",
-      "np": 30.25,
-      "expected_np": 20.17671,
-      "dividend_per_holder": 402931.6
-    },
-    {
-      "date": "2025-11-09",
-      "np": 16.65,
-      "expected_np": 18.46902,
-      "dividend_per_holder": -72760.8
-    },
-    {
-      "date": "2025-11-10",
-      "np": 37.2,
-      "expected_np": 22.0716,
-      "dividend_per_holder": 605136.2
-    },
-    {
-      "date": "2025-11-18",
-      "np": 19.35,
-      "expected_np": 21.24799,
-      "dividend_per_holder": -75919.6
-    },
-    {
-      "date": "2025-11-22",
-      "np": 26.75,
-      "expected_np": 21.46626,
-      "dividend_per_holder": 211349.4
-    },
-    {
-      "date": "2025-11-24",
-      "np": 16.8,
-      "expected_np": 21.20157,
-      "dividend_per_holder": -176063.0
-    },
-    {
-      "date": "2025-11-26",
-      "np": 31.55,
-      "expected_np": 19.22291,
-      "dividend_per_holder": 493083.8
-    },
-    {
-      "date": "2025-11-28",
-      "np": 27.95,
-      "expected_np": 20.95602,
-      "dividend_per_holder": 279759.2
-    },
-    {
-      "date": "2025-11-29",
-      "np": 18.25,
-      "expected_np": 22.34303,
-      "dividend_per_holder": -163721.2
-    },
-    {
-      "date": "2025-12-01",
-      "np": 20.5,
-      "expected_np": 23.71422,
-      "dividend_per_holder": -128568.8
-    },
-    {
-      "date": "2025-12-03",
-      "np": 11.4,
-      "expected_np": 22.44329,
-      "dividend_per_holder": -441731.6
-    },
-    {
-      "date": "2025-12-05",
-      "np": 30.8,
-      "expected_np": 22.17479,
-      "dividend_per_holder": 345008.2
-    },
-    {
-      "date": "2025-12-06",
-      "np": 20.0,
-      "expected_np": 22.12174,
-      "dividend_per_holder": -84869.4
-    },
-    {
-      "date": "2025-12-12",
-      "np": 15.4,
-      "expected_np": 20.35915,
-      "dividend_per_holder": -198365.8
-    },
-    {
-      "date": "2025-12-15",
-      "np": 26.4,
-      "expected_np": 15.27137,
-      "dividend_per_holder": 445145.2
-    },
-    {
-      "date": "2025-12-18",
-      "np": 15.3,
-      "expected_np": 18.65906,
-      "dividend_per_holder": -134362.4
-    },
-    {
-      "date": "2025-12-20",
-      "np": 20.15,
-      "expected_np": 22.04046,
-      "dividend_per_holder": -75618.4
-    },
-    {
-      "date": "2025-12-22",
-      "np": 12.6,
-      "expected_np": 20.93769,
-      "dividend_per_holder": -333507.6
-    },
-    {
-      "date": "2025-12-23",
-      "np": 22.2,
-      "expected_np": 18.73729,
-      "dividend_per_holder": 138508.4
-    },
-    {
-      "date": "2025-12-26",
-      "np": 30.35,
-      "expected_np": 20.17257,
-      "dividend_per_holder": 407097.0
-    },
-    {
-      "date": "2025-12-28",
-      "np": 20.25,
-      "expected_np": 19.39937,
-      "dividend_per_holder": 34025.0
-    },
-    {
-      "date": "2025-12-30",
-      "np": 22.75,
-      "expected_np": 18.96582,
-      "dividend_per_holder": 151367.0
-    },
-    {
-      "date": "2026-01-01",
-      "np": 27.5,
-      "expected_np": 19.58399,
-      "dividend_per_holder": 316640.4
-    },
-    {
-      "date": "2026-01-04",
-      "np": 20.6,
-      "expected_np": 20.10932,
-      "dividend_per_holder": 19627.2
-    },
-    {
-      "date": "2026-01-05",
-      "np": 28.65,
-      "expected_np": 20.63177,
-      "dividend_per_holder": 320729.0
-    },
-    {
-      "date": "2026-01-15",
-      "np": -2.25,
-      "expected_np": 11.82583,
-      "dividend_per_holder": -563033.0
-    },
-    {
-      "date": "2026-01-17",
-      "np": 9.7,
-      "expected_np": 18.51975,
-      "dividend_per_holder": -352790.0
-    },
-    {
-      "date": "2026-01-19",
-      "np": 14.5,
-      "expected_np": 15.39912,
-      "dividend_per_holder": -35964.6
-    },
-    {
-      "date": "2026-01-23",
-      "np": 4.0,
-      "expected_np": 17.81924,
-      "dividend_per_holder": -552769.6
-    },
-    {
-      "date": "2026-01-25",
-      "np": 28.75,
-      "expected_np": 20.28577,
-      "dividend_per_holder": 338569.2
-    },
-    {
-      "date": "2026-01-27",
-      "np": 20.1,
-      "expected_np": 17.68856,
-      "dividend_per_holder": 96457.6
-    },
-    {
-      "date": "2026-01-29",
-      "np": 18.75,
-      "expected_np": 17.99149,
-      "dividend_per_holder": 30340.4
-    },
-    {
-      "date": "2026-01-30",
-      "np": 24.65,
-      "expected_np": 17.87711,
-      "dividend_per_holder": 270915.4
-    },
-    {
-      "date": "2026-02-01",
-      "np": 26.6,
-      "expected_np": 20.4657,
-      "dividend_per_holder": 245372.2
-    },
-    {
-      "date": "2026-02-03",
-      "np": 19.5,
-      "expected_np": 18.80605,
-      "dividend_per_holder": 27758.0
-    },
-    {
-      "date": "2026-02-05",
-      "np": 21.05,
-      "expected_np": 21.65574,
-      "dividend_per_holder": -24229.8
-    },
-    {
-      "date": "2026-02-06",
-      "np": 7.15,
-      "expected_np": 19.55727,
-      "dividend_per_holder": -496291.0
-    },
-    {
-      "date": "2026-02-09",
-      "np": 23.35,
-      "expected_np": 17.59709,
-      "dividend_per_holder": 230116.2
-    },
-    {
-      "date": "2026-02-11",
-      "np": 30.15,
-      "expected_np": 18.57769,
-      "dividend_per_holder": 462892.4
-    },
-    {
-      "date": "2026-02-19",
-      "np": 35.15,
-      "expected_np": 17.13885,
-      "dividend_per_holder": 720445.8
-    },
-    {
-      "date": "2026-02-21",
-      "np": 22.5,
-      "expected_np": 22.84932,
-      "dividend_per_holder": -13972.8
-    },
-    {
-      "date": "2026-02-23",
-      "np": 7.6,
-      "expected_np": 19.61066,
-      "dividend_per_holder": -480426.4
-    },
-    {
-      "date": "2026-02-25",
-      "np": 29.65,
-      "expected_np": 19.71071,
-      "dividend_per_holder": 397571.6
-    },
-    {
-      "date": "2026-02-27",
-      "np": 19.2,
-      "expected_np": 21.56536,
-      "dividend_per_holder": -94614.4
-    },
-    {
-      "date": "2026-03-01",
-      "np": 20.5,
-      "expected_np": 20.10045,
-      "dividend_per_holder": 15982.0
-    },
-    {
-      "date": "2026-03-03",
-      "np": 4.7,
-      "expected_np": 20.71368,
-      "dividend_per_holder": -640547.4
-    },
-    {
-      "date": "2026-03-05",
-      "np": 11.8,
-      "expected_np": 20.17344,
-      "dividend_per_holder": -334937.4
-    },
-    {
-      "date": "2026-03-08",
-      "np": 17.9,
-      "expected_np": 21.21663,
-      "dividend_per_holder": -132665.2
-    },
-    {
-      "date": "2026-03-10",
-      "np": 26.35,
-      "expected_np": 21.17722,
-      "dividend_per_holder": 206911.4
-    },
-    {
-      "date": "2026-03-12",
-      "np": 12.2,
-      "expected_np": 18.88355,
-      "dividend_per_holder": -267342.0
-    },
-    {
-      "date": "2026-03-13",
-      "np": 23.8,
-      "expected_np": 18.72993,
-      "dividend_per_holder": 202802.8
-    },
-    {
-      "date": "2026-03-15",
-      "np": 25.05,
-      "expected_np": 16.39535,
-      "dividend_per_holder": 346185.8
-    },
-    {
-      "date": "2026-03-17",
-      "np": 5.6,
-      "expected_np": 20.33203,
-      "dividend_per_holder": -589281.0
-    },
-    {
-      "date": "2026-04-08",
-      "np": 13.6,
-      "expected_np": 11.43099,
-      "dividend_per_holder": 86760.4
-    },
-    {
-      "date": "2026-04-10",
-      "np": 10.85,
-      "expected_np": 10.66954,
-      "dividend_per_holder": 7218.2
-    },
-    {
-      "date": "2026-04-12",
-      "np": 5.8,
-      "expected_np": 15.51352,
-      "dividend_per_holder": -388540.6
+      "expected_np": 20.41622,
+      "dividend_per_holder": -140648.8
     }
   ],
   "5104157": [
     {
       "date": "2025-10-22",
       "np": 40.6,
-      "expected_np": 16.19557,
-      "dividend_per_holder": 976177.2
+      "expected_np": 16.63143,
+      "dividend_per_holder": 958742.6
     },
     {
       "date": "2025-10-24",
       "np": 33.05,
-      "expected_np": 19.15372,
-      "dividend_per_holder": 555851.0
+      "expected_np": 19.58959,
+      "dividend_per_holder": 538416.4
     },
     {
       "date": "2025-10-26",
       "np": 31.1,
-      "expected_np": 20.45998,
-      "dividend_per_holder": 425600.8
+      "expected_np": 20.89584,
+      "dividend_per_holder": 408166.2
     },
     {
       "date": "2025-10-27",
       "np": 25.25,
-      "expected_np": 22.95441,
-      "dividend_per_holder": 91823.6
+      "expected_np": 23.39027,
+      "dividend_per_holder": 74389.0
     },
     {
       "date": "2025-10-30",
       "np": 24.85,
-      "expected_np": 21.64021,
-      "dividend_per_holder": 128391.6
+      "expected_np": 22.07607,
+      "dividend_per_holder": 110957.0
     },
     {
       "date": "2025-11-02",
       "np": 1.15,
-      "expected_np": 23.70406,
-      "dividend_per_holder": -902162.6
+      "expected_np": 24.13993,
+      "dividend_per_holder": -919597.2
     },
     {
       "date": "2025-11-05",
       "np": 9.65,
-      "expected_np": 21.47905,
-      "dividend_per_holder": -473162.0
+      "expected_np": 21.91491,
+      "dividend_per_holder": -490596.6
     },
     {
       "date": "2025-11-07",
       "np": 15.85,
-      "expected_np": 19.52523,
-      "dividend_per_holder": -147009.0
+      "expected_np": 19.96109,
+      "dividend_per_holder": -164443.6
     },
     {
       "date": "2025-11-08",
       "np": 12.25,
-      "expected_np": 22.35904,
-      "dividend_per_holder": -404361.4
+      "expected_np": 22.7949,
+      "dividend_per_holder": -421796.0
     },
     {
       "date": "2025-11-10",
       "np": 38.15,
-      "expected_np": 20.84696,
-      "dividend_per_holder": 692121.6
+      "expected_np": 21.28282,
+      "dividend_per_holder": 674687.0
     },
     {
       "date": "2025-11-12",
       "np": 24.75,
-      "expected_np": 21.58839,
-      "dividend_per_holder": 126464.2
+      "expected_np": 22.02426,
+      "dividend_per_holder": 109029.6
     },
     {
       "date": "2025-11-14",
       "np": 21.6,
-      "expected_np": 22.19193,
-      "dividend_per_holder": -23677.0
+      "expected_np": 22.62779,
+      "dividend_per_holder": -41111.6
     },
     {
       "date": "2025-12-13",
       "np": 17.6,
-      "expected_np": 19.94888,
-      "dividend_per_holder": -93955.2
+      "expected_np": 20.38474,
+      "dividend_per_holder": -111389.8
     },
     {
       "date": "2025-12-18",
       "np": 16.9,
-      "expected_np": 19.60583,
-      "dividend_per_holder": -108233.2
+      "expected_np": 20.04169,
+      "dividend_per_holder": -125667.8
     },
     {
       "date": "2025-12-19",
       "np": 26.55,
-      "expected_np": 14.92819,
-      "dividend_per_holder": 464872.2
+      "expected_np": 15.36406,
+      "dividend_per_holder": 447437.6
     },
     {
       "date": "2025-12-21",
       "np": 11.05,
-      "expected_np": 16.97592,
-      "dividend_per_holder": -237036.6
+      "expected_np": 17.41178,
+      "dividend_per_holder": -254471.2
     },
     {
       "date": "2025-12-23",
       "np": 7.2,
-      "expected_np": 14.12637,
-      "dividend_per_holder": -277054.6
+      "expected_np": 14.56223,
+      "dividend_per_holder": -294489.2
     },
     {
       "date": "2025-12-25",
       "np": 15.55,
-      "expected_np": 13.65303,
-      "dividend_per_holder": 75878.8
+      "expected_np": 14.08889,
+      "dividend_per_holder": 58444.2
     },
     {
       "date": "2025-12-27",
       "np": 28.3,
-      "expected_np": 18.8574,
-      "dividend_per_holder": 377704.0
+      "expected_np": 19.29326,
+      "dividend_per_holder": 360269.4
     },
     {
       "date": "2025-12-29",
       "np": 22.35,
-      "expected_np": 17.34768,
-      "dividend_per_holder": 200092.8
+      "expected_np": 17.78354,
+      "dividend_per_holder": 182658.2
     },
     {
       "date": "2025-12-31",
       "np": 29.1,
-      "expected_np": 18.39945,
-      "dividend_per_holder": 428022.2
+      "expected_np": 18.83531,
+      "dividend_per_holder": 410587.6
     },
     {
       "date": "2026-01-06",
       "np": 23.55,
-      "expected_np": 16.83354,
-      "dividend_per_holder": 268658.4
+      "expected_np": 17.2694,
+      "dividend_per_holder": 251223.8
     },
     {
       "date": "2026-01-07",
       "np": 14.55,
-      "expected_np": 17.25947,
-      "dividend_per_holder": -108379.0
+      "expected_np": 17.69534,
+      "dividend_per_holder": -125813.6
     },
     {
       "date": "2026-01-10",
       "np": 16.2,
-      "expected_np": 16.5019,
-      "dividend_per_holder": -12076.0
+      "expected_np": 16.93776,
+      "dividend_per_holder": -29510.6
     },
     {
       "date": "2026-01-11",
       "np": 24.5,
-      "expected_np": 17.52248,
-      "dividend_per_holder": 279100.8
+      "expected_np": 17.95834,
+      "dividend_per_holder": 261666.2
     },
     {
       "date": "2026-01-13",
       "np": 10.35,
-      "expected_np": 16.56134,
-      "dividend_per_holder": -248453.4
+      "expected_np": 16.9972,
+      "dividend_per_holder": -265888.0
     },
     {
       "date": "2026-01-15",
       "np": 20.5,
-      "expected_np": 19.19657,
-      "dividend_per_holder": 52137.2
+      "expected_np": 19.63243,
+      "dividend_per_holder": 34702.6
     },
     {
       "date": "2026-01-17",
       "np": 31.8,
-      "expected_np": 17.6091,
-      "dividend_per_holder": 567636.0
+      "expected_np": 18.04496,
+      "dividend_per_holder": 550201.4
     },
     {
       "date": "2026-01-19",
       "np": 31.7,
-      "expected_np": 21.43586,
-      "dividend_per_holder": 410565.4
+      "expected_np": 21.87173,
+      "dividend_per_holder": 393130.8
     },
     {
       "date": "2026-01-20",
       "np": 3.35,
-      "expected_np": 17.68413,
-      "dividend_per_holder": -573365.2
+      "expected_np": 18.11999,
+      "dividend_per_holder": -590799.8
     },
     {
       "date": "2026-01-22",
       "np": 27.8,
-      "expected_np": 21.72007,
-      "dividend_per_holder": 243197.0
+      "expected_np": 22.15594,
+      "dividend_per_holder": 225762.4
     },
     {
       "date": "2026-01-25",
       "np": 8.65,
-      "expected_np": 20.36516,
-      "dividend_per_holder": -468606.2
+      "expected_np": 20.80102,
+      "dividend_per_holder": -486040.8
     },
     {
       "date": "2026-01-28",
       "np": 29.5,
-      "expected_np": 18.32838,
-      "dividend_per_holder": 446865.0
+      "expected_np": 18.76424,
+      "dividend_per_holder": 429430.4
     },
     {
       "date": "2026-01-31",
       "np": 8.7,
-      "expected_np": 19.86695,
-      "dividend_per_holder": -446678.2
+      "expected_np": 20.30282,
+      "dividend_per_holder": -464112.8
     },
     {
       "date": "2026-02-01",
       "np": 27.6,
-      "expected_np": 20.83247,
-      "dividend_per_holder": 270701.2
+      "expected_np": 21.26833,
+      "dividend_per_holder": 253266.6
     },
     {
       "date": "2026-02-04",
       "np": 17.7,
-      "expected_np": 19.28582,
-      "dividend_per_holder": -63433.0
+      "expected_np": 19.72169,
+      "dividend_per_holder": -80867.6
     },
     {
       "date": "2026-02-05",
       "np": 31.35,
-      "expected_np": 19.99694,
-      "dividend_per_holder": 454122.4
+      "expected_np": 20.4328,
+      "dividend_per_holder": 436687.8
     },
     {
       "date": "2026-02-07",
       "np": 13.95,
-      "expected_np": 21.62167,
-      "dividend_per_holder": -306866.6
+      "expected_np": 22.05753,
+      "dividend_per_holder": -324301.2
     },
     {
       "date": "2026-02-10",
       "np": 35.9,
-      "expected_np": 20.37135,
-      "dividend_per_holder": 621146.0
+      "expected_np": 20.80721,
+      "dividend_per_holder": 603711.4
     },
     {
       "date": "2026-02-11",
       "np": 21.7,
-      "expected_np": 19.60683,
-      "dividend_per_holder": 83727.0
+      "expected_np": 20.04269,
+      "dividend_per_holder": 66292.4
     },
     {
       "date": "2026-02-19",
       "np": 19.55,
-      "expected_np": 21.29342,
-      "dividend_per_holder": -69737.0
+      "expected_np": 21.72929,
+      "dividend_per_holder": -87171.6
     },
     {
       "date": "2026-02-21",
       "np": 29.85,
-      "expected_np": 20.42454,
-      "dividend_per_holder": 377018.6
+      "expected_np": 20.8604,
+      "dividend_per_holder": 359584.0
     },
     {
       "date": "2026-02-23",
       "np": 23.75,
-      "expected_np": 19.78618,
-      "dividend_per_holder": 158553.0
+      "expected_np": 20.22204,
+      "dividend_per_holder": 141118.4
     },
     {
       "date": "2026-02-25",
       "np": 8.6,
-      "expected_np": 22.71457,
-      "dividend_per_holder": -564582.8
+      "expected_np": 23.15043,
+      "dividend_per_holder": -582017.4
     },
     {
       "date": "2026-02-26",
       "np": 14.4,
-      "expected_np": 22.15331,
-      "dividend_per_holder": -310132.6
+      "expected_np": 22.58918,
+      "dividend_per_holder": -327567.2
     },
     {
       "date": "2026-03-01",
       "np": 15.65,
-      "expected_np": 19.54256,
-      "dividend_per_holder": -155702.2
+      "expected_np": 19.97842,
+      "dividend_per_holder": -173136.8
     },
     {
       "date": "2026-03-03",
       "np": 16.95,
-      "expected_np": 21.4757,
-      "dividend_per_holder": -181027.8
+      "expected_np": 21.91156,
+      "dividend_per_holder": -198462.4
     },
     {
       "date": "2026-03-05",
       "np": 35.95,
-      "expected_np": 19.19687,
-      "dividend_per_holder": 670125.2
+      "expected_np": 19.63273,
+      "dividend_per_holder": 652690.6
     },
     {
       "date": "2026-03-06",
       "np": 25.65,
-      "expected_np": 22.3219,
-      "dividend_per_holder": 133124.2
+      "expected_np": 22.75776,
+      "dividend_per_holder": 115689.6
     },
     {
       "date": "2026-03-08",
       "np": 31.75,
-      "expected_np": 19.84313,
-      "dividend_per_holder": 476274.8
+      "expected_np": 20.27899,
+      "dividend_per_holder": 458840.2
     },
     {
       "date": "2026-03-10",
       "np": 29.7,
-      "expected_np": 19.95597,
-      "dividend_per_holder": 389761.2
+      "expected_np": 20.39183,
+      "dividend_per_holder": 372326.6
     },
     {
       "date": "2026-03-14",
       "np": 34.25,
-      "expected_np": 21.76248,
-      "dividend_per_holder": 499500.8
+      "expected_np": 22.19834,
+      "dividend_per_holder": 482066.2
     },
     {
       "date": "2026-03-16",
       "np": 15.35,
-      "expected_np": 21.62374,
-      "dividend_per_holder": -250949.8
+      "expected_np": 22.05961,
+      "dividend_per_holder": -268384.4
     },
     {
       "date": "2026-03-17",
       "np": 15.15,
-      "expected_np": 23.29762,
-      "dividend_per_holder": -325904.8
+      "expected_np": 23.73348,
+      "dividend_per_holder": -343339.4
     },
     {
       "date": "2026-03-19",
       "np": 29.2,
-      "expected_np": 20.55844,
-      "dividend_per_holder": 345662.4
+      "expected_np": 20.9943,
+      "dividend_per_holder": 328227.8
     },
     {
       "date": "2026-03-21",
       "np": 20.9,
-      "expected_np": 23.90422,
-      "dividend_per_holder": -120168.8
+      "expected_np": 24.34008,
+      "dividend_per_holder": -137603.4
     },
     {
       "date": "2026-03-23",
       "np": 25.65,
-      "expected_np": 19.5442,
-      "dividend_per_holder": 244232.0
+      "expected_np": 19.98006,
+      "dividend_per_holder": 226797.4
     },
     {
       "date": "2026-03-25",
       "np": 28.1,
-      "expected_np": 22.23956,
-      "dividend_per_holder": 234417.6
+      "expected_np": 22.67542,
+      "dividend_per_holder": 216983.0
     },
     {
       "date": "2026-03-28",
       "np": 19.3,
-      "expected_np": 19.8224,
-      "dividend_per_holder": -20896.2
+      "expected_np": 20.25827,
+      "dividend_per_holder": -38330.8
     },
     {
       "date": "2026-03-30",
       "np": 41.85,
-      "expected_np": 23.71124,
-      "dividend_per_holder": 725550.4
+      "expected_np": 24.1471,
+      "dividend_per_holder": 708115.8
     },
     {
       "date": "2026-04-01",
       "np": 42.45,
-      "expected_np": 23.45654,
-      "dividend_per_holder": 759738.4
+      "expected_np": 23.8924,
+      "dividend_per_holder": 742303.8
     },
     {
       "date": "2026-04-04",
       "np": 37.8,
-      "expected_np": 22.62701,
-      "dividend_per_holder": 606919.8
+      "expected_np": 23.06287,
+      "dividend_per_holder": 589485.2
     },
     {
       "date": "2026-04-06",
       "np": 14.15,
-      "expected_np": 25.20259,
-      "dividend_per_holder": -442103.8
+      "expected_np": 25.63846,
+      "dividend_per_holder": -459538.4
     },
     {
       "date": "2026-04-10",
       "np": 39.35,
-      "expected_np": 21.95473,
-      "dividend_per_holder": 695811.0
+      "expected_np": 22.39059,
+      "dividend_per_holder": 678376.4
     }
   ],
   "3945274": [
     {
       "date": "2025-10-21",
       "np": 39.25,
-      "expected_np": 16.59969,
-      "dividend_per_holder": 906012.6
+      "expected_np": 17.03555,
+      "dividend_per_holder": 888578.0
     },
     {
       "date": "2025-10-24",
       "np": 42.45,
-      "expected_np": 20.39128,
-      "dividend_per_holder": 882348.8
+      "expected_np": 20.82714,
+      "dividend_per_holder": 864914.2
     },
     {
       "date": "2025-10-31",
       "np": 30.9,
-      "expected_np": 21.7164,
-      "dividend_per_holder": 367343.8
+      "expected_np": 22.15227,
+      "dividend_per_holder": 349909.2
     },
     {
       "date": "2025-11-02",
       "np": 22.75,
-      "expected_np": 23.31788,
-      "dividend_per_holder": -22715.0
+      "expected_np": 23.75374,
+      "dividend_per_holder": -40149.6
     },
     {
       "date": "2025-11-05",
       "np": 32.85,
-      "expected_np": 22.49897,
-      "dividend_per_holder": 414041.2
+      "expected_np": 22.93483,
+      "dividend_per_holder": 396606.6
     },
     {
       "date": "2025-11-08",
       "np": 15.75,
-      "expected_np": 24.59443,
-      "dividend_per_holder": -353777.0
+      "expected_np": 25.03029,
+      "dividend_per_holder": -371211.6
     },
     {
       "date": "2025-11-10",
       "np": 28.85,
-      "expected_np": 21.92768,
-      "dividend_per_holder": 276892.8
+      "expected_np": 22.36354,
+      "dividend_per_holder": 259458.2
     },
     {
       "date": "2025-11-12",
       "np": 9.9,
-      "expected_np": 20.97341,
-      "dividend_per_holder": -442936.2
+      "expected_np": 21.40927,
+      "dividend_per_holder": -460370.8
     },
     {
       "date": "2025-11-14",
       "np": 21.2,
-      "expected_np": 22.49441,
-      "dividend_per_holder": -51776.2
+      "expected_np": 22.93027,
+      "dividend_per_holder": -69210.8
     },
     {
       "date": "2025-11-15",
       "np": 35.25,
-      "expected_np": 23.40138,
-      "dividend_per_holder": 473945.0
+      "expected_np": 23.83724,
+      "dividend_per_holder": 456510.4
     },
     {
       "date": "2025-11-18",
       "np": 29.2,
-      "expected_np": 25.40623,
-      "dividend_per_holder": 151750.8
+      "expected_np": 25.84209,
+      "dividend_per_holder": 134316.2
     },
     {
       "date": "2025-11-23",
       "np": 23.5,
-      "expected_np": 24.63409,
-      "dividend_per_holder": -45363.6
+      "expected_np": 25.06995,
+      "dividend_per_holder": -62798.2
     },
     {
       "date": "2025-11-25",
       "np": 38.5,
-      "expected_np": 25.23631,
-      "dividend_per_holder": 530547.4
+      "expected_np": 25.67218,
+      "dividend_per_holder": 513112.8
     },
     {
       "date": "2025-11-28",
       "np": 29.55,
-      "expected_np": 26.59303,
-      "dividend_per_holder": 118279.0
+      "expected_np": 27.02889,
+      "dividend_per_holder": 100844.4
     },
     {
       "date": "2025-11-30",
       "np": 28.45,
-      "expected_np": 27.56954,
-      "dividend_per_holder": 35218.4
+      "expected_np": 28.0054,
+      "dividend_per_holder": 17783.8
     },
     {
       "date": "2025-12-01",
       "np": 23.2,
-      "expected_np": 25.01184,
-      "dividend_per_holder": -72473.4
+      "expected_np": 25.4477,
+      "dividend_per_holder": -89908.0
     },
     {
       "date": "2025-12-07",
       "np": 22.8,
-      "expected_np": 23.35181,
-      "dividend_per_holder": -22072.4
+      "expected_np": 23.78767,
+      "dividend_per_holder": -39507.0
     },
     {
       "date": "2025-12-10",
       "np": 23.65,
-      "expected_np": 25.37353,
-      "dividend_per_holder": -68941.2
+      "expected_np": 25.80939,
+      "dividend_per_holder": -86375.8
     },
     {
       "date": "2025-12-14",
       "np": 11.2,
-      "expected_np": 26.03674,
-      "dividend_per_holder": -593469.4
+      "expected_np": 26.4726,
+      "dividend_per_holder": -610904.0
     },
     {
       "date": "2025-12-18",
       "np": 48.2,
-      "expected_np": 27.43205,
-      "dividend_per_holder": 830718.0
+      "expected_np": 27.86791,
+      "dividend_per_holder": 813283.4
     },
     {
       "date": "2025-12-20",
       "np": 0.6,
-      "expected_np": 26.92294,
-      "dividend_per_holder": -1052917.6
+      "expected_np": 27.3588,
+      "dividend_per_holder": -1070352.2
     },
     {
       "date": "2025-12-25",
       "np": 16.9,
-      "expected_np": 17.86358,
-      "dividend_per_holder": -38543.0
+      "expected_np": 18.29944,
+      "dividend_per_holder": -55977.6
     },
     {
       "date": "2025-12-28",
       "np": 26.95,
-      "expected_np": 23.15617,
-      "dividend_per_holder": 151753.0
+      "expected_np": 23.59204,
+      "dividend_per_holder": 134318.4
     },
     {
       "date": "2025-12-30",
       "np": 15.65,
-      "expected_np": 22.79737,
-      "dividend_per_holder": -285895.0
+      "expected_np": 23.23324,
+      "dividend_per_holder": -303329.6
     },
     {
       "date": "2026-01-02",
       "np": 24.25,
-      "expected_np": 24.1451,
-      "dividend_per_holder": 4196.0
+      "expected_np": 24.58096,
+      "dividend_per_holder": -13238.6
     },
     {
       "date": "2026-01-04",
       "np": 29.75,
-      "expected_np": 25.03355,
-      "dividend_per_holder": 188657.8
+      "expected_np": 25.46942,
+      "dividend_per_holder": 171223.2
     },
     {
       "date": "2026-01-06",
       "np": 21.55,
-      "expected_np": 26.04036,
-      "dividend_per_holder": -179614.6
+      "expected_np": 26.47623,
+      "dividend_per_holder": -197049.2
     },
     {
       "date": "2026-01-07",
       "np": 28.05,
-      "expected_np": 24.25428,
-      "dividend_per_holder": 151828.8
+      "expected_np": 24.69014,
+      "dividend_per_holder": 134394.2
     },
     {
       "date": "2026-01-09",
       "np": 15.4,
-      "expected_np": 26.16947,
-      "dividend_per_holder": -430778.6
+      "expected_np": 26.60533,
+      "dividend_per_holder": -448213.2
     },
     {
       "date": "2026-01-12",
       "np": 40.4,
-      "expected_np": 26.27843,
-      "dividend_per_holder": 564862.8
+      "expected_np": 26.71429,
+      "dividend_per_holder": 547428.2
     },
     {
       "date": "2026-01-13",
       "np": 19.7,
-      "expected_np": 25.6375,
-      "dividend_per_holder": -237500.0
+      "expected_np": 26.07336,
+      "dividend_per_holder": -254934.6
     },
     {
       "date": "2026-01-15",
       "np": 27.45,
-      "expected_np": 24.51979,
-      "dividend_per_holder": 117208.4
+      "expected_np": 24.95565,
+      "dividend_per_holder": 99773.8
     },
     {
       "date": "2026-01-18",
       "np": 12.9,
-      "expected_np": 23.55318,
-      "dividend_per_holder": -426127.2
+      "expected_np": 23.98904,
+      "dividend_per_holder": -443561.8
     },
     {
       "date": "2026-01-20",
       "np": 36.65,
-      "expected_np": 22.50044,
-      "dividend_per_holder": 565982.4
+      "expected_np": 22.9363,
+      "dividend_per_holder": 548547.8
     },
     {
       "date": "2026-01-22",
       "np": 26.2,
-      "expected_np": 22.66514,
-      "dividend_per_holder": 141394.4
+      "expected_np": 23.101,
+      "dividend_per_holder": 123959.8
     },
     {
       "date": "2026-01-24",
       "np": 29.35,
-      "expected_np": 24.86515,
-      "dividend_per_holder": 179394.0
+      "expected_np": 25.30101,
+      "dividend_per_holder": 161959.4
     },
     {
       "date": "2026-01-26",
       "np": 39.3,
-      "expected_np": 25.84295,
-      "dividend_per_holder": 538282.0
+      "expected_np": 26.27881,
+      "dividend_per_holder": 520847.4
     },
     {
       "date": "2026-01-28",
       "np": 20.9,
-      "expected_np": 24.99548,
-      "dividend_per_holder": -163819.2
+      "expected_np": 25.43134,
+      "dividend_per_holder": -181253.8
     },
     {
       "date": "2026-01-30",
       "np": 37.8,
-      "expected_np": 24.92544,
-      "dividend_per_holder": 514982.2
+      "expected_np": 25.36131,
+      "dividend_per_holder": 497547.6
     },
     {
       "date": "2026-02-01",
       "np": 21.85,
-      "expected_np": 21.66297,
-      "dividend_per_holder": 7481.0
+      "expected_np": 22.09884,
+      "dividend_per_holder": -9953.6
     },
     {
       "date": "2026-02-03",
       "np": 13.9,
-      "expected_np": 23.42923,
-      "dividend_per_holder": -381169.4
+      "expected_np": 23.8651,
+      "dividend_per_holder": -398604.0
     },
     {
       "date": "2026-02-05",
       "np": 0.1,
-      "expected_np": 22.57688,
-      "dividend_per_holder": -899075.2
+      "expected_np": 23.01274,
+      "dividend_per_holder": -916509.8
     },
     {
       "date": "2026-02-20",
       "np": 34.8,
-      "expected_np": 15.37703,
-      "dividend_per_holder": 776918.8
+      "expected_np": 15.81289,
+      "dividend_per_holder": 759484.2
     },
     {
       "date": "2026-02-22",
       "np": 12.4,
-      "expected_np": 20.16967,
-      "dividend_per_holder": -310786.8
+      "expected_np": 20.60553,
+      "dividend_per_holder": -328221.4
     },
     {
       "date": "2026-02-24",
       "np": 15.4,
-      "expected_np": 21.59916,
-      "dividend_per_holder": -247966.4
+      "expected_np": 22.03502,
+      "dividend_per_holder": -265401.0
     },
     {
       "date": "2026-02-26",
       "np": 36.5,
-      "expected_np": 22.27275,
-      "dividend_per_holder": 569090.0
+      "expected_np": 22.70861,
+      "dividend_per_holder": 551655.4
     },
     {
       "date": "2026-02-28",
       "np": 23.9,
-      "expected_np": 23.02833,
-      "dividend_per_holder": 34866.8
+      "expected_np": 23.46419,
+      "dividend_per_holder": 17432.2
     },
     {
       "date": "2026-03-01",
       "np": 27.55,
-      "expected_np": 23.26015,
-      "dividend_per_holder": 171594.2
+      "expected_np": 23.69601,
+      "dividend_per_holder": 154159.6
     },
     {
       "date": "2026-03-03",
       "np": 14.2,
-      "expected_np": 22.07552,
-      "dividend_per_holder": -315020.6
+      "expected_np": 22.51138,
+      "dividend_per_holder": -332455.2
     },
     {
       "date": "2026-03-05",
       "np": 22.5,
-      "expected_np": 21.46785,
-      "dividend_per_holder": 41285.8
+      "expected_np": 21.90372,
+      "dividend_per_holder": 23851.2
     },
     {
       "date": "2026-03-06",
       "np": 40.8,
-      "expected_np": 24.89483,
-      "dividend_per_holder": 636206.6
+      "expected_np": 25.3307,
+      "dividend_per_holder": 618772.0
     },
     {
       "date": "2026-03-08",
       "np": 20.6,
-      "expected_np": 22.34815,
-      "dividend_per_holder": -69926.2
+      "expected_np": 22.78402,
+      "dividend_per_holder": -87360.8
     },
     {
       "date": "2026-03-10",
       "np": 27.05,
-      "expected_np": 23.57493,
-      "dividend_per_holder": 139002.8
+      "expected_np": 24.01079,
+      "dividend_per_holder": 121568.2
     },
     {
       "date": "2026-03-12",
       "np": 49.25,
-      "expected_np": 24.69937,
-      "dividend_per_holder": 982025.4
+      "expected_np": 25.13523,
+      "dividend_per_holder": 964590.8
     },
     {
       "date": "2026-03-14",
       "np": 21.75,
-      "expected_np": 24.4988,
-      "dividend_per_holder": -109952.0
+      "expected_np": 24.93466,
+      "dividend_per_holder": -127386.6
     },
     {
       "date": "2026-03-16",
       "np": 23.9,
-      "expected_np": 23.26365,
-      "dividend_per_holder": 25454.0
+      "expected_np": 23.69951,
+      "dividend_per_holder": 8019.4
     },
     {
       "date": "2026-03-18",
       "np": 29.25,
-      "expected_np": 23.26859,
-      "dividend_per_holder": 239256.6
+      "expected_np": 23.70445,
+      "dividend_per_holder": 221822.0
     },
     {
       "date": "2026-03-19",
       "np": 54.45,
-      "expected_np": 24.62711,
-      "dividend_per_holder": 1192915.4
+      "expected_np": 25.06298,
+      "dividend_per_holder": 1175480.8
     },
     {
       "date": "2026-03-21",
       "np": 23.65,
-      "expected_np": 24.88558,
-      "dividend_per_holder": -49423.0
+      "expected_np": 25.32144,
+      "dividend_per_holder": -66857.6
     },
     {
       "date": "2026-03-23",
       "np": 21.0,
-      "expected_np": 23.97122,
-      "dividend_per_holder": -118848.6
+      "expected_np": 24.40708,
+      "dividend_per_holder": -136283.2
     },
     {
       "date": "2026-03-25",
       "np": 29.85,
-      "expected_np": 27.08079,
-      "dividend_per_holder": 110768.6
+      "expected_np": 27.51665,
+      "dividend_per_holder": 93334.0
     },
     {
       "date": "2026-03-27",
       "np": 33.95,
-      "expected_np": 27.68979,
-      "dividend_per_holder": 250408.4
+      "expected_np": 28.12565,
+      "dividend_per_holder": 232973.8
     },
     {
       "date": "2026-03-31",
       "np": 40.65,
-      "expected_np": 26.4857,
-      "dividend_per_holder": 566572.0
+      "expected_np": 26.92156,
+      "dividend_per_holder": 549137.4
     },
     {
       "date": "2026-04-02",
       "np": 4.15,
-      "expected_np": 22.73017,
-      "dividend_per_holder": -743206.8
-    }
-  ],
-  "3032977": [
-    {
-      "date": "2025-10-22",
-      "np": 31.2,
-      "expected_np": 22.66673,
-      "dividend_per_holder": 341330.8
-    },
-    {
-      "date": "2025-10-24",
-      "np": 31.0,
-      "expected_np": 22.72285,
-      "dividend_per_holder": 331086.0
-    },
-    {
-      "date": "2025-10-26",
-      "np": 44.4,
-      "expected_np": 23.63828,
-      "dividend_per_holder": 830468.6
-    },
-    {
-      "date": "2025-10-28",
-      "np": 34.6,
-      "expected_np": 24.54448,
-      "dividend_per_holder": 402220.8
-    },
-    {
-      "date": "2025-11-01",
-      "np": 27.75,
-      "expected_np": 26.50722,
-      "dividend_per_holder": 49711.2
-    },
-    {
-      "date": "2025-11-03",
-      "np": 30.7,
-      "expected_np": 25.32927,
-      "dividend_per_holder": 214829.2
-    },
-    {
-      "date": "2025-11-04",
-      "np": 19.8,
-      "expected_np": 25.22881,
-      "dividend_per_holder": -217152.4
-    },
-    {
-      "date": "2025-11-07",
-      "np": 36.4,
-      "expected_np": 24.458,
-      "dividend_per_holder": 477679.8
-    },
-    {
-      "date": "2025-11-09",
-      "np": 25.95,
-      "expected_np": 25.67395,
-      "dividend_per_holder": 11042.2
-    },
-    {
-      "date": "2025-11-10",
-      "np": 24.85,
-      "expected_np": 28.04398,
-      "dividend_per_holder": -127759.2
-    },
-    {
-      "date": "2025-11-14",
-      "np": 26.45,
-      "expected_np": 29.48681,
-      "dividend_per_holder": -121472.6
-    },
-    {
-      "date": "2025-11-15",
-      "np": 25.55,
-      "expected_np": 28.04758,
-      "dividend_per_holder": -99903.4
-    },
-    {
-      "date": "2025-11-17",
-      "np": 11.45,
-      "expected_np": 25.72968,
-      "dividend_per_holder": -571187.4
-    },
-    {
-      "date": "2025-11-28",
-      "np": 30.7,
-      "expected_np": 18.97866,
-      "dividend_per_holder": 468853.4
-    },
-    {
-      "date": "2025-11-29",
-      "np": 28.45,
-      "expected_np": 21.47818,
-      "dividend_per_holder": 278872.6
-    },
-    {
-      "date": "2025-12-01",
-      "np": 17.85,
-      "expected_np": 20.98116,
-      "dividend_per_holder": -125246.2
-    },
-    {
-      "date": "2025-12-03",
-      "np": 2.55,
-      "expected_np": 21.01324,
-      "dividend_per_holder": -738529.4
-    },
-    {
-      "date": "2025-12-27",
-      "np": 24.9,
-      "expected_np": 13.74492,
-      "dividend_per_holder": 446203.4
-    },
-    {
-      "date": "2025-12-29",
-      "np": 22.3,
-      "expected_np": 15.55042,
-      "dividend_per_holder": 269983.2
-    },
-    {
-      "date": "2025-12-31",
-      "np": 23.05,
-      "expected_np": 19.3266,
-      "dividend_per_holder": 148936.0
-    },
-    {
-      "date": "2026-01-02",
-      "np": 26.4,
-      "expected_np": 21.48822,
-      "dividend_per_holder": 196471.2
-    },
-    {
-      "date": "2026-01-04",
-      "np": 30.8,
-      "expected_np": 22.05845,
-      "dividend_per_holder": 349662.2
-    },
-    {
-      "date": "2026-01-07",
-      "np": 27.75,
-      "expected_np": 21.92731,
-      "dividend_per_holder": 232907.8
-    },
-    {
-      "date": "2026-01-09",
-      "np": 22.45,
-      "expected_np": 23.21826,
-      "dividend_per_holder": -30730.4
-    },
-    {
-      "date": "2026-01-11",
-      "np": 31.5,
-      "expected_np": 22.44146,
-      "dividend_per_holder": 362341.6
-    },
-    {
-      "date": "2026-01-13",
-      "np": 15.1,
-      "expected_np": 23.63496,
-      "dividend_per_holder": -341398.2
-    },
-    {
-      "date": "2026-01-15",
-      "np": 16.05,
-      "expected_np": 22.23682,
-      "dividend_per_holder": -247472.8
-    },
-    {
-      "date": "2026-01-19",
-      "np": 20.95,
-      "expected_np": 21.28158,
-      "dividend_per_holder": -13263.2
-    },
-    {
-      "date": "2026-01-21",
-      "np": 19.45,
-      "expected_np": 21.11002,
-      "dividend_per_holder": -66400.8
-    },
-    {
-      "date": "2026-01-23",
-      "np": 18.8,
-      "expected_np": 23.05892,
-      "dividend_per_holder": -170357.0
-    },
-    {
-      "date": "2026-03-02",
-      "np": 10.95,
-      "expected_np": 19.61009,
-      "dividend_per_holder": -346403.6
-    },
-    {
-      "date": "2026-03-04",
-      "np": 19.2,
-      "expected_np": 21.29228,
-      "dividend_per_holder": -83691.4
-    },
-    {
-      "date": "2026-03-07",
-      "np": 29.65,
-      "expected_np": 22.1207,
-      "dividend_per_holder": 301172.0
-    },
-    {
-      "date": "2026-03-10",
-      "np": 12.55,
-      "expected_np": 20.43445,
-      "dividend_per_holder": -315377.8
-    },
-    {
-      "date": "2026-03-12",
-      "np": 19.95,
-      "expected_np": 18.00973,
-      "dividend_per_holder": 77610.8
-    },
-    {
-      "date": "2026-03-15",
-      "np": 29.45,
-      "expected_np": 23.77655,
-      "dividend_per_holder": 226937.8
+      "expected_np": 23.16603,
+      "dividend_per_holder": -760641.4
     }
   ],
   "6450": [
     {
       "date": "2025-10-22",
       "np": 4.8,
-      "expected_np": 14.04922,
-      "dividend_per_holder": -369969.0
+      "expected_np": 14.48509,
+      "dividend_per_holder": -387403.6
     },
     {
       "date": "2025-10-24",
       "np": 20.45,
-      "expected_np": 14.02823,
-      "dividend_per_holder": 256870.8
+      "expected_np": 14.46409,
+      "dividend_per_holder": 239436.2
     },
     {
       "date": "2025-10-26",
       "np": 24.65,
-      "expected_np": 15.68989,
-      "dividend_per_holder": 358404.6
+      "expected_np": 16.12575,
+      "dividend_per_holder": 340970.0
     },
     {
       "date": "2025-10-28",
       "np": 9.65,
-      "expected_np": 16.09962,
-      "dividend_per_holder": -257984.8
+      "expected_np": 16.53548,
+      "dividend_per_holder": -275419.4
     },
     {
       "date": "2025-10-31",
       "np": 37.2,
-      "expected_np": 16.57203,
-      "dividend_per_holder": 825119.0
+      "expected_np": 17.00789,
+      "dividend_per_holder": 807684.4
     },
     {
       "date": "2025-11-03",
       "np": 24.35,
-      "expected_np": 18.14763,
-      "dividend_per_holder": 248095.0
+      "expected_np": 18.58349,
+      "dividend_per_holder": 230660.4
     },
     {
       "date": "2025-11-23",
       "np": 14.05,
-      "expected_np": 17.13712,
-      "dividend_per_holder": -123484.8
+      "expected_np": 17.57298,
+      "dividend_per_holder": -140919.4
     },
     {
       "date": "2025-11-25",
       "np": 11.15,
-      "expected_np": 15.47811,
-      "dividend_per_holder": -173124.4
+      "expected_np": 15.91397,
+      "dividend_per_holder": -190559.0
     },
     {
       "date": "2025-11-28",
       "np": 29.7,
-      "expected_np": 16.06592,
-      "dividend_per_holder": 545363.4
+      "expected_np": 16.50178,
+      "dividend_per_holder": 527928.8
     },
     {
       "date": "2025-11-29",
       "np": 21.25,
-      "expected_np": 16.63451,
-      "dividend_per_holder": 184619.6
+      "expected_np": 17.07037,
+      "dividend_per_holder": 167185.0
     },
     {
       "date": "2025-12-01",
       "np": 31.8,
-      "expected_np": 15.49767,
-      "dividend_per_holder": 652093.0
+      "expected_np": 15.93354,
+      "dividend_per_holder": 634658.4
     },
     {
       "date": "2025-12-03",
       "np": 12.2,
-      "expected_np": 16.86164,
-      "dividend_per_holder": -186465.8
+      "expected_np": 17.29751,
+      "dividend_per_holder": -203900.4
     },
     {
       "date": "2025-12-05",
       "np": 16.1,
-      "expected_np": 18.25239,
-      "dividend_per_holder": -86095.6
+      "expected_np": 18.68825,
+      "dividend_per_holder": -103530.2
     },
     {
       "date": "2025-12-06",
       "np": 11.75,
-      "expected_np": 18.10221,
-      "dividend_per_holder": -254088.4
+      "expected_np": 18.53807,
+      "dividend_per_holder": -271523.0
     },
     {
       "date": "2025-12-11",
       "np": 22.35,
-      "expected_np": 16.32126,
-      "dividend_per_holder": 241149.8
+      "expected_np": 16.75712,
+      "dividend_per_holder": 223715.2
     },
     {
       "date": "2025-12-15",
       "np": 12.2,
-      "expected_np": 21.24434,
-      "dividend_per_holder": -361773.6
+      "expected_np": 21.6802,
+      "dividend_per_holder": -379208.2
     },
     {
       "date": "2025-12-18",
       "np": 17.25,
-      "expected_np": 17.17461,
-      "dividend_per_holder": 3015.6
+      "expected_np": 17.61047,
+      "dividend_per_holder": -14419.0
     },
     {
       "date": "2025-12-20",
       "np": 25.9,
-      "expected_np": 19.03656,
-      "dividend_per_holder": 274537.4
+      "expected_np": 19.47243,
+      "dividend_per_holder": 257102.8
     },
     {
       "date": "2025-12-23",
       "np": 35.0,
-      "expected_np": 19.54719,
-      "dividend_per_holder": 618112.2
+      "expected_np": 19.98306,
+      "dividend_per_holder": 600677.6
     },
     {
       "date": "2025-12-26",
       "np": 21.1,
-      "expected_np": 20.94299,
-      "dividend_per_holder": 6280.4
+      "expected_np": 21.37885,
+      "dividend_per_holder": -11154.2
     },
     {
       "date": "2025-12-28",
       "np": 55.05,
-      "expected_np": 21.38572,
-      "dividend_per_holder": 1346571.2
+      "expected_np": 21.82158,
+      "dividend_per_holder": 1329136.6
     },
     {
       "date": "2025-12-30",
       "np": 32.0,
-      "expected_np": 23.9617,
-      "dividend_per_holder": 321532.2
+      "expected_np": 24.39756,
+      "dividend_per_holder": 304097.6
     },
     {
       "date": "2026-01-01",
       "np": 35.25,
-      "expected_np": 23.15641,
-      "dividend_per_holder": 483743.4
+      "expected_np": 23.59228,
+      "dividend_per_holder": 466308.8
     },
     {
       "date": "2026-01-03",
       "np": 16.5,
-      "expected_np": 21.65258,
-      "dividend_per_holder": -206103.2
+      "expected_np": 22.08844,
+      "dividend_per_holder": -223537.8
     },
     {
       "date": "2026-01-05",
       "np": 13.4,
-      "expected_np": 21.35632,
-      "dividend_per_holder": -318253.0
+      "expected_np": 21.79219,
+      "dividend_per_holder": -335687.6
     },
     {
       "date": "2026-01-07",
       "np": 17.35,
-      "expected_np": 21.41051,
-      "dividend_per_holder": -162420.6
+      "expected_np": 21.84638,
+      "dividend_per_holder": -179855.2
     },
     {
       "date": "2026-01-09",
       "np": 26.55,
-      "expected_np": 21.47182,
-      "dividend_per_holder": 203127.2
+      "expected_np": 21.90768,
+      "dividend_per_holder": 185692.6
     },
     {
       "date": "2026-01-10",
       "np": 23.2,
-      "expected_np": 18.38959,
-      "dividend_per_holder": 192416.6
+      "expected_np": 18.82545,
+      "dividend_per_holder": 174982.0
     },
     {
       "date": "2026-01-12",
       "np": 27.0,
-      "expected_np": 20.10407,
-      "dividend_per_holder": 275837.2
+      "expected_np": 20.53993,
+      "dividend_per_holder": 258402.6
     },
     {
       "date": "2026-01-14",
       "np": 28.25,
-      "expected_np": 21.65816,
-      "dividend_per_holder": 263673.6
+      "expected_np": 22.09402,
+      "dividend_per_holder": 246239.0
     },
     {
       "date": "2026-01-22",
       "np": 17.25,
-      "expected_np": 19.46542,
-      "dividend_per_holder": -88617.0
+      "expected_np": 19.90129,
+      "dividend_per_holder": -106051.6
     },
     {
       "date": "2026-01-25",
       "np": 22.9,
-      "expected_np": 18.42714,
-      "dividend_per_holder": 178914.4
+      "expected_np": 18.863,
+      "dividend_per_holder": 161479.8
     },
     {
       "date": "2026-01-27",
       "np": 15.55,
-      "expected_np": 19.34539,
-      "dividend_per_holder": -151815.4
+      "expected_np": 19.78125,
+      "dividend_per_holder": -169250.0
     },
     {
       "date": "2026-01-30",
       "np": 14.95,
-      "expected_np": 17.81098,
-      "dividend_per_holder": -114439.4
+      "expected_np": 18.24685,
+      "dividend_per_holder": -131874.0
     },
     {
       "date": "2026-02-01",
       "np": 16.15,
-      "expected_np": 18.28765,
-      "dividend_per_holder": -85505.8
+      "expected_np": 18.72351,
+      "dividend_per_holder": -102940.4
     },
     {
       "date": "2026-02-02",
       "np": 25.9,
-      "expected_np": 19.48006,
-      "dividend_per_holder": 256797.6
+      "expected_np": 19.91592,
+      "dividend_per_holder": 239363.0
     },
     {
       "date": "2026-02-04",
       "np": 16.25,
-      "expected_np": 20.08576,
-      "dividend_per_holder": -153430.4
+      "expected_np": 20.52162,
+      "dividend_per_holder": -170865.0
     },
     {
       "date": "2026-02-06",
       "np": 27.05,
-      "expected_np": 20.17282,
-      "dividend_per_holder": 275087.4
+      "expected_np": 20.60868,
+      "dividend_per_holder": 257652.8
     },
     {
       "date": "2026-02-08",
       "np": 32.45,
-      "expected_np": 19.69856,
-      "dividend_per_holder": 510057.6
+      "expected_np": 20.13442,
+      "dividend_per_holder": 492623.0
     },
     {
       "date": "2026-02-10",
       "np": 16.2,
-      "expected_np": 19.79108,
-      "dividend_per_holder": -143643.2
+      "expected_np": 20.22694,
+      "dividend_per_holder": -161077.8
     },
     {
       "date": "2026-02-11",
       "np": 23.4,
-      "expected_np": 19.5678,
-      "dividend_per_holder": 153287.8
+      "expected_np": 20.00367,
+      "dividend_per_holder": 135853.2
     },
     {
       "date": "2026-02-19",
       "np": 11.7,
-      "expected_np": 21.35994,
-      "dividend_per_holder": -386397.4
+      "expected_np": 21.7958,
+      "dividend_per_holder": -403832.0
     },
     {
       "date": "2026-02-20",
       "np": 20.55,
-      "expected_np": 21.37829,
-      "dividend_per_holder": -33131.6
+      "expected_np": 21.81415,
+      "dividend_per_holder": -50566.2
     },
     {
       "date": "2026-02-22",
       "np": 32.1,
-      "expected_np": 21.85827,
-      "dividend_per_holder": 409669.4
+      "expected_np": 22.29413,
+      "dividend_per_holder": 392234.8
     },
     {
       "date": "2026-03-01",
       "np": 14.9,
-      "expected_np": 23.51601,
-      "dividend_per_holder": -344640.4
+      "expected_np": 23.95187,
+      "dividend_per_holder": -362075.0
     },
     {
       "date": "2026-03-02",
       "np": 23.15,
-      "expected_np": 20.05488,
-      "dividend_per_holder": 123805.0
+      "expected_np": 20.49074,
+      "dividend_per_holder": 106370.4
     },
     {
       "date": "2026-03-04",
       "np": 25.2,
-      "expected_np": 22.06997,
-      "dividend_per_holder": 125201.2
+      "expected_np": 22.50583,
+      "dividend_per_holder": 107766.6
     },
     {
       "date": "2026-03-06",
       "np": 24.95,
-      "expected_np": 19.12369,
-      "dividend_per_holder": 233052.4
+      "expected_np": 19.55955,
+      "dividend_per_holder": 215617.8
     },
     {
       "date": "2026-03-07",
       "np": 24.25,
-      "expected_np": 21.44683,
-      "dividend_per_holder": 112126.8
+      "expected_np": 21.88269,
+      "dividend_per_holder": 94692.2
     },
     {
       "date": "2026-03-09",
       "np": 27.5,
-      "expected_np": 21.0629,
-      "dividend_per_holder": 257484.0
+      "expected_np": 21.49876,
+      "dividend_per_holder": 240049.4
     },
     {
       "date": "2026-03-11",
       "np": 43.85,
-      "expected_np": 22.39215,
-      "dividend_per_holder": 858313.8
+      "expected_np": 22.82802,
+      "dividend_per_holder": 840879.2
     },
     {
       "date": "2026-03-13",
       "np": 15.95,
-      "expected_np": 24.7763,
-      "dividend_per_holder": -353052.2
+      "expected_np": 25.21217,
+      "dividend_per_holder": -370486.8
     },
     {
       "date": "2026-03-14",
       "np": 21.4,
-      "expected_np": 24.3481,
-      "dividend_per_holder": -117923.8
+      "expected_np": 24.78396,
+      "dividend_per_holder": -135358.4
     },
     {
       "date": "2026-03-18",
       "np": 20.75,
-      "expected_np": 22.92116,
-      "dividend_per_holder": -86846.6
+      "expected_np": 23.35703,
+      "dividend_per_holder": -104281.2
     },
     {
       "date": "2026-03-21",
       "np": 28.45,
-      "expected_np": 20.84297,
-      "dividend_per_holder": 304281.2
+      "expected_np": 21.27883,
+      "dividend_per_holder": 286846.6
     },
     {
       "date": "2026-03-23",
       "np": 24.15,
-      "expected_np": 22.26964,
-      "dividend_per_holder": 75214.2
+      "expected_np": 22.70551,
+      "dividend_per_holder": 57779.6
     },
     {
       "date": "2026-03-25",
       "np": 16.6,
-      "expected_np": 19.42906,
-      "dividend_per_holder": -113162.4
+      "expected_np": 19.86492,
+      "dividend_per_holder": -130597.0
     },
     {
       "date": "2026-03-27",
       "np": 23.55,
-      "expected_np": 20.2935,
-      "dividend_per_holder": 130260.2
+      "expected_np": 20.72936,
+      "dividend_per_holder": 112825.6
     },
     {
       "date": "2026-03-29",
       "np": 16.5,
-      "expected_np": 22.3681,
-      "dividend_per_holder": -234724.2
+      "expected_np": 22.80397,
+      "dividend_per_holder": -252158.8
     },
     {
       "date": "2026-03-31",
       "np": 15.75,
-      "expected_np": 20.24362,
-      "dividend_per_holder": -179744.6
+      "expected_np": 20.67948,
+      "dividend_per_holder": -197179.2
     },
     {
       "date": "2026-04-02",
       "np": 23.85,
-      "expected_np": 20.66131,
-      "dividend_per_holder": 127547.6
+      "expected_np": 21.09717,
+      "dividend_per_holder": 110113.0
     },
     {
       "date": "2026-04-05",
       "np": 18.35,
-      "expected_np": 21.79503,
-      "dividend_per_holder": -137801.4
+      "expected_np": 22.2309,
+      "dividend_per_holder": -155236.0
     },
     {
       "date": "2026-04-07",
       "np": 25.0,
-      "expected_np": 22.29085,
-      "dividend_per_holder": 108366.2
+      "expected_np": 22.72671,
+      "dividend_per_holder": 90931.6
     },
     {
       "date": "2026-04-08",
       "np": 11.05,
-      "expected_np": 19.69721,
-      "dividend_per_holder": -345888.6
+      "expected_np": 20.13308,
+      "dividend_per_holder": -363323.2
     },
     {
       "date": "2026-04-10",
       "np": 18.9,
-      "expected_np": 20.29328,
-      "dividend_per_holder": -55731.2
+      "expected_np": 20.72914,
+      "dividend_per_holder": -73165.8
     }
   ],
-  "3975": [
-    {
-      "date": "2025-10-21",
-      "np": 19.05,
-      "expected_np": 12.66873,
-      "dividend_per_holder": 255251.0
-    },
-    {
-      "date": "2025-10-23",
-      "np": 38.95,
-      "expected_np": 13.58794,
-      "dividend_per_holder": 1014482.4
-    },
-    {
-      "date": "2025-10-24",
-      "np": 27.75,
-      "expected_np": 15.21988,
-      "dividend_per_holder": 501204.8
-    },
-    {
-      "date": "2025-10-27",
-      "np": 9.55,
-      "expected_np": 16.20988,
-      "dividend_per_holder": -266395.2
-    },
-    {
-      "date": "2025-10-28",
-      "np": 16.5,
-      "expected_np": 14.20858,
-      "dividend_per_holder": 91656.8
-    },
-    {
-      "date": "2025-10-30",
-      "np": 14.65,
-      "expected_np": 13.86979,
-      "dividend_per_holder": 31208.4
-    },
-    {
-      "date": "2025-11-01",
-      "np": 6.25,
-      "expected_np": 16.06668,
-      "dividend_per_holder": -392667.0
-    },
-    {
-      "date": "2025-11-04",
-      "np": 17.2,
-      "expected_np": 16.77033,
-      "dividend_per_holder": 17186.8
-    },
-    {
-      "date": "2025-11-11",
-      "np": 1.95,
-      "expected_np": 14.78897,
-      "dividend_per_holder": -513558.8
-    },
-    {
-      "date": "2025-11-12",
-      "np": 38.8,
-      "expected_np": 13.18708,
-      "dividend_per_holder": 1024517.0
-    },
-    {
-      "date": "2025-11-14",
-      "np": 39.25,
-      "expected_np": 16.35754,
-      "dividend_per_holder": 915698.4
-    },
-    {
-      "date": "2025-11-16",
-      "np": -2.1,
-      "expected_np": 18.36014,
-      "dividend_per_holder": -818405.6
-    },
-    {
-      "date": "2025-11-18",
-      "np": 27.05,
-      "expected_np": 16.11067,
-      "dividend_per_holder": 437573.4
-    },
-    {
-      "date": "2025-11-21",
-      "np": 27.05,
-      "expected_np": 18.77951,
-      "dividend_per_holder": 330819.8
-    },
-    {
-      "date": "2025-11-24",
-      "np": 21.5,
-      "expected_np": 20.47466,
-      "dividend_per_holder": 41013.8
-    },
-    {
-      "date": "2025-11-26",
-      "np": 3.2,
-      "expected_np": 16.21291,
-      "dividend_per_holder": -520516.2
-    },
-    {
-      "date": "2025-12-12",
-      "np": 27.25,
-      "expected_np": 17.19962,
-      "dividend_per_holder": 402015.4
-    },
-    {
-      "date": "2025-12-14",
-      "np": 40.8,
-      "expected_np": 18.42671,
-      "dividend_per_holder": 894931.4
-    },
-    {
-      "date": "2025-12-18",
-      "np": 10.3,
-      "expected_np": 18.88939,
-      "dividend_per_holder": -343575.6
-    },
-    {
-      "date": "2025-12-20",
-      "np": 20.7,
-      "expected_np": 19.10475,
-      "dividend_per_holder": 63810.0
-    },
-    {
-      "date": "2025-12-22",
-      "np": 17.1,
-      "expected_np": 19.09193,
-      "dividend_per_holder": -79677.2
-    },
-    {
-      "date": "2025-12-25",
-      "np": 10.45,
-      "expected_np": 19.32582,
-      "dividend_per_holder": -355032.8
-    },
-    {
-      "date": "2025-12-28",
-      "np": 23.1,
-      "expected_np": 18.5025,
-      "dividend_per_holder": 183900.0
-    },
-    {
-      "date": "2025-12-29",
-      "np": 20.85,
-      "expected_np": 19.86177,
-      "dividend_per_holder": 39529.2
-    },
-    {
-      "date": "2025-12-31",
-      "np": 15.55,
-      "expected_np": 18.64616,
-      "dividend_per_holder": -123846.2
-    },
-    {
-      "date": "2026-01-03",
-      "np": 22.5,
-      "expected_np": 19.85473,
-      "dividend_per_holder": 105811.0
-    },
-    {
-      "date": "2026-01-05",
-      "np": 21.05,
-      "expected_np": 17.69013,
-      "dividend_per_holder": 134395.0
-    },
-    {
-      "date": "2026-01-07",
-      "np": 24.75,
-      "expected_np": 19.17314,
-      "dividend_per_holder": 223074.4
-    },
-    {
-      "date": "2026-01-09",
-      "np": 23.0,
-      "expected_np": 20.30564,
-      "dividend_per_holder": 107774.6
-    },
-    {
-      "date": "2026-01-11",
-      "np": 20.2,
-      "expected_np": 19.16101,
-      "dividend_per_holder": 41559.6
-    },
-    {
-      "date": "2026-01-13",
-      "np": 7.55,
-      "expected_np": 19.35638,
-      "dividend_per_holder": -472255.4
-    },
-    {
-      "date": "2026-01-15",
-      "np": 22.25,
-      "expected_np": 17.82528,
-      "dividend_per_holder": 176988.8
-    },
-    {
-      "date": "2026-01-17",
-      "np": 6.9,
-      "expected_np": 18.49661,
-      "dividend_per_holder": -463864.2
-    },
-    {
-      "date": "2026-01-19",
-      "np": 15.5,
-      "expected_np": 17.93074,
-      "dividend_per_holder": -97229.8
-    },
-    {
-      "date": "2026-01-20",
-      "np": 8.2,
-      "expected_np": 16.57761,
-      "dividend_per_holder": -335104.4
-    },
-    {
-      "date": "2026-01-22",
-      "np": 23.75,
-      "expected_np": 15.86298,
-      "dividend_per_holder": 315481.0
-    },
-    {
-      "date": "2026-01-25",
-      "np": 23.8,
-      "expected_np": 16.94103,
-      "dividend_per_holder": 274358.6
-    },
-    {
-      "date": "2026-01-28",
-      "np": 17.1,
-      "expected_np": 17.73258,
-      "dividend_per_holder": -25303.0
-    },
-    {
-      "date": "2026-01-30",
-      "np": 11.55,
-      "expected_np": 16.45754,
-      "dividend_per_holder": -196301.6
-    },
-    {
-      "date": "2026-04-05",
-      "np": 21.6,
-      "expected_np": 14.0284,
-      "dividend_per_holder": 302863.8
-    },
-    {
-      "date": "2026-04-07",
-      "np": 10.0,
-      "expected_np": 18.24392,
-      "dividend_per_holder": -329756.6
-    },
-    {
-      "date": "2026-04-10",
-      "np": 7.75,
-      "expected_np": 14.28434,
-      "dividend_per_holder": -261373.4
-    },
-    {
-      "date": "2026-04-12",
-      "np": 17.3,
-      "expected_np": 12.49893,
-      "dividend_per_holder": 192043.0
-    }
-  ],
-  "4066261": [
+  "4432166": [
     {
       "date": "2025-10-22",
-      "np": 5.25,
-      "expected_np": 11.54257,
-      "dividend_per_holder": -251703.0
+      "np": 13.3,
+      "expected_np": 16.23486,
+      "dividend_per_holder": -117394.4
     },
     {
       "date": "2025-10-24",
-      "np": 17.3,
-      "expected_np": 13.2968,
-      "dividend_per_holder": 160127.8
-    },
-    {
-      "date": "2025-10-26",
-      "np": 8.05,
-      "expected_np": 12.44288,
-      "dividend_per_holder": -175715.0
-    },
-    {
-      "date": "2025-10-28",
-      "np": 19.55,
-      "expected_np": 15.38834,
-      "dividend_per_holder": 166466.2
-    },
-    {
-      "date": "2025-10-30",
-      "np": 20.3,
-      "expected_np": 12.97157,
-      "dividend_per_holder": 293137.0
-    },
-    {
-      "date": "2025-11-02",
-      "np": 19.75,
-      "expected_np": 14.79473,
-      "dividend_per_holder": 198210.8
-    },
-    {
-      "date": "2025-11-03",
-      "np": 20.9,
-      "expected_np": 14.04139,
-      "dividend_per_holder": 274344.4
-    },
-    {
-      "date": "2025-11-05",
-      "np": -1.8,
-      "expected_np": 14.10039,
-      "dividend_per_holder": -636015.6
-    },
-    {
-      "date": "2025-11-19",
-      "np": 18.65,
-      "expected_np": 10.71451,
-      "dividend_per_holder": 317419.6
-    },
-    {
-      "date": "2025-11-21",
-      "np": 15.9,
-      "expected_np": 12.59805,
-      "dividend_per_holder": 132077.8
-    },
-    {
-      "date": "2025-11-23",
-      "np": 12.95,
-      "expected_np": 12.75775,
-      "dividend_per_holder": 7690.0
-    },
-    {
-      "date": "2025-11-24",
-      "np": 10.5,
-      "expected_np": 14.28325,
-      "dividend_per_holder": -151329.8
-    },
-    {
-      "date": "2025-11-26",
-      "np": 10.9,
-      "expected_np": 13.15926,
-      "dividend_per_holder": -90370.4
-    },
-    {
-      "date": "2025-11-29",
-      "np": 11.95,
-      "expected_np": 13.94331,
-      "dividend_per_holder": -79732.4
-    },
-    {
-      "date": "2025-12-01",
-      "np": 28.9,
-      "expected_np": 14.17451,
-      "dividend_per_holder": 589019.6
-    },
-    {
-      "date": "2025-12-03",
-      "np": 14.0,
-      "expected_np": 14.83953,
-      "dividend_per_holder": -33581.0
-    },
-    {
-      "date": "2025-12-05",
-      "np": 20.4,
-      "expected_np": 13.4536,
-      "dividend_per_holder": 277856.2
-    },
-    {
-      "date": "2025-12-06",
-      "np": 6.2,
-      "expected_np": 16.70064,
-      "dividend_per_holder": -420025.4
-    },
-    {
-      "date": "2025-12-09",
-      "np": 16.85,
-      "expected_np": 12.78791,
-      "dividend_per_holder": 162483.6
-    },
-    {
-      "date": "2025-12-15",
-      "np": 13.5,
-      "expected_np": 15.10782,
-      "dividend_per_holder": -64312.8
-    },
-    {
-      "date": "2025-12-18",
-      "np": 4.25,
-      "expected_np": 14.91512,
-      "dividend_per_holder": -426605.0
-    },
-    {
-      "date": "2025-12-19",
-      "np": 10.75,
-      "expected_np": 12.60453,
-      "dividend_per_holder": -74181.0
-    },
-    {
-      "date": "2025-12-21",
-      "np": 4.35,
-      "expected_np": 13.28491,
-      "dividend_per_holder": -357396.4
-    },
-    {
-      "date": "2025-12-23",
-      "np": 6.2,
-      "expected_np": 14.0167,
-      "dividend_per_holder": -312667.8
-    },
-    {
-      "date": "2025-12-29",
-      "np": 12.85,
-      "expected_np": 13.51666,
-      "dividend_per_holder": -26666.2
-    },
-    {
-      "date": "2026-01-01",
-      "np": 12.15,
-      "expected_np": 11.014,
-      "dividend_per_holder": 45440.0
-    },
-    {
-      "date": "2026-01-03",
-      "np": 4.15,
-      "expected_np": 12.95351,
-      "dividend_per_holder": -352140.2
-    },
-    {
-      "date": "2026-01-04",
-      "np": 9.2,
-      "expected_np": 14.29818,
-      "dividend_per_holder": -203927.2
-    },
-    {
-      "date": "2026-01-06",
-      "np": 2.4,
-      "expected_np": 12.27891,
-      "dividend_per_holder": -395156.4
-    },
-    {
-      "date": "2026-01-10",
-      "np": 7.15,
-      "expected_np": 12.86782,
-      "dividend_per_holder": -228712.8
-    },
-    {
-      "date": "2026-01-11",
-      "np": 3.35,
-      "expected_np": 10.01921,
-      "dividend_per_holder": -266768.4
-    },
-    {
-      "date": "2026-01-13",
-      "np": 30.8,
-      "expected_np": 12.25308,
-      "dividend_per_holder": 741876.8
-    },
-    {
-      "date": "2026-01-15",
-      "np": 13.8,
-      "expected_np": 12.48171,
-      "dividend_per_holder": 52731.8
-    },
-    {
-      "date": "2026-01-17",
-      "np": 25.5,
-      "expected_np": 12.38349,
-      "dividend_per_holder": 524660.4
-    },
-    {
-      "date": "2026-01-19",
-      "np": -1.85,
-      "expected_np": 13.08551,
-      "dividend_per_holder": -597420.4
-    },
-    {
-      "date": "2026-01-20",
-      "np": 22.05,
-      "expected_np": 13.52614,
-      "dividend_per_holder": 340954.4
-    },
-    {
-      "date": "2026-01-22",
-      "np": 26.6,
-      "expected_np": 13.73785,
-      "dividend_per_holder": 514486.0
-    },
-    {
-      "date": "2026-01-24",
-      "np": 20.25,
-      "expected_np": 16.56773,
-      "dividend_per_holder": 147290.8
-    },
-    {
-      "date": "2026-01-25",
-      "np": 17.5,
-      "expected_np": 14.4945,
-      "dividend_per_holder": 120220.2
-    },
-    {
-      "date": "2026-01-28",
-      "np": 19.2,
-      "expected_np": 15.29024,
-      "dividend_per_holder": 156390.4
-    },
-    {
-      "date": "2026-01-29",
-      "np": 11.1,
-      "expected_np": 16.83008,
-      "dividend_per_holder": -229203.2
-    },
-    {
-      "date": "2026-01-31",
-      "np": 10.1,
-      "expected_np": 17.25587,
-      "dividend_per_holder": -286234.8
-    },
-    {
-      "date": "2026-02-01",
-      "np": 20.95,
-      "expected_np": 17.58385,
-      "dividend_per_holder": 134646.2
-    },
-    {
-      "date": "2026-02-03",
-      "np": 7.15,
-      "expected_np": 15.80837,
-      "dividend_per_holder": -346334.8
-    },
-    {
-      "date": "2026-02-06",
-      "np": 8.55,
-      "expected_np": 12.63701,
-      "dividend_per_holder": -163480.6
-    },
-    {
-      "date": "2026-02-08",
-      "np": 23.9,
-      "expected_np": 16.59595,
-      "dividend_per_holder": 292162.0
-    },
-    {
-      "date": "2026-02-09",
-      "np": 12.7,
-      "expected_np": 16.59445,
-      "dividend_per_holder": -155778.0
-    },
-    {
-      "date": "2026-02-11",
-      "np": 19.3,
-      "expected_np": 15.7391,
-      "dividend_per_holder": 142436.0
-    },
-    {
-      "date": "2026-02-20",
-      "np": 15.25,
-      "expected_np": 16.50887,
-      "dividend_per_holder": -50355.0
-    },
-    {
-      "date": "2026-02-21",
-      "np": 11.5,
-      "expected_np": 15.05863,
-      "dividend_per_holder": -142345.2
-    },
-    {
-      "date": "2026-02-24",
-      "np": 11.85,
-      "expected_np": 13.09593,
-      "dividend_per_holder": -49837.2
-    },
-    {
-      "date": "2026-02-26",
-      "np": 23.0,
-      "expected_np": 14.00074,
-      "dividend_per_holder": 359970.4
-    },
-    {
-      "date": "2026-02-28",
-      "np": 18.1,
-      "expected_np": 14.91475,
-      "dividend_per_holder": 127410.0
-    },
-    {
-      "date": "2026-03-03",
-      "np": 24.3,
-      "expected_np": 17.12605,
-      "dividend_per_holder": 286957.8
-    },
-    {
-      "date": "2026-03-05",
-      "np": 17.25,
-      "expected_np": 17.97866,
-      "dividend_per_holder": -29146.4
-    },
-    {
-      "date": "2026-03-06",
-      "np": 16.4,
-      "expected_np": 14.47416,
-      "dividend_per_holder": 77033.8
-    },
-    {
-      "date": "2026-03-08",
-      "np": 20.4,
-      "expected_np": 16.48018,
-      "dividend_per_holder": 156792.8
-    },
-    {
-      "date": "2026-03-10",
-      "np": 62.6,
-      "expected_np": 19.05621,
-      "dividend_per_holder": 1741751.8
-    },
-    {
-      "date": "2026-03-12",
-      "np": 9.0,
-      "expected_np": 21.97299,
-      "dividend_per_holder": -518919.4
-    },
-    {
-      "date": "2026-03-14",
-      "np": 15.45,
-      "expected_np": 20.42711,
-      "dividend_per_holder": -199084.2
-    },
-    {
-      "date": "2026-03-19",
-      "np": 20.7,
-      "expected_np": 20.81509,
-      "dividend_per_holder": -4603.6
-    },
-    {
-      "date": "2026-03-21",
-      "np": 31.25,
-      "expected_np": 18.74996,
-      "dividend_per_holder": 500001.6
-    },
-    {
-      "date": "2026-03-23",
       "np": 10.15,
-      "expected_np": 20.56061,
-      "dividend_per_holder": -416424.6
-    },
-    {
-      "date": "2026-03-25",
-      "np": 12.5,
-      "expected_np": 18.32145,
-      "dividend_per_holder": -232858.0
-    },
-    {
-      "date": "2026-03-27",
-      "np": 8.75,
-      "expected_np": 17.50792,
-      "dividend_per_holder": -350316.8
-    },
-    {
-      "date": "2026-03-29",
-      "np": 8.2,
-      "expected_np": 18.62564,
-      "dividend_per_holder": -417025.8
-    },
-    {
-      "date": "2026-03-30",
-      "np": 22.1,
-      "expected_np": 17.53883,
-      "dividend_per_holder": 182447.0
-    },
-    {
-      "date": "2026-04-01",
-      "np": 20.0,
-      "expected_np": 16.99506,
-      "dividend_per_holder": 120197.6
-    },
-    {
-      "date": "2026-04-04",
-      "np": 15.0,
-      "expected_np": 20.76648,
-      "dividend_per_holder": -230659.4
-    },
-    {
-      "date": "2026-04-07",
-      "np": 0.2,
-      "expected_np": 14.84601,
-      "dividend_per_holder": -585840.6
-    },
-    {
-      "date": "2026-04-09",
-      "np": 26.55,
-      "expected_np": 15.44042,
-      "dividend_per_holder": 444383.2
-    },
-    {
-      "date": "2026-04-10",
-      "np": 18.8,
-      "expected_np": 18.66461,
-      "dividend_per_holder": 5415.6
-    },
-    {
-      "date": "2026-04-12",
-      "np": 27.25,
-      "expected_np": 17.33563,
-      "dividend_per_holder": 396574.6
-    }
-  ],
-  "3136195": [
-    {
-      "date": "2025-10-22",
-      "np": 11.05,
-      "expected_np": 13.5901,
-      "dividend_per_holder": -101604.0
-    },
-    {
-      "date": "2025-10-24",
-      "np": 19.25,
-      "expected_np": 14.26644,
-      "dividend_per_holder": 199342.6
+      "expected_np": 15.63833,
+      "dividend_per_holder": -219533.4
     },
     {
       "date": "2025-10-26",
-      "np": 11.1,
-      "expected_np": 15.87242,
-      "dividend_per_holder": -190896.6
-    },
-    {
-      "date": "2025-10-28",
-      "np": 1.4,
-      "expected_np": 15.78759,
-      "dividend_per_holder": -575503.4
-    },
-    {
-      "date": "2025-10-31",
-      "np": 17.05,
-      "expected_np": 16.00858,
-      "dividend_per_holder": 41656.8
-    },
-    {
-      "date": "2025-11-02",
-      "np": 20.7,
-      "expected_np": 16.00132,
-      "dividend_per_holder": 187947.2
-    },
-    {
-      "date": "2025-11-03",
-      "np": 29.0,
-      "expected_np": 17.57637,
-      "dividend_per_holder": 456945.2
-    },
-    {
-      "date": "2025-11-05",
-      "np": 11.0,
-      "expected_np": 16.24389,
-      "dividend_per_holder": -209755.6
-    },
-    {
-      "date": "2025-11-09",
-      "np": 26.0,
-      "expected_np": 17.16422,
-      "dividend_per_holder": 353431.2
-    },
-    {
-      "date": "2025-11-11",
-      "np": 21.5,
-      "expected_np": 16.6892,
-      "dividend_per_holder": 192432.2
-    },
-    {
-      "date": "2025-11-12",
-      "np": 10.05,
-      "expected_np": 16.18067,
-      "dividend_per_holder": -245226.6
-    },
-    {
-      "date": "2025-11-14",
-      "np": 31.7,
-      "expected_np": 17.87956,
-      "dividend_per_holder": 552817.8
-    },
-    {
-      "date": "2025-11-17",
-      "np": 12.9,
-      "expected_np": 18.85473,
-      "dividend_per_holder": -238189.2
-    },
-    {
-      "date": "2025-11-19",
-      "np": 13.95,
-      "expected_np": 18.78939,
-      "dividend_per_holder": -193575.8
-    },
-    {
-      "date": "2025-11-22",
-      "np": 13.65,
-      "expected_np": 17.7349,
-      "dividend_per_holder": -163396.0
-    },
-    {
-      "date": "2025-11-24",
-      "np": 37.35,
-      "expected_np": 19.92169,
-      "dividend_per_holder": 697132.2
-    },
-    {
-      "date": "2025-11-26",
-      "np": 12.85,
-      "expected_np": 19.34458,
-      "dividend_per_holder": -259783.4
-    },
-    {
-      "date": "2025-11-28",
-      "np": 5.0,
-      "expected_np": 18.38456,
-      "dividend_per_holder": -535382.6
-    },
-    {
-      "date": "2025-11-30",
-      "np": 12.55,
-      "expected_np": 17.77987,
-      "dividend_per_holder": -209194.8
-    },
-    {
-      "date": "2025-12-02",
-      "np": 20.4,
-      "expected_np": 15.54364,
-      "dividend_per_holder": 194254.2
-    },
-    {
-      "date": "2025-12-03",
-      "np": 34.6,
-      "expected_np": 17.45734,
-      "dividend_per_holder": 685706.6
-    },
-    {
-      "date": "2025-12-05",
-      "np": 17.0,
-      "expected_np": 20.54849,
-      "dividend_per_holder": -141939.6
-    },
-    {
-      "date": "2025-12-09",
-      "np": 14.05,
-      "expected_np": 16.17624,
-      "dividend_per_holder": -85049.8
-    },
-    {
-      "date": "2025-12-13",
-      "np": 28.35,
-      "expected_np": 15.5371,
-      "dividend_per_holder": 512516.0
-    },
-    {
-      "date": "2025-12-19",
-      "np": 12.4,
-      "expected_np": 16.59768,
-      "dividend_per_holder": -167907.2
-    },
-    {
-      "date": "2025-12-21",
-      "np": -2.35,
-      "expected_np": 17.7513,
-      "dividend_per_holder": -804052.0
-    },
-    {
-      "date": "2025-12-23",
-      "np": 29.65,
-      "expected_np": 14.95955,
-      "dividend_per_holder": 587618.0
-    },
-    {
-      "date": "2025-12-25",
-      "np": 7.55,
-      "expected_np": 17.27199,
-      "dividend_per_holder": -388879.8
-    },
-    {
-      "date": "2025-12-27",
-      "np": 31.4,
-      "expected_np": 16.3936,
-      "dividend_per_holder": 600256.0
-    },
-    {
-      "date": "2025-12-29",
-      "np": 13.2,
-      "expected_np": 16.78234,
-      "dividend_per_holder": -143293.6
-    },
-    {
-      "date": "2025-12-31",
-      "np": 15.3,
-      "expected_np": 15.17771,
-      "dividend_per_holder": 4891.6
-    },
-    {
-      "date": "2026-01-03",
-      "np": 18.45,
-      "expected_np": 16.20747,
-      "dividend_per_holder": 89701.2
-    },
-    {
-      "date": "2026-01-05",
-      "np": -4.55,
-      "expected_np": 16.32757,
-      "dividend_per_holder": -835103.0
-    },
-    {
-      "date": "2026-01-07",
-      "np": 16.25,
-      "expected_np": 14.32055,
-      "dividend_per_holder": 77178.2
-    },
-    {
-      "date": "2026-01-09",
-      "np": 7.9,
-      "expected_np": 14.76793,
-      "dividend_per_holder": -274717.4
-    },
-    {
-      "date": "2026-01-11",
-      "np": 19.25,
-      "expected_np": 14.17756,
-      "dividend_per_holder": 202897.4
-    },
-    {
-      "date": "2026-01-14",
-      "np": 8.1,
-      "expected_np": 14.44743,
-      "dividend_per_holder": -253897.2
-    },
-    {
-      "date": "2026-01-15",
-      "np": 17.45,
-      "expected_np": 14.81919,
-      "dividend_per_holder": 105232.4
-    },
-    {
-      "date": "2026-01-17",
-      "np": 16.35,
-      "expected_np": 15.42357,
-      "dividend_per_holder": 37057.2
-    },
-    {
-      "date": "2026-01-19",
-      "np": 17.35,
-      "expected_np": 16.5489,
-      "dividend_per_holder": 32044.0
-    },
-    {
-      "date": "2026-01-21",
-      "np": 13.35,
-      "expected_np": 16.60203,
-      "dividend_per_holder": -130081.2
-    },
-    {
-      "date": "2026-01-24",
-      "np": 6.9,
-      "expected_np": 13.14745,
-      "dividend_per_holder": -249897.8
-    },
-    {
-      "date": "2026-01-27",
-      "np": 11.15,
-      "expected_np": 11.78683,
-      "dividend_per_holder": -25473.4
-    },
-    {
-      "date": "2026-01-28",
-      "np": 6.85,
-      "expected_np": 13.32592,
-      "dividend_per_holder": -259036.8
-    },
-    {
-      "date": "2026-01-30",
-      "np": 15.8,
-      "expected_np": 15.08344,
-      "dividend_per_holder": 28662.4
-    },
-    {
-      "date": "2026-02-01",
-      "np": 10.25,
-      "expected_np": 15.10984,
-      "dividend_per_holder": -194393.8
-    },
-    {
-      "date": "2026-02-03",
-      "np": 17.3,
-      "expected_np": 16.46305,
-      "dividend_per_holder": 33478.0
-    },
-    {
-      "date": "2026-02-04",
-      "np": 20.95,
-      "expected_np": 15.40484,
-      "dividend_per_holder": 221806.4
-    },
-    {
-      "date": "2026-02-08",
-      "np": 4.15,
-      "expected_np": 12.45905,
-      "dividend_per_holder": -332362.0
-    },
-    {
-      "date": "2026-02-10",
-      "np": 12.8,
-      "expected_np": 15.38641,
-      "dividend_per_holder": -103456.6
-    },
-    {
-      "date": "2026-02-11",
-      "np": 22.55,
-      "expected_np": 13.44379,
-      "dividend_per_holder": 364248.2
-    },
-    {
-      "date": "2026-02-19",
-      "np": 18.95,
-      "expected_np": 13.05828,
-      "dividend_per_holder": 235668.6
-    },
-    {
-      "date": "2026-02-21",
-      "np": 19.65,
-      "expected_np": 14.79415,
-      "dividend_per_holder": 194234.2
-    },
-    {
-      "date": "2026-02-22",
-      "np": 25.75,
-      "expected_np": 16.862,
-      "dividend_per_holder": 355519.8
-    },
-    {
-      "date": "2026-02-24",
-      "np": 11.7,
-      "expected_np": 15.49479,
-      "dividend_per_holder": -151791.8
-    },
-    {
-      "date": "2026-02-27",
-      "np": 12.6,
-      "expected_np": 14.99902,
-      "dividend_per_holder": -95960.8
-    },
-    {
-      "date": "2026-03-01",
-      "np": 8.95,
-      "expected_np": 14.44486,
-      "dividend_per_holder": -219794.4
-    },
-    {
-      "date": "2026-03-03",
-      "np": 19.75,
-      "expected_np": 13.61589,
-      "dividend_per_holder": 245364.2
-    },
-    {
-      "date": "2026-03-04",
-      "np": 20.35,
-      "expected_np": 13.76356,
-      "dividend_per_holder": 263457.6
-    },
-    {
-      "date": "2026-03-06",
-      "np": 15.15,
-      "expected_np": 14.22975,
-      "dividend_per_holder": 36809.8
-    },
-    {
-      "date": "2026-03-08",
-      "np": 20.55,
-      "expected_np": 13.96352,
-      "dividend_per_holder": 263459.4
-    },
-    {
-      "date": "2026-03-09",
-      "np": 33.4,
-      "expected_np": 14.57278,
-      "dividend_per_holder": 753089.0
-    },
-    {
-      "date": "2026-03-11",
-      "np": 18.0,
-      "expected_np": 17.57499,
-      "dividend_per_holder": 17000.6
-    },
-    {
-      "date": "2026-03-15",
-      "np": 14.85,
-      "expected_np": 16.02329,
-      "dividend_per_holder": -46931.6
-    },
-    {
-      "date": "2026-03-17",
-      "np": 19.45,
-      "expected_np": 17.45619,
-      "dividend_per_holder": 79752.4
-    },
-    {
-      "date": "2026-03-20",
-      "np": 19.6,
-      "expected_np": 16.51136,
-      "dividend_per_holder": 123545.6
-    },
-    {
-      "date": "2026-03-22",
-      "np": 27.3,
-      "expected_np": 18.19846,
-      "dividend_per_holder": 364061.4
-    },
-    {
-      "date": "2026-03-24",
-      "np": 15.1,
-      "expected_np": 16.56613,
-      "dividend_per_holder": -58645.4
-    },
-    {
-      "date": "2026-03-26",
-      "np": 8.95,
-      "expected_np": 14.11398,
-      "dividend_per_holder": -206559.2
-    },
-    {
-      "date": "2026-03-29",
-      "np": 14.15,
-      "expected_np": 12.25991,
-      "dividend_per_holder": 75603.4
-    },
-    {
-      "date": "2026-03-31",
-      "np": 13.4,
-      "expected_np": 13.48023,
-      "dividend_per_holder": -3209.4
-    },
-    {
-      "date": "2026-04-01",
-      "np": 19.85,
-      "expected_np": 16.69149,
-      "dividend_per_holder": 126340.2
-    },
-    {
-      "date": "2026-04-06",
-      "np": 23.3,
-      "expected_np": 14.77072,
-      "dividend_per_holder": 341171.4
-    },
-    {
-      "date": "2026-04-09",
-      "np": 16.4,
-      "expected_np": 14.72404,
-      "dividend_per_holder": 67038.4
-    },
-    {
-      "date": "2026-04-10",
-      "np": 20.95,
-      "expected_np": 15.9759,
-      "dividend_per_holder": 198964.0
-    }
-  ],
-  "3908809": [
-    {
-      "date": "2025-10-22",
-      "np": 21.35,
-      "expected_np": 18.59387,
-      "dividend_per_holder": 110245.4
-    },
-    {
-      "date": "2025-10-24",
-      "np": 30.75,
-      "expected_np": 22.07037,
-      "dividend_per_holder": 347185.4
-    },
-    {
-      "date": "2025-10-26",
-      "np": 10.05,
-      "expected_np": 21.15813,
-      "dividend_per_holder": -444325.2
+      "np": 13.75,
+      "expected_np": 18.02784,
+      "dividend_per_holder": -171113.6
     },
     {
       "date": "2025-10-27",
-      "np": 23.45,
-      "expected_np": 19.64127,
-      "dividend_per_holder": 152349.4
+      "np": 0.4,
+      "expected_np": 18.18039,
+      "dividend_per_holder": -711215.6
     },
     {
       "date": "2025-10-29",
-      "np": 7.95,
-      "expected_np": 17.86506,
-      "dividend_per_holder": -396602.4
+      "np": 32.65,
+      "expected_np": 16.75312,
+      "dividend_per_holder": 635875.0
     },
     {
-      "date": "2025-11-02",
-      "np": 30.45,
-      "expected_np": 18.80239,
-      "dividend_per_holder": 465904.6
+      "date": "2025-11-01",
+      "np": 25.85,
+      "expected_np": 18.79725,
+      "dividend_per_holder": 282110.0
+    },
+    {
+      "date": "2025-11-03",
+      "np": 25.05,
+      "expected_np": 19.4941,
+      "dividend_per_holder": 222236.0
     },
     {
       "date": "2025-11-05",
-      "np": 42.9,
-      "expected_np": 19.46696,
-      "dividend_per_holder": 937321.6
+      "np": 21.6,
+      "expected_np": 20.88343,
+      "dividend_per_holder": 28662.8
     },
     {
       "date": "2025-11-07",
-      "np": 22.4,
-      "expected_np": 21.0995,
-      "dividend_per_holder": 52020.0
+      "np": 30.25,
+      "expected_np": 20.61257,
+      "dividend_per_holder": 385497.0
     },
     {
-      "date": "2025-11-08",
-      "np": 19.35,
-      "expected_np": 19.6762,
-      "dividend_per_holder": -13048.0
+      "date": "2025-11-09",
+      "np": 16.65,
+      "expected_np": 18.90488,
+      "dividend_per_holder": -90195.4
     },
     {
       "date": "2025-11-10",
-      "np": 20.95,
-      "expected_np": 19.46782,
-      "dividend_per_holder": 59287.4
+      "np": 37.2,
+      "expected_np": 22.50746,
+      "dividend_per_holder": 587701.6
     },
     {
-      "date": "2025-11-13",
-      "np": 19.75,
-      "expected_np": 21.06987,
-      "dividend_per_holder": -52794.6
+      "date": "2025-11-18",
+      "np": 19.35,
+      "expected_np": 21.68385,
+      "dividend_per_holder": -93354.2
     },
     {
-      "date": "2025-11-15",
-      "np": 20.3,
-      "expected_np": 22.1655,
-      "dividend_per_holder": -74620.0
-    },
-    {
-      "date": "2025-11-17",
-      "np": 31.1,
-      "expected_np": 21.28532,
-      "dividend_per_holder": 392587.4
-    },
-    {
-      "date": "2025-11-19",
-      "np": 11.15,
-      "expected_np": 20.15124,
-      "dividend_per_holder": -360049.8
-    },
-    {
-      "date": "2025-11-21",
-      "np": 21.75,
-      "expected_np": 21.67816,
-      "dividend_per_holder": 2873.8
-    },
-    {
-      "date": "2025-11-23",
-      "np": 33.4,
-      "expected_np": 20.82596,
-      "dividend_per_holder": 502961.6
+      "date": "2025-11-22",
+      "np": 26.75,
+      "expected_np": 21.90213,
+      "dividend_per_holder": 193914.8
     },
     {
       "date": "2025-11-24",
-      "np": 7.2,
-      "expected_np": 19.79681,
-      "dividend_per_holder": -503872.4
+      "np": 16.8,
+      "expected_np": 21.63744,
+      "dividend_per_holder": -193497.6
+    },
+    {
+      "date": "2025-11-26",
+      "np": 31.55,
+      "expected_np": 19.65877,
+      "dividend_per_holder": 475649.2
     },
     {
       "date": "2025-11-28",
-      "np": 28.1,
-      "expected_np": 19.44678,
-      "dividend_per_holder": 346128.8
+      "np": 27.95,
+      "expected_np": 21.39188,
+      "dividend_per_holder": 262324.6
     },
     {
-      "date": "2025-11-30",
-      "np": 13.0,
-      "expected_np": 21.01033,
-      "dividend_per_holder": -320413.0
+      "date": "2025-11-29",
+      "np": 18.25,
+      "expected_np": 22.77889,
+      "dividend_per_holder": -181155.8
     },
     {
       "date": "2025-12-01",
-      "np": 34.4,
-      "expected_np": 21.20437,
-      "dividend_per_holder": 527825.2
+      "np": 20.5,
+      "expected_np": 24.15008,
+      "dividend_per_holder": -146003.4
     },
     {
       "date": "2025-12-03",
-      "np": 20.65,
-      "expected_np": 22.62176,
-      "dividend_per_holder": -78870.6
+      "np": 11.4,
+      "expected_np": 22.87915,
+      "dividend_per_holder": -459166.2
     },
     {
       "date": "2025-12-05",
-      "np": 22.75,
-      "expected_np": 21.1249,
-      "dividend_per_holder": 65004.0
+      "np": 30.8,
+      "expected_np": 22.61066,
+      "dividend_per_holder": 327573.6
     },
     {
       "date": "2025-12-06",
-      "np": 16.05,
-      "expected_np": 20.72133,
-      "dividend_per_holder": -186853.0
+      "np": 20.0,
+      "expected_np": 22.5576,
+      "dividend_per_holder": -102304.0
     },
     {
       "date": "2025-12-12",
-      "np": 37.0,
-      "expected_np": 22.68511,
-      "dividend_per_holder": 572595.4
+      "np": 15.4,
+      "expected_np": 20.79501,
+      "dividend_per_holder": -215800.4
     },
     {
-      "date": "2025-12-14",
-      "np": 5.75,
-      "expected_np": 23.09339,
-      "dividend_per_holder": -693735.6
+      "date": "2025-12-15",
+      "np": 26.4,
+      "expected_np": 15.70723,
+      "dividend_per_holder": 427710.6
     },
     {
-      "date": "2025-12-17",
-      "np": 19.4,
-      "expected_np": 22.2182,
-      "dividend_per_holder": -112728.0
+      "date": "2025-12-18",
+      "np": 15.3,
+      "expected_np": 19.09492,
+      "dividend_per_holder": -151797.0
+    },
+    {
+      "date": "2025-12-20",
+      "np": 20.15,
+      "expected_np": 22.47632,
+      "dividend_per_holder": -93053.0
     },
     {
       "date": "2025-12-22",
-      "np": 22.2,
-      "expected_np": 21.54417,
-      "dividend_per_holder": 26233.0
+      "np": 12.6,
+      "expected_np": 21.37355,
+      "dividend_per_holder": -350942.2
     },
     {
       "date": "2025-12-23",
-      "np": 21.4,
-      "expected_np": 21.44426,
-      "dividend_per_holder": -1770.2
+      "np": 22.2,
+      "expected_np": 19.17315,
+      "dividend_per_holder": 121073.8
     },
     {
-      "date": "2025-12-25",
-      "np": 31.2,
-      "expected_np": 16.19032,
-      "dividend_per_holder": 600387.2
+      "date": "2025-12-26",
+      "np": 30.35,
+      "expected_np": 20.60844,
+      "dividend_per_holder": 389662.4
     },
     {
-      "date": "2025-12-27",
-      "np": 12.15,
-      "expected_np": 17.69648,
-      "dividend_per_holder": -221859.2
+      "date": "2025-12-28",
+      "np": 20.25,
+      "expected_np": 19.83524,
+      "dividend_per_holder": 16590.4
     },
     {
-      "date": "2025-12-29",
-      "np": 5.2,
-      "expected_np": 18.11678,
-      "dividend_per_holder": -516671.0
+      "date": "2025-12-30",
+      "np": 22.75,
+      "expected_np": 19.40169,
+      "dividend_per_holder": 133932.4
     },
     {
-      "date": "2025-12-31",
-      "np": 31.85,
-      "expected_np": 19.87584,
-      "dividend_per_holder": 478966.2
-    },
-    {
-      "date": "2026-01-02",
-      "np": 23.85,
-      "expected_np": 19.84676,
-      "dividend_per_holder": 160129.4
+      "date": "2026-01-01",
+      "np": 27.5,
+      "expected_np": 20.01985,
+      "dividend_per_holder": 299205.8
     },
     {
       "date": "2026-01-04",
-      "np": 22.75,
-      "expected_np": 19.83072,
-      "dividend_per_holder": 116771.4
+      "np": 20.6,
+      "expected_np": 20.54518,
+      "dividend_per_holder": 2192.6
     },
     {
-      "date": "2026-01-08",
-      "np": 22.45,
-      "expected_np": 18.71462,
-      "dividend_per_holder": 149415.4
+      "date": "2026-01-05",
+      "np": 28.65,
+      "expected_np": 21.06764,
+      "dividend_per_holder": 303294.4
     },
     {
-      "date": "2026-01-10",
-      "np": 21.45,
-      "expected_np": 20.23419,
-      "dividend_per_holder": 48632.4
+      "date": "2026-01-15",
+      "np": -2.25,
+      "expected_np": 12.26169,
+      "dividend_per_holder": -580467.6
     },
     {
-      "date": "2026-01-12",
-      "np": 11.95,
-      "expected_np": 21.98559,
-      "dividend_per_holder": -401423.8
-    },
-    {
-      "date": "2026-01-14",
-      "np": 31.55,
-      "expected_np": 18.77191,
-      "dividend_per_holder": 511123.4
-    },
-    {
-      "date": "2026-01-16",
-      "np": 7.5,
-      "expected_np": 19.21162,
-      "dividend_per_holder": -468464.6
+      "date": "2026-01-17",
+      "np": 9.7,
+      "expected_np": 18.95561,
+      "dividend_per_holder": -370224.6
     },
     {
       "date": "2026-01-19",
-      "np": 10.3,
-      "expected_np": 18.5411,
-      "dividend_per_holder": -329644.0
-    },
-    {
-      "date": "2026-01-21",
-      "np": 8.45,
-      "expected_np": 19.47301,
-      "dividend_per_holder": -440920.2
+      "np": 14.5,
+      "expected_np": 15.83498,
+      "dividend_per_holder": -53399.2
     },
     {
       "date": "2026-01-23",
-      "np": 25.2,
-      "expected_np": 21.38935,
-      "dividend_per_holder": 152426.0
+      "np": 4.0,
+      "expected_np": 18.2551,
+      "dividend_per_holder": -570204.2
     },
     {
-      "date": "2026-01-24",
-      "np": 27.8,
-      "expected_np": 19.2017,
-      "dividend_per_holder": 343932.2
+      "date": "2026-01-25",
+      "np": 28.75,
+      "expected_np": 20.72163,
+      "dividend_per_holder": 321134.6
     },
     {
-      "date": "2026-01-26",
-      "np": 33.55,
-      "expected_np": 21.26259,
-      "dividend_per_holder": 491496.4
+      "date": "2026-01-27",
+      "np": 20.1,
+      "expected_np": 18.12442,
+      "dividend_per_holder": 79023.0
     },
     {
-      "date": "2026-01-28",
-      "np": 19.4,
-      "expected_np": 21.60389,
-      "dividend_per_holder": -88155.4
+      "date": "2026-01-29",
+      "np": 18.75,
+      "expected_np": 18.42735,
+      "dividend_per_holder": 12905.8
     },
     {
       "date": "2026-01-30",
-      "np": 6.1,
-      "expected_np": 19.5438,
-      "dividend_per_holder": -537752.2
+      "np": 24.65,
+      "expected_np": 18.31298,
+      "dividend_per_holder": 253480.8
     },
     {
       "date": "2026-02-01",
-      "np": 10.2,
-      "expected_np": 18.71584,
-      "dividend_per_holder": -340633.8
+      "np": 26.6,
+      "expected_np": 20.90156,
+      "dividend_per_holder": 227937.6
     },
     {
-      "date": "2026-02-04",
-      "np": 29.85,
-      "expected_np": 17.12814,
-      "dividend_per_holder": 508874.4
+      "date": "2026-02-03",
+      "np": 19.5,
+      "expected_np": 19.24191,
+      "dividend_per_holder": 10323.4
     },
     {
-      "date": "2026-02-07",
-      "np": 27.65,
-      "expected_np": 18.99045,
-      "dividend_per_holder": 346382.2
+      "date": "2026-02-05",
+      "np": 21.05,
+      "expected_np": 22.09161,
+      "dividend_per_holder": -41664.4
+    },
+    {
+      "date": "2026-02-06",
+      "np": 7.15,
+      "expected_np": 19.99314,
+      "dividend_per_holder": -513725.6
     },
     {
       "date": "2026-02-09",
-      "np": 28.6,
-      "expected_np": 18.86066,
-      "dividend_per_holder": 389573.6
+      "np": 23.35,
+      "expected_np": 18.03296,
+      "dividend_per_holder": 212681.6
     },
     {
       "date": "2026-02-11",
-      "np": 22.45,
-      "expected_np": 22.41062,
-      "dividend_per_holder": 1575.2
+      "np": 30.15,
+      "expected_np": 19.01355,
+      "dividend_per_holder": 445457.8
     },
     {
       "date": "2026-02-19",
-      "np": 12.75,
-      "expected_np": 18.85978,
-      "dividend_per_holder": -244391.0
+      "np": 35.15,
+      "expected_np": 17.57472,
+      "dividend_per_holder": 703011.2
     },
     {
-      "date": "2026-02-20",
-      "np": 20.95,
-      "expected_np": 14.24041,
-      "dividend_per_holder": 268383.6
+      "date": "2026-02-21",
+      "np": 22.5,
+      "expected_np": 23.28518,
+      "dividend_per_holder": -31407.4
     },
     {
-      "date": "2026-02-22",
-      "np": 12.65,
-      "expected_np": 15.4852,
-      "dividend_per_holder": -113408.0
+      "date": "2026-02-23",
+      "np": 7.6,
+      "expected_np": 20.04652,
+      "dividend_per_holder": -497861.0
     },
     {
-      "date": "2026-02-24",
-      "np": 13.65,
-      "expected_np": 18.44616,
-      "dividend_per_holder": -191846.6
+      "date": "2026-02-25",
+      "np": 29.65,
+      "expected_np": 20.14657,
+      "dividend_per_holder": 380137.0
+    },
+    {
+      "date": "2026-02-27",
+      "np": 19.2,
+      "expected_np": 22.00122,
+      "dividend_per_holder": -112049.0
+    },
+    {
+      "date": "2026-03-01",
+      "np": 20.5,
+      "expected_np": 20.53631,
+      "dividend_per_holder": -1452.6
+    },
+    {
+      "date": "2026-03-03",
+      "np": 4.7,
+      "expected_np": 21.14955,
+      "dividend_per_holder": -657982.0
+    },
+    {
+      "date": "2026-03-05",
+      "np": 11.8,
+      "expected_np": 20.6093,
+      "dividend_per_holder": -352372.0
     },
     {
       "date": "2026-03-08",
-      "np": 26.9,
-      "expected_np": 17.73858,
-      "dividend_per_holder": 366456.8
+      "np": 17.9,
+      "expected_np": 21.65249,
+      "dividend_per_holder": -150099.8
     },
     {
-      "date": "2026-03-09",
-      "np": 15.85,
-      "expected_np": 19.45714,
-      "dividend_per_holder": -144285.4
+      "date": "2026-03-10",
+      "np": 26.35,
+      "expected_np": 21.61308,
+      "dividend_per_holder": 189476.8
     },
     {
-      "date": "2026-03-11",
-      "np": 13.15,
-      "expected_np": 17.8965,
-      "dividend_per_holder": -189860.0
+      "date": "2026-03-12",
+      "np": 12.2,
+      "expected_np": 19.31941,
+      "dividend_per_holder": -284776.6
     },
     {
       "date": "2026-03-13",
-      "np": 23.25,
-      "expected_np": 19.99627,
-      "dividend_per_holder": 130149.0
+      "np": 23.8,
+      "expected_np": 19.16579,
+      "dividend_per_holder": 185368.2
     },
     {
       "date": "2026-03-15",
-      "np": 20.2,
-      "expected_np": 20.19711,
-      "dividend_per_holder": 115.8
+      "np": 25.05,
+      "expected_np": 16.83122,
+      "dividend_per_holder": 328751.2
     },
     {
       "date": "2026-03-17",
-      "np": 12.6,
-      "expected_np": 20.35473,
-      "dividend_per_holder": -310189.0
-    },
-    {
-      "date": "2026-03-21",
-      "np": 15.95,
-      "expected_np": 20.1046,
-      "dividend_per_holder": -166184.0
-    },
-    {
-      "date": "2026-03-24",
-      "np": 31.8,
-      "expected_np": 20.99134,
-      "dividend_per_holder": 432346.4
-    },
-    {
-      "date": "2026-03-25",
-      "np": 18.0,
-      "expected_np": 20.69549,
-      "dividend_per_holder": -107819.6
-    },
-    {
-      "date": "2026-03-27",
-      "np": 4.7,
-      "expected_np": 20.24265,
-      "dividend_per_holder": -621705.8
-    },
-    {
-      "date": "2026-03-30",
-      "np": 26.1,
-      "expected_np": 20.24042,
-      "dividend_per_holder": 234383.2
-    },
-    {
-      "date": "2026-03-31",
-      "np": 5.15,
-      "expected_np": 18.88677,
-      "dividend_per_holder": -549470.8
-    },
-    {
-      "date": "2026-04-02",
-      "np": 18.35,
-      "expected_np": 16.2478,
-      "dividend_per_holder": 84087.8
-    },
-    {
-      "date": "2026-04-05",
-      "np": 29.7,
-      "expected_np": 19.22632,
-      "dividend_per_holder": 418947.0
+      "np": 5.6,
+      "expected_np": 20.76789,
+      "dividend_per_holder": -606715.6
     },
     {
       "date": "2026-04-08",
-      "np": 25.05,
-      "expected_np": 18.4666,
-      "dividend_per_holder": 263336.0
+      "np": 13.6,
+      "expected_np": 11.86685,
+      "dividend_per_holder": 69325.8
+    },
+    {
+      "date": "2026-04-10",
+      "np": 10.85,
+      "expected_np": 11.10541,
+      "dividend_per_holder": -10216.4
+    },
+    {
+      "date": "2026-04-12",
+      "np": 5.8,
+      "expected_np": 15.94938,
+      "dividend_per_holder": -405975.2
     }
   ],
   "3078576": [
     {
       "date": "2025-10-22",
       "np": 16.6,
-      "expected_np": 9.66621,
-      "dividend_per_holder": 277351.6
+      "expected_np": 10.10207,
+      "dividend_per_holder": 259917.0
     },
     {
       "date": "2025-10-24",
       "np": 5.2,
-      "expected_np": 10.95023,
-      "dividend_per_holder": -230009.2
+      "expected_np": 11.38609,
+      "dividend_per_holder": -247443.8
     },
     {
       "date": "2025-10-26",
       "np": 12.5,
-      "expected_np": 11.50844,
-      "dividend_per_holder": 39662.4
+      "expected_np": 11.9443,
+      "dividend_per_holder": 22227.8
     },
     {
       "date": "2025-10-27",
       "np": 5.5,
-      "expected_np": 12.84428,
-      "dividend_per_holder": -293771.4
+      "expected_np": 13.28015,
+      "dividend_per_holder": -311206.0
     },
     {
       "date": "2025-10-29",
       "np": 7.15,
-      "expected_np": 12.34942,
-      "dividend_per_holder": -207976.8
+      "expected_np": 12.78528,
+      "dividend_per_holder": -225411.4
     },
     {
       "date": "2025-10-31",
       "np": 8.6,
-      "expected_np": 12.75013,
-      "dividend_per_holder": -166005.0
+      "expected_np": 13.18599,
+      "dividend_per_holder": -183439.6
     },
     {
       "date": "2025-11-01",
       "np": 0.6,
-      "expected_np": 12.27332,
-      "dividend_per_holder": -466932.8
+      "expected_np": 12.70918,
+      "dividend_per_holder": -484367.4
     },
     {
       "date": "2025-11-03",
       "np": 11.35,
-      "expected_np": 13.33471,
-      "dividend_per_holder": -79388.4
+      "expected_np": 13.77057,
+      "dividend_per_holder": -96823.0
     },
     {
       "date": "2025-11-05",
       "np": 17.0,
-      "expected_np": 13.53903,
-      "dividend_per_holder": 138438.8
+      "expected_np": 13.97489,
+      "dividend_per_holder": 121004.2
     },
     {
       "date": "2025-11-07",
       "np": 16.45,
-      "expected_np": 11.62755,
-      "dividend_per_holder": 192898.0
+      "expected_np": 12.06341,
+      "dividend_per_holder": 175463.4
     },
     {
       "date": "2025-11-09",
       "np": 13.55,
-      "expected_np": 12.52483,
-      "dividend_per_holder": 41006.8
+      "expected_np": 12.96069,
+      "dividend_per_holder": 23572.2
     },
     {
       "date": "2025-11-11",
       "np": 9.5,
-      "expected_np": 13.38112,
-      "dividend_per_holder": -155244.8
+      "expected_np": 13.81698,
+      "dividend_per_holder": -172679.4
     },
     {
       "date": "2025-11-12",
       "np": 20.1,
-      "expected_np": 15.25059,
-      "dividend_per_holder": 193976.2
+      "expected_np": 15.68646,
+      "dividend_per_holder": 176541.6
     },
     {
       "date": "2025-11-16",
       "np": 19.35,
-      "expected_np": 13.56665,
-      "dividend_per_holder": 231334.2
+      "expected_np": 14.00251,
+      "dividend_per_holder": 213899.6
     },
     {
       "date": "2025-11-18",
       "np": 8.85,
-      "expected_np": 15.29844,
-      "dividend_per_holder": -257937.4
+      "expected_np": 15.7343,
+      "dividend_per_holder": -275372.0
     },
     {
       "date": "2025-11-21",
       "np": -3.7,
-      "expected_np": 15.19121,
-      "dividend_per_holder": -755648.4
+      "expected_np": 15.62707,
+      "dividend_per_holder": -773083.0
     },
     {
       "date": "2025-11-23",
       "np": 17.8,
-      "expected_np": 13.56355,
-      "dividend_per_holder": 169458.2
+      "expected_np": 13.99941,
+      "dividend_per_holder": 152023.6
     },
     {
       "date": "2025-11-26",
       "np": 26.7,
-      "expected_np": 14.00695,
-      "dividend_per_holder": 507722.0
+      "expected_np": 14.44281,
+      "dividend_per_holder": 490287.4
     },
     {
       "date": "2025-11-29",
       "np": 7.35,
-      "expected_np": 12.87353,
-      "dividend_per_holder": -220941.0
+      "expected_np": 13.30939,
+      "dividend_per_holder": -238375.6
     },
     {
       "date": "2025-12-02",
       "np": 13.15,
-      "expected_np": 14.25399,
-      "dividend_per_holder": -44159.4
+      "expected_np": 14.68985,
+      "dividend_per_holder": -61594.0
     },
     {
       "date": "2025-12-04",
       "np": 27.15,
-      "expected_np": 15.56501,
-      "dividend_per_holder": 463399.8
+      "expected_np": 16.00087,
+      "dividend_per_holder": 445965.2
     },
     {
       "date": "2025-12-05",
       "np": 14.1,
-      "expected_np": 14.29126,
-      "dividend_per_holder": -7650.4
+      "expected_np": 14.72712,
+      "dividend_per_holder": -25085.0
     },
     {
       "date": "2025-12-07",
       "np": 16.3,
-      "expected_np": 13.14382,
-      "dividend_per_holder": 126247.4
+      "expected_np": 13.57968,
+      "dividend_per_holder": 108812.8
     },
     {
       "date": "2025-12-11",
       "np": -0.8,
-      "expected_np": 14.5543,
-      "dividend_per_holder": -614172.2
+      "expected_np": 14.99017,
+      "dividend_per_holder": -631606.8
     },
     {
       "date": "2025-12-15",
       "np": 20.6,
-      "expected_np": 13.22903,
-      "dividend_per_holder": 294838.8
+      "expected_np": 13.66489,
+      "dividend_per_holder": 277404.2
     },
     {
       "date": "2025-12-19",
       "np": 30.2,
-      "expected_np": 15.59659,
-      "dividend_per_holder": 584136.6
+      "expected_np": 16.03245,
+      "dividend_per_holder": 566702.0
     },
     {
       "date": "2025-12-20",
       "np": 4.3,
-      "expected_np": 14.56685,
-      "dividend_per_holder": -410673.8
+      "expected_np": 15.00271,
+      "dividend_per_holder": -428108.4
     },
     {
       "date": "2025-12-22",
       "np": 11.1,
-      "expected_np": 16.21075,
-      "dividend_per_holder": -204430.0
+      "expected_np": 16.64661,
+      "dividend_per_holder": -221864.6
     },
     {
       "date": "2025-12-26",
       "np": 17.0,
-      "expected_np": 14.84208,
-      "dividend_per_holder": 86317.0
+      "expected_np": 15.27794,
+      "dividend_per_holder": 68882.4
     },
     {
       "date": "2025-12-28",
       "np": 8.2,
-      "expected_np": 14.97844,
-      "dividend_per_holder": -271137.6
+      "expected_np": 15.4143,
+      "dividend_per_holder": -288572.2
     },
     {
       "date": "2025-12-30",
       "np": 28.8,
-      "expected_np": 16.84999,
-      "dividend_per_holder": 478000.6
+      "expected_np": 17.28585,
+      "dividend_per_holder": 460566.0
     },
     {
       "date": "2026-01-01",
       "np": 15.4,
-      "expected_np": 16.88884,
-      "dividend_per_holder": -59553.6
+      "expected_np": 17.3247,
+      "dividend_per_holder": -76988.2
     },
     {
       "date": "2026-01-03",
       "np": 23.75,
-      "expected_np": 14.88761,
-      "dividend_per_holder": 354495.4
+      "expected_np": 15.32348,
+      "dividend_per_holder": 337060.8
     },
     {
       "date": "2026-01-05",
       "np": 8.25,
-      "expected_np": 17.59462,
-      "dividend_per_holder": -373784.6
+      "expected_np": 18.03048,
+      "dividend_per_holder": -391219.2
     },
     {
       "date": "2026-01-07",
       "np": 8.6,
-      "expected_np": 16.3879,
-      "dividend_per_holder": -311515.8
+      "expected_np": 16.82376,
+      "dividend_per_holder": -328950.4
     },
     {
       "date": "2026-01-09",
       "np": 12.65,
-      "expected_np": 15.62424,
-      "dividend_per_holder": -118969.4
+      "expected_np": 16.0601,
+      "dividend_per_holder": -136404.0
     },
     {
       "date": "2026-01-10",
       "np": 21.85,
-      "expected_np": 15.62541,
-      "dividend_per_holder": 248983.6
+      "expected_np": 16.06127,
+      "dividend_per_holder": 231549.0
     },
     {
       "date": "2026-01-12",
       "np": 4.05,
-      "expected_np": 17.6344,
-      "dividend_per_holder": -543376.0
+      "expected_np": 18.07026,
+      "dividend_per_holder": -560810.6
     },
     {
       "date": "2026-01-15",
       "np": 4.35,
-      "expected_np": 16.71888,
-      "dividend_per_holder": -494755.2
+      "expected_np": 17.15474,
+      "dividend_per_holder": -512189.8
     },
     {
       "date": "2026-01-17",
       "np": 17.35,
-      "expected_np": 15.81007,
-      "dividend_per_holder": 61597.2
+      "expected_np": 16.24593,
+      "dividend_per_holder": 44162.6
     },
     {
       "date": "2026-01-19",
       "np": -0.2,
-      "expected_np": 12.67099,
-      "dividend_per_holder": -514839.6
+      "expected_np": 13.10685,
+      "dividend_per_holder": -532274.2
     },
     {
       "date": "2026-01-21",
       "np": 8.2,
-      "expected_np": 15.27348,
-      "dividend_per_holder": -282939.4
+      "expected_np": 15.70935,
+      "dividend_per_holder": -300374.0
     },
     {
       "date": "2026-01-24",
       "np": 10.5,
-      "expected_np": 13.88216,
-      "dividend_per_holder": -135286.2
+      "expected_np": 14.31802,
+      "dividend_per_holder": -152720.8
     },
     {
       "date": "2026-01-26",
       "np": 6.8,
-      "expected_np": 15.30654,
-      "dividend_per_holder": -340261.6
+      "expected_np": 15.7424,
+      "dividend_per_holder": -357696.2
     },
     {
       "date": "2026-01-28",
       "np": 4.4,
-      "expected_np": 14.97683,
-      "dividend_per_holder": -423073.2
+      "expected_np": 15.41269,
+      "dividend_per_holder": -440507.8
     },
     {
       "date": "2026-01-30",
       "np": 9.6,
-      "expected_np": 15.21922,
-      "dividend_per_holder": -224768.8
+      "expected_np": 15.65508,
+      "dividend_per_holder": -242203.4
     },
     {
       "date": "2026-02-01",
       "np": 15.95,
-      "expected_np": 13.49074,
-      "dividend_per_holder": 98370.4
+      "expected_np": 13.9266,
+      "dividend_per_holder": 80935.8
     },
     {
       "date": "2026-02-03",
       "np": 2.7,
-      "expected_np": 13.35535,
-      "dividend_per_holder": -426214.0
+      "expected_np": 13.79121,
+      "dividend_per_holder": -443648.6
     },
     {
       "date": "2026-02-04",
       "np": 15.75,
-      "expected_np": 12.25514,
-      "dividend_per_holder": 139794.4
+      "expected_np": 12.691,
+      "dividend_per_holder": 122359.8
     },
     {
       "date": "2026-02-06",
       "np": 15.15,
-      "expected_np": 15.05571,
-      "dividend_per_holder": 3771.6
+      "expected_np": 15.49157,
+      "dividend_per_holder": -13663.0
     },
     {
       "date": "2026-02-08",
       "np": 11.95,
-      "expected_np": 15.13609,
-      "dividend_per_holder": -127443.6
+      "expected_np": 15.57195,
+      "dividend_per_holder": -144878.2
     },
     {
       "date": "2026-02-11",
       "np": 12.75,
-      "expected_np": 15.90251,
-      "dividend_per_holder": -126100.6
+      "expected_np": 16.33838,
+      "dividend_per_holder": -143535.2
     },
     {
       "date": "2026-02-19",
       "np": 8.4,
-      "expected_np": 12.84304,
-      "dividend_per_holder": -177721.6
+      "expected_np": 13.2789,
+      "dividend_per_holder": -195156.2
     },
     {
       "date": "2026-02-22",
       "np": 10.05,
-      "expected_np": 14.97566,
-      "dividend_per_holder": -197026.6
+      "expected_np": 15.41153,
+      "dividend_per_holder": -214461.2
     },
     {
       "date": "2026-02-24",
       "np": 22.75,
-      "expected_np": 13.74147,
-      "dividend_per_holder": 360341.0
+      "expected_np": 14.17734,
+      "dividend_per_holder": 342906.4
     },
     {
       "date": "2026-02-25",
       "np": 16.0,
-      "expected_np": 13.69411,
-      "dividend_per_holder": 92235.6
+      "expected_np": 14.12997,
+      "dividend_per_holder": 74801.0
     },
     {
       "date": "2026-02-27",
       "np": 12.0,
-      "expected_np": 15.00366,
-      "dividend_per_holder": -120146.6
+      "expected_np": 15.43953,
+      "dividend_per_holder": -137581.2
     },
     {
       "date": "2026-03-01",
       "np": 17.3,
-      "expected_np": 13.7519,
-      "dividend_per_holder": 141924.0
+      "expected_np": 14.18776,
+      "dividend_per_holder": 124489.4
     },
     {
       "date": "2026-03-02",
       "np": 9.7,
-      "expected_np": 14.32215,
-      "dividend_per_holder": -184886.2
+      "expected_np": 14.75802,
+      "dividend_per_holder": -202320.8
     },
     {
       "date": "2026-03-04",
       "np": 22.1,
-      "expected_np": 14.64258,
-      "dividend_per_holder": 298296.8
+      "expected_np": 15.07844,
+      "dividend_per_holder": 280862.2
     },
     {
       "date": "2026-03-06",
       "np": 19.0,
-      "expected_np": 15.11362,
-      "dividend_per_holder": 155455.0
+      "expected_np": 15.54949,
+      "dividend_per_holder": 138020.4
     },
     {
       "date": "2026-03-08",
       "np": 1.55,
-      "expected_np": 13.56063,
-      "dividend_per_holder": -480425.2
+      "expected_np": 13.99649,
+      "dividend_per_holder": -497859.8
     },
     {
       "date": "2026-03-10",
       "np": 26.45,
-      "expected_np": 13.2333,
-      "dividend_per_holder": 528667.8
+      "expected_np": 13.66917,
+      "dividend_per_holder": 511233.2
     },
     {
       "date": "2026-03-14",
       "np": 11.05,
-      "expected_np": 18.0118,
-      "dividend_per_holder": -278472.0
+      "expected_np": 18.44766,
+      "dividend_per_holder": -295906.6
     },
     {
       "date": "2026-03-16",
       "np": 14.2,
-      "expected_np": 15.28513,
-      "dividend_per_holder": -43405.0
+      "expected_np": 15.72099,
+      "dividend_per_holder": -60839.6
     },
     {
       "date": "2026-03-18",
       "np": 9.8,
-      "expected_np": 14.47169,
-      "dividend_per_holder": -186867.8
+      "expected_np": 14.90756,
+      "dividend_per_holder": -204302.4
     },
     {
       "date": "2026-03-20",
       "np": 9.0,
-      "expected_np": 13.98467,
-      "dividend_per_holder": -199386.8
+      "expected_np": 14.42053,
+      "dividend_per_holder": -216821.4
     },
     {
       "date": "2026-03-22",
       "np": 7.55,
-      "expected_np": 14.21974,
-      "dividend_per_holder": -266789.6
+      "expected_np": 14.6556,
+      "dividend_per_holder": -284224.2
     },
     {
       "date": "2026-03-25",
       "np": 5.1,
-      "expected_np": 13.03854,
-      "dividend_per_holder": -317541.8
+      "expected_np": 13.47441,
+      "dividend_per_holder": -334976.4
     },
     {
       "date": "2026-03-27",
       "np": -0.2,
-      "expected_np": 14.17817,
-      "dividend_per_holder": -575126.6
+      "expected_np": 14.61403,
+      "dividend_per_holder": -592561.2
     },
     {
       "date": "2026-03-30",
       "np": 2.7,
-      "expected_np": 13.15001,
-      "dividend_per_holder": -418000.2
+      "expected_np": 13.58587,
+      "dividend_per_holder": -435434.8
     },
     {
       "date": "2026-04-01",
       "np": 3.25,
-      "expected_np": 13.3432,
-      "dividend_per_holder": -403728.2
+      "expected_np": 13.77907,
+      "dividend_per_holder": -421162.8
     },
     {
       "date": "2026-04-03",
       "np": 12.3,
-      "expected_np": 12.73951,
-      "dividend_per_holder": -17580.2
+      "expected_np": 13.17537,
+      "dividend_per_holder": -35014.8
     },
     {
       "date": "2026-04-05",
       "np": 9.6,
-      "expected_np": 11.76131,
-      "dividend_per_holder": -86452.2
+      "expected_np": 12.19717,
+      "dividend_per_holder": -103886.8
     },
     {
       "date": "2026-04-07",
       "np": 9.5,
-      "expected_np": 11.38057,
-      "dividend_per_holder": -75222.8
+      "expected_np": 11.81643,
+      "dividend_per_holder": -92657.4
     },
     {
       "date": "2026-04-09",
       "np": -0.1,
-      "expected_np": 10.14391,
-      "dividend_per_holder": -409756.6
+      "expected_np": 10.57978,
+      "dividend_per_holder": -427191.2
     },
     {
       "date": "2026-04-10",
       "np": 7.25,
-      "expected_np": 11.92814,
-      "dividend_per_holder": -187125.6
+      "expected_np": 12.364,
+      "dividend_per_holder": -204560.2
     }
   ],
-  "4432158": [
+  "3908809": [
     {
       "date": "2025-10-22",
-      "np": 15.4,
-      "expected_np": 12.45426,
-      "dividend_per_holder": 117829.4
+      "np": 21.35,
+      "expected_np": 19.02973,
+      "dividend_per_holder": 92810.8
     },
     {
       "date": "2025-10-24",
-      "np": 8.2,
-      "expected_np": 15.55331,
-      "dividend_per_holder": -294132.2
+      "np": 30.75,
+      "expected_np": 22.50623,
+      "dividend_per_holder": 329750.8
     },
     {
       "date": "2025-10-26",
-      "np": 23.65,
-      "expected_np": 15.10622,
-      "dividend_per_holder": 341751.4
+      "np": 10.05,
+      "expected_np": 21.59399,
+      "dividend_per_holder": -461759.8
     },
     {
       "date": "2025-10-27",
-      "np": 16.15,
-      "expected_np": 14.7486,
-      "dividend_per_holder": 56056.2
+      "np": 23.45,
+      "expected_np": 20.07713,
+      "dividend_per_holder": 134914.8
     },
     {
       "date": "2025-10-29",
-      "np": 12.7,
-      "expected_np": 13.60279,
-      "dividend_per_holder": -36111.6
-    },
-    {
-      "date": "2025-10-31",
-      "np": 26.35,
-      "expected_np": 16.4842,
-      "dividend_per_holder": 394631.8
+      "np": 7.95,
+      "expected_np": 18.30092,
+      "dividend_per_holder": -414037.0
     },
     {
       "date": "2025-11-02",
-      "np": 10.5,
-      "expected_np": 16.69517,
-      "dividend_per_holder": -247807.0
+      "np": 30.45,
+      "expected_np": 19.23825,
+      "dividend_per_holder": 448470.0
     },
     {
       "date": "2025-11-05",
-      "np": 15.45,
-      "expected_np": 16.88888,
-      "dividend_per_holder": -57555.2
+      "np": 42.9,
+      "expected_np": 19.90282,
+      "dividend_per_holder": 919887.0
     },
     {
       "date": "2025-11-07",
-      "np": 14.3,
-      "expected_np": 17.67322,
-      "dividend_per_holder": -134928.8
+      "np": 22.4,
+      "expected_np": 21.53536,
+      "dividend_per_holder": 34585.4
     },
     {
       "date": "2025-11-08",
-      "np": 21.2,
-      "expected_np": 17.07113,
-      "dividend_per_holder": 165154.8
+      "np": 19.35,
+      "expected_np": 20.11206,
+      "dividend_per_holder": -30482.6
     },
     {
       "date": "2025-11-10",
-      "np": 17.05,
-      "expected_np": 16.28848,
-      "dividend_per_holder": 30461.0
+      "np": 20.95,
+      "expected_np": 19.90368,
+      "dividend_per_holder": 41852.8
     },
     {
       "date": "2025-11-13",
-      "np": 3.9,
-      "expected_np": 16.64393,
-      "dividend_per_holder": -509757.4
+      "np": 19.75,
+      "expected_np": 21.50573,
+      "dividend_per_holder": -70229.2
     },
     {
       "date": "2025-11-15",
-      "np": 17.15,
-      "expected_np": 16.82477,
-      "dividend_per_holder": 13009.0
+      "np": 20.3,
+      "expected_np": 22.60136,
+      "dividend_per_holder": -92054.6
     },
     {
       "date": "2025-11-17",
-      "np": 4.9,
-      "expected_np": 16.92653,
-      "dividend_per_holder": -481061.2
+      "np": 31.1,
+      "expected_np": 21.72118,
+      "dividend_per_holder": 375152.8
     },
     {
       "date": "2025-11-19",
-      "np": 5.05,
-      "expected_np": 15.2585,
-      "dividend_per_holder": -408340.2
+      "np": 11.15,
+      "expected_np": 20.58711,
+      "dividend_per_holder": -377484.4
     },
     {
       "date": "2025-11-21",
-      "np": 21.0,
-      "expected_np": 17.24344,
-      "dividend_per_holder": 150262.2
+      "np": 21.75,
+      "expected_np": 22.11402,
+      "dividend_per_holder": -14560.8
     },
     {
       "date": "2025-11-23",
-      "np": 18.7,
-      "expected_np": 16.47654,
-      "dividend_per_holder": 88938.4
+      "np": 33.4,
+      "expected_np": 21.26182,
+      "dividend_per_holder": 485527.0
     },
     {
       "date": "2025-11-24",
-      "np": 9.3,
-      "expected_np": 15.80536,
-      "dividend_per_holder": -260214.4
+      "np": 7.2,
+      "expected_np": 20.23267,
+      "dividend_per_holder": -521307.0
     },
     {
       "date": "2025-11-28",
-      "np": 21.6,
-      "expected_np": 14.58554,
-      "dividend_per_holder": 280578.6
+      "np": 28.1,
+      "expected_np": 19.88264,
+      "dividend_per_holder": 328694.2
     },
     {
       "date": "2025-11-30",
-      "np": 24.95,
-      "expected_np": 15.58142,
-      "dividend_per_holder": 374743.2
+      "np": 13.0,
+      "expected_np": 21.44619,
+      "dividend_per_holder": -337847.6
     },
     {
       "date": "2025-12-01",
-      "np": 10.75,
-      "expected_np": 16.9136,
-      "dividend_per_holder": -246543.8
+      "np": 34.4,
+      "expected_np": 21.64023,
+      "dividend_per_holder": 510390.6
     },
     {
       "date": "2025-12-03",
-      "np": 26.8,
-      "expected_np": 16.44073,
-      "dividend_per_holder": 414371.0
+      "np": 20.65,
+      "expected_np": 23.05763,
+      "dividend_per_holder": -96305.2
     },
     {
       "date": "2025-12-05",
-      "np": 15.2,
-      "expected_np": 15.99005,
-      "dividend_per_holder": -31602.2
+      "np": 22.75,
+      "expected_np": 21.56076,
+      "dividend_per_holder": 47569.4
     },
     {
       "date": "2025-12-06",
-      "np": 10.8,
-      "expected_np": 15.89397,
-      "dividend_per_holder": -203759.0
+      "np": 16.05,
+      "expected_np": 21.15719,
+      "dividend_per_holder": -204287.6
     },
     {
       "date": "2025-12-12",
-      "np": 19.8,
-      "expected_np": 17.78846,
-      "dividend_per_holder": 80461.8
+      "np": 37.0,
+      "expected_np": 23.12098,
+      "dividend_per_holder": 555160.8
+    },
+    {
+      "date": "2025-12-14",
+      "np": 5.75,
+      "expected_np": 23.52925,
+      "dividend_per_holder": -711170.2
+    },
+    {
+      "date": "2025-12-17",
+      "np": 19.4,
+      "expected_np": 22.65406,
+      "dividend_per_holder": -130162.6
+    },
+    {
+      "date": "2025-12-22",
+      "np": 22.2,
+      "expected_np": 21.98004,
+      "dividend_per_holder": 8798.4
+    },
+    {
+      "date": "2025-12-23",
+      "np": 21.4,
+      "expected_np": 21.88012,
+      "dividend_per_holder": -19204.8
     },
     {
       "date": "2025-12-25",
-      "np": 12.4,
-      "expected_np": 16.22708,
-      "dividend_per_holder": -153083.4
+      "np": 31.2,
+      "expected_np": 16.62618,
+      "dividend_per_holder": 582952.6
     },
     {
       "date": "2025-12-27",
-      "np": -1.1,
-      "expected_np": 12.74966,
-      "dividend_per_holder": -553986.4
+      "np": 12.15,
+      "expected_np": 18.13234,
+      "dividend_per_holder": -239293.8
     },
     {
       "date": "2025-12-29",
-      "np": 13.65,
-      "expected_np": 11.31417,
-      "dividend_per_holder": 93433.2
+      "np": 5.2,
+      "expected_np": 18.55264,
+      "dividend_per_holder": -534105.6
     },
     {
       "date": "2025-12-31",
-      "np": 20.9,
-      "expected_np": 13.9198,
-      "dividend_per_holder": 279208.0
+      "np": 31.85,
+      "expected_np": 20.31171,
+      "dividend_per_holder": 461531.6
     },
     {
       "date": "2026-01-02",
-      "np": 9.5,
-      "expected_np": 14.51999,
-      "dividend_per_holder": -200799.6
+      "np": 23.85,
+      "expected_np": 20.28263,
+      "dividend_per_holder": 142694.8
     },
     {
       "date": "2026-01-04",
-      "np": 15.9,
-      "expected_np": 14.65915,
-      "dividend_per_holder": 49634.0
-    },
-    {
-      "date": "2026-01-06",
-      "np": 15.55,
-      "expected_np": 15.26359,
-      "dividend_per_holder": 11456.6
+      "np": 22.75,
+      "expected_np": 20.26658,
+      "dividend_per_holder": 99336.8
     },
     {
       "date": "2026-01-08",
-      "np": 12.15,
-      "expected_np": 15.12712,
-      "dividend_per_holder": -119084.6
+      "np": 22.45,
+      "expected_np": 19.15048,
+      "dividend_per_holder": 131980.8
     },
     {
       "date": "2026-01-10",
-      "np": 20.45,
-      "expected_np": 15.87134,
-      "dividend_per_holder": 183146.2
+      "np": 21.45,
+      "expected_np": 20.67005,
+      "dividend_per_holder": 31197.8
     },
     {
       "date": "2026-01-12",
-      "np": 20.4,
-      "expected_np": 17.46989,
-      "dividend_per_holder": 117204.4
+      "np": 11.95,
+      "expected_np": 22.42146,
+      "dividend_per_holder": -418858.4
     },
     {
       "date": "2026-01-14",
-      "np": 21.45,
-      "expected_np": 15.23076,
-      "dividend_per_holder": 248769.6
+      "np": 31.55,
+      "expected_np": 19.20778,
+      "dividend_per_holder": 493688.8
     },
     {
       "date": "2026-01-16",
-      "np": 12.2,
-      "expected_np": 15.42951,
-      "dividend_per_holder": -129180.2
+      "np": 7.5,
+      "expected_np": 19.64748,
+      "dividend_per_holder": -485899.2
     },
     {
       "date": "2026-01-19",
-      "np": 12.85,
-      "expected_np": 14.64879,
-      "dividend_per_holder": -71951.4
+      "np": 10.3,
+      "expected_np": 18.97696,
+      "dividend_per_holder": -347078.6
     },
     {
       "date": "2026-01-21",
-      "np": 10.2,
-      "expected_np": 15.34306,
-      "dividend_per_holder": -205722.2
+      "np": 8.45,
+      "expected_np": 19.90887,
+      "dividend_per_holder": -458354.8
     },
     {
       "date": "2026-01-23",
-      "np": 29.05,
-      "expected_np": 16.8991,
-      "dividend_per_holder": 486035.8
+      "np": 25.2,
+      "expected_np": 21.82521,
+      "dividend_per_holder": 134991.4
     },
     {
       "date": "2026-01-24",
-      "np": 4.55,
-      "expected_np": 16.39214,
-      "dividend_per_holder": -473685.8
+      "np": 27.8,
+      "expected_np": 19.63756,
+      "dividend_per_holder": 326497.6
     },
     {
       "date": "2026-01-26",
-      "np": 14.5,
-      "expected_np": 16.83929,
-      "dividend_per_holder": -93571.4
-    },
-    {
-      "date": "2026-02-19",
-      "np": 7.8,
-      "expected_np": 17.23355,
-      "dividend_per_holder": -377342.0
-    },
-    {
-      "date": "2026-02-22",
-      "np": 9.45,
-      "expected_np": 11.73505,
-      "dividend_per_holder": -91402.2
-    },
-    {
-      "date": "2026-02-24",
-      "np": 9.65,
-      "expected_np": 12.78725,
-      "dividend_per_holder": -125490.0
-    },
-    {
-      "date": "2026-02-27",
-      "np": 20.15,
-      "expected_np": 12.72716,
-      "dividend_per_holder": 296913.4
-    },
-    {
-      "date": "2026-03-01",
-      "np": 12.55,
-      "expected_np": 14.17763,
-      "dividend_per_holder": -65105.0
-    },
-    {
-      "date": "2026-03-03",
-      "np": 16.9,
-      "expected_np": 12.69878,
-      "dividend_per_holder": 168048.6
-    },
-    {
-      "date": "2026-03-08",
-      "np": 18.65,
-      "expected_np": 12.36821,
-      "dividend_per_holder": 251271.6
-    },
-    {
-      "date": "2026-03-09",
-      "np": 12.7,
-      "expected_np": 14.57022,
-      "dividend_per_holder": -74808.8
-    },
-    {
-      "date": "2026-03-11",
-      "np": 18.3,
-      "expected_np": 13.61634,
-      "dividend_per_holder": 187346.6
-    },
-    {
-      "date": "2026-03-13",
-      "np": 25.65,
-      "expected_np": 15.53732,
-      "dividend_per_holder": 404507.4
-    },
-    {
-      "date": "2026-03-15",
-      "np": 14.35,
-      "expected_np": 15.26319,
-      "dividend_per_holder": -36527.6
-    },
-    {
-      "date": "2026-03-17",
-      "np": 26.15,
-      "expected_np": 15.58152,
-      "dividend_per_holder": 422739.2
-    },
-    {
-      "date": "2026-03-19",
-      "np": 24.25,
-      "expected_np": 17.82008,
-      "dividend_per_holder": 257196.6
-    },
-    {
-      "date": "2026-03-21",
-      "np": 18.05,
-      "expected_np": 18.3258,
-      "dividend_per_holder": -11032.2
-    },
-    {
-      "date": "2026-03-24",
-      "np": 19.75,
-      "expected_np": 17.2725,
-      "dividend_per_holder": 99100.0
-    },
-    {
-      "date": "2026-03-25",
-      "np": 1.35,
-      "expected_np": 17.07751,
-      "dividend_per_holder": -629100.2
-    },
-    {
-      "date": "2026-03-27",
-      "np": 21.75,
-      "expected_np": 16.25826,
-      "dividend_per_holder": 219669.8
-    },
-    {
-      "date": "2026-03-30",
-      "np": 36.2,
-      "expected_np": 17.44608,
-      "dividend_per_holder": 750156.6
-    },
-    {
-      "date": "2026-03-31",
-      "np": 4.65,
-      "expected_np": 16.3385,
-      "dividend_per_holder": -467539.8
-    },
-    {
-      "date": "2026-04-02",
-      "np": 11.6,
-      "expected_np": 13.49676,
-      "dividend_per_holder": -75870.2
-    },
-    {
-      "date": "2026-04-06",
-      "np": 19.9,
-      "expected_np": 16.95463,
-      "dividend_per_holder": 117814.8
-    },
-    {
-      "date": "2026-04-08",
-      "np": 21.35,
-      "expected_np": 12.37586,
-      "dividend_per_holder": 358965.8
-    },
-    {
-      "date": "2026-04-10",
-      "np": 2.5,
-      "expected_np": 16.96267,
-      "dividend_per_holder": -578506.8
-    }
-  ],
-  "3136193": [
-    {
-      "date": "2025-10-22",
-      "np": 17.15,
-      "expected_np": 16.80381,
-      "dividend_per_holder": 13847.4
-    },
-    {
-      "date": "2025-10-24",
-      "np": 13.0,
-      "expected_np": 15.5399,
-      "dividend_per_holder": -101595.8
-    },
-    {
-      "date": "2025-10-25",
-      "np": 18.4,
-      "expected_np": 14.42369,
-      "dividend_per_holder": 159052.6
-    },
-    {
-      "date": "2025-10-27",
-      "np": 23.5,
-      "expected_np": 16.49955,
-      "dividend_per_holder": 280018.2
-    },
-    {
-      "date": "2025-10-29",
-      "np": 19.25,
-      "expected_np": 19.22317,
-      "dividend_per_holder": 1073.0
-    },
-    {
-      "date": "2025-10-31",
-      "np": 31.8,
-      "expected_np": 20.31219,
-      "dividend_per_holder": 459512.4
-    },
-    {
-      "date": "2025-11-02",
-      "np": 25.55,
-      "expected_np": 18.97295,
-      "dividend_per_holder": 263082.0
-    },
-    {
-      "date": "2025-11-04",
-      "np": 24.9,
-      "expected_np": 17.92449,
-      "dividend_per_holder": 279020.6
-    },
-    {
-      "date": "2025-11-06",
-      "np": 18.2,
-      "expected_np": 19.46633,
-      "dividend_per_holder": -50653.0
-    },
-    {
-      "date": "2025-11-08",
-      "np": 12.95,
-      "expected_np": 18.49299,
-      "dividend_per_holder": -221719.4
-    },
-    {
-      "date": "2025-11-10",
-      "np": 11.95,
-      "expected_np": 20.55944,
-      "dividend_per_holder": -344377.6
-    },
-    {
-      "date": "2025-11-12",
-      "np": 16.55,
-      "expected_np": 16.96532,
-      "dividend_per_holder": -16613.0
-    },
-    {
-      "date": "2025-11-13",
-      "np": 26.85,
-      "expected_np": 19.38591,
-      "dividend_per_holder": 298563.6
-    },
-    {
-      "date": "2025-11-16",
-      "np": 15.3,
-      "expected_np": 18.08776,
-      "dividend_per_holder": -111510.4
-    },
-    {
-      "date": "2025-11-18",
-      "np": 18.95,
-      "expected_np": 19.36224,
-      "dividend_per_holder": -16489.6
-    },
-    {
-      "date": "2025-11-21",
-      "np": 0.75,
-      "expected_np": 18.22481,
-      "dividend_per_holder": -698992.6
-    },
-    {
-      "date": "2025-11-23",
-      "np": 17.2,
-      "expected_np": 18.41585,
-      "dividend_per_holder": -48633.8
-    },
-    {
-      "date": "2025-11-24",
-      "np": 8.1,
-      "expected_np": 17.75658,
-      "dividend_per_holder": -386263.4
-    },
-    {
-      "date": "2025-11-26",
-      "np": 8.5,
-      "expected_np": 19.4904,
-      "dividend_per_holder": -439616.0
-    },
-    {
-      "date": "2025-11-28",
-      "np": 13.5,
-      "expected_np": 16.6695,
-      "dividend_per_holder": -126779.8
-    },
-    {
-      "date": "2025-11-29",
-      "np": 20.95,
-      "expected_np": 19.08335,
-      "dividend_per_holder": 74666.0
-    },
-    {
-      "date": "2025-12-01",
-      "np": 9.1,
-      "expected_np": 18.31017,
-      "dividend_per_holder": -368406.8
-    },
-    {
-      "date": "2025-12-14",
-      "np": 22.5,
-      "expected_np": 13.76108,
-      "dividend_per_holder": 349556.8
-    },
-    {
-      "date": "2025-12-18",
-      "np": 13.05,
-      "expected_np": 16.18181,
-      "dividend_per_holder": -125272.4
-    },
-    {
-      "date": "2025-12-20",
-      "np": 30.45,
-      "expected_np": 16.19584,
-      "dividend_per_holder": 570166.4
-    },
-    {
-      "date": "2025-12-23",
-      "np": 18.85,
-      "expected_np": 18.6256,
-      "dividend_per_holder": 8976.2
-    },
-    {
-      "date": "2025-12-26",
-      "np": 24.05,
-      "expected_np": 17.9825,
-      "dividend_per_holder": 242699.8
-    },
-    {
-      "date": "2025-12-27",
-      "np": 4.85,
-      "expected_np": 19.83119,
-      "dividend_per_holder": -599247.4
-    },
-    {
-      "date": "2025-12-29",
-      "np": 10.45,
-      "expected_np": 20.6477,
-      "dividend_per_holder": -407908.2
-    },
-    {
-      "date": "2025-12-31",
-      "np": 23.55,
-      "expected_np": 18.58493,
-      "dividend_per_holder": 198602.6
-    },
-    {
-      "date": "2026-01-02",
-      "np": 21.7,
-      "expected_np": 20.85349,
-      "dividend_per_holder": 33860.2
-    },
-    {
-      "date": "2026-01-04",
-      "np": 21.1,
-      "expected_np": 16.4058,
-      "dividend_per_holder": 187768.2
-    },
-    {
-      "date": "2026-01-05",
-      "np": 12.0,
-      "expected_np": 17.14122,
-      "dividend_per_holder": -205648.8
-    },
-    {
-      "date": "2026-01-07",
-      "np": 8.4,
-      "expected_np": 19.01149,
-      "dividend_per_holder": -424459.8
-    },
-    {
-      "date": "2026-01-09",
-      "np": 22.15,
-      "expected_np": 18.29156,
-      "dividend_per_holder": 154337.8
-    },
-    {
-      "date": "2026-01-11",
-      "np": 12.2,
-      "expected_np": 21.66796,
-      "dividend_per_holder": -378718.2
-    },
-    {
-      "date": "2026-01-13",
-      "np": 16.45,
-      "expected_np": 18.17328,
-      "dividend_per_holder": -68931.0
-    },
-    {
-      "date": "2026-01-17",
-      "np": 14.15,
-      "expected_np": 18.72224,
-      "dividend_per_holder": -182889.6
-    },
-    {
-      "date": "2026-01-19",
-      "np": 13.95,
-      "expected_np": 20.16589,
-      "dividend_per_holder": -248635.6
-    },
-    {
-      "date": "2026-01-20",
-      "np": 12.05,
-      "expected_np": 18.21974,
-      "dividend_per_holder": -246789.6
-    },
-    {
-      "date": "2026-01-23",
-      "np": 23.35,
-      "expected_np": 18.78548,
-      "dividend_per_holder": 182580.8
-    },
-    {
-      "date": "2026-02-07",
-      "np": 13.55,
-      "expected_np": 17.71965,
-      "dividend_per_holder": -166786.0
-    },
-    {
-      "date": "2026-02-10",
-      "np": 13.25,
-      "expected_np": 18.24822,
-      "dividend_per_holder": -199928.8
-    },
-    {
-      "date": "2026-02-19",
-      "np": -0.35,
-      "expected_np": 16.73327,
-      "dividend_per_holder": -683330.6
-    },
-    {
-      "date": "2026-03-03",
-      "np": 6.4,
-      "expected_np": 12.74654,
-      "dividend_per_holder": -253861.4
-    },
-    {
-      "date": "2026-03-05",
-      "np": 16.85,
-      "expected_np": 16.30532,
-      "dividend_per_holder": 21787.0
-    },
-    {
-      "date": "2026-03-06",
-      "np": 21.95,
-      "expected_np": 17.80451,
-      "dividend_per_holder": 165819.4
-    },
-    {
-      "date": "2026-03-08",
-      "np": 23.15,
-      "expected_np": 17.62826,
-      "dividend_per_holder": 220869.8
-    },
-    {
-      "date": "2026-03-10",
-      "np": 20.75,
-      "expected_np": 17.88275,
-      "dividend_per_holder": 114690.0
-    },
-    {
-      "date": "2026-03-12",
-      "np": 32.4,
-      "expected_np": 19.4519,
-      "dividend_per_holder": 517924.2
-    },
-    {
-      "date": "2026-03-13",
-      "np": 14.95,
-      "expected_np": 18.40055,
-      "dividend_per_holder": -138022.2
-    },
-    {
-      "date": "2026-03-16",
-      "np": 26.7,
-      "expected_np": 17.26841,
-      "dividend_per_holder": 377263.8
-    },
-    {
-      "date": "2026-03-17",
-      "np": 18.4,
-      "expected_np": 19.42786,
-      "dividend_per_holder": -41114.2
-    },
-    {
-      "date": "2026-03-19",
-      "np": 6.7,
-      "expected_np": 19.06095,
-      "dividend_per_holder": -494438.0
-    },
-    {
-      "date": "2026-03-21",
-      "np": 6.7,
-      "expected_np": 21.3838,
-      "dividend_per_holder": -587352.2
-    },
-    {
-      "date": "2026-03-22",
-      "np": 19.25,
-      "expected_np": 19.57335,
-      "dividend_per_holder": -12933.8
-    },
-    {
-      "date": "2026-03-24",
-      "np": 16.45,
-      "expected_np": 18.65895,
-      "dividend_per_holder": -88358.2
-    },
-    {
-      "date": "2026-03-28",
-      "np": 25.6,
-      "expected_np": 21.39407,
-      "dividend_per_holder": 168237.2
-    },
-    {
-      "date": "2026-03-30",
-      "np": 28.1,
-      "expected_np": 18.30665,
-      "dividend_per_holder": 391734.0
-    },
-    {
-      "date": "2026-03-31",
-      "np": 25.4,
-      "expected_np": 15.34445,
-      "dividend_per_holder": 402222.0
-    },
-    {
-      "date": "2026-04-02",
-      "np": 12.6,
-      "expected_np": 17.1503,
-      "dividend_per_holder": -182012.2
-    },
-    {
-      "date": "2026-04-05",
-      "np": 19.25,
-      "expected_np": 19.78566,
-      "dividend_per_holder": -21426.4
-    },
-    {
-      "date": "2026-04-07",
-      "np": 22.15,
-      "expected_np": 18.6652,
-      "dividend_per_holder": 139392.2
-    },
-    {
-      "date": "2026-04-08",
-      "np": 26.15,
-      "expected_np": 21.78537,
-      "dividend_per_holder": 174585.4
-    }
-  ],
-  "3202": [
-    {
-      "date": "2025-10-21",
-      "np": 11.25,
-      "expected_np": 12.17194,
-      "dividend_per_holder": -36877.6
-    },
-    {
-      "date": "2025-10-24",
-      "np": 32.0,
-      "expected_np": 13.99408,
-      "dividend_per_holder": 720237.0
-    },
-    {
-      "date": "2025-10-27",
-      "np": 11.85,
-      "expected_np": 16.28891,
-      "dividend_per_holder": -177556.6
-    },
-    {
-      "date": "2025-10-29",
-      "np": 21.85,
-      "expected_np": 13.58898,
-      "dividend_per_holder": 330440.6
-    },
-    {
-      "date": "2025-11-01",
-      "np": 22.95,
-      "expected_np": 13.74631,
-      "dividend_per_holder": 368147.6
-    },
-    {
-      "date": "2025-11-03",
-      "np": 11.9,
-      "expected_np": 15.15198,
-      "dividend_per_holder": -130079.2
-    },
-    {
-      "date": "2025-11-05",
-      "np": 2.4,
-      "expected_np": 15.65754,
-      "dividend_per_holder": -530301.6
-    },
-    {
-      "date": "2025-11-07",
-      "np": 6.65,
-      "expected_np": 14.70188,
-      "dividend_per_holder": -322075.0
-    },
-    {
-      "date": "2025-11-09",
-      "np": 24.75,
-      "expected_np": 15.48751,
-      "dividend_per_holder": 370499.4
-    },
-    {
-      "date": "2025-11-12",
-      "np": 18.3,
-      "expected_np": 18.16511,
-      "dividend_per_holder": 5395.4
-    },
-    {
-      "date": "2025-11-14",
-      "np": 21.8,
-      "expected_np": 15.90278,
-      "dividend_per_holder": 235889.0
-    },
-    {
-      "date": "2025-11-16",
-      "np": 22.05,
-      "expected_np": 15.47593,
-      "dividend_per_holder": 262962.8
-    },
-    {
-      "date": "2025-11-19",
-      "np": 4.45,
-      "expected_np": 16.11122,
-      "dividend_per_holder": -466448.8
-    },
-    {
-      "date": "2025-11-21",
-      "np": 6.4,
-      "expected_np": 16.19305,
-      "dividend_per_holder": -391722.2
-    },
-    {
-      "date": "2025-11-30",
-      "np": 27.6,
-      "expected_np": 16.90919,
-      "dividend_per_holder": 427632.4
-    },
-    {
-      "date": "2025-12-01",
-      "np": 15.75,
-      "expected_np": 16.22618,
-      "dividend_per_holder": -19047.2
-    },
-    {
-      "date": "2025-12-03",
-      "np": 21.7,
-      "expected_np": 17.95088,
-      "dividend_per_holder": 149964.6
-    },
-    {
-      "date": "2025-12-05",
-      "np": 24.9,
-      "expected_np": 16.30204,
-      "dividend_per_holder": 343918.4
-    },
-    {
-      "date": "2025-12-06",
-      "np": 17.4,
-      "expected_np": 16.35749,
-      "dividend_per_holder": 41700.4
-    },
-    {
-      "date": "2025-12-11",
-      "np": 1.6,
-      "expected_np": 15.91729,
-      "dividend_per_holder": -572691.6
-    },
-    {
-      "date": "2025-12-15",
-      "np": 21.75,
-      "expected_np": 15.22174,
-      "dividend_per_holder": 261130.6
-    },
-    {
-      "date": "2025-12-18",
-      "np": 26.55,
-      "expected_np": 17.64602,
-      "dividend_per_holder": 356159.4
-    },
-    {
-      "date": "2025-12-20",
-      "np": 23.9,
-      "expected_np": 15.35584,
-      "dividend_per_holder": 341766.6
-    },
-    {
-      "date": "2025-12-21",
-      "np": 14.15,
-      "expected_np": 17.2325,
-      "dividend_per_holder": -123300.2
-    },
-    {
-      "date": "2025-12-23",
-      "np": 14.25,
-      "expected_np": 16.55883,
-      "dividend_per_holder": -92353.2
-    },
-    {
-      "date": "2025-12-25",
-      "np": 23.65,
-      "expected_np": 14.70134,
-      "dividend_per_holder": 357946.2
-    },
-    {
-      "date": "2025-12-27",
-      "np": 24.15,
-      "expected_np": 14.88736,
-      "dividend_per_holder": 370505.6
-    },
-    {
-      "date": "2025-12-29",
-      "np": 22.8,
-      "expected_np": 15.3964,
-      "dividend_per_holder": 296143.8
-    },
-    {
-      "date": "2026-01-01",
-      "np": 14.6,
-      "expected_np": 14.78683,
-      "dividend_per_holder": -7473.0
-    },
-    {
-      "date": "2026-01-03",
-      "np": 26.75,
-      "expected_np": 15.41445,
-      "dividend_per_holder": 453421.8
-    },
-    {
-      "date": "2026-01-05",
-      "np": 17.55,
-      "expected_np": 17.16676,
-      "dividend_per_holder": 15329.6
-    },
-    {
-      "date": "2026-01-07",
-      "np": 21.35,
-      "expected_np": 17.6345,
-      "dividend_per_holder": 148620.0
-    },
-    {
-      "date": "2026-01-09",
-      "np": 25.0,
-      "expected_np": 18.05918,
-      "dividend_per_holder": 277632.8
-    },
-    {
-      "date": "2026-01-11",
-      "np": 15.35,
-      "expected_np": 19.43708,
-      "dividend_per_holder": -163483.4
-    },
-    {
-      "date": "2026-01-13",
-      "np": 17.35,
-      "expected_np": 19.38708,
-      "dividend_per_holder": -81483.2
-    },
-    {
-      "date": "2026-01-15",
-      "np": 9.7,
-      "expected_np": 16.85129,
-      "dividend_per_holder": -286051.6
-    },
-    {
-      "date": "2026-01-16",
-      "np": 32.6,
-      "expected_np": 18.06656,
-      "dividend_per_holder": 581337.8
-    },
-    {
-      "date": "2026-01-18",
-      "np": 9.9,
-      "expected_np": 20.61898,
-      "dividend_per_holder": -428759.4
-    },
-    {
-      "date": "2026-01-20",
-      "np": 13.25,
-      "expected_np": 18.50583,
-      "dividend_per_holder": -210233.4
-    },
-    {
-      "date": "2026-01-22",
-      "np": 20.7,
-      "expected_np": 17.52017,
-      "dividend_per_holder": 127193.4
-    },
-    {
-      "date": "2026-01-23",
-      "np": 26.5,
-      "expected_np": 16.24231,
-      "dividend_per_holder": 410307.8
-    },
-    {
-      "date": "2026-01-26",
-      "np": 21.1,
-      "expected_np": 18.84523,
-      "dividend_per_holder": 90190.6
+      "np": 33.55,
+      "expected_np": 21.69845,
+      "dividend_per_holder": 474061.8
     },
     {
       "date": "2026-01-28",
-      "np": 15.5,
-      "expected_np": 17.87038,
-      "dividend_per_holder": -94815.4
-    },
-    {
-      "date": "2026-01-29",
-      "np": 20.5,
-      "expected_np": 17.91579,
-      "dividend_per_holder": 103368.6
-    },
-    {
-      "date": "2026-01-31",
-      "np": 8.6,
-      "expected_np": 18.13134,
-      "dividend_per_holder": -381253.4
-    },
-    {
-      "date": "2026-02-04",
-      "np": 9.15,
-      "expected_np": 16.95884,
-      "dividend_per_holder": -312353.4
-    },
-    {
-      "date": "2026-02-05",
-      "np": 22.15,
-      "expected_np": 16.03549,
-      "dividend_per_holder": 244580.4
-    },
-    {
-      "date": "2026-02-07",
-      "np": 11.55,
-      "expected_np": 13.93826,
-      "dividend_per_holder": -95530.4
-    },
-    {
-      "date": "2026-02-10",
-      "np": 12.75,
-      "expected_np": 15.96365,
-      "dividend_per_holder": -128546.0
-    },
-    {
-      "date": "2026-02-11",
-      "np": 9.45,
-      "expected_np": 16.47793,
-      "dividend_per_holder": -281117.4
-    },
-    {
-      "date": "2026-02-19",
-      "np": 34.1,
-      "expected_np": 15.39791,
-      "dividend_per_holder": 748083.6
-    },
-    {
-      "date": "2026-02-21",
-      "np": 12.9,
-      "expected_np": 15.09959,
-      "dividend_per_holder": -87983.4
-    },
-    {
-      "date": "2026-02-23",
-      "np": 18.0,
-      "expected_np": 19.40046,
-      "dividend_per_holder": -56018.4
-    },
-    {
-      "date": "2026-02-25",
-      "np": 16.35,
-      "expected_np": 18.35724,
-      "dividend_per_holder": -80289.8
-    },
-    {
-      "date": "2026-02-26",
-      "np": 30.2,
-      "expected_np": 14.22842,
-      "dividend_per_holder": 638863.4
-    },
-    {
-      "date": "2026-02-28",
-      "np": 28.75,
-      "expected_np": 16.81435,
-      "dividend_per_holder": 477426.0
-    },
-    {
-      "date": "2026-03-02",
-      "np": 17.75,
-      "expected_np": 19.38353,
-      "dividend_per_holder": -65341.0
-    },
-    {
-      "date": "2026-03-05",
-      "np": 18.4,
-      "expected_np": 17.63151,
-      "dividend_per_holder": 30739.6
-    },
-    {
-      "date": "2026-03-06",
-      "np": 6.4,
-      "expected_np": 17.9396,
-      "dividend_per_holder": -461584.2
-    },
-    {
-      "date": "2026-03-08",
-      "np": 19.8,
-      "expected_np": 15.90194,
-      "dividend_per_holder": 155922.4
-    },
-    {
-      "date": "2026-03-10",
-      "np": 28.2,
-      "expected_np": 16.12538,
-      "dividend_per_holder": 482984.6
-    },
-    {
-      "date": "2026-03-11",
-      "np": 6.6,
-      "expected_np": 15.08456,
-      "dividend_per_holder": -339382.4
-    },
-    {
-      "date": "2026-03-13",
-      "np": 25.05,
-      "expected_np": 15.47227,
-      "dividend_per_holder": 383109.0
-    },
-    {
-      "date": "2026-03-16",
-      "np": 2.6,
-      "expected_np": 16.02377,
-      "dividend_per_holder": -536950.6
-    },
-    {
-      "date": "2026-03-18",
-      "np": 12.65,
-      "expected_np": 15.76127,
-      "dividend_per_holder": -124450.8
-    },
-    {
-      "date": "2026-03-20",
-      "np": 26.05,
-      "expected_np": 15.67292,
-      "dividend_per_holder": 415083.0
-    },
-    {
-      "date": "2026-03-21",
-      "np": 15.9,
-      "expected_np": 14.82167,
-      "dividend_per_holder": 43133.4
-    },
-    {
-      "date": "2026-03-23",
-      "np": 29.2,
-      "expected_np": 15.38339,
-      "dividend_per_holder": 552664.4
-    },
-    {
-      "date": "2026-03-25",
-      "np": 18.1,
-      "expected_np": 15.44177,
-      "dividend_per_holder": 106329.2
-    },
-    {
-      "date": "2026-03-27",
-      "np": 22.4,
-      "expected_np": 17.25859,
-      "dividend_per_holder": 205656.4
-    },
-    {
-      "date": "2026-03-29",
-      "np": 14.0,
-      "expected_np": 16.70698,
-      "dividend_per_holder": -108279.2
-    },
-    {
-      "date": "2026-03-31",
-      "np": 23.2,
-      "expected_np": 14.59701,
-      "dividend_per_holder": 344119.4
-    },
-    {
-      "date": "2026-04-01",
-      "np": 13.55,
-      "expected_np": 16.60538,
-      "dividend_per_holder": -122215.0
-    },
-    {
-      "date": "2026-04-03",
-      "np": 22.0,
-      "expected_np": 18.1612,
-      "dividend_per_holder": 153552.0
-    },
-    {
-      "date": "2026-04-05",
-      "np": 28.15,
-      "expected_np": 14.87349,
-      "dividend_per_holder": 531060.6
-    },
-    {
-      "date": "2026-04-07",
-      "np": 11.95,
-      "expected_np": 15.23582,
-      "dividend_per_holder": -131432.8
-    },
-    {
-      "date": "2026-04-09",
-      "np": 20.3,
-      "expected_np": 16.59858,
-      "dividend_per_holder": 148056.6
-    },
-    {
-      "date": "2026-04-10",
-      "np": 30.3,
-      "expected_np": 16.54282,
-      "dividend_per_holder": 550287.4
-    }
-  ],
-  "1966": [
-    {
-      "date": "2025-11-18",
-      "np": 13.45,
-      "expected_np": 11.41449,
-      "dividend_per_holder": 81420.6
-    },
-    {
-      "date": "2025-11-23",
-      "np": 11.2,
-      "expected_np": 12.6223,
-      "dividend_per_holder": -56892.0
-    },
-    {
-      "date": "2025-11-25",
-      "np": 21.45,
-      "expected_np": 14.39791,
-      "dividend_per_holder": 282083.4
-    },
-    {
-      "date": "2025-11-28",
-      "np": 7.3,
-      "expected_np": 15.27916,
-      "dividend_per_holder": -319166.6
-    },
-    {
-      "date": "2025-12-01",
-      "np": -0.95,
-      "expected_np": 14.64037,
-      "dividend_per_holder": -623614.6
-    },
-    {
-      "date": "2025-12-04",
-      "np": 3.15,
-      "expected_np": 13.27419,
-      "dividend_per_holder": -404967.6
-    },
-    {
-      "date": "2025-12-07",
-      "np": 27.3,
-      "expected_np": 14.03549,
-      "dividend_per_holder": 530580.4
-    },
-    {
-      "date": "2025-12-10",
-      "np": 18.65,
-      "expected_np": 14.76482,
-      "dividend_per_holder": 155407.4
-    },
-    {
-      "date": "2025-12-14",
-      "np": 13.25,
-      "expected_np": 15.05077,
-      "dividend_per_holder": -72030.6
-    },
-    {
-      "date": "2025-12-18",
-      "np": 25.1,
-      "expected_np": 16.85611,
-      "dividend_per_holder": 329755.6
-    },
-    {
-      "date": "2025-12-20",
-      "np": 25.05,
-      "expected_np": 15.48671,
-      "dividend_per_holder": 382531.4
-    },
-    {
-      "date": "2025-12-23",
-      "np": 17.05,
-      "expected_np": 16.63886,
-      "dividend_per_holder": 16445.4
-    },
-    {
-      "date": "2025-12-25",
-      "np": 13.65,
-      "expected_np": 13.57927,
-      "dividend_per_holder": 2829.0
-    },
-    {
-      "date": "2025-12-28",
-      "np": 24.05,
-      "expected_np": 16.13902,
-      "dividend_per_holder": 316439.4
-    },
-    {
-      "date": "2025-12-30",
-      "np": 4.6,
-      "expected_np": 14.49123,
-      "dividend_per_holder": -395649.4
-    },
-    {
-      "date": "2026-01-02",
-      "np": 24.15,
-      "expected_np": 15.33401,
-      "dividend_per_holder": 352639.6
-    },
-    {
-      "date": "2026-01-04",
-      "np": 24.9,
-      "expected_np": 16.6881,
-      "dividend_per_holder": 328476.0
-    },
-    {
-      "date": "2026-01-06",
-      "np": 29.8,
-      "expected_np": 17.63143,
-      "dividend_per_holder": 486742.6
-    },
-    {
-      "date": "2026-01-09",
-      "np": 24.0,
-      "expected_np": 17.34753,
-      "dividend_per_holder": 266098.8
-    },
-    {
-      "date": "2026-01-12",
-      "np": 12.3,
-      "expected_np": 18.04829,
-      "dividend_per_holder": -229931.6
-    },
-    {
-      "date": "2026-01-13",
-      "np": 28.65,
-      "expected_np": 17.01986,
-      "dividend_per_holder": 465205.6
-    },
-    {
-      "date": "2026-01-15",
-      "np": 26.05,
-      "expected_np": 17.56668,
-      "dividend_per_holder": 339332.6
-    },
-    {
-      "date": "2026-01-17",
-      "np": 16.35,
-      "expected_np": 17.20793,
-      "dividend_per_holder": -34317.4
-    },
-    {
-      "date": "2026-01-18",
-      "np": 19.5,
-      "expected_np": 16.92667,
-      "dividend_per_holder": 102933.2
-    },
-    {
-      "date": "2026-01-20",
-      "np": 10.15,
-      "expected_np": 16.59181,
-      "dividend_per_holder": -257672.2
-    },
-    {
-      "date": "2026-01-22",
-      "np": 14.8,
-      "expected_np": 16.50802,
-      "dividend_per_holder": -68320.6
-    },
-    {
-      "date": "2026-01-24",
-      "np": 14.0,
-      "expected_np": 17.76433,
-      "dividend_per_holder": -150573.0
-    },
-    {
-      "date": "2026-01-26",
-      "np": 14.65,
-      "expected_np": 18.35206,
-      "dividend_per_holder": -148082.6
-    },
-    {
-      "date": "2026-01-28",
-      "np": 1.8,
-      "expected_np": 17.10962,
-      "dividend_per_holder": -612384.8
+      "np": 19.4,
+      "expected_np": 22.03975,
+      "dividend_per_holder": -105590.0
     },
     {
       "date": "2026-01-30",
-      "np": 15.05,
-      "expected_np": 17.10179,
-      "dividend_per_holder": -82071.6
+      "np": 6.1,
+      "expected_np": 19.97967,
+      "dividend_per_holder": -555186.8
     },
     {
       "date": "2026-02-01",
-      "np": 17.45,
-      "expected_np": 14.49235,
-      "dividend_per_holder": 118305.8
+      "np": 10.2,
+      "expected_np": 19.15171,
+      "dividend_per_holder": -358068.4
     },
     {
-      "date": "2026-02-03",
-      "np": 25.05,
-      "expected_np": 16.00968,
-      "dividend_per_holder": 361613.0
-    },
-    {
-      "date": "2026-02-05",
-      "np": 5.5,
-      "expected_np": 16.34655,
-      "dividend_per_holder": -433862.0
+      "date": "2026-02-04",
+      "np": 29.85,
+      "expected_np": 17.564,
+      "dividend_per_holder": 491439.8
     },
     {
       "date": "2026-02-07",
-      "np": 11.1,
-      "expected_np": 16.95653,
-      "dividend_per_holder": -234261.2
+      "np": 27.65,
+      "expected_np": 19.42631,
+      "dividend_per_holder": 328947.6
     },
     {
       "date": "2026-02-09",
-      "np": 17.7,
-      "expected_np": 15.5463,
-      "dividend_per_holder": 86148.0
+      "np": 28.6,
+      "expected_np": 19.29652,
+      "dividend_per_holder": 372139.0
     },
     {
-      "date": "2026-02-12",
-      "np": 23.6,
-      "expected_np": 18.07352,
-      "dividend_per_holder": 221059.2
+      "date": "2026-02-11",
+      "np": 22.45,
+      "expected_np": 22.84648,
+      "dividend_per_holder": -15859.4
+    },
+    {
+      "date": "2026-02-19",
+      "np": 12.75,
+      "expected_np": 19.29564,
+      "dividend_per_holder": -261825.6
     },
     {
       "date": "2026-02-20",
-      "np": 9.5,
-      "expected_np": 17.87821,
-      "dividend_per_holder": -335128.2
+      "np": 20.95,
+      "expected_np": 14.67627,
+      "dividend_per_holder": 250949.0
     },
     {
       "date": "2026-02-22",
-      "np": 14.45,
-      "expected_np": 15.74483,
-      "dividend_per_holder": -51793.4
+      "np": 12.65,
+      "expected_np": 15.92106,
+      "dividend_per_holder": -130842.6
     },
     {
       "date": "2026-02-24",
-      "np": 14.6,
-      "expected_np": 17.41374,
-      "dividend_per_holder": -112549.8
+      "np": 13.65,
+      "expected_np": 18.88203,
+      "dividend_per_holder": -209281.2
     },
     {
-      "date": "2026-02-26",
-      "np": 8.0,
-      "expected_np": 15.33953,
-      "dividend_per_holder": -293581.2
+      "date": "2026-03-08",
+      "np": 26.9,
+      "expected_np": 18.17444,
+      "dividend_per_holder": 349022.2
     },
     {
-      "date": "2026-02-28",
-      "np": 20.0,
-      "expected_np": 15.30364,
-      "dividend_per_holder": 187854.4
+      "date": "2026-03-09",
+      "np": 15.85,
+      "expected_np": 19.893,
+      "dividend_per_holder": -161720.0
     },
     {
-      "date": "2026-03-01",
-      "np": 19.55,
-      "expected_np": 16.24828,
-      "dividend_per_holder": 132068.8
+      "date": "2026-03-11",
+      "np": 13.15,
+      "expected_np": 18.33236,
+      "dividend_per_holder": -207294.6
     },
     {
-      "date": "2026-03-03",
-      "np": 15.9,
-      "expected_np": 15.42239,
-      "dividend_per_holder": 19104.4
+      "date": "2026-03-13",
+      "np": 23.25,
+      "expected_np": 20.43214,
+      "dividend_per_holder": 112714.4
     },
     {
-      "date": "2026-03-05",
-      "np": 19.6,
-      "expected_np": 14.49591,
-      "dividend_per_holder": 204163.8
+      "date": "2026-03-15",
+      "np": 20.2,
+      "expected_np": 20.63297,
+      "dividend_per_holder": -17318.8
     },
     {
-      "date": "2026-03-12",
-      "np": 15.75,
-      "expected_np": 16.48807,
-      "dividend_per_holder": -29522.8
-    },
-    {
-      "date": "2026-03-14",
-      "np": 9.65,
-      "expected_np": 15.35529,
-      "dividend_per_holder": -228211.8
-    },
-    {
-      "date": "2026-03-16",
-      "np": 15.8,
-      "expected_np": 14.03302,
-      "dividend_per_holder": 70679.2
-    },
-    {
-      "date": "2026-03-18",
-      "np": 27.7,
-      "expected_np": 13.63242,
-      "dividend_per_holder": 562703.2
-    },
-    {
-      "date": "2026-03-19",
-      "np": 19.8,
-      "expected_np": 14.47728,
-      "dividend_per_holder": 212908.6
+      "date": "2026-03-17",
+      "np": 12.6,
+      "expected_np": 20.79059,
+      "dividend_per_holder": -327623.6
     },
     {
       "date": "2026-03-21",
-      "np": 9.3,
-      "expected_np": 14.85331,
-      "dividend_per_holder": -222132.4
+      "np": 15.95,
+      "expected_np": 20.54046,
+      "dividend_per_holder": -183618.6
     },
     {
-      "date": "2026-03-23",
-      "np": 9.05,
-      "expected_np": 13.24558,
-      "dividend_per_holder": -167823.4
+      "date": "2026-03-24",
+      "np": 31.8,
+      "expected_np": 21.4272,
+      "dividend_per_holder": 414911.8
     },
     {
       "date": "2026-03-25",
-      "np": 22.15,
-      "expected_np": 15.8446,
-      "dividend_per_holder": 252216.2
+      "np": 18.0,
+      "expected_np": 21.13135,
+      "dividend_per_holder": -125254.2
     },
     {
       "date": "2026-03-27",
-      "np": 10.9,
-      "expected_np": 16.28014,
-      "dividend_per_holder": -215205.6
+      "np": 4.7,
+      "expected_np": 20.67851,
+      "dividend_per_holder": -639140.4
     },
     {
       "date": "2026-03-30",
-      "np": 18.4,
-      "expected_np": 17.7251,
-      "dividend_per_holder": 26996.0
+      "np": 26.1,
+      "expected_np": 20.67628,
+      "dividend_per_holder": 216948.6
     },
     {
       "date": "2026-03-31",
-      "np": 11.3,
-      "expected_np": 15.28894,
-      "dividend_per_holder": -159557.8
+      "np": 5.15,
+      "expected_np": 19.32263,
+      "dividend_per_holder": -566905.4
     },
     {
       "date": "2026-04-02",
-      "np": 9.1,
-      "expected_np": 12.42283,
-      "dividend_per_holder": -132913.0
+      "np": 18.35,
+      "expected_np": 16.68367,
+      "dividend_per_holder": 66653.2
     },
     {
       "date": "2026-04-05",
-      "np": 26.05,
-      "expected_np": 13.94854,
-      "dividend_per_holder": 484058.4
+      "np": 29.7,
+      "expected_np": 19.66219,
+      "dividend_per_holder": 401512.4
+    },
+    {
+      "date": "2026-04-08",
+      "np": 25.05,
+      "expected_np": 18.90246,
+      "dividend_per_holder": 245901.4
+    }
+  ],
+  "4066261": [
+    {
+      "date": "2025-10-22",
+      "np": 5.25,
+      "expected_np": 11.97844,
+      "dividend_per_holder": -269137.6
+    },
+    {
+      "date": "2025-10-24",
+      "np": 17.3,
+      "expected_np": 13.73267,
+      "dividend_per_holder": 142693.2
+    },
+    {
+      "date": "2025-10-26",
+      "np": 8.05,
+      "expected_np": 12.87874,
+      "dividend_per_holder": -193149.6
+    },
+    {
+      "date": "2025-10-28",
+      "np": 19.55,
+      "expected_np": 15.82421,
+      "dividend_per_holder": 149031.6
+    },
+    {
+      "date": "2025-10-30",
+      "np": 20.3,
+      "expected_np": 13.40744,
+      "dividend_per_holder": 275702.4
+    },
+    {
+      "date": "2025-11-02",
+      "np": 19.75,
+      "expected_np": 15.23059,
+      "dividend_per_holder": 180776.2
+    },
+    {
+      "date": "2025-11-03",
+      "np": 20.9,
+      "expected_np": 14.47725,
+      "dividend_per_holder": 256909.8
+    },
+    {
+      "date": "2025-11-05",
+      "np": -1.8,
+      "expected_np": 14.53625,
+      "dividend_per_holder": -653450.2
+    },
+    {
+      "date": "2025-11-19",
+      "np": 18.65,
+      "expected_np": 11.15037,
+      "dividend_per_holder": 299985.0
+    },
+    {
+      "date": "2025-11-21",
+      "np": 15.9,
+      "expected_np": 13.03392,
+      "dividend_per_holder": 114643.2
+    },
+    {
+      "date": "2025-11-23",
+      "np": 12.95,
+      "expected_np": 13.19361,
+      "dividend_per_holder": -9744.6
+    },
+    {
+      "date": "2025-11-24",
+      "np": 10.5,
+      "expected_np": 14.71911,
+      "dividend_per_holder": -168764.4
+    },
+    {
+      "date": "2025-11-26",
+      "np": 10.9,
+      "expected_np": 13.59512,
+      "dividend_per_holder": -107805.0
+    },
+    {
+      "date": "2025-11-29",
+      "np": 11.95,
+      "expected_np": 14.37917,
+      "dividend_per_holder": -97167.0
+    },
+    {
+      "date": "2025-12-01",
+      "np": 28.9,
+      "expected_np": 14.61037,
+      "dividend_per_holder": 571585.0
+    },
+    {
+      "date": "2025-12-03",
+      "np": 14.0,
+      "expected_np": 15.27539,
+      "dividend_per_holder": -51015.6
+    },
+    {
+      "date": "2025-12-05",
+      "np": 20.4,
+      "expected_np": 13.88946,
+      "dividend_per_holder": 260421.6
+    },
+    {
+      "date": "2025-12-06",
+      "np": 6.2,
+      "expected_np": 17.1365,
+      "dividend_per_holder": -437460.0
+    },
+    {
+      "date": "2025-12-09",
+      "np": 16.85,
+      "expected_np": 13.22377,
+      "dividend_per_holder": 145049.0
+    },
+    {
+      "date": "2025-12-15",
+      "np": 13.5,
+      "expected_np": 15.54368,
+      "dividend_per_holder": -81747.4
+    },
+    {
+      "date": "2025-12-18",
+      "np": 4.25,
+      "expected_np": 15.35099,
+      "dividend_per_holder": -444039.6
+    },
+    {
+      "date": "2025-12-19",
+      "np": 10.75,
+      "expected_np": 13.04039,
+      "dividend_per_holder": -91615.6
+    },
+    {
+      "date": "2025-12-21",
+      "np": 4.35,
+      "expected_np": 13.72077,
+      "dividend_per_holder": -374831.0
+    },
+    {
+      "date": "2025-12-23",
+      "np": 6.2,
+      "expected_np": 14.45256,
+      "dividend_per_holder": -330102.4
+    },
+    {
+      "date": "2025-12-29",
+      "np": 12.85,
+      "expected_np": 13.95252,
+      "dividend_per_holder": -44100.8
+    },
+    {
+      "date": "2026-01-01",
+      "np": 12.15,
+      "expected_np": 11.44986,
+      "dividend_per_holder": 28005.4
+    },
+    {
+      "date": "2026-01-03",
+      "np": 4.15,
+      "expected_np": 13.38937,
+      "dividend_per_holder": -369574.8
+    },
+    {
+      "date": "2026-01-04",
+      "np": 9.2,
+      "expected_np": 14.73404,
+      "dividend_per_holder": -221361.8
+    },
+    {
+      "date": "2026-01-06",
+      "np": 2.4,
+      "expected_np": 12.71477,
+      "dividend_per_holder": -412591.0
+    },
+    {
+      "date": "2026-01-10",
+      "np": 7.15,
+      "expected_np": 13.30368,
+      "dividend_per_holder": -246147.4
+    },
+    {
+      "date": "2026-01-11",
+      "np": 3.35,
+      "expected_np": 10.45507,
+      "dividend_per_holder": -284203.0
+    },
+    {
+      "date": "2026-01-13",
+      "np": 30.8,
+      "expected_np": 12.68894,
+      "dividend_per_holder": 724442.2
+    },
+    {
+      "date": "2026-01-15",
+      "np": 13.8,
+      "expected_np": 12.91757,
+      "dividend_per_holder": 35297.2
+    },
+    {
+      "date": "2026-01-17",
+      "np": 25.5,
+      "expected_np": 12.81935,
+      "dividend_per_holder": 507225.8
+    },
+    {
+      "date": "2026-01-19",
+      "np": -1.85,
+      "expected_np": 13.52137,
+      "dividend_per_holder": -614855.0
+    },
+    {
+      "date": "2026-01-20",
+      "np": 22.05,
+      "expected_np": 13.962,
+      "dividend_per_holder": 323519.8
+    },
+    {
+      "date": "2026-01-22",
+      "np": 26.6,
+      "expected_np": 14.17371,
+      "dividend_per_holder": 497051.4
+    },
+    {
+      "date": "2026-01-24",
+      "np": 20.25,
+      "expected_np": 17.00359,
+      "dividend_per_holder": 129856.2
+    },
+    {
+      "date": "2026-01-25",
+      "np": 17.5,
+      "expected_np": 14.93036,
+      "dividend_per_holder": 102785.6
+    },
+    {
+      "date": "2026-01-28",
+      "np": 19.2,
+      "expected_np": 15.7261,
+      "dividend_per_holder": 138955.8
+    },
+    {
+      "date": "2026-01-29",
+      "np": 11.1,
+      "expected_np": 17.26594,
+      "dividend_per_holder": -246637.8
+    },
+    {
+      "date": "2026-01-31",
+      "np": 10.1,
+      "expected_np": 17.69173,
+      "dividend_per_holder": -303669.4
+    },
+    {
+      "date": "2026-02-01",
+      "np": 20.95,
+      "expected_np": 18.01971,
+      "dividend_per_holder": 117211.6
+    },
+    {
+      "date": "2026-02-03",
+      "np": 7.15,
+      "expected_np": 16.24423,
+      "dividend_per_holder": -363769.4
+    },
+    {
+      "date": "2026-02-06",
+      "np": 8.55,
+      "expected_np": 13.07288,
+      "dividend_per_holder": -180915.2
+    },
+    {
+      "date": "2026-02-08",
+      "np": 23.9,
+      "expected_np": 17.03181,
+      "dividend_per_holder": 274727.4
+    },
+    {
+      "date": "2026-02-09",
+      "np": 12.7,
+      "expected_np": 17.03031,
+      "dividend_per_holder": -173212.6
+    },
+    {
+      "date": "2026-02-11",
+      "np": 19.3,
+      "expected_np": 16.17496,
+      "dividend_per_holder": 125001.4
+    },
+    {
+      "date": "2026-02-20",
+      "np": 15.25,
+      "expected_np": 16.94474,
+      "dividend_per_holder": -67789.6
+    },
+    {
+      "date": "2026-02-21",
+      "np": 11.5,
+      "expected_np": 15.49449,
+      "dividend_per_holder": -159779.8
+    },
+    {
+      "date": "2026-02-24",
+      "np": 11.85,
+      "expected_np": 13.53179,
+      "dividend_per_holder": -67271.8
+    },
+    {
+      "date": "2026-02-26",
+      "np": 23.0,
+      "expected_np": 14.4366,
+      "dividend_per_holder": 342535.8
+    },
+    {
+      "date": "2026-02-28",
+      "np": 18.1,
+      "expected_np": 15.35061,
+      "dividend_per_holder": 109975.4
+    },
+    {
+      "date": "2026-03-03",
+      "np": 24.3,
+      "expected_np": 17.56192,
+      "dividend_per_holder": 269523.2
+    },
+    {
+      "date": "2026-03-05",
+      "np": 17.25,
+      "expected_np": 18.41452,
+      "dividend_per_holder": -46581.0
+    },
+    {
+      "date": "2026-03-06",
+      "np": 16.4,
+      "expected_np": 14.91002,
+      "dividend_per_holder": 59599.2
+    },
+    {
+      "date": "2026-03-08",
+      "np": 20.4,
+      "expected_np": 16.91604,
+      "dividend_per_holder": 139358.2
+    },
+    {
+      "date": "2026-03-10",
+      "np": 62.6,
+      "expected_np": 19.49207,
+      "dividend_per_holder": 1724317.2
+    },
+    {
+      "date": "2026-03-12",
+      "np": 9.0,
+      "expected_np": 22.40885,
+      "dividend_per_holder": -536354.0
+    },
+    {
+      "date": "2026-03-14",
+      "np": 15.45,
+      "expected_np": 20.86297,
+      "dividend_per_holder": -216518.8
+    },
+    {
+      "date": "2026-03-19",
+      "np": 20.7,
+      "expected_np": 21.25095,
+      "dividend_per_holder": -22038.2
+    },
+    {
+      "date": "2026-03-21",
+      "np": 31.25,
+      "expected_np": 19.18582,
+      "dividend_per_holder": 482567.0
+    },
+    {
+      "date": "2026-03-23",
+      "np": 10.15,
+      "expected_np": 20.99648,
+      "dividend_per_holder": -433859.2
+    },
+    {
+      "date": "2026-03-25",
+      "np": 12.5,
+      "expected_np": 18.75731,
+      "dividend_per_holder": -250292.6
+    },
+    {
+      "date": "2026-03-27",
+      "np": 8.75,
+      "expected_np": 17.94378,
+      "dividend_per_holder": -367751.4
+    },
+    {
+      "date": "2026-03-29",
+      "np": 8.2,
+      "expected_np": 19.06151,
+      "dividend_per_holder": -434460.4
+    },
+    {
+      "date": "2026-03-30",
+      "np": 22.1,
+      "expected_np": 17.97469,
+      "dividend_per_holder": 165012.4
+    },
+    {
+      "date": "2026-04-01",
+      "np": 20.0,
+      "expected_np": 17.43092,
+      "dividend_per_holder": 102763.0
+    },
+    {
+      "date": "2026-04-04",
+      "np": 15.0,
+      "expected_np": 21.20235,
+      "dividend_per_holder": -248094.0
+    },
+    {
+      "date": "2026-04-07",
+      "np": 0.2,
+      "expected_np": 15.28188,
+      "dividend_per_holder": -603275.2
     },
     {
       "date": "2026-04-09",
-      "np": 26.75,
-      "expected_np": 15.22016,
-      "dividend_per_holder": 461193.8
+      "np": 26.55,
+      "expected_np": 15.87628,
+      "dividend_per_holder": 426948.6
     },
     {
       "date": "2026-04-10",
-      "np": 32.1,
-      "expected_np": 14.82693,
-      "dividend_per_holder": 690923.0
+      "np": 18.8,
+      "expected_np": 19.10047,
+      "dividend_per_holder": -12019.0
     },
     {
       "date": "2026-04-12",
-      "np": 14.5,
-      "expected_np": 17.38326,
-      "dividend_per_holder": -115330.4
+      "np": 27.25,
+      "expected_np": 17.7715,
+      "dividend_per_holder": 379140.0
     }
   ],
   "4433255": [
     {
       "date": "2025-10-21",
       "np": 19.2,
-      "expected_np": 10.99069,
-      "dividend_per_holder": 328372.4
+      "expected_np": 11.42655,
+      "dividend_per_holder": 310937.8
     },
     {
       "date": "2025-10-23",
       "np": 9.05,
-      "expected_np": 12.22664,
-      "dividend_per_holder": -127065.6
+      "expected_np": 12.6625,
+      "dividend_per_holder": -144500.2
     },
     {
       "date": "2025-10-25",
       "np": 31.65,
-      "expected_np": 13.28776,
-      "dividend_per_holder": 734489.6
+      "expected_np": 13.72362,
+      "dividend_per_holder": 717055.0
     },
     {
       "date": "2025-10-27",
       "np": 15.65,
-      "expected_np": 13.07735,
-      "dividend_per_holder": 102905.8
+      "expected_np": 13.51322,
+      "dividend_per_holder": 85471.2
     },
     {
       "date": "2025-11-04",
       "np": 8.35,
-      "expected_np": 12.43978,
-      "dividend_per_holder": -163591.0
+      "expected_np": 12.87564,
+      "dividend_per_holder": -181025.6
     },
     {
       "date": "2025-11-07",
       "np": 5.75,
-      "expected_np": 13.37202,
-      "dividend_per_holder": -304880.8
+      "expected_np": 13.80788,
+      "dividend_per_holder": -322315.4
     },
     {
       "date": "2025-11-09",
       "np": 17.2,
-      "expected_np": 12.15054,
-      "dividend_per_holder": 201978.4
+      "expected_np": 12.5864,
+      "dividend_per_holder": 184543.8
     },
     {
       "date": "2025-11-11",
       "np": 23.45,
-      "expected_np": 12.60651,
-      "dividend_per_holder": 433739.6
+      "expected_np": 13.04237,
+      "dividend_per_holder": 416305.0
     },
     {
       "date": "2025-11-12",
       "np": 9.5,
-      "expected_np": 12.21998,
-      "dividend_per_holder": -108799.0
+      "expected_np": 12.65584,
+      "dividend_per_holder": -126233.6
     },
     {
       "date": "2025-11-15",
       "np": 16.8,
-      "expected_np": 12.14246,
-      "dividend_per_holder": 186301.4
+      "expected_np": 12.57833,
+      "dividend_per_holder": 168866.8
     },
     {
       "date": "2025-11-17",
       "np": 19.75,
-      "expected_np": 13.71927,
-      "dividend_per_holder": 241229.2
+      "expected_np": 14.15513,
+      "dividend_per_holder": 223794.6
     },
     {
       "date": "2025-11-19",
       "np": 14.4,
-      "expected_np": 15.30935,
-      "dividend_per_holder": -36374.0
+      "expected_np": 15.74521,
+      "dividend_per_holder": -53808.6
     },
     {
       "date": "2025-11-21",
       "np": 6.35,
-      "expected_np": 15.48855,
-      "dividend_per_holder": -365542.2
+      "expected_np": 15.92442,
+      "dividend_per_holder": -382976.8
     },
     {
       "date": "2025-11-23",
       "np": 2.8,
-      "expected_np": 14.81791,
-      "dividend_per_holder": -480716.2
+      "expected_np": 15.25377,
+      "dividend_per_holder": -498150.8
     },
     {
       "date": "2025-11-26",
       "np": 8.05,
-      "expected_np": 13.39204,
-      "dividend_per_holder": -213681.6
+      "expected_np": 13.8279,
+      "dividend_per_holder": -231116.2
     },
     {
       "date": "2025-11-28",
       "np": 17.75,
-      "expected_np": 12.98067,
-      "dividend_per_holder": 190773.0
+      "expected_np": 13.41654,
+      "dividend_per_holder": 173338.4
     },
     {
       "date": "2025-11-30",
       "np": 16.2,
-      "expected_np": 13.85569,
-      "dividend_per_holder": 93772.2
+      "expected_np": 14.29156,
+      "dividend_per_holder": 76337.6
     },
     {
       "date": "2025-12-02",
       "np": 16.65,
-      "expected_np": 13.87929,
-      "dividend_per_holder": 110828.4
+      "expected_np": 14.31515,
+      "dividend_per_holder": 93393.8
     },
     {
       "date": "2025-12-05",
       "np": 12.85,
-      "expected_np": 15.00157,
-      "dividend_per_holder": -86063.0
+      "expected_np": 15.43744,
+      "dividend_per_holder": -103497.6
     },
     {
       "date": "2025-12-07",
       "np": 22.55,
-      "expected_np": 14.62805,
-      "dividend_per_holder": 316878.0
+      "expected_np": 15.06391,
+      "dividend_per_holder": 299443.4
     },
     {
       "date": "2025-12-10",
       "np": 24.85,
-      "expected_np": 10.70836,
-      "dividend_per_holder": 565665.6
+      "expected_np": 11.14422,
+      "dividend_per_holder": 548231.0
     },
     {
       "date": "2025-12-13",
       "np": 10.25,
-      "expected_np": 11.75789,
-      "dividend_per_holder": -60315.6
+      "expected_np": 12.19375,
+      "dividend_per_holder": -77750.2
     },
     {
       "date": "2025-12-18",
       "np": 18.3,
-      "expected_np": 14.45826,
-      "dividend_per_holder": 153669.6
+      "expected_np": 14.89412,
+      "dividend_per_holder": 136235.0
     },
     {
       "date": "2025-12-19",
       "np": 10.55,
-      "expected_np": 13.6026,
-      "dividend_per_holder": -122103.8
+      "expected_np": 14.03846,
+      "dividend_per_holder": -139538.4
     },
     {
       "date": "2025-12-23",
       "np": 0.6,
-      "expected_np": 11.38814,
-      "dividend_per_holder": -431525.6
+      "expected_np": 11.824,
+      "dividend_per_holder": -448960.2
     },
     {
       "date": "2025-12-25",
       "np": 7.05,
-      "expected_np": 12.62287,
-      "dividend_per_holder": -222914.6
+      "expected_np": 13.05873,
+      "dividend_per_holder": -240349.2
     },
     {
       "date": "2025-12-28",
       "np": 23.35,
-      "expected_np": 13.18654,
-      "dividend_per_holder": 406538.6
+      "expected_np": 13.6224,
+      "dividend_per_holder": 389104.0
     },
     {
       "date": "2025-12-29",
       "np": 21.55,
-      "expected_np": 14.9526,
-      "dividend_per_holder": 263896.2
+      "expected_np": 15.38846,
+      "dividend_per_holder": 246461.6
     },
     {
       "date": "2025-12-31",
       "np": 13.8,
-      "expected_np": 15.72339,
-      "dividend_per_holder": -76935.4
+      "expected_np": 16.15925,
+      "dividend_per_holder": -94370.0
     },
     {
       "date": "2026-01-02",
       "np": 20.55,
-      "expected_np": 13.51384,
-      "dividend_per_holder": 281446.4
+      "expected_np": 13.9497,
+      "dividend_per_holder": 264011.8
     },
     {
       "date": "2026-01-04",
       "np": 18.2,
-      "expected_np": 13.71165,
-      "dividend_per_holder": 179534.0
+      "expected_np": 14.14751,
+      "dividend_per_holder": 162099.4
     },
     {
       "date": "2026-01-05",
       "np": 10.8,
-      "expected_np": 15.2539,
-      "dividend_per_holder": -178156.0
+      "expected_np": 15.68976,
+      "dividend_per_holder": -195590.6
     },
     {
       "date": "2026-01-07",
       "np": 21.25,
-      "expected_np": 15.61662,
-      "dividend_per_holder": 225335.0
+      "expected_np": 16.05249,
+      "dividend_per_holder": 207900.4
     },
     {
       "date": "2026-01-11",
       "np": 17.4,
-      "expected_np": 15.97898,
-      "dividend_per_holder": 56840.8
+      "expected_np": 16.41484,
+      "dividend_per_holder": 39406.2
     },
     {
       "date": "2026-01-13",
       "np": 7.45,
-      "expected_np": 15.40582,
-      "dividend_per_holder": -318232.6
+      "expected_np": 15.84168,
+      "dividend_per_holder": -335667.2
     },
     {
       "date": "2026-01-15",
       "np": 23.1,
-      "expected_np": 11.7999,
-      "dividend_per_holder": 452004.2
+      "expected_np": 12.23576,
+      "dividend_per_holder": 434569.6
     },
     {
       "date": "2026-01-17",
       "np": 13.3,
-      "expected_np": 13.39421,
-      "dividend_per_holder": -3768.4
+      "expected_np": 13.83007,
+      "dividend_per_holder": -21203.0
     },
     {
       "date": "2026-01-19",
       "np": 24.4,
-      "expected_np": 14.16024,
-      "dividend_per_holder": 409590.6
+      "expected_np": 14.5961,
+      "dividend_per_holder": 392156.0
     },
     {
       "date": "2026-01-21",
       "np": 4.9,
-      "expected_np": 15.16665,
-      "dividend_per_holder": -410666.0
+      "expected_np": 15.60251,
+      "dividend_per_holder": -428100.6
     },
     {
       "date": "2026-01-23",
       "np": 24.45,
-      "expected_np": 16.06079,
-      "dividend_per_holder": 335568.6
+      "expected_np": 16.49665,
+      "dividend_per_holder": 318134.0
     },
     {
       "date": "2026-01-25",
       "np": 4.4,
-      "expected_np": 15.45141,
-      "dividend_per_holder": -442056.4
+      "expected_np": 15.88727,
+      "dividend_per_holder": -459491.0
     },
     {
       "date": "2026-01-27",
       "np": 22.7,
-      "expected_np": 15.96046,
-      "dividend_per_holder": 269581.6
+      "expected_np": 16.39632,
+      "dividend_per_holder": 252147.0
     },
     {
       "date": "2026-01-29",
       "np": 14.9,
-      "expected_np": 14.78296,
-      "dividend_per_holder": 4681.8
+      "expected_np": 15.21882,
+      "dividend_per_holder": -12752.8
     },
     {
       "date": "2026-02-01",
       "np": 8.15,
-      "expected_np": 14.08685,
-      "dividend_per_holder": -237474.0
+      "expected_np": 14.52271,
+      "dividend_per_holder": -254908.6
     },
     {
       "date": "2026-02-03",
       "np": 12.35,
-      "expected_np": 13.84971,
-      "dividend_per_holder": -59988.4
+      "expected_np": 14.28557,
+      "dividend_per_holder": -77423.0
     },
     {
       "date": "2026-02-07",
       "np": 11.8,
-      "expected_np": 12.76415,
-      "dividend_per_holder": -38566.0
+      "expected_np": 13.20001,
+      "dividend_per_holder": -56000.6
     },
     {
       "date": "2026-02-09",
       "np": 12.95,
-      "expected_np": 14.21718,
-      "dividend_per_holder": -50687.0
+      "expected_np": 14.65304,
+      "dividend_per_holder": -68121.6
     },
     {
       "date": "2026-02-11",
       "np": 8.6,
-      "expected_np": 13.92883,
-      "dividend_per_holder": -213153.2
+      "expected_np": 14.36469,
+      "dividend_per_holder": -230587.8
     },
     {
       "date": "2026-02-12",
       "np": 17.55,
-      "expected_np": 13.90146,
-      "dividend_per_holder": 145941.8
+      "expected_np": 14.33732,
+      "dividend_per_holder": 128507.2
     },
     {
       "date": "2026-02-20",
       "np": 8.6,
-      "expected_np": 14.1001,
-      "dividend_per_holder": -220004.2
+      "expected_np": 14.53597,
+      "dividend_per_holder": -237438.8
     },
     {
       "date": "2026-02-22",
       "np": 14.9,
-      "expected_np": 12.95402,
-      "dividend_per_holder": 77839.2
+      "expected_np": 13.38988,
+      "dividend_per_holder": 60404.6
     },
     {
       "date": "2026-02-24",
       "np": 9.15,
-      "expected_np": 14.13538,
-      "dividend_per_holder": -199415.0
+      "expected_np": 14.57124,
+      "dividend_per_holder": -216849.6
     },
     {
       "date": "2026-02-27",
       "np": 19.1,
-      "expected_np": 13.08316,
-      "dividend_per_holder": 240673.6
+      "expected_np": 13.51902,
+      "dividend_per_holder": 223239.0
     },
     {
       "date": "2026-03-01",
       "np": 18.45,
-      "expected_np": 15.18029,
-      "dividend_per_holder": 130788.2
+      "expected_np": 15.61616,
+      "dividend_per_holder": 113353.6
     },
     {
       "date": "2026-03-03",
       "np": 8.5,
-      "expected_np": 15.40735,
-      "dividend_per_holder": -276294.0
+      "expected_np": 15.84321,
+      "dividend_per_holder": -293728.6
     },
     {
       "date": "2026-03-04",
       "np": 18.85,
-      "expected_np": 12.21942,
-      "dividend_per_holder": 265223.2
+      "expected_np": 12.65528,
+      "dividend_per_holder": 247788.6
     },
     {
       "date": "2026-03-12",
       "np": 9.1,
-      "expected_np": 12.34723,
-      "dividend_per_holder": -129889.2
+      "expected_np": 12.78309,
+      "dividend_per_holder": -147323.8
     },
     {
       "date": "2026-03-15",
       "np": 24.1,
-      "expected_np": 13.18033,
-      "dividend_per_holder": 436786.6
+      "expected_np": 13.6162,
+      "dividend_per_holder": 419352.0
     },
     {
       "date": "2026-03-17",
       "np": 16.45,
-      "expected_np": 14.22865,
-      "dividend_per_holder": 88854.0
+      "expected_np": 14.66451,
+      "dividend_per_holder": 71419.4
     },
     {
       "date": "2026-03-18",
       "np": 5.2,
-      "expected_np": 16.01722,
-      "dividend_per_holder": -432688.8
+      "expected_np": 16.45308,
+      "dividend_per_holder": -450123.4
     },
     {
       "date": "2026-03-21",
       "np": 17.0,
-      "expected_np": 15.13413,
-      "dividend_per_holder": 74634.8
+      "expected_np": 15.56999,
+      "dividend_per_holder": 57200.2
     },
     {
       "date": "2026-03-23",
       "np": 19.0,
-      "expected_np": 12.62111,
-      "dividend_per_holder": 255155.6
+      "expected_np": 13.05697,
+      "dividend_per_holder": 237721.0
     },
     {
       "date": "2026-03-25",
       "np": 3.8,
-      "expected_np": 11.98993,
-      "dividend_per_holder": -327597.2
+      "expected_np": 12.42579,
+      "dividend_per_holder": -345031.8
     },
     {
       "date": "2026-03-29",
       "np": 12.4,
-      "expected_np": 12.27949,
-      "dividend_per_holder": 4820.2
+      "expected_np": 12.71536,
+      "dividend_per_holder": -12614.4
     },
     {
       "date": "2026-03-30",
       "np": 11.55,
-      "expected_np": 13.44211,
-      "dividend_per_holder": -75684.4
+      "expected_np": 13.87797,
+      "dividend_per_holder": -93119.0
     },
     {
       "date": "2026-04-02",
       "np": 6.0,
-      "expected_np": 13.39503,
-      "dividend_per_holder": -295801.0
+      "expected_np": 13.83089,
+      "dividend_per_holder": -313235.6
     },
     {
       "date": "2026-04-05",
       "np": 21.55,
-      "expected_np": 11.86199,
-      "dividend_per_holder": 387520.6
+      "expected_np": 12.29785,
+      "dividend_per_holder": 370086.0
     },
     {
       "date": "2026-04-07",
       "np": 14.85,
-      "expected_np": 11.6172,
-      "dividend_per_holder": 129312.2
+      "expected_np": 12.05306,
+      "dividend_per_holder": 111877.6
     },
     {
       "date": "2026-04-08",
       "np": 36.05,
-      "expected_np": 10.3084,
-      "dividend_per_holder": 1029664.0
-    }
-  ],
-  "4433134": [
-    {
-      "date": "2025-10-22",
-      "np": 24.3,
-      "expected_np": 14.45567,
-      "dividend_per_holder": 393773.0
-    },
-    {
-      "date": "2025-10-24",
-      "np": 10.4,
-      "expected_np": 16.58522,
-      "dividend_per_holder": -247408.8
-    },
-    {
-      "date": "2025-10-26",
-      "np": 25.45,
-      "expected_np": 16.54497,
-      "dividend_per_holder": 356201.2
-    },
-    {
-      "date": "2025-10-27",
-      "np": 1.6,
-      "expected_np": 16.0478,
-      "dividend_per_holder": -577911.8
-    },
-    {
-      "date": "2025-10-29",
-      "np": 28.1,
-      "expected_np": 13.90849,
-      "dividend_per_holder": 567660.4
-    },
-    {
-      "date": "2025-10-31",
-      "np": 8.65,
-      "expected_np": 14.60462,
-      "dividend_per_holder": -238184.8
-    },
-    {
-      "date": "2025-11-02",
-      "np": 22.1,
-      "expected_np": 16.52305,
-      "dividend_per_holder": 223078.0
-    },
-    {
-      "date": "2025-11-04",
-      "np": 26.45,
-      "expected_np": 16.15007,
-      "dividend_per_holder": 411997.2
-    },
-    {
-      "date": "2025-11-07",
-      "np": 11.45,
-      "expected_np": 14.40172,
-      "dividend_per_holder": -118068.8
-    },
-    {
-      "date": "2025-11-08",
-      "np": 15.95,
-      "expected_np": 15.45499,
-      "dividend_per_holder": 19800.4
-    },
-    {
-      "date": "2025-11-11",
-      "np": 16.3,
-      "expected_np": 16.04499,
-      "dividend_per_holder": 10200.4
-    },
-    {
-      "date": "2025-11-13",
-      "np": 29.55,
-      "expected_np": 14.52129,
-      "dividend_per_holder": 601148.4
-    },
-    {
-      "date": "2025-11-15",
-      "np": 14.3,
-      "expected_np": 16.48724,
-      "dividend_per_holder": -87489.8
-    },
-    {
-      "date": "2025-11-17",
-      "np": 15.1,
-      "expected_np": 16.44561,
-      "dividend_per_holder": -53824.6
-    },
-    {
-      "date": "2025-11-19",
-      "np": 8.5,
-      "expected_np": 15.36897,
-      "dividend_per_holder": -274758.6
-    },
-    {
-      "date": "2025-11-21",
-      "np": 20.5,
-      "expected_np": 18.69752,
-      "dividend_per_holder": 72099.2
-    },
-    {
-      "date": "2025-11-23",
-      "np": 19.7,
-      "expected_np": 16.61734,
-      "dividend_per_holder": 123306.4
-    },
-    {
-      "date": "2025-11-24",
-      "np": 14.5,
-      "expected_np": 15.39858,
-      "dividend_per_holder": -35943.2
-    },
-    {
-      "date": "2025-11-26",
-      "np": 18.45,
-      "expected_np": 17.56273,
-      "dividend_per_holder": 35490.8
-    },
-    {
-      "date": "2025-11-29",
-      "np": 29.55,
-      "expected_np": 17.20254,
-      "dividend_per_holder": 493898.2
-    },
-    {
-      "date": "2025-11-30",
-      "np": 11.85,
-      "expected_np": 15.20521,
-      "dividend_per_holder": -134208.4
-    },
-    {
-      "date": "2025-12-02",
-      "np": 20.6,
-      "expected_np": 16.43557,
-      "dividend_per_holder": 166577.4
-    },
-    {
-      "date": "2025-12-04",
-      "np": 26.25,
-      "expected_np": 16.73391,
-      "dividend_per_holder": 380643.4
-    },
-    {
-      "date": "2025-12-05",
-      "np": 4.8,
-      "expected_np": 17.70517,
-      "dividend_per_holder": -516206.6
-    },
-    {
-      "date": "2025-12-07",
-      "np": 18.0,
-      "expected_np": 15.12544,
-      "dividend_per_holder": 114982.4
-    },
-    {
-      "date": "2025-12-09",
-      "np": 4.15,
-      "expected_np": 15.68531,
-      "dividend_per_holder": -461412.4
-    },
-    {
-      "date": "2025-12-15",
-      "np": 16.9,
-      "expected_np": 16.00148,
-      "dividend_per_holder": 35940.6
-    },
-    {
-      "date": "2025-12-18",
-      "np": 21.35,
-      "expected_np": 15.24333,
-      "dividend_per_holder": 244266.8
-    },
-    {
-      "date": "2025-12-20",
-      "np": 5.6,
-      "expected_np": 15.4949,
-      "dividend_per_holder": -395796.0
-    },
-    {
-      "date": "2025-12-21",
-      "np": -0.75,
-      "expected_np": 15.16779,
-      "dividend_per_holder": -636711.8
-    },
-    {
-      "date": "2025-12-23",
-      "np": 20.95,
-      "expected_np": 14.49695,
-      "dividend_per_holder": 258122.0
-    },
-    {
-      "date": "2025-12-26",
-      "np": 7.85,
-      "expected_np": 16.55672,
-      "dividend_per_holder": -348268.6
-    },
-    {
-      "date": "2025-12-28",
-      "np": 33.05,
-      "expected_np": 13.60122,
-      "dividend_per_holder": 777951.4
-    },
-    {
-      "date": "2025-12-29",
-      "np": 10.05,
-      "expected_np": 15.23888,
-      "dividend_per_holder": -207555.2
-    },
-    {
-      "date": "2025-12-31",
-      "np": 25.05,
-      "expected_np": 15.41958,
-      "dividend_per_holder": 385216.8
-    },
-    {
-      "date": "2026-01-03",
-      "np": 20.0,
-      "expected_np": 16.29679,
-      "dividend_per_holder": 148128.4
-    },
-    {
-      "date": "2026-01-05",
-      "np": 13.9,
-      "expected_np": 15.85592,
-      "dividend_per_holder": -78236.6
-    },
-    {
-      "date": "2026-01-07",
-      "np": 8.65,
-      "expected_np": 16.29993,
-      "dividend_per_holder": -305997.0
-    },
-    {
-      "date": "2026-01-11",
-      "np": 22.25,
-      "expected_np": 14.98781,
-      "dividend_per_holder": 290487.6
-    },
-    {
-      "date": "2026-01-12",
-      "np": 7.2,
-      "expected_np": 16.39117,
-      "dividend_per_holder": -367646.8
-    },
-    {
-      "date": "2026-01-14",
-      "np": 26.65,
-      "expected_np": 16.47175,
-      "dividend_per_holder": 407130.2
-    },
-    {
-      "date": "2026-01-16",
-      "np": 15.05,
-      "expected_np": 16.59584,
-      "dividend_per_holder": -61833.4
-    },
-    {
-      "date": "2026-01-18",
-      "np": 13.65,
-      "expected_np": 17.16269,
-      "dividend_per_holder": -140507.8
-    },
-    {
-      "date": "2026-01-20",
-      "np": 22.5,
-      "expected_np": 16.34884,
-      "dividend_per_holder": 246046.4
-    },
-    {
-      "date": "2026-01-21",
-      "np": 24.35,
-      "expected_np": 18.73284,
-      "dividend_per_holder": 224686.4
-    },
-    {
-      "date": "2026-01-23",
-      "np": 11.25,
-      "expected_np": 17.60143,
-      "dividend_per_holder": -254057.2
-    },
-    {
-      "date": "2026-01-25",
-      "np": 14.2,
-      "expected_np": 14.98924,
-      "dividend_per_holder": -31569.6
-    },
-    {
-      "date": "2026-01-28",
-      "np": 11.35,
-      "expected_np": 16.29472,
-      "dividend_per_holder": -197789.0
-    },
-    {
-      "date": "2026-01-30",
-      "np": 17.75,
-      "expected_np": 15.34098,
-      "dividend_per_holder": 96360.6
-    },
-    {
-      "date": "2026-02-01",
-      "np": 12.05,
-      "expected_np": 18.20211,
-      "dividend_per_holder": -246084.6
-    },
-    {
-      "date": "2026-02-04",
-      "np": 22.05,
-      "expected_np": 16.20756,
-      "dividend_per_holder": 233697.4
-    },
-    {
-      "date": "2026-02-05",
-      "np": 8.15,
-      "expected_np": 17.69698,
-      "dividend_per_holder": -381879.4
-    },
-    {
-      "date": "2026-02-08",
-      "np": 29.65,
-      "expected_np": 16.67493,
-      "dividend_per_holder": 519002.8
-    },
-    {
-      "date": "2026-02-11",
-      "np": 21.45,
-      "expected_np": 15.5105,
-      "dividend_per_holder": 237580.2
-    },
-    {
-      "date": "2026-02-19",
-      "np": 6.75,
-      "expected_np": 15.97544,
-      "dividend_per_holder": -369017.6
-    },
-    {
-      "date": "2026-02-24",
-      "np": 14.35,
-      "expected_np": 15.08619,
-      "dividend_per_holder": -29447.8
-    },
-    {
-      "date": "2026-02-25",
-      "np": 9.55,
-      "expected_np": 15.31737,
-      "dividend_per_holder": -230694.6
-    },
-    {
-      "date": "2026-02-28",
-      "np": 15.7,
-      "expected_np": 17.00351,
-      "dividend_per_holder": -52140.4
-    },
-    {
-      "date": "2026-03-03",
-      "np": 10.95,
-      "expected_np": 14.37654,
-      "dividend_per_holder": -137061.6
-    },
-    {
-      "date": "2026-03-05",
-      "np": 11.25,
-      "expected_np": 14.29689,
-      "dividend_per_holder": -121875.4
-    },
-    {
-      "date": "2026-03-08",
-      "np": 14.15,
-      "expected_np": 16.11568,
-      "dividend_per_holder": -78627.2
-    },
-    {
-      "date": "2026-03-10",
-      "np": 15.1,
-      "expected_np": 13.59298,
-      "dividend_per_holder": 60281.0
-    },
-    {
-      "date": "2026-03-11",
-      "np": 4.9,
-      "expected_np": 15.34623,
-      "dividend_per_holder": -417849.0
-    },
-    {
-      "date": "2026-03-13",
-      "np": 10.65,
-      "expected_np": 14.73942,
-      "dividend_per_holder": -163577.0
-    },
-    {
-      "date": "2026-03-15",
-      "np": 17.75,
-      "expected_np": 13.08251,
-      "dividend_per_holder": 186699.8
-    },
-    {
-      "date": "2026-03-18",
-      "np": 14.1,
-      "expected_np": 15.05756,
-      "dividend_per_holder": -38302.4
-    },
-    {
-      "date": "2026-03-20",
-      "np": 12.8,
-      "expected_np": 12.40806,
-      "dividend_per_holder": 15677.4
-    },
-    {
-      "date": "2026-03-22",
-      "np": 18.1,
-      "expected_np": 13.91945,
-      "dividend_per_holder": 167222.2
-    },
-    {
-      "date": "2026-03-23",
-      "np": 22.55,
-      "expected_np": 14.15689,
-      "dividend_per_holder": 335724.6
-    },
-    {
-      "date": "2026-03-25",
-      "np": 14.05,
-      "expected_np": 12.07566,
-      "dividend_per_holder": 78973.4
-    },
-    {
-      "date": "2026-03-27",
-      "np": 27.4,
-      "expected_np": 14.39369,
-      "dividend_per_holder": 520252.4
-    },
-    {
-      "date": "2026-03-29",
-      "np": 29.5,
-      "expected_np": 14.73697,
-      "dividend_per_holder": 590521.2
-    },
-    {
-      "date": "2026-03-31",
-      "np": 6.5,
-      "expected_np": 13.60234,
-      "dividend_per_holder": -284093.4
-    },
-    {
-      "date": "2026-04-01",
-      "np": 10.6,
-      "expected_np": 15.66333,
-      "dividend_per_holder": -202533.0
-    },
-    {
-      "date": "2026-04-03",
-      "np": 8.2,
-      "expected_np": 15.16135,
-      "dividend_per_holder": -278453.8
-    },
-    {
-      "date": "2026-04-05",
-      "np": 7.05,
-      "expected_np": 11.57091,
-      "dividend_per_holder": -180836.4
-    },
-    {
-      "date": "2026-04-07",
-      "np": 24.2,
-      "expected_np": 13.54948,
-      "dividend_per_holder": 426020.6
-    },
-    {
-      "date": "2026-04-09",
-      "np": 10.15,
-      "expected_np": 14.41826,
-      "dividend_per_holder": -170730.4
-    },
-    {
-      "date": "2026-04-10",
-      "np": 8.45,
-      "expected_np": 12.68406,
-      "dividend_per_holder": -169362.2
-    },
-    {
-      "date": "2026-04-12",
-      "np": 26.6,
-      "expected_np": 13.68547,
-      "dividend_per_holder": 516581.4
+      "expected_np": 10.74426,
+      "dividend_per_holder": 1012229.4
     }
   ],
   "4431678": [
     {
       "date": "2025-10-22",
       "np": 33.8,
-      "expected_np": 14.35001,
-      "dividend_per_holder": 777999.6
+      "expected_np": 14.78587,
+      "dividend_per_holder": 760565.0
     },
     {
       "date": "2025-10-25",
       "np": 19.25,
-      "expected_np": 13.88921,
-      "dividend_per_holder": 214431.6
+      "expected_np": 14.32507,
+      "dividend_per_holder": 196997.0
     },
     {
       "date": "2025-10-27",
       "np": 31.55,
-      "expected_np": 15.93462,
-      "dividend_per_holder": 624615.2
+      "expected_np": 16.37048,
+      "dividend_per_holder": 607180.6
     },
     {
       "date": "2025-10-28",
       "np": 27.6,
-      "expected_np": 19.84511,
-      "dividend_per_holder": 310195.4
+      "expected_np": 20.28098,
+      "dividend_per_holder": 292760.8
     },
     {
       "date": "2025-10-31",
       "np": 25.95,
-      "expected_np": 19.39212,
-      "dividend_per_holder": 262315.2
+      "expected_np": 19.82798,
+      "dividend_per_holder": 244880.6
     },
     {
       "date": "2025-11-02",
       "np": 20.3,
-      "expected_np": 21.61932,
-      "dividend_per_holder": -52772.6
+      "expected_np": 22.05518,
+      "dividend_per_holder": -70207.2
     },
     {
       "date": "2025-11-04",
       "np": 30.35,
-      "expected_np": 20.35241,
-      "dividend_per_holder": 399903.6
+      "expected_np": 20.78827,
+      "dividend_per_holder": 382469.0
     },
     {
       "date": "2025-11-05",
       "np": 18.65,
-      "expected_np": 19.41669,
-      "dividend_per_holder": -30667.4
+      "expected_np": 19.85255,
+      "dividend_per_holder": -48102.0
     },
     {
       "date": "2025-11-08",
       "np": 24.55,
-      "expected_np": 21.01287,
-      "dividend_per_holder": 141485.2
+      "expected_np": 21.44873,
+      "dividend_per_holder": 124050.6
     },
     {
       "date": "2025-11-09",
       "np": 22.0,
-      "expected_np": 20.86268,
-      "dividend_per_holder": 45492.8
+      "expected_np": 21.29854,
+      "dividend_per_holder": 28058.2
     },
     {
       "date": "2025-11-11",
       "np": 16.8,
-      "expected_np": 20.45091,
-      "dividend_per_holder": -146036.4
+      "expected_np": 20.88677,
+      "dividend_per_holder": -163471.0
     },
     {
       "date": "2025-11-14",
       "np": 19.25,
-      "expected_np": 19.1034,
-      "dividend_per_holder": 5864.0
+      "expected_np": 19.53926,
+      "dividend_per_holder": -11570.6
     },
     {
       "date": "2025-11-17",
       "np": 25.1,
-      "expected_np": 21.20803,
-      "dividend_per_holder": 155678.6
+      "expected_np": 21.6439,
+      "dividend_per_holder": 138244.0
     },
     {
       "date": "2025-11-19",
       "np": 23.4,
-      "expected_np": 22.36014,
-      "dividend_per_holder": 41594.6
+      "expected_np": 22.796,
+      "dividend_per_holder": 24160.0
     },
     {
       "date": "2025-11-20",
       "np": 47.9,
-      "expected_np": 20.62088,
-      "dividend_per_holder": 1091164.8
+      "expected_np": 21.05674,
+      "dividend_per_holder": 1073730.2
     },
     {
       "date": "2025-11-23",
       "np": 17.4,
-      "expected_np": 23.22981,
-      "dividend_per_holder": -233192.2
+      "expected_np": 23.66567,
+      "dividend_per_holder": -250626.8
     },
     {
       "date": "2025-11-25",
       "np": 12.65,
-      "expected_np": 21.37007,
-      "dividend_per_holder": -348803.0
+      "expected_np": 21.80594,
+      "dividend_per_holder": -366237.6
     },
     {
       "date": "2025-11-28",
       "np": 18.3,
-      "expected_np": 20.47208,
-      "dividend_per_holder": -86883.2
+      "expected_np": 20.90794,
+      "dividend_per_holder": -104317.8
     },
     {
       "date": "2025-11-30",
       "np": 26.05,
-      "expected_np": 21.54466,
-      "dividend_per_holder": 180213.4
+      "expected_np": 21.98053,
+      "dividend_per_holder": 162778.8
     },
     {
       "date": "2025-12-02",
       "np": 33.9,
-      "expected_np": 26.11181,
-      "dividend_per_holder": 311527.6
+      "expected_np": 26.54767,
+      "dividend_per_holder": 294093.0
     },
     {
       "date": "2025-12-04",
       "np": 22.4,
-      "expected_np": 20.65171,
-      "dividend_per_holder": 69931.6
+      "expected_np": 21.08757,
+      "dividend_per_holder": 52497.0
     },
     {
       "date": "2025-12-05",
       "np": 9.8,
-      "expected_np": 21.42881,
-      "dividend_per_holder": -465152.2
+      "expected_np": 21.86467,
+      "dividend_per_holder": -482586.8
     },
     {
       "date": "2025-12-07",
       "np": 22.15,
-      "expected_np": 21.11774,
-      "dividend_per_holder": 41290.2
+      "expected_np": 21.55361,
+      "dividend_per_holder": 23855.6
     },
     {
       "date": "2025-12-19",
       "np": 20.6,
-      "expected_np": 20.14587,
-      "dividend_per_holder": 18165.4
+      "expected_np": 20.58173,
+      "dividend_per_holder": 730.8
     },
     {
       "date": "2025-12-20",
       "np": 26.5,
-      "expected_np": 21.59733,
-      "dividend_per_holder": 196106.8
+      "expected_np": 22.03319,
+      "dividend_per_holder": 178672.2
     },
     {
       "date": "2025-12-23",
       "np": 3.5,
-      "expected_np": 23.10222,
-      "dividend_per_holder": -784088.8
+      "expected_np": 23.53808,
+      "dividend_per_holder": -801523.4
     },
     {
       "date": "2025-12-26",
       "np": 17.55,
-      "expected_np": 22.1896,
-      "dividend_per_holder": -185584.0
+      "expected_np": 22.62546,
+      "dividend_per_holder": -203018.6
     },
     {
       "date": "2025-12-28",
       "np": 21.55,
-      "expected_np": 18.7589,
-      "dividend_per_holder": 111644.2
+      "expected_np": 19.19476,
+      "dividend_per_holder": 94209.6
     },
     {
       "date": "2025-12-30",
       "np": 34.6,
-      "expected_np": 20.0688,
-      "dividend_per_holder": 581248.2
+      "expected_np": 20.50466,
+      "dividend_per_holder": 563813.6
     },
     {
       "date": "2026-01-01",
       "np": 32.0,
-      "expected_np": 20.7137,
-      "dividend_per_holder": 451452.2
+      "expected_np": 21.14956,
+      "dividend_per_holder": 434017.6
     },
     {
       "date": "2026-01-03",
       "np": 28.9,
-      "expected_np": 21.02048,
-      "dividend_per_holder": 315180.8
+      "expected_np": 21.45634,
+      "dividend_per_holder": 297746.2
     },
     {
       "date": "2026-01-05",
       "np": 24.85,
-      "expected_np": 21.68959,
-      "dividend_per_holder": 126416.4
+      "expected_np": 22.12545,
+      "dividend_per_holder": 108981.8
     },
     {
       "date": "2026-01-07",
       "np": 21.6,
-      "expected_np": 23.98027,
-      "dividend_per_holder": -95211.0
+      "expected_np": 24.41614,
+      "dividend_per_holder": -112645.6
     },
     {
       "date": "2026-01-09",
       "np": 19.3,
-      "expected_np": 18.01431,
-      "dividend_per_holder": 51427.8
+      "expected_np": 18.45017,
+      "dividend_per_holder": 33993.2
     },
     {
       "date": "2026-01-11",
       "np": 25.2,
-      "expected_np": 18.37524,
-      "dividend_per_holder": 272990.4
+      "expected_np": 18.8111,
+      "dividend_per_holder": 255555.8
     },
     {
       "date": "2026-01-12",
       "np": 27.2,
-      "expected_np": 19.63506,
-      "dividend_per_holder": 302597.6
+      "expected_np": 20.07092,
+      "dividend_per_holder": 285163.0
     },
     {
       "date": "2026-01-14",
       "np": 6.85,
-      "expected_np": 19.87587,
-      "dividend_per_holder": -521034.8
+      "expected_np": 20.31173,
+      "dividend_per_holder": -538469.4
     },
     {
       "date": "2026-01-16",
       "np": 21.85,
-      "expected_np": 18.5198,
-      "dividend_per_holder": 133208.0
+      "expected_np": 18.95566,
+      "dividend_per_holder": 115773.4
     },
     {
       "date": "2026-01-19",
       "np": 32.7,
-      "expected_np": 20.5053,
-      "dividend_per_holder": 487787.8
+      "expected_np": 20.94117,
+      "dividend_per_holder": 470353.2
     },
     {
       "date": "2026-01-20",
       "np": 9.35,
-      "expected_np": 20.40407,
-      "dividend_per_holder": -442162.6
+      "expected_np": 20.83993,
+      "dividend_per_holder": -459597.2
     },
     {
       "date": "2026-01-22",
       "np": 29.65,
-      "expected_np": 20.28411,
-      "dividend_per_holder": 374635.8
+      "expected_np": 20.71997,
+      "dividend_per_holder": 357201.2
     },
     {
       "date": "2026-01-24",
       "np": 17.45,
-      "expected_np": 21.17863,
-      "dividend_per_holder": -149145.4
+      "expected_np": 21.6145,
+      "dividend_per_holder": -166580.0
     },
     {
       "date": "2026-01-26",
       "np": -1.3,
-      "expected_np": 20.01065,
-      "dividend_per_holder": -852426.2
+      "expected_np": 20.44652,
+      "dividend_per_holder": -869860.8
     },
     {
       "date": "2026-01-27",
       "np": 16.0,
-      "expected_np": 17.77414,
-      "dividend_per_holder": -70965.6
+      "expected_np": 18.21,
+      "dividend_per_holder": -88400.2
     },
     {
       "date": "2026-01-29",
       "np": 35.5,
-      "expected_np": 19.4291,
-      "dividend_per_holder": 642836.0
+      "expected_np": 19.86496,
+      "dividend_per_holder": 625401.4
     },
     {
       "date": "2026-01-31",
       "np": 12.6,
-      "expected_np": 20.75373,
-      "dividend_per_holder": -326149.2
+      "expected_np": 21.18959,
+      "dividend_per_holder": -343583.8
     },
     {
       "date": "2026-02-02",
       "np": 26.5,
-      "expected_np": 17.96075,
-      "dividend_per_holder": 341570.0
+      "expected_np": 18.39661,
+      "dividend_per_holder": 324135.4
     },
     {
       "date": "2026-02-03",
       "np": 9.85,
-      "expected_np": 17.46866,
-      "dividend_per_holder": -304746.6
+      "expected_np": 17.90453,
+      "dividend_per_holder": -322181.2
     },
     {
       "date": "2026-02-05",
       "np": 23.1,
-      "expected_np": 17.1659,
-      "dividend_per_holder": 237363.8
+      "expected_np": 17.60177,
+      "dividend_per_holder": 219929.2
     },
     {
       "date": "2026-02-07",
       "np": 18.7,
-      "expected_np": 17.38497,
-      "dividend_per_holder": 52601.2
+      "expected_np": 17.82083,
+      "dividend_per_holder": 35166.6
     },
     {
       "date": "2026-02-09",
       "np": 17.85,
-      "expected_np": 19.30993,
-      "dividend_per_holder": -58397.4
+      "expected_np": 19.7458,
+      "dividend_per_holder": -75832.0
     },
     {
       "date": "2026-02-11",
       "np": 20.4,
-      "expected_np": 18.41802,
-      "dividend_per_holder": 79279.2
+      "expected_np": 18.85388,
+      "dividend_per_holder": 61844.6
     },
     {
       "date": "2026-02-19",
       "np": 15.0,
-      "expected_np": 19.02025,
-      "dividend_per_holder": -160809.8
+      "expected_np": 19.45611,
+      "dividend_per_holder": -178244.4
     },
     {
       "date": "2026-02-21",
       "np": 19.75,
-      "expected_np": 21.41833,
-      "dividend_per_holder": -66733.2
+      "expected_np": 21.85419,
+      "dividend_per_holder": -84167.8
     },
     {
       "date": "2026-02-22",
       "np": 30.5,
-      "expected_np": 19.32376,
-      "dividend_per_holder": 447049.8
+      "expected_np": 19.75962,
+      "dividend_per_holder": 429615.2
     },
     {
       "date": "2026-02-24",
       "np": 29.0,
-      "expected_np": 21.12295,
-      "dividend_per_holder": 315081.8
+      "expected_np": 21.55882,
+      "dividend_per_holder": 297647.2
     },
     {
       "date": "2026-02-26",
       "np": 26.7,
-      "expected_np": 21.1223,
-      "dividend_per_holder": 223108.0
+      "expected_np": 21.55816,
+      "dividend_per_holder": 205673.4
     },
     {
       "date": "2026-03-01",
       "np": 19.6,
-      "expected_np": 19.65267,
-      "dividend_per_holder": -2106.8
+      "expected_np": 20.08853,
+      "dividend_per_holder": -19541.4
     },
     {
       "date": "2026-03-03",
       "np": 13.35,
-      "expected_np": 23.15461,
-      "dividend_per_holder": -392184.2
+      "expected_np": 23.59047,
+      "dividend_per_holder": -409618.8
     },
     {
       "date": "2026-03-04",
       "np": 17.5,
-      "expected_np": 22.66131,
-      "dividend_per_holder": -206452.4
+      "expected_np": 23.09717,
+      "dividend_per_holder": -223887.0
     },
     {
       "date": "2026-03-07",
       "np": 23.35,
-      "expected_np": 21.05213,
-      "dividend_per_holder": 91914.8
+      "expected_np": 21.48799,
+      "dividend_per_holder": 74480.2
     },
     {
       "date": "2026-03-28",
       "np": 20.75,
-      "expected_np": 20.15698,
-      "dividend_per_holder": 23720.8
+      "expected_np": 20.59284,
+      "dividend_per_holder": 6286.2
     },
     {
       "date": "2026-03-30",
       "np": 15.45,
-      "expected_np": 22.4781,
-      "dividend_per_holder": -281124.0
+      "expected_np": 22.91396,
+      "dividend_per_holder": -298558.6
     },
     {
       "date": "2026-04-01",
       "np": 23.15,
-      "expected_np": 24.85606,
-      "dividend_per_holder": -68242.4
+      "expected_np": 25.29192,
+      "dividend_per_holder": -85677.0
     },
     {
       "date": "2026-04-03",
       "np": 17.9,
-      "expected_np": 21.77792,
-      "dividend_per_holder": -155117.0
+      "expected_np": 22.21379,
+      "dividend_per_holder": -172551.6
     },
     {
       "date": "2026-04-04",
       "np": 11.8,
-      "expected_np": 19.04439,
-      "dividend_per_holder": -289775.4
+      "expected_np": 19.48025,
+      "dividend_per_holder": -307210.0
     },
     {
       "date": "2026-04-06",
       "np": 4.8,
-      "expected_np": 17.65196,
-      "dividend_per_holder": -514078.4
+      "expected_np": 18.08782,
+      "dividend_per_holder": -531513.0
     },
     {
       "date": "2026-04-09",
       "np": 14.15,
-      "expected_np": 17.62704,
-      "dividend_per_holder": -139081.8
+      "expected_np": 18.06291,
+      "dividend_per_holder": -156516.4
     },
     {
       "date": "2026-04-10",
       "np": 22.55,
-      "expected_np": 19.34997,
-      "dividend_per_holder": 128001.2
+      "expected_np": 19.78583,
+      "dividend_per_holder": 110566.6
     },
     {
       "date": "2026-04-12",
       "np": 13.2,
-      "expected_np": 20.6908,
-      "dividend_per_holder": -299631.8
+      "expected_np": 21.12666,
+      "dividend_per_holder": -317066.4
     }
   ],
-  "3059318": [
+  "4433134": [
     {
       "date": "2025-10-22",
-      "np": -0.2,
-      "expected_np": 17.389,
-      "dividend_per_holder": -703560.2
+      "np": 24.3,
+      "expected_np": 14.89154,
+      "dividend_per_holder": 376338.4
     },
     {
-      "date": "2025-10-25",
-      "np": 15.8,
-      "expected_np": 18.46352,
-      "dividend_per_holder": -106540.6
+      "date": "2025-10-24",
+      "np": 10.4,
+      "expected_np": 17.02108,
+      "dividend_per_holder": -264843.4
     },
     {
-      "date": "2025-10-28",
-      "np": 19.95,
-      "expected_np": 16.22054,
-      "dividend_per_holder": 149178.2
+      "date": "2025-10-26",
+      "np": 25.45,
+      "expected_np": 16.98083,
+      "dividend_per_holder": 338766.6
+    },
+    {
+      "date": "2025-10-27",
+      "np": 1.6,
+      "expected_np": 16.48366,
+      "dividend_per_holder": -595346.4
+    },
+    {
+      "date": "2025-10-29",
+      "np": 28.1,
+      "expected_np": 14.34435,
+      "dividend_per_holder": 550225.8
     },
     {
       "date": "2025-10-31",
-      "np": 13.65,
-      "expected_np": 14.37485,
-      "dividend_per_holder": -28994.0
+      "np": 8.65,
+      "expected_np": 15.04048,
+      "dividend_per_holder": -255619.4
+    },
+    {
+      "date": "2025-11-02",
+      "np": 22.1,
+      "expected_np": 16.95891,
+      "dividend_per_holder": 205643.4
     },
     {
       "date": "2025-11-04",
-      "np": 15.2,
-      "expected_np": 14.852,
-      "dividend_per_holder": 13920.0
+      "np": 26.45,
+      "expected_np": 16.58593,
+      "dividend_per_holder": 394562.6
+    },
+    {
+      "date": "2025-11-07",
+      "np": 11.45,
+      "expected_np": 14.83758,
+      "dividend_per_holder": -135503.4
     },
     {
       "date": "2025-11-08",
-      "np": 24.8,
-      "expected_np": 15.96564,
-      "dividend_per_holder": 353374.4
+      "np": 15.95,
+      "expected_np": 15.89085,
+      "dividend_per_holder": 2365.8
+    },
+    {
+      "date": "2025-11-11",
+      "np": 16.3,
+      "expected_np": 16.48085,
+      "dividend_per_holder": -7234.2
+    },
+    {
+      "date": "2025-11-13",
+      "np": 29.55,
+      "expected_np": 14.95715,
+      "dividend_per_holder": 583713.8
+    },
+    {
+      "date": "2025-11-15",
+      "np": 14.3,
+      "expected_np": 16.92311,
+      "dividend_per_holder": -104924.4
+    },
+    {
+      "date": "2025-11-17",
+      "np": 15.1,
+      "expected_np": 16.88148,
+      "dividend_per_holder": -71259.2
+    },
+    {
+      "date": "2025-11-19",
+      "np": 8.5,
+      "expected_np": 15.80483,
+      "dividend_per_holder": -292193.2
+    },
+    {
+      "date": "2025-11-21",
+      "np": 20.5,
+      "expected_np": 19.13338,
+      "dividend_per_holder": 54664.6
+    },
+    {
+      "date": "2025-11-23",
+      "np": 19.7,
+      "expected_np": 17.0532,
+      "dividend_per_holder": 105871.8
+    },
+    {
+      "date": "2025-11-24",
+      "np": 14.5,
+      "expected_np": 15.83444,
+      "dividend_per_holder": -53377.8
+    },
+    {
+      "date": "2025-11-26",
+      "np": 18.45,
+      "expected_np": 17.99859,
+      "dividend_per_holder": 18056.2
+    },
+    {
+      "date": "2025-11-29",
+      "np": 29.55,
+      "expected_np": 17.63841,
+      "dividend_per_holder": 476463.6
     },
     {
       "date": "2025-11-30",
-      "np": 10.45,
-      "expected_np": 14.71299,
-      "dividend_per_holder": -170519.6
+      "np": 11.85,
+      "expected_np": 15.64107,
+      "dividend_per_holder": -151643.0
+    },
+    {
+      "date": "2025-12-02",
+      "np": 20.6,
+      "expected_np": 16.87143,
+      "dividend_per_holder": 149142.8
     },
     {
       "date": "2025-12-04",
-      "np": 4.3,
-      "expected_np": 15.65168,
-      "dividend_per_holder": -454067.4
+      "np": 26.25,
+      "expected_np": 17.16978,
+      "dividend_per_holder": 363208.8
+    },
+    {
+      "date": "2025-12-05",
+      "np": 4.8,
+      "expected_np": 18.14103,
+      "dividend_per_holder": -533641.2
     },
     {
       "date": "2025-12-07",
-      "np": 6.1,
-      "expected_np": 15.59827,
-      "dividend_per_holder": -379930.8
+      "np": 18.0,
+      "expected_np": 15.5613,
+      "dividend_per_holder": 97547.8
     },
     {
-      "date": "2025-12-12",
-      "np": 28.4,
-      "expected_np": 19.22461,
-      "dividend_per_holder": 367015.8
+      "date": "2025-12-09",
+      "np": 4.15,
+      "expected_np": 16.12117,
+      "dividend_per_holder": -478847.0
     },
     {
-      "date": "2025-12-14",
-      "np": 16.45,
-      "expected_np": 19.80731,
-      "dividend_per_holder": -134292.4
+      "date": "2025-12-15",
+      "np": 16.9,
+      "expected_np": 16.43735,
+      "dividend_per_holder": 18506.0
+    },
+    {
+      "date": "2025-12-18",
+      "np": 21.35,
+      "expected_np": 15.67919,
+      "dividend_per_holder": 226832.2
+    },
+    {
+      "date": "2025-12-20",
+      "np": 5.6,
+      "expected_np": 15.93076,
+      "dividend_per_holder": -413230.6
+    },
+    {
+      "date": "2025-12-21",
+      "np": -0.75,
+      "expected_np": 15.60366,
+      "dividend_per_holder": -654146.4
     },
     {
       "date": "2025-12-23",
-      "np": 22.1,
-      "expected_np": 21.2013,
-      "dividend_per_holder": 35948.0
+      "np": 20.95,
+      "expected_np": 14.93281,
+      "dividend_per_holder": 240687.4
     },
     {
       "date": "2025-12-26",
-      "np": 21.5,
-      "expected_np": 21.05285,
-      "dividend_per_holder": 17886.0
+      "np": 7.85,
+      "expected_np": 16.99258,
+      "dividend_per_holder": -365703.2
     },
     {
-      "date": "2025-12-30",
-      "np": 25.9,
-      "expected_np": 20.12663,
-      "dividend_per_holder": 230934.8
+      "date": "2025-12-28",
+      "np": 33.05,
+      "expected_np": 14.03708,
+      "dividend_per_holder": 760516.8
     },
     {
-      "date": "2026-01-01",
-      "np": 14.3,
-      "expected_np": 21.86828,
-      "dividend_per_holder": -302731.4
+      "date": "2025-12-29",
+      "np": 10.05,
+      "expected_np": 15.67474,
+      "dividend_per_holder": -224989.8
+    },
+    {
+      "date": "2025-12-31",
+      "np": 25.05,
+      "expected_np": 15.85544,
+      "dividend_per_holder": 367782.2
     },
     {
       "date": "2026-01-03",
-      "np": 19.5,
-      "expected_np": 21.53028,
-      "dividend_per_holder": -81211.4
+      "np": 20.0,
+      "expected_np": 16.73265,
+      "dividend_per_holder": 130693.8
     },
     {
       "date": "2026-01-05",
-      "np": 21.4,
-      "expected_np": 22.24817,
-      "dividend_per_holder": -33926.6
+      "np": 13.9,
+      "expected_np": 16.29178,
+      "dividend_per_holder": -95671.2
     },
     {
       "date": "2026-01-07",
-      "np": 24.55,
-      "expected_np": 24.56416,
-      "dividend_per_holder": -566.4
+      "np": 8.65,
+      "expected_np": 16.73579,
+      "dividend_per_holder": -323431.6
     },
     {
-      "date": "2026-01-09",
-      "np": 14.3,
-      "expected_np": 18.23864,
-      "dividend_per_holder": -157545.6
+      "date": "2026-01-11",
+      "np": 22.25,
+      "expected_np": 15.42367,
+      "dividend_per_holder": 273053.0
     },
     {
       "date": "2026-01-12",
-      "np": 17.8,
-      "expected_np": 19.15868,
-      "dividend_per_holder": -54347.2
+      "np": 7.2,
+      "expected_np": 16.82703,
+      "dividend_per_holder": -385081.4
     },
     {
       "date": "2026-01-14",
-      "np": 11.9,
-      "expected_np": 20.82234,
-      "dividend_per_holder": -356893.6
+      "np": 26.65,
+      "expected_np": 16.90761,
+      "dividend_per_holder": 389695.6
     },
     {
       "date": "2026-01-16",
-      "np": 24.1,
-      "expected_np": 18.31954,
-      "dividend_per_holder": 231218.4
+      "np": 15.05,
+      "expected_np": 17.0317,
+      "dividend_per_holder": -79268.0
     },
     {
-      "date": "2026-01-19",
-      "np": 25.1,
-      "expected_np": 20.82101,
-      "dividend_per_holder": 171159.6
+      "date": "2026-01-18",
+      "np": 13.65,
+      "expected_np": 17.59856,
+      "dividend_per_holder": -157942.4
     },
     {
-      "date": "2026-01-22",
-      "np": 28.55,
-      "expected_np": 18.82244,
-      "dividend_per_holder": 389102.4
+      "date": "2026-01-20",
+      "np": 22.5,
+      "expected_np": 16.7847,
+      "dividend_per_holder": 228611.8
     },
     {
-      "date": "2026-01-24",
-      "np": 30.85,
-      "expected_np": 21.44609,
-      "dividend_per_holder": 376156.6
+      "date": "2026-01-21",
+      "np": 24.35,
+      "expected_np": 19.1687,
+      "dividend_per_holder": 207251.8
     },
     {
-      "date": "2026-01-27",
-      "np": 23.55,
-      "expected_np": 22.29225,
-      "dividend_per_holder": 50310.0
+      "date": "2026-01-23",
+      "np": 11.25,
+      "expected_np": 18.03729,
+      "dividend_per_holder": -271491.8
     },
     {
-      "date": "2026-01-29",
-      "np": 32.4,
-      "expected_np": 22.37309,
-      "dividend_per_holder": 401076.4
+      "date": "2026-01-25",
+      "np": 14.2,
+      "expected_np": 15.4251,
+      "dividend_per_holder": -49004.2
     },
     {
-      "date": "2026-01-31",
-      "np": 29.4,
-      "expected_np": 23.39026,
-      "dividend_per_holder": 240389.4
+      "date": "2026-01-28",
+      "np": 11.35,
+      "expected_np": 16.73059,
+      "dividend_per_holder": -215223.6
     },
     {
-      "date": "2026-02-02",
-      "np": 15.6,
-      "expected_np": 22.50399,
-      "dividend_per_holder": -276159.6
+      "date": "2026-01-30",
+      "np": 17.75,
+      "expected_np": 15.77685,
+      "dividend_per_holder": 78926.0
+    },
+    {
+      "date": "2026-02-01",
+      "np": 12.05,
+      "expected_np": 18.63798,
+      "dividend_per_holder": -263519.2
+    },
+    {
+      "date": "2026-02-04",
+      "np": 22.05,
+      "expected_np": 16.64343,
+      "dividend_per_holder": 216262.8
     },
     {
       "date": "2026-02-05",
-      "np": 32.85,
-      "expected_np": 21.84453,
-      "dividend_per_holder": 440218.6
+      "np": 8.15,
+      "expected_np": 18.13285,
+      "dividend_per_holder": -399314.0
     },
     {
-      "date": "2026-02-07",
-      "np": 24.5,
-      "expected_np": 21.96112,
-      "dividend_per_holder": 101555.0
+      "date": "2026-02-08",
+      "np": 29.65,
+      "expected_np": 17.11079,
+      "dividend_per_holder": 501568.2
+    },
+    {
+      "date": "2026-02-11",
+      "np": 21.45,
+      "expected_np": 15.94636,
+      "dividend_per_holder": 220145.6
+    },
+    {
+      "date": "2026-02-19",
+      "np": 6.75,
+      "expected_np": 16.4113,
+      "dividend_per_holder": -386452.2
     },
     {
       "date": "2026-02-24",
-      "np": 21.1,
-      "expected_np": 22.89751,
-      "dividend_per_holder": -71900.4
+      "np": 14.35,
+      "expected_np": 15.52206,
+      "dividend_per_holder": -46882.4
     },
     {
-      "date": "2026-02-26",
-      "np": 18.45,
-      "expected_np": 20.85979,
-      "dividend_per_holder": -96391.6
+      "date": "2026-02-25",
+      "np": 9.55,
+      "expected_np": 15.75323,
+      "dividend_per_holder": -248129.2
+    },
+    {
+      "date": "2026-02-28",
+      "np": 15.7,
+      "expected_np": 17.43937,
+      "dividend_per_holder": -69575.0
+    },
+    {
+      "date": "2026-03-03",
+      "np": 10.95,
+      "expected_np": 14.8124,
+      "dividend_per_holder": -154496.2
+    },
+    {
+      "date": "2026-03-05",
+      "np": 11.25,
+      "expected_np": 14.73275,
+      "dividend_per_holder": -139310.0
+    },
+    {
+      "date": "2026-03-08",
+      "np": 14.15,
+      "expected_np": 16.55154,
+      "dividend_per_holder": -96061.8
+    },
+    {
+      "date": "2026-03-10",
+      "np": 15.1,
+      "expected_np": 14.02884,
+      "dividend_per_holder": 42846.4
+    },
+    {
+      "date": "2026-03-11",
+      "np": 4.9,
+      "expected_np": 15.78209,
+      "dividend_per_holder": -435283.6
+    },
+    {
+      "date": "2026-03-13",
+      "np": 10.65,
+      "expected_np": 15.17529,
+      "dividend_per_holder": -181011.6
+    },
+    {
+      "date": "2026-03-15",
+      "np": 17.75,
+      "expected_np": 13.51837,
+      "dividend_per_holder": 169265.2
+    },
+    {
+      "date": "2026-03-18",
+      "np": 14.1,
+      "expected_np": 15.49342,
+      "dividend_per_holder": -55737.0
+    },
+    {
+      "date": "2026-03-20",
+      "np": 12.8,
+      "expected_np": 12.84393,
+      "dividend_per_holder": -1757.2
+    },
+    {
+      "date": "2026-03-22",
+      "np": 18.1,
+      "expected_np": 14.35531,
+      "dividend_per_holder": 149787.6
+    },
+    {
+      "date": "2026-03-23",
+      "np": 22.55,
+      "expected_np": 14.59275,
+      "dividend_per_holder": 318290.0
     },
     {
       "date": "2026-03-25",
-      "np": 31.75,
-      "expected_np": 21.99838,
-      "dividend_per_holder": 390064.6
+      "np": 14.05,
+      "expected_np": 12.51153,
+      "dividend_per_holder": 61538.8
     },
     {
-      "date": "2026-03-28",
-      "np": 19.9,
-      "expected_np": 15.29722,
-      "dividend_per_holder": 184111.0
+      "date": "2026-03-27",
+      "np": 27.4,
+      "expected_np": 14.82955,
+      "dividend_per_holder": 502817.8
     },
     {
-      "date": "2026-03-30",
-      "np": 12.5,
-      "expected_np": 21.83132,
-      "dividend_per_holder": -373252.6
+      "date": "2026-03-29",
+      "np": 29.5,
+      "expected_np": 15.17283,
+      "dividend_per_holder": 573086.6
+    },
+    {
+      "date": "2026-03-31",
+      "np": 6.5,
+      "expected_np": 14.0382,
+      "dividend_per_holder": -301528.0
+    },
+    {
+      "date": "2026-04-01",
+      "np": 10.6,
+      "expected_np": 16.09919,
+      "dividend_per_holder": -219967.6
     },
     {
       "date": "2026-04-03",
-      "np": 17.2,
-      "expected_np": 22.17557,
-      "dividend_per_holder": -199023.0
+      "np": 8.2,
+      "expected_np": 15.59721,
+      "dividend_per_holder": -295888.4
+    },
+    {
+      "date": "2026-04-05",
+      "np": 7.05,
+      "expected_np": 12.00677,
+      "dividend_per_holder": -198271.0
+    },
+    {
+      "date": "2026-04-07",
+      "np": 24.2,
+      "expected_np": 13.98535,
+      "dividend_per_holder": 408586.0
+    },
+    {
+      "date": "2026-04-09",
+      "np": 10.15,
+      "expected_np": 14.85412,
+      "dividend_per_holder": -188165.0
+    },
+    {
+      "date": "2026-04-10",
+      "np": 8.45,
+      "expected_np": 13.11992,
+      "dividend_per_holder": -186796.8
+    },
+    {
+      "date": "2026-04-12",
+      "np": 26.6,
+      "expected_np": 14.12133,
+      "dividend_per_holder": 499146.8
+    }
+  ],
+  "3136195": [
+    {
+      "date": "2025-10-22",
+      "np": 11.05,
+      "expected_np": 14.02596,
+      "dividend_per_holder": -119038.6
+    },
+    {
+      "date": "2025-10-24",
+      "np": 19.25,
+      "expected_np": 14.7023,
+      "dividend_per_holder": 181908.0
+    },
+    {
+      "date": "2025-10-26",
+      "np": 11.1,
+      "expected_np": 16.30828,
+      "dividend_per_holder": -208331.2
+    },
+    {
+      "date": "2025-10-28",
+      "np": 1.4,
+      "expected_np": 16.22345,
+      "dividend_per_holder": -592938.0
+    },
+    {
+      "date": "2025-10-31",
+      "np": 17.05,
+      "expected_np": 16.44444,
+      "dividend_per_holder": 24222.2
+    },
+    {
+      "date": "2025-11-02",
+      "np": 20.7,
+      "expected_np": 16.43718,
+      "dividend_per_holder": 170512.6
+    },
+    {
+      "date": "2025-11-03",
+      "np": 29.0,
+      "expected_np": 18.01223,
+      "dividend_per_holder": 439510.6
+    },
+    {
+      "date": "2025-11-05",
+      "np": 11.0,
+      "expected_np": 16.67975,
+      "dividend_per_holder": -227190.2
+    },
+    {
+      "date": "2025-11-09",
+      "np": 26.0,
+      "expected_np": 17.60008,
+      "dividend_per_holder": 335996.6
+    },
+    {
+      "date": "2025-11-11",
+      "np": 21.5,
+      "expected_np": 17.12506,
+      "dividend_per_holder": 174997.6
+    },
+    {
+      "date": "2025-11-12",
+      "np": 10.05,
+      "expected_np": 16.61653,
+      "dividend_per_holder": -262661.2
+    },
+    {
+      "date": "2025-11-14",
+      "np": 31.7,
+      "expected_np": 18.31542,
+      "dividend_per_holder": 535383.2
+    },
+    {
+      "date": "2025-11-17",
+      "np": 12.9,
+      "expected_np": 19.29059,
+      "dividend_per_holder": -255623.8
+    },
+    {
+      "date": "2025-11-19",
+      "np": 13.95,
+      "expected_np": 19.22526,
+      "dividend_per_holder": -211010.4
+    },
+    {
+      "date": "2025-11-22",
+      "np": 13.65,
+      "expected_np": 18.17076,
+      "dividend_per_holder": -180830.6
+    },
+    {
+      "date": "2025-11-24",
+      "np": 37.35,
+      "expected_np": 20.35756,
+      "dividend_per_holder": 679697.6
+    },
+    {
+      "date": "2025-11-26",
+      "np": 12.85,
+      "expected_np": 19.78045,
+      "dividend_per_holder": -277218.0
+    },
+    {
+      "date": "2025-11-28",
+      "np": 5.0,
+      "expected_np": 18.82043,
+      "dividend_per_holder": -552817.2
+    },
+    {
+      "date": "2025-11-30",
+      "np": 12.55,
+      "expected_np": 18.21573,
+      "dividend_per_holder": -226629.4
+    },
+    {
+      "date": "2025-12-02",
+      "np": 20.4,
+      "expected_np": 15.97951,
+      "dividend_per_holder": 176819.6
+    },
+    {
+      "date": "2025-12-03",
+      "np": 34.6,
+      "expected_np": 17.8932,
+      "dividend_per_holder": 668272.0
+    },
+    {
+      "date": "2025-12-05",
+      "np": 17.0,
+      "expected_np": 20.98435,
+      "dividend_per_holder": -159374.2
+    },
+    {
+      "date": "2025-12-09",
+      "np": 14.05,
+      "expected_np": 16.61211,
+      "dividend_per_holder": -102484.4
+    },
+    {
+      "date": "2025-12-13",
+      "np": 28.35,
+      "expected_np": 15.97296,
+      "dividend_per_holder": 495081.4
+    },
+    {
+      "date": "2025-12-19",
+      "np": 12.4,
+      "expected_np": 17.03354,
+      "dividend_per_holder": -185341.8
+    },
+    {
+      "date": "2025-12-21",
+      "np": -2.35,
+      "expected_np": 18.18716,
+      "dividend_per_holder": -821486.6
+    },
+    {
+      "date": "2025-12-23",
+      "np": 29.65,
+      "expected_np": 15.39541,
+      "dividend_per_holder": 570183.4
+    },
+    {
+      "date": "2025-12-25",
+      "np": 7.55,
+      "expected_np": 17.70786,
+      "dividend_per_holder": -406314.4
+    },
+    {
+      "date": "2025-12-27",
+      "np": 31.4,
+      "expected_np": 16.82946,
+      "dividend_per_holder": 582821.4
+    },
+    {
+      "date": "2025-12-29",
+      "np": 13.2,
+      "expected_np": 17.2182,
+      "dividend_per_holder": -160728.2
+    },
+    {
+      "date": "2025-12-31",
+      "np": 15.3,
+      "expected_np": 15.61357,
+      "dividend_per_holder": -12543.0
+    },
+    {
+      "date": "2026-01-03",
+      "np": 18.45,
+      "expected_np": 16.64333,
+      "dividend_per_holder": 72266.6
+    },
+    {
+      "date": "2026-01-05",
+      "np": -4.55,
+      "expected_np": 16.76344,
+      "dividend_per_holder": -852537.6
+    },
+    {
+      "date": "2026-01-07",
+      "np": 16.25,
+      "expected_np": 14.75641,
+      "dividend_per_holder": 59743.6
+    },
+    {
+      "date": "2026-01-09",
+      "np": 7.9,
+      "expected_np": 15.2038,
+      "dividend_per_holder": -292152.0
+    },
+    {
+      "date": "2026-01-11",
+      "np": 19.25,
+      "expected_np": 14.61343,
+      "dividend_per_holder": 185462.8
+    },
+    {
+      "date": "2026-01-14",
+      "np": 8.1,
+      "expected_np": 14.88329,
+      "dividend_per_holder": -271331.8
+    },
+    {
+      "date": "2026-01-15",
+      "np": 17.45,
+      "expected_np": 15.25505,
+      "dividend_per_holder": 87797.8
+    },
+    {
+      "date": "2026-01-17",
+      "np": 16.35,
+      "expected_np": 15.85943,
+      "dividend_per_holder": 19622.6
+    },
+    {
+      "date": "2026-01-19",
+      "np": 17.35,
+      "expected_np": 16.98476,
+      "dividend_per_holder": 14609.4
+    },
+    {
+      "date": "2026-01-21",
+      "np": 13.35,
+      "expected_np": 17.03789,
+      "dividend_per_holder": -147515.8
+    },
+    {
+      "date": "2026-01-24",
+      "np": 6.9,
+      "expected_np": 13.58331,
+      "dividend_per_holder": -267332.4
+    },
+    {
+      "date": "2026-01-27",
+      "np": 11.15,
+      "expected_np": 12.2227,
+      "dividend_per_holder": -42908.0
+    },
+    {
+      "date": "2026-01-28",
+      "np": 6.85,
+      "expected_np": 13.76178,
+      "dividend_per_holder": -276471.4
+    },
+    {
+      "date": "2026-01-30",
+      "np": 15.8,
+      "expected_np": 15.5193,
+      "dividend_per_holder": 11227.8
+    },
+    {
+      "date": "2026-02-01",
+      "np": 10.25,
+      "expected_np": 15.54571,
+      "dividend_per_holder": -211828.4
+    },
+    {
+      "date": "2026-02-03",
+      "np": 17.3,
+      "expected_np": 16.89891,
+      "dividend_per_holder": 16043.4
+    },
+    {
+      "date": "2026-02-04",
+      "np": 20.95,
+      "expected_np": 15.8407,
+      "dividend_per_holder": 204371.8
+    },
+    {
+      "date": "2026-02-08",
+      "np": 4.15,
+      "expected_np": 12.89491,
+      "dividend_per_holder": -349796.6
+    },
+    {
+      "date": "2026-02-10",
+      "np": 12.8,
+      "expected_np": 15.82228,
+      "dividend_per_holder": -120891.2
+    },
+    {
+      "date": "2026-02-11",
+      "np": 22.55,
+      "expected_np": 13.87966,
+      "dividend_per_holder": 346813.6
+    },
+    {
+      "date": "2026-02-19",
+      "np": 18.95,
+      "expected_np": 13.49415,
+      "dividend_per_holder": 218234.0
+    },
+    {
+      "date": "2026-02-21",
+      "np": 19.65,
+      "expected_np": 15.23001,
+      "dividend_per_holder": 176799.6
+    },
+    {
+      "date": "2026-02-22",
+      "np": 25.75,
+      "expected_np": 17.29787,
+      "dividend_per_holder": 338085.2
+    },
+    {
+      "date": "2026-02-24",
+      "np": 11.7,
+      "expected_np": 15.93066,
+      "dividend_per_holder": -169226.4
+    },
+    {
+      "date": "2026-02-27",
+      "np": 12.6,
+      "expected_np": 15.43488,
+      "dividend_per_holder": -113395.4
+    },
+    {
+      "date": "2026-03-01",
+      "np": 8.95,
+      "expected_np": 14.88072,
+      "dividend_per_holder": -237229.0
+    },
+    {
+      "date": "2026-03-03",
+      "np": 19.75,
+      "expected_np": 14.05176,
+      "dividend_per_holder": 227929.6
+    },
+    {
+      "date": "2026-03-04",
+      "np": 20.35,
+      "expected_np": 14.19942,
+      "dividend_per_holder": 246023.0
+    },
+    {
+      "date": "2026-03-06",
+      "np": 15.15,
+      "expected_np": 14.66562,
+      "dividend_per_holder": 19375.2
+    },
+    {
+      "date": "2026-03-08",
+      "np": 20.55,
+      "expected_np": 14.39938,
+      "dividend_per_holder": 246024.8
+    },
+    {
+      "date": "2026-03-09",
+      "np": 33.4,
+      "expected_np": 15.00864,
+      "dividend_per_holder": 735654.4
+    },
+    {
+      "date": "2026-03-11",
+      "np": 18.0,
+      "expected_np": 18.01085,
+      "dividend_per_holder": -434.0
+    },
+    {
+      "date": "2026-03-15",
+      "np": 14.85,
+      "expected_np": 16.45915,
+      "dividend_per_holder": -64366.2
+    },
+    {
+      "date": "2026-03-17",
+      "np": 19.45,
+      "expected_np": 17.89205,
+      "dividend_per_holder": 62317.8
+    },
+    {
+      "date": "2026-03-20",
+      "np": 19.6,
+      "expected_np": 16.94722,
+      "dividend_per_holder": 106111.0
+    },
+    {
+      "date": "2026-03-22",
+      "np": 27.3,
+      "expected_np": 18.63433,
+      "dividend_per_holder": 346626.8
+    },
+    {
+      "date": "2026-03-24",
+      "np": 15.1,
+      "expected_np": 17.002,
+      "dividend_per_holder": -76080.0
+    },
+    {
+      "date": "2026-03-26",
+      "np": 8.95,
+      "expected_np": 14.54984,
+      "dividend_per_holder": -223993.8
+    },
+    {
+      "date": "2026-03-29",
+      "np": 14.15,
+      "expected_np": 12.69578,
+      "dividend_per_holder": 58168.8
+    },
+    {
+      "date": "2026-03-31",
+      "np": 13.4,
+      "expected_np": 13.9161,
+      "dividend_per_holder": -20644.0
+    },
+    {
+      "date": "2026-04-01",
+      "np": 19.85,
+      "expected_np": 17.12736,
+      "dividend_per_holder": 108905.6
     },
     {
       "date": "2026-04-06",
-      "np": 25.45,
-      "expected_np": 20.37186,
-      "dividend_per_holder": 203125.4
+      "np": 23.3,
+      "expected_np": 15.20658,
+      "dividend_per_holder": 323736.8
+    },
+    {
+      "date": "2026-04-09",
+      "np": 16.4,
+      "expected_np": 15.1599,
+      "dividend_per_holder": 49603.8
+    },
+    {
+      "date": "2026-04-10",
+      "np": 20.95,
+      "expected_np": 16.41176,
+      "dividend_per_holder": 181529.4
     }
   ],
   "4432816": [
     {
       "date": "2025-10-22",
       "np": 11.7,
-      "expected_np": 16.10712,
-      "dividend_per_holder": -176285.0
+      "expected_np": 16.54299,
+      "dividend_per_holder": -193719.6
     },
     {
       "date": "2025-10-25",
       "np": 25.25,
-      "expected_np": 14.60343,
-      "dividend_per_holder": 425862.6
+      "expected_np": 15.0393,
+      "dividend_per_holder": 408428.0
     },
     {
       "date": "2025-10-26",
       "np": 39.35,
-      "expected_np": 16.82041,
-      "dividend_per_holder": 901183.6
+      "expected_np": 17.25627,
+      "dividend_per_holder": 883749.0
     },
     {
       "date": "2025-10-28",
       "np": 12.0,
-      "expected_np": 17.91349,
-      "dividend_per_holder": -236539.4
+      "expected_np": 18.34935,
+      "dividend_per_holder": -253974.0
     },
     {
       "date": "2025-10-30",
       "np": 15.15,
-      "expected_np": 17.39261,
-      "dividend_per_holder": -89704.4
+      "expected_np": 17.82847,
+      "dividend_per_holder": -107139.0
     },
     {
       "date": "2025-11-01",
       "np": 11.05,
-      "expected_np": 17.90956,
-      "dividend_per_holder": -274382.4
+      "expected_np": 18.34542,
+      "dividend_per_holder": -291817.0
     },
     {
       "date": "2025-11-14",
       "np": 10.35,
-      "expected_np": 17.54512,
-      "dividend_per_holder": -287804.8
+      "expected_np": 17.98098,
+      "dividend_per_holder": -305239.4
     },
     {
       "date": "2025-11-17",
       "np": 12.45,
-      "expected_np": 15.86031,
-      "dividend_per_holder": -136412.2
+      "expected_np": 16.29617,
+      "dividend_per_holder": -153846.8
     },
     {
       "date": "2025-11-19",
       "np": 9.0,
-      "expected_np": 17.0926,
-      "dividend_per_holder": -323704.0
+      "expected_np": 17.52846,
+      "dividend_per_holder": -341138.6
     },
     {
       "date": "2025-11-22",
       "np": 12.2,
-      "expected_np": 15.73458,
-      "dividend_per_holder": -141383.2
+      "expected_np": 16.17044,
+      "dividend_per_holder": -158817.8
     },
     {
       "date": "2025-11-26",
       "np": 2.7,
-      "expected_np": 14.31482,
-      "dividend_per_holder": -464592.6
+      "expected_np": 14.75068,
+      "dividend_per_holder": -482027.2
     },
     {
       "date": "2025-11-28",
       "np": 11.05,
-      "expected_np": 15.85135,
-      "dividend_per_holder": -192054.2
+      "expected_np": 16.28722,
+      "dividend_per_holder": -209488.8
     },
     {
       "date": "2025-11-29",
       "np": 5.6,
-      "expected_np": 15.28213,
-      "dividend_per_holder": -387285.2
+      "expected_np": 15.71799,
+      "dividend_per_holder": -404719.8
     },
     {
       "date": "2025-12-01",
       "np": 13.5,
-      "expected_np": 14.86455,
-      "dividend_per_holder": -54582.0
+      "expected_np": 15.30041,
+      "dividend_per_holder": -72016.6
     },
     {
       "date": "2025-12-03",
       "np": 24.4,
-      "expected_np": 14.49755,
-      "dividend_per_holder": 396098.2
+      "expected_np": 14.93341,
+      "dividend_per_holder": 378663.6
     },
     {
       "date": "2025-12-05",
       "np": 7.7,
-      "expected_np": 16.40391,
-      "dividend_per_holder": -348156.4
+      "expected_np": 16.83977,
+      "dividend_per_holder": -365591.0
     },
     {
       "date": "2025-12-18",
       "np": 25.9,
-      "expected_np": 12.66728,
-      "dividend_per_holder": 529309.0
+      "expected_np": 13.10314,
+      "dividend_per_holder": 511874.4
     },
     {
       "date": "2025-12-20",
       "np": 2.2,
-      "expected_np": 13.77171,
-      "dividend_per_holder": -462868.4
+      "expected_np": 14.20757,
+      "dividend_per_holder": -480303.0
     },
     {
       "date": "2025-12-22",
       "np": 18.4,
-      "expected_np": 13.86654,
-      "dividend_per_holder": 181338.2
+      "expected_np": 14.30241,
+      "dividend_per_holder": 163903.6
     },
     {
       "date": "2025-12-23",
       "np": 22.7,
-      "expected_np": 15.4995,
-      "dividend_per_holder": 288019.8
+      "expected_np": 15.93537,
+      "dividend_per_holder": 270585.2
     },
     {
       "date": "2025-12-26",
       "np": 9.15,
-      "expected_np": 13.51334,
-      "dividend_per_holder": -174533.6
+      "expected_np": 13.9492,
+      "dividend_per_holder": -191968.2
     },
     {
       "date": "2025-12-29",
       "np": 13.2,
-      "expected_np": 15.93386,
-      "dividend_per_holder": -109354.4
+      "expected_np": 16.36972,
+      "dividend_per_holder": -126789.0
     },
     {
       "date": "2025-12-31",
       "np": 24.8,
-      "expected_np": 15.68875,
-      "dividend_per_holder": 364450.0
+      "expected_np": 16.12461,
+      "dividend_per_holder": 347015.4
     },
     {
       "date": "2026-01-02",
       "np": 10.85,
-      "expected_np": 16.14861,
-      "dividend_per_holder": -211944.4
+      "expected_np": 16.58447,
+      "dividend_per_holder": -229379.0
     },
     {
       "date": "2026-01-03",
       "np": 16.1,
-      "expected_np": 16.26463,
-      "dividend_per_holder": -6585.0
+      "expected_np": 16.70049,
+      "dividend_per_holder": -24019.6
     },
     {
       "date": "2026-01-05",
       "np": 7.6,
-      "expected_np": 12.19993,
-      "dividend_per_holder": -183997.2
+      "expected_np": 12.63579,
+      "dividend_per_holder": -201431.8
     },
     {
       "date": "2026-01-07",
       "np": 10.6,
-      "expected_np": 14.28538,
-      "dividend_per_holder": -147415.0
+      "expected_np": 14.72124,
+      "dividend_per_holder": -164849.6
     },
     {
       "date": "2026-01-08",
       "np": 28.5,
-      "expected_np": 13.70342,
-      "dividend_per_holder": 591863.0
+      "expected_np": 14.13929,
+      "dividend_per_holder": 574428.4
     },
     {
       "date": "2026-01-10",
       "np": 8.6,
-      "expected_np": 14.37953,
-      "dividend_per_holder": -231181.0
+      "expected_np": 14.81539,
+      "dividend_per_holder": -248615.6
     },
     {
       "date": "2026-01-12",
       "np": 16.35,
-      "expected_np": 13.25291,
-      "dividend_per_holder": 123883.6
+      "expected_np": 13.68877,
+      "dividend_per_holder": 106449.0
     },
     {
       "date": "2026-01-15",
       "np": 27.6,
-      "expected_np": 14.10844,
-      "dividend_per_holder": 539662.2
+      "expected_np": 14.54431,
+      "dividend_per_holder": 522227.6
     },
     {
       "date": "2026-01-17",
       "np": 5.15,
-      "expected_np": 15.00289,
-      "dividend_per_holder": -394115.4
+      "expected_np": 15.43875,
+      "dividend_per_holder": -411550.0
     },
     {
       "date": "2026-01-18",
       "np": 10.1,
-      "expected_np": 13.32251,
-      "dividend_per_holder": -128900.4
+      "expected_np": 13.75837,
+      "dividend_per_holder": -146335.0
     },
     {
       "date": "2026-01-21",
       "np": -2.8,
-      "expected_np": 12.38125,
-      "dividend_per_holder": -607250.0
+      "expected_np": 12.81711,
+      "dividend_per_holder": -624684.6
     },
     {
       "date": "2026-01-22",
       "np": 13.3,
-      "expected_np": 12.53471,
-      "dividend_per_holder": 30611.4
+      "expected_np": 12.97058,
+      "dividend_per_holder": 13176.8
     },
     {
       "date": "2026-01-24",
       "np": 14.15,
-      "expected_np": 14.73618,
-      "dividend_per_holder": -23447.2
+      "expected_np": 15.17204,
+      "dividend_per_holder": -40881.8
     },
     {
       "date": "2026-01-26",
       "np": 6.8,
-      "expected_np": 14.71349,
-      "dividend_per_holder": -316539.4
+      "expected_np": 15.14935,
+      "dividend_per_holder": -333974.0
     },
     {
       "date": "2026-01-28",
       "np": 11.0,
-      "expected_np": 12.81653,
-      "dividend_per_holder": -72661.4
+      "expected_np": 13.2524,
+      "dividend_per_holder": -90096.0
     },
     {
       "date": "2026-01-29",
       "np": 16.75,
-      "expected_np": 13.31326,
-      "dividend_per_holder": 137469.8
+      "expected_np": 13.74912,
+      "dividend_per_holder": 120035.2
     },
     {
       "date": "2026-01-31",
       "np": 8.7,
-      "expected_np": 13.57063,
-      "dividend_per_holder": -194825.0
+      "expected_np": 14.00649,
+      "dividend_per_holder": -212259.6
     },
     {
       "date": "2026-02-02",
       "np": 17.6,
-      "expected_np": 15.97203,
-      "dividend_per_holder": 65118.8
+      "expected_np": 16.40789,
+      "dividend_per_holder": 47684.2
     },
     {
       "date": "2026-02-05",
       "np": 8.75,
-      "expected_np": 14.25902,
-      "dividend_per_holder": -220360.8
+      "expected_np": 14.69488,
+      "dividend_per_holder": -237795.4
     },
     {
       "date": "2026-02-07",
       "np": 13.05,
-      "expected_np": 15.1425,
-      "dividend_per_holder": -83700.0
+      "expected_np": 15.57836,
+      "dividend_per_holder": -101134.6
     },
     {
       "date": "2026-02-09",
       "np": 7.05,
-      "expected_np": 14.94437,
-      "dividend_per_holder": -315774.8
+      "expected_np": 15.38023,
+      "dividend_per_holder": -333209.4
     },
     {
       "date": "2026-02-11",
       "np": 14.4,
-      "expected_np": 16.51089,
-      "dividend_per_holder": -84435.6
+      "expected_np": 16.94675,
+      "dividend_per_holder": -101870.2
     },
     {
       "date": "2026-02-19",
       "np": 8.35,
-      "expected_np": 15.54634,
-      "dividend_per_holder": -287853.4
+      "expected_np": 15.9822,
+      "dividend_per_holder": -305288.0
     },
     {
       "date": "2026-02-20",
       "np": 7.75,
-      "expected_np": 16.47441,
-      "dividend_per_holder": -348976.4
+      "expected_np": 16.91027,
+      "dividend_per_holder": -366411.0
     },
     {
       "date": "2026-02-22",
       "np": 36.8,
-      "expected_np": 16.07216,
-      "dividend_per_holder": 829113.6
+      "expected_np": 16.50802,
+      "dividend_per_holder": 811679.0
     },
     {
       "date": "2026-02-24",
       "np": 10.65,
-      "expected_np": 13.86049,
-      "dividend_per_holder": -128419.6
+      "expected_np": 14.29635,
+      "dividend_per_holder": -145854.2
     },
     {
       "date": "2026-02-26",
       "np": 19.4,
-      "expected_np": 13.56649,
-      "dividend_per_holder": 233340.2
+      "expected_np": 14.00236,
+      "dividend_per_holder": 215905.6
     },
     {
       "date": "2026-02-28",
       "np": 10.45,
-      "expected_np": 13.40607,
-      "dividend_per_holder": -118243.0
+      "expected_np": 13.84194,
+      "dividend_per_holder": -135677.6
     },
     {
       "date": "2026-03-03",
       "np": 13.3,
-      "expected_np": 15.02854,
-      "dividend_per_holder": -69141.6
+      "expected_np": 15.4644,
+      "dividend_per_holder": -86576.2
     },
     {
       "date": "2026-03-04",
       "np": 13.15,
-      "expected_np": 13.74079,
-      "dividend_per_holder": -23631.6
+      "expected_np": 14.17665,
+      "dividend_per_holder": -41066.2
     },
     {
       "date": "2026-03-06",
       "np": 7.9,
-      "expected_np": 14.7147,
-      "dividend_per_holder": -272588.0
+      "expected_np": 15.15056,
+      "dividend_per_holder": -290022.6
     },
     {
       "date": "2026-03-08",
       "np": 14.15,
-      "expected_np": 14.82675,
-      "dividend_per_holder": -27069.8
+      "expected_np": 15.26261,
+      "dividend_per_holder": -44504.4
     },
     {
       "date": "2026-03-10",
       "np": 7.25,
-      "expected_np": 16.5476,
-      "dividend_per_holder": -371903.8
+      "expected_np": 16.98346,
+      "dividend_per_holder": -389338.4
     },
     {
       "date": "2026-03-11",
       "np": 21.5,
-      "expected_np": 15.26584,
-      "dividend_per_holder": 249366.2
+      "expected_np": 15.70171,
+      "dividend_per_holder": 231931.6
     },
     {
       "date": "2026-03-14",
       "np": 15.8,
-      "expected_np": 13.17499,
-      "dividend_per_holder": 105000.6
+      "expected_np": 13.61085,
+      "dividend_per_holder": 87566.0
     },
     {
       "date": "2026-03-17",
       "np": 24.55,
-      "expected_np": 13.59342,
-      "dividend_per_holder": 438263.2
+      "expected_np": 14.02928,
+      "dividend_per_holder": 420828.6
     },
     {
       "date": "2026-03-19",
       "np": 21.3,
-      "expected_np": 16.27328,
-      "dividend_per_holder": 201068.8
+      "expected_np": 16.70914,
+      "dividend_per_holder": 183634.2
     },
     {
       "date": "2026-03-21",
       "np": 23.85,
-      "expected_np": 15.10867,
-      "dividend_per_holder": 349653.2
+      "expected_np": 15.54453,
+      "dividend_per_holder": 332218.6
     },
     {
       "date": "2026-03-24",
       "np": 21.0,
-      "expected_np": 16.36175,
-      "dividend_per_holder": 185530.0
+      "expected_np": 16.79761,
+      "dividend_per_holder": 168095.4
     },
     {
       "date": "2026-03-26",
       "np": 16.35,
-      "expected_np": 13.98407,
-      "dividend_per_holder": 94637.2
+      "expected_np": 14.41993,
+      "dividend_per_holder": 77202.6
     },
     {
       "date": "2026-03-28",
       "np": 7.15,
-      "expected_np": 16.61533,
-      "dividend_per_holder": -378613.2
+      "expected_np": 17.05119,
+      "dividend_per_holder": -396047.8
     },
     {
       "date": "2026-03-29",
       "np": 8.0,
-      "expected_np": 16.22312,
-      "dividend_per_holder": -328925.0
+      "expected_np": 16.65899,
+      "dividend_per_holder": -346359.6
     },
     {
       "date": "2026-03-31",
       "np": 9.0,
-      "expected_np": 16.1419,
-      "dividend_per_holder": -285676.0
+      "expected_np": 16.57776,
+      "dividend_per_holder": -303110.6
     },
     {
       "date": "2026-04-02",
       "np": 16.05,
-      "expected_np": 15.49345,
-      "dividend_per_holder": 22261.8
+      "expected_np": 15.92932,
+      "dividend_per_holder": 4827.2
     },
     {
       "date": "2026-04-03",
       "np": 15.2,
-      "expected_np": 16.63091,
-      "dividend_per_holder": -57236.4
+      "expected_np": 17.06677,
+      "dividend_per_holder": -74671.0
     },
     {
       "date": "2026-04-05",
       "np": 28.05,
-      "expected_np": 13.9008,
-      "dividend_per_holder": 565968.0
+      "expected_np": 14.33666,
+      "dividend_per_holder": 548533.4
     },
     {
       "date": "2026-04-07",
       "np": 25.5,
-      "expected_np": 14.03992,
-      "dividend_per_holder": 458403.0
+      "expected_np": 14.47579,
+      "dividend_per_holder": 440968.4
     },
     {
       "date": "2026-04-10",
       "np": 21.05,
-      "expected_np": 15.68605,
-      "dividend_per_holder": 214558.2
+      "expected_np": 16.12191,
+      "dividend_per_holder": 197123.6
     },
     {
       "date": "2026-04-12",
       "np": 12.05,
-      "expected_np": 15.35872,
-      "dividend_per_holder": -132349.0
+      "expected_np": 15.79459,
+      "dividend_per_holder": -149783.6
     }
   ],
-  "3917376": [
+  "4684740": [
     {
-      "date": "2025-10-22",
-      "np": 15.5,
-      "expected_np": 12.16163,
-      "dividend_per_holder": 133534.8
+      "date": "2025-10-21",
+      "np": 9.5,
+      "expected_np": 12.38572,
+      "dividend_per_holder": -115429.0
     },
     {
       "date": "2025-10-24",
-      "np": 9.4,
-      "expected_np": 13.12384,
-      "dividend_per_holder": -148953.6
-    },
-    {
-      "date": "2025-10-26",
-      "np": 26.9,
-      "expected_np": 13.38189,
-      "dividend_per_holder": 540724.6
+      "np": -0.05,
+      "expected_np": 14.39249,
+      "dividend_per_holder": -577699.8
     },
     {
       "date": "2025-10-27",
-      "np": 9.65,
-      "expected_np": 15.26174,
-      "dividend_per_holder": -224469.6
+      "np": 12.6,
+      "expected_np": 14.42278,
+      "dividend_per_holder": -72911.4
     },
     {
       "date": "2025-10-29",
-      "np": 24.35,
-      "expected_np": 13.20878,
-      "dividend_per_holder": 445648.6
-    },
-    {
-      "date": "2025-10-31",
-      "np": 25.65,
-      "expected_np": 13.5018,
-      "dividend_per_holder": 485927.8
+      "np": 15.15,
+      "expected_np": 12.92802,
+      "dividend_per_holder": 88879.0
     },
     {
       "date": "2025-11-01",
-      "np": 3.6,
-      "expected_np": 12.99265,
-      "dividend_per_holder": -375706.0
+      "np": 13.75,
+      "expected_np": 14.06297,
+      "dividend_per_holder": -12519.0
     },
     {
       "date": "2025-11-03",
-      "np": 22.75,
-      "expected_np": 14.93607,
-      "dividend_per_holder": 312557.2
+      "np": 20.0,
+      "expected_np": 16.02254,
+      "dividend_per_holder": 159098.4
     },
     {
       "date": "2025-11-05",
-      "np": 30.6,
-      "expected_np": 17.42841,
-      "dividend_per_holder": 526863.6
+      "np": 23.5,
+      "expected_np": 16.71581,
+      "dividend_per_holder": 271367.6
     },
     {
       "date": "2025-11-07",
-      "np": 19.2,
-      "expected_np": 14.98677,
-      "dividend_per_holder": 168529.4
+      "np": 7.45,
+      "expected_np": 17.34895,
+      "dividend_per_holder": -395958.2
     },
     {
       "date": "2025-11-09",
-      "np": 12.7,
-      "expected_np": 16.2681,
-      "dividend_per_holder": -142723.8
-    },
-    {
-      "date": "2025-11-11",
-      "np": 15.0,
-      "expected_np": 16.89704,
-      "dividend_per_holder": -75881.6
+      "np": 13.1,
+      "expected_np": 17.49594,
+      "dividend_per_holder": -175837.8
     },
     {
       "date": "2025-11-12",
-      "np": 14.4,
-      "expected_np": 18.91057,
-      "dividend_per_holder": -180423.0
+      "np": 20.05,
+      "expected_np": 19.48327,
+      "dividend_per_holder": 22669.0
+    },
+    {
+      "date": "2025-11-14",
+      "np": 12.6,
+      "expected_np": 17.30168,
+      "dividend_per_holder": -188067.4
     },
     {
       "date": "2025-11-16",
-      "np": 22.6,
-      "expected_np": 16.51045,
-      "dividend_per_holder": 243582.0
+      "np": 4.0,
+      "expected_np": 16.14351,
+      "dividend_per_holder": -485740.6
     },
     {
-      "date": "2025-11-18",
-      "np": 14.25,
-      "expected_np": 19.95831,
-      "dividend_per_holder": -228332.4
+      "date": "2025-11-19",
+      "np": 14.95,
+      "expected_np": 15.16829,
+      "dividend_per_holder": -8731.6
     },
     {
       "date": "2025-11-21",
-      "np": 19.6,
-      "expected_np": 19.63182,
-      "dividend_per_holder": -1272.8
+      "np": 15.05,
+      "expected_np": 16.47226,
+      "dividend_per_holder": -56890.6
     },
     {
-      "date": "2025-11-23",
-      "np": 27.85,
-      "expected_np": 17.75505,
-      "dividend_per_holder": 403798.0
+      "date": "2025-11-24",
+      "np": 23.8,
+      "expected_np": 17.78294,
+      "dividend_per_holder": 240682.2
     },
     {
       "date": "2025-11-26",
-      "np": 21.05,
-      "expected_np": 19.49471,
-      "dividend_per_holder": 62211.8
-    },
-    {
-      "date": "2025-11-29",
-      "np": 35.8,
-      "expected_np": 19.15935,
-      "dividend_per_holder": 665626.0
+      "np": 5.95,
+      "expected_np": 16.66082,
+      "dividend_per_holder": -428432.8
     },
     {
       "date": "2025-11-30",
-      "np": 11.8,
-      "expected_np": 20.73479,
-      "dividend_per_holder": -357391.4
+      "np": 3.35,
+      "expected_np": 17.66185,
+      "dividend_per_holder": -572474.0
     },
     {
-      "date": "2025-12-02",
-      "np": 31.4,
-      "expected_np": 21.02274,
-      "dividend_per_holder": 415090.4
+      "date": "2025-12-01",
+      "np": 16.6,
+      "expected_np": 16.24953,
+      "dividend_per_holder": 14018.8
+    },
+    {
+      "date": "2025-12-03",
+      "np": 17.9,
+      "expected_np": 16.94952,
+      "dividend_per_holder": 38019.2
     },
     {
       "date": "2025-12-05",
-      "np": 22.55,
-      "expected_np": 22.05225,
-      "dividend_per_holder": 19909.8
+      "np": 21.65,
+      "expected_np": 16.56142,
+      "dividend_per_holder": 203543.2
     },
     {
-      "date": "2025-12-07",
-      "np": 24.25,
-      "expected_np": 20.37254,
-      "dividend_per_holder": 155098.2
+      "date": "2025-12-06",
+      "np": 2.3,
+      "expected_np": 16.38615,
+      "dividend_per_holder": -563446.2
     },
     {
       "date": "2025-12-11",
-      "np": 19.75,
-      "expected_np": 21.28076,
-      "dividend_per_holder": -61230.6
+      "np": 21.7,
+      "expected_np": 15.60366,
+      "dividend_per_holder": 243853.6
     },
     {
       "date": "2025-12-15",
-      "np": 26.05,
-      "expected_np": 18.37672,
-      "dividend_per_holder": 306931.4
-    },
-    {
-      "date": "2025-12-19",
-      "np": 22.15,
-      "expected_np": 22.41521,
-      "dividend_per_holder": -10608.2
-    },
-    {
-      "date": "2025-12-22",
-      "np": 21.75,
-      "expected_np": 21.93626,
-      "dividend_per_holder": -7450.4
-    },
-    {
-      "date": "2025-12-26",
-      "np": 26.45,
-      "expected_np": 20.65176,
-      "dividend_per_holder": 231929.6
-    },
-    {
-      "date": "2025-12-28",
-      "np": 23.2,
-      "expected_np": 19.96655,
-      "dividend_per_holder": 129338.0
-    },
-    {
-      "date": "2025-12-30",
-      "np": 20.25,
-      "expected_np": 22.27709,
-      "dividend_per_holder": -81083.6
-    },
-    {
-      "date": "2026-01-01",
-      "np": 14.4,
-      "expected_np": 21.49065,
-      "dividend_per_holder": -283626.0
-    },
-    {
-      "date": "2026-01-03",
-      "np": 41.25,
-      "expected_np": 19.72561,
-      "dividend_per_holder": 860975.8
-    },
-    {
-      "date": "2026-01-05",
-      "np": -1.05,
-      "expected_np": 22.80372,
-      "dividend_per_holder": -954148.8
-    },
-    {
-      "date": "2026-01-07",
-      "np": 16.5,
-      "expected_np": 21.02068,
-      "dividend_per_holder": -180827.0
-    },
-    {
-      "date": "2026-01-09",
-      "np": 16.4,
-      "expected_np": 20.67622,
-      "dividend_per_holder": -171049.0
-    },
-    {
-      "date": "2026-01-10",
-      "np": 10.9,
-      "expected_np": 20.21023,
-      "dividend_per_holder": -372409.2
-    },
-    {
-      "date": "2026-01-15",
       "np": 9.75,
-      "expected_np": 21.71056,
-      "dividend_per_holder": -478422.4
+      "expected_np": 16.17457,
+      "dividend_per_holder": -256982.8
     },
     {
-      "date": "2026-01-17",
-      "np": 29.75,
-      "expected_np": 20.30586,
-      "dividend_per_holder": 377765.8
+      "date": "2025-12-18",
+      "np": 19.0,
+      "expected_np": 17.59222,
+      "dividend_per_holder": 56311.0
     },
     {
-      "date": "2026-01-19",
-      "np": 16.55,
-      "expected_np": 18.53906,
-      "dividend_per_holder": -79562.2
+      "date": "2025-12-20",
+      "np": 12.7,
+      "expected_np": 15.15992,
+      "dividend_per_holder": -98397.0
     },
     {
-      "date": "2026-01-21",
-      "np": 23.2,
-      "expected_np": 22.8255,
-      "dividend_per_holder": 14980.2
-    },
-    {
-      "date": "2026-01-23",
-      "np": 16.7,
-      "expected_np": 21.45585,
-      "dividend_per_holder": -190234.0
-    },
-    {
-      "date": "2026-01-24",
-      "np": 23.45,
-      "expected_np": 21.92674,
-      "dividend_per_holder": 60930.6
-    },
-    {
-      "date": "2026-01-26",
-      "np": 18.05,
-      "expected_np": 22.53148,
-      "dividend_per_holder": -179259.4
-    },
-    {
-      "date": "2026-01-28",
-      "np": 10.5,
-      "expected_np": 22.00486,
-      "dividend_per_holder": -460194.4
-    },
-    {
-      "date": "2026-02-01",
-      "np": 22.95,
-      "expected_np": 20.25618,
-      "dividend_per_holder": 107752.8
-    },
-    {
-      "date": "2026-02-03",
-      "np": 21.5,
-      "expected_np": 18.97831,
-      "dividend_per_holder": 100867.8
-    },
-    {
-      "date": "2026-02-06",
-      "np": 10.3,
-      "expected_np": 20.65523,
-      "dividend_per_holder": -414209.2
-    },
-    {
-      "date": "2026-02-08",
-      "np": 14.95,
-      "expected_np": 19.70376,
-      "dividend_per_holder": -190150.4
-    },
-    {
-      "date": "2026-02-11",
-      "np": 13.7,
-      "expected_np": 21.39623,
-      "dividend_per_holder": -307849.2
-    },
-    {
-      "date": "2026-02-19",
-      "np": 23.3,
-      "expected_np": 17.80578,
-      "dividend_per_holder": 219768.8
-    },
-    {
-      "date": "2026-02-22",
-      "np": 19.45,
-      "expected_np": 20.8899,
-      "dividend_per_holder": -57596.0
-    },
-    {
-      "date": "2026-02-25",
-      "np": 11.9,
-      "expected_np": 20.45852,
-      "dividend_per_holder": -342341.0
-    },
-    {
-      "date": "2026-02-27",
-      "np": 30.4,
-      "expected_np": 22.17647,
-      "dividend_per_holder": 328941.4
-    },
-    {
-      "date": "2026-03-01",
-      "np": 19.4,
-      "expected_np": 19.76687,
-      "dividend_per_holder": -14675.0
-    },
-    {
-      "date": "2026-03-04",
-      "np": 11.6,
-      "expected_np": 20.36773,
-      "dividend_per_holder": -350709.0
-    },
-    {
-      "date": "2026-03-06",
-      "np": 20.8,
-      "expected_np": 21.15001,
-      "dividend_per_holder": -14000.6
-    },
-    {
-      "date": "2026-03-08",
-      "np": 15.35,
-      "expected_np": 18.63633,
-      "dividend_per_holder": -131453.2
-    },
-    {
-      "date": "2026-03-10",
-      "np": 7.95,
-      "expected_np": 18.45205,
-      "dividend_per_holder": -420082.0
-    },
-    {
-      "date": "2026-03-12",
-      "np": 21.95,
-      "expected_np": 14.55508,
-      "dividend_per_holder": 295796.8
-    },
-    {
-      "date": "2026-03-14",
-      "np": 8.8,
-      "expected_np": 21.1198,
-      "dividend_per_holder": -492792.2
-    },
-    {
-      "date": "2026-03-16",
-      "np": 32.35,
-      "expected_np": 17.55959,
-      "dividend_per_holder": 591616.4
-    },
-    {
-      "date": "2026-03-18",
-      "np": 24.45,
-      "expected_np": 19.67909,
-      "dividend_per_holder": 190836.4
-    },
-    {
-      "date": "2026-03-20",
-      "np": 20.95,
-      "expected_np": 20.18178,
-      "dividend_per_holder": 30728.8
-    },
-    {
-      "date": "2026-03-22",
-      "np": 12.85,
-      "expected_np": 20.54431,
-      "dividend_per_holder": -307772.4
-    },
-    {
-      "date": "2026-03-25",
-      "np": 25.5,
-      "expected_np": 18.79697,
-      "dividend_per_holder": 268121.0
-    },
-    {
-      "date": "2026-03-30",
-      "np": 11.65,
-      "expected_np": 20.58011,
-      "dividend_per_holder": -357204.2
-    },
-    {
-      "date": "2026-04-01",
-      "np": 33.35,
-      "expected_np": 22.08927,
-      "dividend_per_holder": 450429.0
-    },
-    {
-      "date": "2026-04-03",
-      "np": 18.8,
-      "expected_np": 22.70586,
-      "dividend_per_holder": -156234.6
-    },
-    {
-      "date": "2026-04-05",
-      "np": 16.7,
-      "expected_np": 20.1392,
-      "dividend_per_holder": -137568.0
-    },
-    {
-      "date": "2026-04-07",
-      "np": 19.05,
-      "expected_np": 19.71114,
-      "dividend_per_holder": -26445.4
-    },
-    {
-      "date": "2026-04-10",
-      "np": 10.5,
-      "expected_np": 23.13854,
-      "dividend_per_holder": -505541.6
-    }
-  ],
-  "4251": [
-    {
-      "date": "2025-11-17",
-      "np": 4.85,
-      "expected_np": 8.98095,
-      "dividend_per_holder": -165237.8
-    },
-    {
-      "date": "2025-11-20",
-      "np": 17.0,
-      "expected_np": 7.67434,
-      "dividend_per_holder": 373026.6
-    },
-    {
-      "date": "2025-11-23",
-      "np": 6.45,
-      "expected_np": 9.15996,
-      "dividend_per_holder": -108398.6
-    },
-    {
-      "date": "2025-11-28",
-      "np": 12.3,
-      "expected_np": 8.31208,
-      "dividend_per_holder": 159516.6
-    },
-    {
-      "date": "2025-11-30",
-      "np": 16.1,
-      "expected_np": 6.51281,
-      "dividend_per_holder": 383487.8
-    },
-    {
-      "date": "2025-12-02",
-      "np": 5.15,
-      "expected_np": 11.03081,
-      "dividend_per_holder": -235232.4
-    },
-    {
-      "date": "2025-12-05",
-      "np": 16.3,
-      "expected_np": 7.48462,
-      "dividend_per_holder": 352615.0
-    },
-    {
-      "date": "2025-12-07",
-      "np": 8.05,
-      "expected_np": 8.9925,
-      "dividend_per_holder": -37700.2
-    },
-    {
-      "date": "2025-12-12",
-      "np": 15.0,
-      "expected_np": 11.4563,
-      "dividend_per_holder": 141748.0
-    },
-    {
-      "date": "2025-12-14",
-      "np": 25.55,
-      "expected_np": 11.42516,
-      "dividend_per_holder": 564993.8
-    },
-    {
-      "date": "2025-12-19",
-      "np": 1.35,
-      "expected_np": 11.60985,
-      "dividend_per_holder": -410394.0
+      "date": "2025-12-21",
+      "np": 20.4,
+      "expected_np": 16.92021,
+      "dividend_per_holder": 139191.4
     },
     {
       "date": "2025-12-23",
-      "np": 14.8,
-      "expected_np": 12.97954,
-      "dividend_per_holder": 72818.6
+      "np": 18.25,
+      "expected_np": 15.69272,
+      "dividend_per_holder": 102291.2
     },
     {
-      "date": "2025-12-26",
-      "np": 8.9,
-      "expected_np": 12.94846,
-      "dividend_per_holder": -161938.2
+      "date": "2025-12-25",
+      "np": 22.1,
+      "expected_np": 15.10929,
+      "dividend_per_holder": 279628.2
     },
     {
-      "date": "2025-12-28",
-      "np": 4.6,
-      "expected_np": 10.82125,
-      "dividend_per_holder": -248850.0
+      "date": "2025-12-27",
+      "np": 7.0,
+      "expected_np": 15.50612,
+      "dividend_per_holder": -340244.8
     },
     {
-      "date": "2025-12-30",
-      "np": 3.2,
-      "expected_np": 11.28611,
-      "dividend_per_holder": -323444.4
+      "date": "2025-12-29",
+      "np": 19.2,
+      "expected_np": 16.15841,
+      "dividend_per_holder": 121663.6
     },
     {
       "date": "2026-01-01",
-      "np": 5.1,
-      "expected_np": 11.97779,
-      "dividend_per_holder": -275111.4
+      "np": 23.95,
+      "expected_np": 15.16516,
+      "dividend_per_holder": 351393.4
     },
     {
       "date": "2026-01-03",
-      "np": 13.6,
-      "expected_np": 11.20855,
-      "dividend_per_holder": 95658.0
+      "np": 19.3,
+      "expected_np": 14.50752,
+      "dividend_per_holder": 191699.2
     },
     {
       "date": "2026-01-05",
-      "np": 4.85,
-      "expected_np": 12.24891,
-      "dividend_per_holder": -295956.4
+      "np": 9.55,
+      "expected_np": 16.1673,
+      "dividend_per_holder": -264692.0
     },
     {
       "date": "2026-01-07",
-      "np": 22.55,
-      "expected_np": 12.53507,
-      "dividend_per_holder": 400597.2
+      "np": 21.35,
+      "expected_np": 16.10931,
+      "dividend_per_holder": 209627.6
     },
     {
       "date": "2026-01-09",
-      "np": 13.9,
-      "expected_np": 10.46841,
-      "dividend_per_holder": 137263.6
+      "np": 17.9,
+      "expected_np": 16.72801,
+      "dividend_per_holder": 46879.4
     },
     {
-      "date": "2026-01-12",
-      "np": 8.85,
-      "expected_np": 11.14849,
-      "dividend_per_holder": -91939.8
+      "date": "2026-01-11",
+      "np": 24.9,
+      "expected_np": 17.52248,
+      "dividend_per_holder": 295100.6
     },
     {
-      "date": "2026-01-14",
-      "np": 12.7,
-      "expected_np": 11.10505,
-      "dividend_per_holder": 63798.0
+      "date": "2026-01-13",
+      "np": 17.2,
+      "expected_np": 18.79361,
+      "dividend_per_holder": -63744.4
+    },
+    {
+      "date": "2026-01-15",
+      "np": 8.0,
+      "expected_np": 16.06056,
+      "dividend_per_holder": -322422.6
     },
     {
       "date": "2026-01-16",
-      "np": 11.9,
-      "expected_np": 11.35182,
-      "dividend_per_holder": 21927.0
+      "np": 7.05,
+      "expected_np": 17.30576,
+      "dividend_per_holder": -410230.4
+    },
+    {
+      "date": "2026-01-18",
+      "np": 19.05,
+      "expected_np": 18.35958,
+      "dividend_per_holder": 27616.8
+    },
+    {
+      "date": "2026-01-20",
+      "np": 11.75,
+      "expected_np": 17.02594,
+      "dividend_per_holder": -211037.6
     },
     {
       "date": "2026-01-22",
-      "np": 10.0,
-      "expected_np": 9.61933,
-      "dividend_per_holder": 15226.8
+      "np": 20.3,
+      "expected_np": 16.63103,
+      "dividend_per_holder": 146758.8
     },
     {
-      "date": "2026-01-24",
-      "np": 4.75,
-      "expected_np": 10.84554,
-      "dividend_per_holder": -243821.6
+      "date": "2026-01-23",
+      "np": 16.2,
+      "expected_np": 15.37226,
+      "dividend_per_holder": 33109.6
     },
     {
-      "date": "2026-01-27",
-      "np": 26.8,
-      "expected_np": 11.12482,
-      "dividend_per_holder": 627007.2
+      "date": "2026-01-26",
+      "np": 8.45,
+      "expected_np": 17.43688,
+      "dividend_per_holder": -359475.2
+    },
+    {
+      "date": "2026-01-28",
+      "np": 22.3,
+      "expected_np": 16.83181,
+      "dividend_per_holder": 218727.6
     },
     {
       "date": "2026-01-29",
-      "np": 10.0,
-      "expected_np": 12.64615,
-      "dividend_per_holder": -105846.2
+      "np": 11.45,
+      "expected_np": 17.46924,
+      "dividend_per_holder": -240769.8
+    },
+    {
+      "date": "2026-01-31",
+      "np": 22.15,
+      "expected_np": 17.15716,
+      "dividend_per_holder": 199713.4
+    },
+    {
+      "date": "2026-02-02",
+      "np": 13.25,
+      "expected_np": 17.9588,
+      "dividend_per_holder": -188352.0
+    },
+    {
+      "date": "2026-02-04",
+      "np": 4.45,
+      "expected_np": 16.95897,
+      "dividend_per_holder": -500358.8
+    },
+    {
+      "date": "2026-02-05",
+      "np": 5.35,
+      "expected_np": 15.54281,
+      "dividend_per_holder": -407712.6
+    },
+    {
+      "date": "2026-02-10",
+      "np": 13.05,
+      "expected_np": 10.15883,
+      "dividend_per_holder": 115646.6
+    },
+    {
+      "date": "2026-02-11",
+      "np": 9.1,
+      "expected_np": 13.01806,
+      "dividend_per_holder": -156722.4
+    },
+    {
+      "date": "2026-02-19",
+      "np": 8.5,
+      "expected_np": 13.33205,
+      "dividend_per_holder": -193282.2
+    },
+    {
+      "date": "2026-02-21",
+      "np": 14.15,
+      "expected_np": 12.97557,
+      "dividend_per_holder": 46977.0
+    },
+    {
+      "date": "2026-02-23",
+      "np": 16.75,
+      "expected_np": 16.4797,
+      "dividend_per_holder": 10812.0
+    },
+    {
+      "date": "2026-02-26",
+      "np": 6.5,
+      "expected_np": 12.78265,
+      "dividend_per_holder": -251306.2
+    },
+    {
+      "date": "2026-02-28",
+      "np": 10.6,
+      "expected_np": 12.13151,
+      "dividend_per_holder": -61260.4
+    },
+    {
+      "date": "2026-03-02",
+      "np": 22.5,
+      "expected_np": 15.04205,
+      "dividend_per_holder": 298318.0
+    },
+    {
+      "date": "2026-03-05",
+      "np": 20.4,
+      "expected_np": 13.61578,
+      "dividend_per_holder": 271368.8
+    },
+    {
+      "date": "2026-03-06",
+      "np": 29.05,
+      "expected_np": 15.22679,
+      "dividend_per_holder": 552928.2
+    },
+    {
+      "date": "2026-03-08",
+      "np": 20.85,
+      "expected_np": 14.23361,
+      "dividend_per_holder": 264655.6
+    },
+    {
+      "date": "2026-03-10",
+      "np": 16.7,
+      "expected_np": 15.46077,
+      "dividend_per_holder": 49569.0
+    },
+    {
+      "date": "2026-03-11",
+      "np": 11.05,
+      "expected_np": 15.10916,
+      "dividend_per_holder": -162366.4
+    },
+    {
+      "date": "2026-03-13",
+      "np": 20.15,
+      "expected_np": 16.32635,
+      "dividend_per_holder": 152945.8
+    },
+    {
+      "date": "2026-03-16",
+      "np": 15.0,
+      "expected_np": 16.12884,
+      "dividend_per_holder": -45153.8
+    },
+    {
+      "date": "2026-03-18",
+      "np": 24.75,
+      "expected_np": 16.4452,
+      "dividend_per_holder": 332192.0
+    },
+    {
+      "date": "2026-03-20",
+      "np": 12.0,
+      "expected_np": 17.71658,
+      "dividend_per_holder": -228663.2
+    },
+    {
+      "date": "2026-03-21",
+      "np": 22.45,
+      "expected_np": 16.4072,
+      "dividend_per_holder": 241712.0
+    },
+    {
+      "date": "2026-03-23",
+      "np": 18.5,
+      "expected_np": 17.2197,
+      "dividend_per_holder": 51211.8
     },
     {
       "date": "2026-03-25",
-      "np": 28.75,
-      "expected_np": 12.70597,
-      "dividend_per_holder": 641761.0
+      "np": 13.55,
+      "expected_np": 16.21745,
+      "dividend_per_holder": -106698.0
     },
     {
-      "date": "2026-03-28",
-      "np": 22.75,
-      "expected_np": 8.71401,
-      "dividend_per_holder": 561439.6
+      "date": "2026-03-27",
+      "np": 14.9,
+      "expected_np": 17.21885,
+      "dividend_per_holder": -92754.2
     },
     {
-      "date": "2026-03-30",
-      "np": 9.4,
-      "expected_np": 12.84181,
-      "dividend_per_holder": -137672.4
+      "date": "2026-03-29",
+      "np": 15.6,
+      "expected_np": 17.06149,
+      "dividend_per_holder": -58459.8
+    },
+    {
+      "date": "2026-03-31",
+      "np": 15.05,
+      "expected_np": 15.18269,
+      "dividend_per_holder": -5307.8
     },
     {
       "date": "2026-04-01",
-      "np": 39.4,
-      "expected_np": 14.21972,
-      "dividend_per_holder": 1007211.2
+      "np": 19.3,
+      "expected_np": 16.98179,
+      "dividend_per_holder": 92728.2
     },
     {
       "date": "2026-04-03",
-      "np": 17.55,
-      "expected_np": 13.47271,
-      "dividend_per_holder": 163091.6
+      "np": 20.2,
+      "expected_np": 18.0977,
+      "dividend_per_holder": 84092.0
     },
     {
-      "date": "2026-04-04",
-      "np": 15.25,
-      "expected_np": 13.15785,
-      "dividend_per_holder": 83686.2
+      "date": "2026-04-05",
+      "np": 14.55,
+      "expected_np": 15.1042,
+      "dividend_per_holder": -22168.2
     },
     {
-      "date": "2026-04-06",
-      "np": 8.65,
-      "expected_np": 11.86032,
-      "dividend_per_holder": -128413.0
+      "date": "2026-04-07",
+      "np": 25.15,
+      "expected_np": 15.00143,
+      "dividend_per_holder": 405942.8
     },
     {
       "date": "2026-04-09",
-      "np": -2.05,
-      "expected_np": 12.16248,
-      "dividend_per_holder": -568499.0
+      "np": 11.5,
+      "expected_np": 16.3651,
+      "dividend_per_holder": -194604.2
     },
     {
       "date": "2026-04-10",
-      "np": 11.9,
-      "expected_np": 12.46825,
-      "dividend_per_holder": -22730.2
-    },
-    {
-      "date": "2026-04-12",
-      "np": 7.55,
-      "expected_np": 13.25839,
-      "dividend_per_holder": -228335.6
+      "np": 40.95,
+      "expected_np": 16.60229,
+      "dividend_per_holder": 973908.4
     }
   ],
-  "4066336": [
+  "3202": [
     {
-      "date": "2025-10-22",
-      "np": 16.7,
-      "expected_np": 11.26388,
-      "dividend_per_holder": 217445.0
+      "date": "2025-10-21",
+      "np": 11.25,
+      "expected_np": 12.6078,
+      "dividend_per_holder": -54312.2
     },
     {
       "date": "2025-10-24",
-      "np": 20.55,
-      "expected_np": 11.08674,
-      "dividend_per_holder": 378530.6
+      "np": 32.0,
+      "expected_np": 14.42994,
+      "dividend_per_holder": 702802.4
     },
     {
       "date": "2025-10-27",
-      "np": 38.9,
-      "expected_np": 13.60136,
-      "dividend_per_holder": 1011945.6
+      "np": 11.85,
+      "expected_np": 16.72478,
+      "dividend_per_holder": -194991.2
     },
     {
       "date": "2025-10-29",
-      "np": 28.85,
-      "expected_np": 16.69937,
-      "dividend_per_holder": 486025.2
+      "np": 21.85,
+      "expected_np": 14.02485,
+      "dividend_per_holder": 313006.0
+    },
+    {
+      "date": "2025-11-01",
+      "np": 22.95,
+      "expected_np": 14.18217,
+      "dividend_per_holder": 350713.0
+    },
+    {
+      "date": "2025-11-03",
+      "np": 11.9,
+      "expected_np": 15.58784,
+      "dividend_per_holder": -147513.8
+    },
+    {
+      "date": "2025-11-05",
+      "np": 2.4,
+      "expected_np": 16.0934,
+      "dividend_per_holder": -547736.2
+    },
+    {
+      "date": "2025-11-07",
+      "np": 6.65,
+      "expected_np": 15.13774,
+      "dividend_per_holder": -339509.6
+    },
+    {
+      "date": "2025-11-09",
+      "np": 24.75,
+      "expected_np": 15.92338,
+      "dividend_per_holder": 353064.8
+    },
+    {
+      "date": "2025-11-12",
+      "np": 18.3,
+      "expected_np": 18.60098,
+      "dividend_per_holder": -12039.2
+    },
+    {
+      "date": "2025-11-14",
+      "np": 21.8,
+      "expected_np": 16.33864,
+      "dividend_per_holder": 218454.4
+    },
+    {
+      "date": "2025-11-16",
+      "np": 22.05,
+      "expected_np": 15.91179,
+      "dividend_per_holder": 245528.2
+    },
+    {
+      "date": "2025-11-19",
+      "np": 4.45,
+      "expected_np": 16.54708,
+      "dividend_per_holder": -483883.4
+    },
+    {
+      "date": "2025-11-21",
+      "np": 6.4,
+      "expected_np": 16.62892,
+      "dividend_per_holder": -409156.8
+    },
+    {
+      "date": "2025-11-30",
+      "np": 27.6,
+      "expected_np": 17.34505,
+      "dividend_per_holder": 410197.8
+    },
+    {
+      "date": "2025-12-01",
+      "np": 15.75,
+      "expected_np": 16.66204,
+      "dividend_per_holder": -36481.8
+    },
+    {
+      "date": "2025-12-03",
+      "np": 21.7,
+      "expected_np": 18.38675,
+      "dividend_per_holder": 132530.0
+    },
+    {
+      "date": "2025-12-05",
+      "np": 24.9,
+      "expected_np": 16.7379,
+      "dividend_per_holder": 326483.8
+    },
+    {
+      "date": "2025-12-06",
+      "np": 17.4,
+      "expected_np": 16.79335,
+      "dividend_per_holder": 24265.8
+    },
+    {
+      "date": "2025-12-11",
+      "np": 1.6,
+      "expected_np": 16.35315,
+      "dividend_per_holder": -590126.2
+    },
+    {
+      "date": "2025-12-15",
+      "np": 21.75,
+      "expected_np": 15.6576,
+      "dividend_per_holder": 243696.0
+    },
+    {
+      "date": "2025-12-18",
+      "np": 26.55,
+      "expected_np": 18.08188,
+      "dividend_per_holder": 338724.8
+    },
+    {
+      "date": "2025-12-20",
+      "np": 23.9,
+      "expected_np": 15.7917,
+      "dividend_per_holder": 324332.0
+    },
+    {
+      "date": "2025-12-21",
+      "np": 14.15,
+      "expected_np": 17.66837,
+      "dividend_per_holder": -140734.8
+    },
+    {
+      "date": "2025-12-23",
+      "np": 14.25,
+      "expected_np": 16.99469,
+      "dividend_per_holder": -109787.8
+    },
+    {
+      "date": "2025-12-25",
+      "np": 23.65,
+      "expected_np": 15.13721,
+      "dividend_per_holder": 340511.6
+    },
+    {
+      "date": "2025-12-27",
+      "np": 24.15,
+      "expected_np": 15.32322,
+      "dividend_per_holder": 353071.0
+    },
+    {
+      "date": "2025-12-29",
+      "np": 22.8,
+      "expected_np": 15.83227,
+      "dividend_per_holder": 278709.2
+    },
+    {
+      "date": "2026-01-01",
+      "np": 14.6,
+      "expected_np": 15.22269,
+      "dividend_per_holder": -24907.6
+    },
+    {
+      "date": "2026-01-03",
+      "np": 26.75,
+      "expected_np": 15.85032,
+      "dividend_per_holder": 435987.2
+    },
+    {
+      "date": "2026-01-05",
+      "np": 17.55,
+      "expected_np": 17.60262,
+      "dividend_per_holder": -2105.0
+    },
+    {
+      "date": "2026-01-07",
+      "np": 21.35,
+      "expected_np": 18.07036,
+      "dividend_per_holder": 131185.4
+    },
+    {
+      "date": "2026-01-09",
+      "np": 25.0,
+      "expected_np": 18.49504,
+      "dividend_per_holder": 260198.2
+    },
+    {
+      "date": "2026-01-11",
+      "np": 15.35,
+      "expected_np": 19.87295,
+      "dividend_per_holder": -180918.0
+    },
+    {
+      "date": "2026-01-13",
+      "np": 17.35,
+      "expected_np": 19.82294,
+      "dividend_per_holder": -98917.8
+    },
+    {
+      "date": "2026-01-15",
+      "np": 9.7,
+      "expected_np": 17.28715,
+      "dividend_per_holder": -303486.2
+    },
+    {
+      "date": "2026-01-16",
+      "np": 32.6,
+      "expected_np": 18.50242,
+      "dividend_per_holder": 563903.2
+    },
+    {
+      "date": "2026-01-18",
+      "np": 9.9,
+      "expected_np": 21.05485,
+      "dividend_per_holder": -446194.0
+    },
+    {
+      "date": "2026-01-20",
+      "np": 13.25,
+      "expected_np": 18.9417,
+      "dividend_per_holder": -227668.0
+    },
+    {
+      "date": "2026-01-22",
+      "np": 20.7,
+      "expected_np": 17.95603,
+      "dividend_per_holder": 109758.8
+    },
+    {
+      "date": "2026-01-23",
+      "np": 26.5,
+      "expected_np": 16.67817,
+      "dividend_per_holder": 392873.2
+    },
+    {
+      "date": "2026-01-26",
+      "np": 21.1,
+      "expected_np": 19.2811,
+      "dividend_per_holder": 72756.0
+    },
+    {
+      "date": "2026-01-28",
+      "np": 15.5,
+      "expected_np": 18.30625,
+      "dividend_per_holder": -112250.0
+    },
+    {
+      "date": "2026-01-29",
+      "np": 20.5,
+      "expected_np": 18.35165,
+      "dividend_per_holder": 85934.0
+    },
+    {
+      "date": "2026-01-31",
+      "np": 8.6,
+      "expected_np": 18.5672,
+      "dividend_per_holder": -398688.0
+    },
+    {
+      "date": "2026-02-04",
+      "np": 9.15,
+      "expected_np": 17.3947,
+      "dividend_per_holder": -329788.0
+    },
+    {
+      "date": "2026-02-05",
+      "np": 22.15,
+      "expected_np": 16.47135,
+      "dividend_per_holder": 227145.8
+    },
+    {
+      "date": "2026-02-07",
+      "np": 11.55,
+      "expected_np": 14.37412,
+      "dividend_per_holder": -112965.0
+    },
+    {
+      "date": "2026-02-10",
+      "np": 12.75,
+      "expected_np": 16.39951,
+      "dividend_per_holder": -145980.6
+    },
+    {
+      "date": "2026-02-11",
+      "np": 9.45,
+      "expected_np": 16.9138,
+      "dividend_per_holder": -298552.0
+    },
+    {
+      "date": "2026-02-19",
+      "np": 34.1,
+      "expected_np": 15.83377,
+      "dividend_per_holder": 730649.0
+    },
+    {
+      "date": "2026-02-21",
+      "np": 12.9,
+      "expected_np": 15.53545,
+      "dividend_per_holder": -105418.0
+    },
+    {
+      "date": "2026-02-23",
+      "np": 18.0,
+      "expected_np": 19.83632,
+      "dividend_per_holder": -73453.0
+    },
+    {
+      "date": "2026-02-25",
+      "np": 16.35,
+      "expected_np": 18.79311,
+      "dividend_per_holder": -97724.4
+    },
+    {
+      "date": "2026-02-26",
+      "np": 30.2,
+      "expected_np": 14.66428,
+      "dividend_per_holder": 621428.8
+    },
+    {
+      "date": "2026-02-28",
+      "np": 28.75,
+      "expected_np": 17.25021,
+      "dividend_per_holder": 459991.4
+    },
+    {
+      "date": "2026-03-02",
+      "np": 17.75,
+      "expected_np": 19.81939,
+      "dividend_per_holder": -82775.6
+    },
+    {
+      "date": "2026-03-05",
+      "np": 18.4,
+      "expected_np": 18.06737,
+      "dividend_per_holder": 13305.0
+    },
+    {
+      "date": "2026-03-06",
+      "np": 6.4,
+      "expected_np": 18.37547,
+      "dividend_per_holder": -479018.8
+    },
+    {
+      "date": "2026-03-08",
+      "np": 19.8,
+      "expected_np": 16.3378,
+      "dividend_per_holder": 138487.8
+    },
+    {
+      "date": "2026-03-10",
+      "np": 28.2,
+      "expected_np": 16.56125,
+      "dividend_per_holder": 465550.0
+    },
+    {
+      "date": "2026-03-11",
+      "np": 6.6,
+      "expected_np": 15.52042,
+      "dividend_per_holder": -356817.0
+    },
+    {
+      "date": "2026-03-13",
+      "np": 25.05,
+      "expected_np": 15.90814,
+      "dividend_per_holder": 365674.4
+    },
+    {
+      "date": "2026-03-16",
+      "np": 2.6,
+      "expected_np": 16.45963,
+      "dividend_per_holder": -554385.2
+    },
+    {
+      "date": "2026-03-18",
+      "np": 12.65,
+      "expected_np": 16.19713,
+      "dividend_per_holder": -141885.4
+    },
+    {
+      "date": "2026-03-20",
+      "np": 26.05,
+      "expected_np": 16.10879,
+      "dividend_per_holder": 397648.4
+    },
+    {
+      "date": "2026-03-21",
+      "np": 15.9,
+      "expected_np": 15.25753,
+      "dividend_per_holder": 25698.8
+    },
+    {
+      "date": "2026-03-23",
+      "np": 29.2,
+      "expected_np": 15.81925,
+      "dividend_per_holder": 535229.8
+    },
+    {
+      "date": "2026-03-25",
+      "np": 18.1,
+      "expected_np": 15.87763,
+      "dividend_per_holder": 88894.6
+    },
+    {
+      "date": "2026-03-27",
+      "np": 22.4,
+      "expected_np": 17.69445,
+      "dividend_per_holder": 188221.8
+    },
+    {
+      "date": "2026-03-29",
+      "np": 14.0,
+      "expected_np": 17.14284,
+      "dividend_per_holder": -125713.8
+    },
+    {
+      "date": "2026-03-31",
+      "np": 23.2,
+      "expected_np": 15.03288,
+      "dividend_per_holder": 326684.8
+    },
+    {
+      "date": "2026-04-01",
+      "np": 13.55,
+      "expected_np": 17.04124,
+      "dividend_per_holder": -139649.6
+    },
+    {
+      "date": "2026-04-03",
+      "np": 22.0,
+      "expected_np": 18.59706,
+      "dividend_per_holder": 136117.4
+    },
+    {
+      "date": "2026-04-05",
+      "np": 28.15,
+      "expected_np": 15.30935,
+      "dividend_per_holder": 513626.0
+    },
+    {
+      "date": "2026-04-07",
+      "np": 11.95,
+      "expected_np": 15.67168,
+      "dividend_per_holder": -148867.4
+    },
+    {
+      "date": "2026-04-09",
+      "np": 20.3,
+      "expected_np": 17.03445,
+      "dividend_per_holder": 130622.0
+    },
+    {
+      "date": "2026-04-10",
+      "np": 30.3,
+      "expected_np": 16.97868,
+      "dividend_per_holder": 532852.8
+    }
+  ],
+  "3136193": [
+    {
+      "date": "2025-10-22",
+      "np": 17.15,
+      "expected_np": 17.23968,
+      "dividend_per_holder": -3587.2
+    },
+    {
+      "date": "2025-10-24",
+      "np": 13.0,
+      "expected_np": 15.97576,
+      "dividend_per_holder": -119030.4
+    },
+    {
+      "date": "2025-10-25",
+      "np": 18.4,
+      "expected_np": 14.85955,
+      "dividend_per_holder": 141618.0
+    },
+    {
+      "date": "2025-10-27",
+      "np": 23.5,
+      "expected_np": 16.93541,
+      "dividend_per_holder": 262583.6
+    },
+    {
+      "date": "2025-10-29",
+      "np": 19.25,
+      "expected_np": 19.65904,
+      "dividend_per_holder": -16361.6
+    },
+    {
+      "date": "2025-10-31",
+      "np": 31.8,
+      "expected_np": 20.74805,
+      "dividend_per_holder": 442077.8
+    },
+    {
+      "date": "2025-11-02",
+      "np": 25.55,
+      "expected_np": 19.40881,
+      "dividend_per_holder": 245647.4
+    },
+    {
+      "date": "2025-11-04",
+      "np": 24.9,
+      "expected_np": 18.36035,
+      "dividend_per_holder": 261586.0
+    },
+    {
+      "date": "2025-11-06",
+      "np": 18.2,
+      "expected_np": 19.90219,
+      "dividend_per_holder": -68087.6
+    },
+    {
+      "date": "2025-11-08",
+      "np": 12.95,
+      "expected_np": 18.92885,
+      "dividend_per_holder": -239154.0
+    },
+    {
+      "date": "2025-11-10",
+      "np": 11.95,
+      "expected_np": 20.9953,
+      "dividend_per_holder": -361812.2
+    },
+    {
+      "date": "2025-11-12",
+      "np": 16.55,
+      "expected_np": 17.40119,
+      "dividend_per_holder": -34047.6
+    },
+    {
+      "date": "2025-11-13",
+      "np": 26.85,
+      "expected_np": 19.82177,
+      "dividend_per_holder": 281129.0
+    },
+    {
+      "date": "2025-11-16",
+      "np": 15.3,
+      "expected_np": 18.52362,
+      "dividend_per_holder": -128945.0
+    },
+    {
+      "date": "2025-11-18",
+      "np": 18.95,
+      "expected_np": 19.7981,
+      "dividend_per_holder": -33924.2
+    },
+    {
+      "date": "2025-11-21",
+      "np": 0.75,
+      "expected_np": 18.66068,
+      "dividend_per_holder": -716427.2
+    },
+    {
+      "date": "2025-11-23",
+      "np": 17.2,
+      "expected_np": 18.85171,
+      "dividend_per_holder": -66068.4
+    },
+    {
+      "date": "2025-11-24",
+      "np": 8.1,
+      "expected_np": 18.19245,
+      "dividend_per_holder": -403698.0
+    },
+    {
+      "date": "2025-11-26",
+      "np": 8.5,
+      "expected_np": 19.92626,
+      "dividend_per_holder": -457050.6
+    },
+    {
+      "date": "2025-11-28",
+      "np": 13.5,
+      "expected_np": 17.10536,
+      "dividend_per_holder": -144214.4
+    },
+    {
+      "date": "2025-11-29",
+      "np": 20.95,
+      "expected_np": 19.51921,
+      "dividend_per_holder": 57231.4
+    },
+    {
+      "date": "2025-12-01",
+      "np": 9.1,
+      "expected_np": 18.74603,
+      "dividend_per_holder": -385841.4
+    },
+    {
+      "date": "2025-12-14",
+      "np": 22.5,
+      "expected_np": 14.19694,
+      "dividend_per_holder": 332122.2
+    },
+    {
+      "date": "2025-12-18",
+      "np": 13.05,
+      "expected_np": 16.61767,
+      "dividend_per_holder": -142707.0
+    },
+    {
+      "date": "2025-12-20",
+      "np": 30.45,
+      "expected_np": 16.6317,
+      "dividend_per_holder": 552731.8
+    },
+    {
+      "date": "2025-12-23",
+      "np": 18.85,
+      "expected_np": 19.06146,
+      "dividend_per_holder": -8458.4
+    },
+    {
+      "date": "2025-12-26",
+      "np": 24.05,
+      "expected_np": 18.41837,
+      "dividend_per_holder": 225265.2
+    },
+    {
+      "date": "2025-12-27",
+      "np": 4.85,
+      "expected_np": 20.26705,
+      "dividend_per_holder": -616682.0
+    },
+    {
+      "date": "2025-12-29",
+      "np": 10.45,
+      "expected_np": 21.08357,
+      "dividend_per_holder": -425342.8
+    },
+    {
+      "date": "2025-12-31",
+      "np": 23.55,
+      "expected_np": 19.0208,
+      "dividend_per_holder": 181168.0
+    },
+    {
+      "date": "2026-01-02",
+      "np": 21.7,
+      "expected_np": 21.28936,
+      "dividend_per_holder": 16425.6
+    },
+    {
+      "date": "2026-01-04",
+      "np": 21.1,
+      "expected_np": 16.84166,
+      "dividend_per_holder": 170333.6
+    },
+    {
+      "date": "2026-01-05",
+      "np": 12.0,
+      "expected_np": 17.57708,
+      "dividend_per_holder": -223083.4
+    },
+    {
+      "date": "2026-01-07",
+      "np": 8.4,
+      "expected_np": 19.44736,
+      "dividend_per_holder": -441894.4
+    },
+    {
+      "date": "2026-01-09",
+      "np": 22.15,
+      "expected_np": 18.72742,
+      "dividend_per_holder": 136903.2
+    },
+    {
+      "date": "2026-01-11",
+      "np": 12.2,
+      "expected_np": 22.10382,
+      "dividend_per_holder": -396152.8
+    },
+    {
+      "date": "2026-01-13",
+      "np": 16.45,
+      "expected_np": 18.60914,
+      "dividend_per_holder": -86365.6
+    },
+    {
+      "date": "2026-01-17",
+      "np": 14.15,
+      "expected_np": 19.1581,
+      "dividend_per_holder": -200324.2
+    },
+    {
+      "date": "2026-01-19",
+      "np": 13.95,
+      "expected_np": 20.60175,
+      "dividend_per_holder": -266070.2
+    },
+    {
+      "date": "2026-01-20",
+      "np": 12.05,
+      "expected_np": 18.6556,
+      "dividend_per_holder": -264224.2
+    },
+    {
+      "date": "2026-01-23",
+      "np": 23.35,
+      "expected_np": 19.22134,
+      "dividend_per_holder": 165146.2
+    },
+    {
+      "date": "2026-02-07",
+      "np": 13.55,
+      "expected_np": 18.15551,
+      "dividend_per_holder": -184220.6
+    },
+    {
+      "date": "2026-02-10",
+      "np": 13.25,
+      "expected_np": 18.68408,
+      "dividend_per_holder": -217363.4
+    },
+    {
+      "date": "2026-02-19",
+      "np": -0.35,
+      "expected_np": 17.16913,
+      "dividend_per_holder": -700765.2
+    },
+    {
+      "date": "2026-03-03",
+      "np": 6.4,
+      "expected_np": 13.1824,
+      "dividend_per_holder": -271296.0
+    },
+    {
+      "date": "2026-03-05",
+      "np": 16.85,
+      "expected_np": 16.74119,
+      "dividend_per_holder": 4352.4
+    },
+    {
+      "date": "2026-03-06",
+      "np": 21.95,
+      "expected_np": 18.24038,
+      "dividend_per_holder": 148384.8
+    },
+    {
+      "date": "2026-03-08",
+      "np": 23.15,
+      "expected_np": 18.06412,
+      "dividend_per_holder": 203435.2
+    },
+    {
+      "date": "2026-03-10",
+      "np": 20.75,
+      "expected_np": 18.31861,
+      "dividend_per_holder": 97255.4
+    },
+    {
+      "date": "2026-03-12",
+      "np": 32.4,
+      "expected_np": 19.88776,
+      "dividend_per_holder": 500489.6
+    },
+    {
+      "date": "2026-03-13",
+      "np": 14.95,
+      "expected_np": 18.83642,
+      "dividend_per_holder": -155456.8
+    },
+    {
+      "date": "2026-03-16",
+      "np": 26.7,
+      "expected_np": 17.70427,
+      "dividend_per_holder": 359829.2
+    },
+    {
+      "date": "2026-03-17",
+      "np": 18.4,
+      "expected_np": 19.86372,
+      "dividend_per_holder": -58548.8
+    },
+    {
+      "date": "2026-03-19",
+      "np": 6.7,
+      "expected_np": 19.49681,
+      "dividend_per_holder": -511872.6
+    },
+    {
+      "date": "2026-03-21",
+      "np": 6.7,
+      "expected_np": 21.81967,
+      "dividend_per_holder": -604786.8
+    },
+    {
+      "date": "2026-03-22",
+      "np": 19.25,
+      "expected_np": 20.00921,
+      "dividend_per_holder": -30368.4
+    },
+    {
+      "date": "2026-03-24",
+      "np": 16.45,
+      "expected_np": 19.09482,
+      "dividend_per_holder": -105792.8
+    },
+    {
+      "date": "2026-03-28",
+      "np": 25.6,
+      "expected_np": 21.82993,
+      "dividend_per_holder": 150802.6
+    },
+    {
+      "date": "2026-03-30",
+      "np": 28.1,
+      "expected_np": 18.74251,
+      "dividend_per_holder": 374299.4
+    },
+    {
+      "date": "2026-03-31",
+      "np": 25.4,
+      "expected_np": 15.78031,
+      "dividend_per_holder": 384787.4
+    },
+    {
+      "date": "2026-04-02",
+      "np": 12.6,
+      "expected_np": 17.58617,
+      "dividend_per_holder": -199446.8
+    },
+    {
+      "date": "2026-04-05",
+      "np": 19.25,
+      "expected_np": 20.22152,
+      "dividend_per_holder": -38861.0
+    },
+    {
+      "date": "2026-04-07",
+      "np": 22.15,
+      "expected_np": 19.10106,
+      "dividend_per_holder": 121957.6
+    },
+    {
+      "date": "2026-04-08",
+      "np": 26.15,
+      "expected_np": 22.22123,
+      "dividend_per_holder": 157150.8
+    }
+  ],
+  "3032977": [
+    {
+      "date": "2025-10-22",
+      "np": 31.2,
+      "expected_np": 23.10259,
+      "dividend_per_holder": 323896.2
+    },
+    {
+      "date": "2025-10-24",
+      "np": 31.0,
+      "expected_np": 23.15871,
+      "dividend_per_holder": 313651.4
+    },
+    {
+      "date": "2025-10-26",
+      "np": 44.4,
+      "expected_np": 24.07415,
+      "dividend_per_holder": 813034.0
+    },
+    {
+      "date": "2025-10-28",
+      "np": 34.6,
+      "expected_np": 24.98034,
+      "dividend_per_holder": 384786.2
+    },
+    {
+      "date": "2025-11-01",
+      "np": 27.75,
+      "expected_np": 26.94308,
+      "dividend_per_holder": 32276.6
+    },
+    {
+      "date": "2025-11-03",
+      "np": 30.7,
+      "expected_np": 25.76513,
+      "dividend_per_holder": 197394.6
+    },
+    {
+      "date": "2025-11-04",
+      "np": 19.8,
+      "expected_np": 25.66467,
+      "dividend_per_holder": -234587.0
+    },
+    {
+      "date": "2025-11-07",
+      "np": 36.4,
+      "expected_np": 24.89387,
+      "dividend_per_holder": 460245.2
+    },
+    {
+      "date": "2025-11-09",
+      "np": 25.95,
+      "expected_np": 26.10981,
+      "dividend_per_holder": -6392.4
+    },
+    {
+      "date": "2025-11-10",
+      "np": 24.85,
+      "expected_np": 28.47984,
+      "dividend_per_holder": -145193.8
+    },
+    {
+      "date": "2025-11-14",
+      "np": 26.45,
+      "expected_np": 29.92268,
+      "dividend_per_holder": -138907.2
+    },
+    {
+      "date": "2025-11-15",
+      "np": 25.55,
+      "expected_np": 28.48345,
+      "dividend_per_holder": -117338.0
+    },
+    {
+      "date": "2025-11-17",
+      "np": 11.45,
+      "expected_np": 26.16555,
+      "dividend_per_holder": -588622.0
+    },
+    {
+      "date": "2025-11-28",
+      "np": 30.7,
+      "expected_np": 19.41453,
+      "dividend_per_holder": 451418.8
+    },
+    {
+      "date": "2025-11-29",
+      "np": 28.45,
+      "expected_np": 21.91405,
+      "dividend_per_holder": 261438.0
+    },
+    {
+      "date": "2025-12-01",
+      "np": 17.85,
+      "expected_np": 21.41702,
+      "dividend_per_holder": -142680.8
+    },
+    {
+      "date": "2025-12-03",
+      "np": 2.55,
+      "expected_np": 21.4491,
+      "dividend_per_holder": -755964.0
+    },
+    {
+      "date": "2025-12-27",
+      "np": 24.9,
+      "expected_np": 14.18078,
+      "dividend_per_holder": 428768.8
+    },
+    {
+      "date": "2025-12-29",
+      "np": 22.3,
+      "expected_np": 15.98628,
+      "dividend_per_holder": 252548.6
+    },
+    {
+      "date": "2025-12-31",
+      "np": 23.05,
+      "expected_np": 19.76246,
+      "dividend_per_holder": 131501.4
+    },
+    {
+      "date": "2026-01-02",
+      "np": 26.4,
+      "expected_np": 21.92408,
+      "dividend_per_holder": 179036.6
+    },
+    {
+      "date": "2026-01-04",
+      "np": 30.8,
+      "expected_np": 22.49431,
+      "dividend_per_holder": 332227.6
+    },
+    {
+      "date": "2026-01-07",
+      "np": 27.75,
+      "expected_np": 22.36317,
+      "dividend_per_holder": 215473.2
+    },
+    {
+      "date": "2026-01-09",
+      "np": 22.45,
+      "expected_np": 23.65412,
+      "dividend_per_holder": -48165.0
+    },
+    {
+      "date": "2026-01-11",
+      "np": 31.5,
+      "expected_np": 22.87732,
+      "dividend_per_holder": 344907.0
+    },
+    {
+      "date": "2026-01-13",
+      "np": 15.1,
+      "expected_np": 24.07082,
+      "dividend_per_holder": -358832.8
+    },
+    {
+      "date": "2026-01-15",
+      "np": 16.05,
+      "expected_np": 22.67268,
+      "dividend_per_holder": -264907.4
+    },
+    {
+      "date": "2026-01-19",
+      "np": 20.95,
+      "expected_np": 21.71744,
+      "dividend_per_holder": -30697.8
+    },
+    {
+      "date": "2026-01-21",
+      "np": 19.45,
+      "expected_np": 21.54588,
+      "dividend_per_holder": -83835.4
+    },
+    {
+      "date": "2026-01-23",
+      "np": 18.8,
+      "expected_np": 23.49479,
+      "dividend_per_holder": -187791.6
+    },
+    {
+      "date": "2026-03-02",
+      "np": 10.95,
+      "expected_np": 20.04595,
+      "dividend_per_holder": -363838.2
+    },
+    {
+      "date": "2026-03-04",
+      "np": 19.2,
+      "expected_np": 21.72815,
+      "dividend_per_holder": -101126.0
+    },
+    {
+      "date": "2026-03-07",
+      "np": 29.65,
+      "expected_np": 22.55656,
+      "dividend_per_holder": 283737.4
+    },
+    {
+      "date": "2026-03-10",
+      "np": 12.55,
+      "expected_np": 20.87031,
+      "dividend_per_holder": -332812.4
+    },
+    {
+      "date": "2026-03-12",
+      "np": 19.95,
+      "expected_np": 18.44559,
+      "dividend_per_holder": 60176.2
+    },
+    {
+      "date": "2026-03-15",
+      "np": 29.45,
+      "expected_np": 24.21242,
+      "dividend_per_holder": 209503.2
+    }
+  ],
+  "4869342": [
+    {
+      "date": "2025-10-22",
+      "np": 1.8,
+      "expected_np": 10.75362,
+      "dividend_per_holder": -358144.8
+    },
+    {
+      "date": "2025-10-24",
+      "np": 5.1,
+      "expected_np": 8.83426,
+      "dividend_per_holder": -149370.6
+    },
+    {
+      "date": "2025-10-25",
+      "np": 3.6,
+      "expected_np": 8.97974,
+      "dividend_per_holder": -215189.6
+    },
+    {
+      "date": "2025-10-27",
+      "np": -0.2,
+      "expected_np": 9.52247,
+      "dividend_per_holder": -388898.8
+    },
+    {
+      "date": "2025-10-29",
+      "np": 6.3,
+      "expected_np": 10.11132,
+      "dividend_per_holder": -152453.0
     },
     {
       "date": "2025-10-31",
       "np": 20.0,
-      "expected_np": 17.30179,
-      "dividend_per_holder": 107928.6
+      "expected_np": 10.32916,
+      "dividend_per_holder": 386833.4
     },
     {
       "date": "2025-11-02",
-      "np": 18.05,
-      "expected_np": 17.68979,
-      "dividend_per_holder": 14408.6
+      "np": 17.65,
+      "expected_np": 10.7322,
+      "dividend_per_holder": 276711.8
     },
     {
-      "date": "2025-11-03",
-      "np": 9.05,
-      "expected_np": 15.58656,
-      "dividend_per_holder": -261462.2
-    },
-    {
-      "date": "2025-11-05",
-      "np": 11.1,
-      "expected_np": 16.18114,
-      "dividend_per_holder": -203245.4
+      "date": "2025-11-04",
+      "np": 18.1,
+      "expected_np": 11.82217,
+      "dividend_per_holder": 251113.2
     },
     {
       "date": "2025-11-07",
-      "np": 7.75,
-      "expected_np": 16.76643,
-      "dividend_per_holder": -360657.2
+      "np": 8.1,
+      "expected_np": 12.21331,
+      "dividend_per_holder": -164532.4
+    },
+    {
+      "date": "2025-11-08",
+      "np": 14.3,
+      "expected_np": 11.61177,
+      "dividend_per_holder": 107529.0
     },
     {
       "date": "2025-11-10",
-      "np": 15.7,
-      "expected_np": 15.72898,
-      "dividend_per_holder": -1159.0
+      "np": 4.25,
+      "expected_np": 11.4138,
+      "dividend_per_holder": -286552.2
     },
     {
-      "date": "2025-11-11",
-      "np": 29.8,
-      "expected_np": 16.77041,
-      "dividend_per_holder": 521183.8
+      "date": "2025-11-12",
+      "np": 3.65,
+      "expected_np": 12.63949,
+      "dividend_per_holder": -359579.6
     },
     {
       "date": "2025-11-13",
-      "np": 30.2,
-      "expected_np": 16.86995,
-      "dividend_per_holder": 533201.8
+      "np": 2.25,
+      "expected_np": 12.00839,
+      "dividend_per_holder": -390335.6
     },
     {
       "date": "2025-11-16",
-      "np": 34.75,
-      "expected_np": 18.48307,
-      "dividend_per_holder": 650677.2
+      "np": 17.3,
+      "expected_np": 10.49105,
+      "dividend_per_holder": 272358.0
     },
     {
       "date": "2025-11-18",
-      "np": 25.45,
-      "expected_np": 18.01207,
-      "dividend_per_holder": 297517.2
-    },
-    {
-      "date": "2025-11-21",
-      "np": 17.65,
-      "expected_np": 16.68345,
-      "dividend_per_holder": 38661.8
-    },
-    {
-      "date": "2025-11-23",
-      "np": 12.15,
-      "expected_np": 17.54894,
-      "dividend_per_holder": -215957.6
-    },
-    {
-      "date": "2025-11-24",
-      "np": 6.6,
-      "expected_np": 16.76942,
-      "dividend_per_holder": -406776.8
-    },
-    {
-      "date": "2025-11-28",
-      "np": 14.8,
-      "expected_np": 18.85927,
-      "dividend_per_holder": -162370.8
-    },
-    {
-      "date": "2025-11-30",
-      "np": 10.95,
-      "expected_np": 17.25259,
-      "dividend_per_holder": -252103.4
-    },
-    {
-      "date": "2025-12-01",
-      "np": 21.8,
-      "expected_np": 15.80492,
-      "dividend_per_holder": 239803.0
-    },
-    {
-      "date": "2025-12-04",
-      "np": 22.7,
-      "expected_np": 18.56171,
-      "dividend_per_holder": 165531.4
-    },
-    {
-      "date": "2025-12-05",
-      "np": 13.7,
-      "expected_np": 16.23042,
-      "dividend_per_holder": -101216.8
-    },
-    {
-      "date": "2025-12-12",
-      "np": 12.5,
-      "expected_np": 16.17278,
-      "dividend_per_holder": -146911.2
-    },
-    {
-      "date": "2025-12-15",
-      "np": 32.7,
-      "expected_np": 17.76208,
-      "dividend_per_holder": 597516.6
-    },
-    {
-      "date": "2025-12-22",
-      "np": 15.25,
-      "expected_np": 17.31847,
-      "dividend_per_holder": -82739.0
-    },
-    {
-      "date": "2025-12-26",
-      "np": 21.25,
-      "expected_np": 18.30681,
-      "dividend_per_holder": 117727.6
-    },
-    {
-      "date": "2025-12-27",
-      "np": 27.7,
-      "expected_np": 17.81898,
-      "dividend_per_holder": 395240.8
-    },
-    {
-      "date": "2025-12-30",
-      "np": 17.7,
-      "expected_np": 17.65132,
-      "dividend_per_holder": 1947.4
-    },
-    {
-      "date": "2026-01-03",
-      "np": 22.15,
-      "expected_np": 18.01786,
-      "dividend_per_holder": 165285.8
-    },
-    {
-      "date": "2026-01-05",
-      "np": 15.85,
-      "expected_np": 19.67821,
-      "dividend_per_holder": -153128.4
-    },
-    {
-      "date": "2026-01-07",
-      "np": 20.05,
-      "expected_np": 15.63468,
-      "dividend_per_holder": 176612.6
-    },
-    {
-      "date": "2026-01-08",
-      "np": 22.3,
-      "expected_np": 19.07878,
-      "dividend_per_holder": 128849.0
-    },
-    {
-      "date": "2026-01-12",
-      "np": 22.2,
-      "expected_np": 18.81007,
-      "dividend_per_holder": 135597.0
-    },
-    {
-      "date": "2026-01-27",
-      "np": 12.35,
-      "expected_np": 18.6929,
-      "dividend_per_holder": -253715.8
-    },
-    {
-      "date": "2026-01-28",
-      "np": 12.55,
-      "expected_np": 16.81727,
-      "dividend_per_holder": -170690.8
-    },
-    {
-      "date": "2026-02-01",
-      "np": 21.4,
-      "expected_np": 16.09514,
-      "dividend_per_holder": 212194.2
-    },
-    {
-      "date": "2026-02-03",
-      "np": 17.4,
-      "expected_np": 18.88602,
-      "dividend_per_holder": -59440.8
-    },
-    {
-      "date": "2026-02-05",
-      "np": 13.9,
-      "expected_np": 17.12551,
-      "dividend_per_holder": -129020.4
-    },
-    {
-      "date": "2026-02-07",
-      "np": 18.65,
-      "expected_np": 10.43044,
-      "dividend_per_holder": 328782.4
-    },
-    {
-      "date": "2026-02-09",
-      "np": 9.75,
-      "expected_np": 14.69037,
-      "dividend_per_holder": -197614.8
-    },
-    {
-      "date": "2026-02-11",
-      "np": 17.75,
-      "expected_np": 15.15821,
-      "dividend_per_holder": 103671.8
-    },
-    {
-      "date": "2026-02-23",
-      "np": 18.8,
-      "expected_np": 11.77542,
-      "dividend_per_holder": 280983.2
-    }
-  ],
-  "4222252": [
-    {
-      "date": "2025-10-21",
-      "np": 8.2,
-      "expected_np": 8.86168,
-      "dividend_per_holder": -26467.2
-    },
-    {
-      "date": "2025-10-23",
-      "np": 0.85,
-      "expected_np": 9.35871,
-      "dividend_per_holder": -340348.2
-    },
-    {
-      "date": "2025-10-25",
-      "np": 11.6,
-      "expected_np": 9.74306,
-      "dividend_per_holder": 74277.6
-    },
-    {
-      "date": "2025-10-27",
-      "np": 15.5,
-      "expected_np": 10.37153,
-      "dividend_per_holder": 205138.6
-    },
-    {
-      "date": "2025-10-28",
-      "np": 6.85,
-      "expected_np": 10.62677,
-      "dividend_per_holder": -151070.8
-    },
-    {
-      "date": "2025-10-30",
-      "np": 17.8,
-      "expected_np": 11.30276,
-      "dividend_per_holder": 259889.6
-    },
-    {
-      "date": "2025-11-02",
-      "np": 20.9,
-      "expected_np": 11.24192,
-      "dividend_per_holder": 386323.4
-    },
-    {
-      "date": "2025-11-04",
-      "np": 15.0,
-      "expected_np": 9.2287,
-      "dividend_per_holder": 230852.0
-    },
-    {
-      "date": "2025-11-05",
-      "np": 10.2,
-      "expected_np": 10.60827,
-      "dividend_per_holder": -16330.8
-    },
-    {
-      "date": "2025-11-07",
-      "np": 37.35,
-      "expected_np": 10.81065,
-      "dividend_per_holder": 1061574.0
-    },
-    {
-      "date": "2025-11-09",
-      "np": 15.5,
-      "expected_np": 12.49921,
-      "dividend_per_holder": 120031.8
-    },
-    {
-      "date": "2025-11-11",
-      "np": 7.4,
-      "expected_np": 12.58376,
-      "dividend_per_holder": -207350.2
-    },
-    {
-      "date": "2025-11-12",
-      "np": 9.6,
-      "expected_np": 10.46915,
-      "dividend_per_holder": -34766.0
-    },
-    {
-      "date": "2025-11-15",
-      "np": 13.3,
-      "expected_np": 11.08866,
-      "dividend_per_holder": 88453.4
-    },
-    {
-      "date": "2025-11-17",
-      "np": 22.7,
-      "expected_np": 11.65342,
-      "dividend_per_holder": 441863.4
-    },
-    {
-      "date": "2025-11-19",
-      "np": 7.55,
-      "expected_np": 12.47848,
-      "dividend_per_holder": -197139.4
-    },
-    {
-      "date": "2025-11-21",
-      "np": 12.2,
-      "expected_np": 12.29226,
-      "dividend_per_holder": -3690.4
-    },
-    {
-      "date": "2025-11-23",
-      "np": 7.2,
-      "expected_np": 11.54535,
-      "dividend_per_holder": -173814.0
-    },
-    {
-      "date": "2025-11-26",
-      "np": 13.6,
-      "expected_np": 11.10182,
-      "dividend_per_holder": 99927.2
-    },
-    {
-      "date": "2025-12-13",
-      "np": 10.3,
-      "expected_np": 10.82102,
-      "dividend_per_holder": -20840.8
-    },
-    {
-      "date": "2025-12-19",
-      "np": -1.8,
-      "expected_np": 9.24349,
-      "dividend_per_holder": -441739.8
-    },
-    {
-      "date": "2025-12-23",
-      "np": 4.6,
-      "expected_np": 9.3133,
-      "dividend_per_holder": -188532.2
-    },
-    {
-      "date": "2025-12-25",
-      "np": 15.0,
-      "expected_np": 9.97077,
-      "dividend_per_holder": 201169.4
-    },
-    {
-      "date": "2025-12-28",
-      "np": 2.7,
-      "expected_np": 9.59787,
-      "dividend_per_holder": -275914.8
-    },
-    {
-      "date": "2026-01-29",
-      "np": 7.9,
-      "expected_np": 8.28572,
-      "dividend_per_holder": -15428.8
-    },
-    {
-      "date": "2026-02-01",
-      "np": 0.8,
-      "expected_np": 8.0374,
-      "dividend_per_holder": -289495.8
-    },
-    {
-      "date": "2026-02-03",
-      "np": 16.5,
-      "expected_np": 8.35129,
-      "dividend_per_holder": 325948.4
-    },
-    {
-      "date": "2026-02-07",
-      "np": 6.95,
-      "expected_np": 8.5643,
-      "dividend_per_holder": -64572.0
-    },
-    {
-      "date": "2026-02-09",
-      "np": 14.9,
-      "expected_np": 8.65088,
-      "dividend_per_holder": 249964.8
-    },
-    {
-      "date": "2026-02-11",
-      "np": 10.1,
-      "expected_np": 8.91131,
-      "dividend_per_holder": 47547.8
-    },
-    {
-      "date": "2026-02-20",
-      "np": 14.3,
-      "expected_np": 9.2328,
-      "dividend_per_holder": 202687.8
-    },
-    {
-      "date": "2026-02-22",
-      "np": 12.2,
-      "expected_np": 10.02453,
-      "dividend_per_holder": 87018.6
-    },
-    {
-      "date": "2026-02-24",
-      "np": 11.2,
-      "expected_np": 9.64253,
-      "dividend_per_holder": 62299.0
-    },
-    {
-      "date": "2026-02-27",
-      "np": 15.55,
-      "expected_np": 8.78145,
-      "dividend_per_holder": 270741.8
-    },
-    {
-      "date": "2026-03-01",
-      "np": 6.7,
-      "expected_np": 9.6872,
-      "dividend_per_holder": -119488.0
-    },
-    {
-      "date": "2026-03-04",
-      "np": -0.65,
-      "expected_np": 8.46725,
-      "dividend_per_holder": -364690.0
-    },
-    {
-      "date": "2026-03-15",
-      "np": 3.05,
-      "expected_np": 7.78401,
-      "dividend_per_holder": -189360.4
-    },
-    {
-      "date": "2026-03-17",
-      "np": 3.9,
-      "expected_np": 8.05328,
-      "dividend_per_holder": -166131.4
-    },
-    {
-      "date": "2026-03-21",
-      "np": 18.75,
-      "expected_np": 8.46272,
-      "dividend_per_holder": 411491.2
-    },
-    {
-      "date": "2026-03-23",
-      "np": 13.85,
-      "expected_np": 8.00727,
-      "dividend_per_holder": 233709.0
-    },
-    {
-      "date": "2026-03-25",
-      "np": 8.0,
-      "expected_np": 7.4755,
-      "dividend_per_holder": 20980.0
-    },
-    {
-      "date": "2026-03-27",
-      "np": 8.8,
-      "expected_np": 10.42719,
-      "dividend_per_holder": -65087.8
-    },
-    {
-      "date": "2026-03-29",
-      "np": 6.4,
-      "expected_np": 8.86388,
-      "dividend_per_holder": -98555.2
-    },
-    {
-      "date": "2026-04-02",
-      "np": 12.7,
-      "expected_np": 9.84339,
-      "dividend_per_holder": 114264.2
-    },
-    {
-      "date": "2026-04-05",
-      "np": 11.75,
-      "expected_np": 9.84717,
-      "dividend_per_holder": 76113.0
-    },
-    {
-      "date": "2026-04-07",
-      "np": 1.6,
-      "expected_np": 9.14522,
-      "dividend_per_holder": -301809.0
-    },
-    {
-      "date": "2026-04-08",
-      "np": 10.9,
-      "expected_np": 6.01163,
-      "dividend_per_holder": 195534.8
-    }
-  ],
-  "4566434": [
-    {
-      "date": "2025-10-22",
-      "np": 18.55,
-      "expected_np": 15.37726,
-      "dividend_per_holder": 126909.6
-    },
-    {
-      "date": "2025-10-24",
-      "np": 17.9,
-      "expected_np": 17.24559,
-      "dividend_per_holder": 26176.2
-    },
-    {
-      "date": "2025-10-25",
-      "np": 9.05,
-      "expected_np": 17.73769,
-      "dividend_per_holder": -347507.6
-    },
-    {
-      "date": "2025-10-27",
-      "np": 18.3,
-      "expected_np": 15.86409,
-      "dividend_per_holder": 97436.4
-    },
-    {
-      "date": "2025-10-29",
-      "np": 13.85,
-      "expected_np": 15.80569,
-      "dividend_per_holder": -78227.6
-    },
-    {
-      "date": "2025-10-30",
-      "np": 14.2,
-      "expected_np": 16.50761,
-      "dividend_per_holder": -92304.4
-    },
-    {
-      "date": "2025-11-01",
-      "np": 23.3,
-      "expected_np": 16.76881,
-      "dividend_per_holder": 261247.6
-    },
-    {
-      "date": "2025-11-04",
-      "np": 6.55,
-      "expected_np": 15.48638,
-      "dividend_per_holder": -357455.2
-    },
-    {
-      "date": "2025-11-07",
-      "np": 20.2,
-      "expected_np": 15.07634,
-      "dividend_per_holder": 204946.6
-    },
-    {
-      "date": "2025-11-09",
-      "np": 14.15,
-      "expected_np": 16.09676,
-      "dividend_per_holder": -77870.4
-    },
-    {
-      "date": "2025-11-10",
-      "np": 19.3,
-      "expected_np": 17.68823,
-      "dividend_per_holder": 64470.8
-    },
-    {
-      "date": "2025-11-12",
-      "np": 23.0,
-      "expected_np": 15.88995,
-      "dividend_per_holder": 284402.2
-    },
-    {
-      "date": "2025-11-14",
-      "np": 13.8,
-      "expected_np": 18.87551,
-      "dividend_per_holder": -203020.4
-    },
-    {
-      "date": "2025-11-16",
-      "np": 17.45,
-      "expected_np": 15.36694,
-      "dividend_per_holder": 83322.4
-    },
-    {
-      "date": "2025-11-18",
-      "np": 11.85,
-      "expected_np": 17.39817,
-      "dividend_per_holder": -221926.8
+      "np": 15.2,
+      "expected_np": 11.35833,
+      "dividend_per_holder": 153666.8
     },
     {
       "date": "2025-11-20",
-      "np": 13.8,
-      "expected_np": 17.19934,
-      "dividend_per_holder": -135973.6
+      "np": 5.25,
+      "expected_np": 11.04855,
+      "dividend_per_holder": -231942.0
     },
     {
       "date": "2025-11-22",
-      "np": 33.5,
-      "expected_np": 16.28194,
-      "dividend_per_holder": 688722.4
+      "np": 11.55,
+      "expected_np": 11.86232,
+      "dividend_per_holder": -12492.8
     },
     {
       "date": "2025-11-23",
-      "np": 10.75,
-      "expected_np": 15.37387,
-      "dividend_per_holder": -184954.8
+      "np": 21.1,
+      "expected_np": 12.24053,
+      "dividend_per_holder": 354378.6
     },
     {
       "date": "2025-11-25",
-      "np": 17.15,
-      "expected_np": 15.17257,
-      "dividend_per_holder": 79097.2
+      "np": 8.15,
+      "expected_np": 13.15852,
+      "dividend_per_holder": -200341.0
     },
     {
       "date": "2025-11-28",
-      "np": 14.85,
-      "expected_np": 14.87887,
-      "dividend_per_holder": -1154.8
+      "np": 13.55,
+      "expected_np": 11.77613,
+      "dividend_per_holder": 70954.6
+    },
+    {
+      "date": "2025-11-30",
+      "np": 14.15,
+      "expected_np": 12.41301,
+      "dividend_per_holder": 69479.6
     },
     {
       "date": "2025-12-01",
-      "np": 17.8,
-      "expected_np": 18.07271,
-      "dividend_per_holder": -10908.4
+      "np": 8.05,
+      "expected_np": 12.31056,
+      "dividend_per_holder": -170422.4
     },
     {
       "date": "2025-12-03",
-      "np": 23.05,
-      "expected_np": 17.10217,
-      "dividend_per_holder": 237913.2
+      "np": 7.45,
+      "expected_np": 13.46245,
+      "dividend_per_holder": -240498.0
     },
     {
       "date": "2025-12-05",
-      "np": 22.15,
-      "expected_np": 18.17931,
-      "dividend_per_holder": 158827.6
+      "np": 12.25,
+      "expected_np": 12.57683,
+      "dividend_per_holder": -13073.2
     },
     {
-      "date": "2025-12-07",
-      "np": 8.4,
-      "expected_np": 16.6001,
-      "dividend_per_holder": -328004.0
+      "date": "2025-12-06",
+      "np": 1.05,
+      "expected_np": 14.42537,
+      "dividend_per_holder": -535015.0
+    },
+    {
+      "date": "2025-12-12",
+      "np": 16.45,
+      "expected_np": 12.5995,
+      "dividend_per_holder": 154020.0
+    },
+    {
+      "date": "2025-12-14",
+      "np": 24.45,
+      "expected_np": 13.26475,
+      "dividend_per_holder": 447410.0
+    },
+    {
+      "date": "2025-12-18",
+      "np": 9.5,
+      "expected_np": 14.41856,
+      "dividend_per_holder": -196742.4
+    },
+    {
+      "date": "2025-12-19",
+      "np": 3.45,
+      "expected_np": 13.1658,
+      "dividend_per_holder": -388632.2
+    },
+    {
+      "date": "2025-12-21",
+      "np": 8.5,
+      "expected_np": 13.13037,
+      "dividend_per_holder": -185214.8
+    },
+    {
+      "date": "2025-12-26",
+      "np": 5.45,
+      "expected_np": 13.75898,
+      "dividend_per_holder": -332359.2
+    },
+    {
+      "date": "2025-12-27",
+      "np": 14.9,
+      "expected_np": 12.46209,
+      "dividend_per_holder": 97516.4
+    },
+    {
+      "date": "2025-12-29",
+      "np": 10.8,
+      "expected_np": 11.63722,
+      "dividend_per_holder": -33488.8
+    },
+    {
+      "date": "2025-12-31",
+      "np": 18.2,
+      "expected_np": 13.0978,
+      "dividend_per_holder": 204087.8
+    },
+    {
+      "date": "2026-01-02",
+      "np": 11.55,
+      "expected_np": 11.70954,
+      "dividend_per_holder": -6381.6
+    },
+    {
+      "date": "2026-01-03",
+      "np": 26.35,
+      "expected_np": 12.35456,
+      "dividend_per_holder": 559817.4
+    },
+    {
+      "date": "2026-01-05",
+      "np": 0.65,
+      "expected_np": 12.94639,
+      "dividend_per_holder": -491855.6
+    },
+    {
+      "date": "2026-01-07",
+      "np": 16.5,
+      "expected_np": 15.38627,
+      "dividend_per_holder": 44549.0
+    },
+    {
+      "date": "2026-01-09",
+      "np": 22.6,
+      "expected_np": 13.20037,
+      "dividend_per_holder": 375985.0
+    },
+    {
+      "date": "2026-01-11",
+      "np": 11.05,
+      "expected_np": 13.42101,
+      "dividend_per_holder": -94840.4
+    },
+    {
+      "date": "2026-01-13",
+      "np": 12.55,
+      "expected_np": 13.5017,
+      "dividend_per_holder": -38068.0
     },
     {
       "date": "2026-01-15",
-      "np": 8.75,
-      "expected_np": 10.7629,
-      "dividend_per_holder": -80515.8
+      "np": 4.95,
+      "expected_np": 12.93574,
+      "dividend_per_holder": -319429.8
     },
     {
-      "date": "2026-01-18",
-      "np": 8.1,
-      "expected_np": 12.73609,
-      "dividend_per_holder": -185443.6
+      "date": "2026-01-19",
+      "np": 21.2,
+      "expected_np": 12.91873,
+      "dividend_per_holder": 331250.8
     },
     {
-      "date": "2026-02-09",
-      "np": 11.75,
-      "expected_np": 12.91072,
-      "dividend_per_holder": -46428.6
+      "date": "2026-01-21",
+      "np": -0.35,
+      "expected_np": 12.73942,
+      "dividend_per_holder": -523577.0
+    },
+    {
+      "date": "2026-01-23",
+      "np": 6.85,
+      "expected_np": 12.96279,
+      "dividend_per_holder": -244511.8
+    },
+    {
+      "date": "2026-01-26",
+      "np": 22.5,
+      "expected_np": 14.08599,
+      "dividend_per_holder": 336560.4
+    },
+    {
+      "date": "2026-01-28",
+      "np": 23.4,
+      "expected_np": 12.61918,
+      "dividend_per_holder": 431232.8
+    },
+    {
+      "date": "2026-01-29",
+      "np": 4.0,
+      "expected_np": 13.0825,
+      "dividend_per_holder": -363300.2
+    },
+    {
+      "date": "2026-01-31",
+      "np": 11.05,
+      "expected_np": 13.57684,
+      "dividend_per_holder": -101073.8
+    },
+    {
+      "date": "2026-02-03",
+      "np": 0.9,
+      "expected_np": 12.56175,
+      "dividend_per_holder": -466470.2
+    },
+    {
+      "date": "2026-02-05",
+      "np": 6.25,
+      "expected_np": 11.64564,
+      "dividend_per_holder": -215825.8
+    },
+    {
+      "date": "2026-02-07",
+      "np": 7.8,
+      "expected_np": 10.21398,
+      "dividend_per_holder": -96559.4
     },
     {
       "date": "2026-02-11",
-      "np": 2.6,
-      "expected_np": 11.0018,
-      "dividend_per_holder": -336072.0
+      "np": 16.8,
+      "expected_np": 10.41892,
+      "dividend_per_holder": 255243.2
+    },
+    {
+      "date": "2026-02-19",
+      "np": 8.45,
+      "expected_np": 10.36038,
+      "dividend_per_holder": -76415.2
+    },
+    {
+      "date": "2026-02-20",
+      "np": 2.1,
+      "expected_np": 13.50977,
+      "dividend_per_holder": -456390.8
+    },
+    {
+      "date": "2026-02-22",
+      "np": 12.35,
+      "expected_np": 12.65403,
+      "dividend_per_holder": -12161.4
+    },
+    {
+      "date": "2026-02-24",
+      "np": 12.5,
+      "expected_np": 13.71438,
+      "dividend_per_holder": -48575.2
+    },
+    {
+      "date": "2026-02-26",
+      "np": 21.3,
+      "expected_np": 13.30784,
+      "dividend_per_holder": 319686.2
+    },
+    {
+      "date": "2026-03-01",
+      "np": 16.45,
+      "expected_np": 12.61333,
+      "dividend_per_holder": 153466.8
+    },
+    {
+      "date": "2026-03-04",
+      "np": 16.45,
+      "expected_np": 11.76091,
+      "dividend_per_holder": 187563.6
+    },
+    {
+      "date": "2026-03-07",
+      "np": 15.35,
+      "expected_np": 12.89327,
+      "dividend_per_holder": 98269.2
+    },
+    {
+      "date": "2026-03-10",
+      "np": 19.4,
+      "expected_np": 13.34181,
+      "dividend_per_holder": 242327.6
+    },
+    {
+      "date": "2026-03-14",
+      "np": 10.8,
+      "expected_np": 13.80089,
+      "dividend_per_holder": -120035.6
+    },
+    {
+      "date": "2026-03-16",
+      "np": 15.25,
+      "expected_np": 12.25901,
+      "dividend_per_holder": 119639.6
+    },
+    {
+      "date": "2026-03-18",
+      "np": 18.6,
+      "expected_np": 13.13498,
+      "dividend_per_holder": 218600.6
+    },
+    {
+      "date": "2026-03-20",
+      "np": -1.35,
+      "expected_np": 11.71123,
+      "dividend_per_holder": -522449.2
+    },
+    {
+      "date": "2026-03-21",
+      "np": 31.75,
+      "expected_np": 11.79189,
+      "dividend_per_holder": 798324.4
+    },
+    {
+      "date": "2026-03-23",
+      "np": 12.55,
+      "expected_np": 13.22997,
+      "dividend_per_holder": -27198.8
+    },
+    {
+      "date": "2026-03-25",
+      "np": 15.2,
+      "expected_np": 9.86638,
+      "dividend_per_holder": 213344.6
+    },
+    {
+      "date": "2026-03-27",
+      "np": 6.75,
+      "expected_np": 11.31057,
+      "dividend_per_holder": -182423.0
+    },
+    {
+      "date": "2026-03-30",
+      "np": 16.85,
+      "expected_np": 11.38033,
+      "dividend_per_holder": 218786.6
     },
     {
       "date": "2026-04-01",
-      "np": 3.4,
-      "expected_np": 9.98102,
-      "dividend_per_holder": -263241.0
+      "np": 13.75,
+      "expected_np": 12.46377,
+      "dividend_per_holder": 51449.2
     },
     {
       "date": "2026-04-03",
-      "np": 12.9,
-      "expected_np": 10.44821,
-      "dividend_per_holder": 98071.6
+      "np": 15.85,
+      "expected_np": 12.67771,
+      "dividend_per_holder": 126891.6
     },
     {
-      "date": "2026-04-05",
-      "np": 7.25,
-      "expected_np": 10.49112,
-      "dividend_per_holder": -129645.0
+      "date": "2026-04-06",
+      "np": 9.65,
+      "expected_np": 11.47158,
+      "dividend_per_holder": -72863.4
     },
     {
       "date": "2026-04-08",
-      "np": 9.9,
-      "expected_np": 10.26157,
-      "dividend_per_holder": -14463.0
+      "np": 12.1,
+      "expected_np": 12.15417,
+      "dividend_per_holder": -2166.8
     },
     {
       "date": "2026-04-10",
-      "np": 17.7,
-      "expected_np": 11.36155,
-      "dividend_per_holder": 253537.8
+      "np": 20.65,
+      "expected_np": 12.4775,
+      "dividend_per_holder": 326900.0
+    }
+  ],
+  "4432158": [
+    {
+      "date": "2025-10-22",
+      "np": 15.4,
+      "expected_np": 12.89013,
+      "dividend_per_holder": 100394.8
     },
     {
-      "date": "2026-04-12",
-      "np": 11.05,
-      "expected_np": 10.24243,
-      "dividend_per_holder": 32303.0
+      "date": "2025-10-24",
+      "np": 8.2,
+      "expected_np": 15.98917,
+      "dividend_per_holder": -311566.8
+    },
+    {
+      "date": "2025-10-26",
+      "np": 23.65,
+      "expected_np": 15.54208,
+      "dividend_per_holder": 324316.8
+    },
+    {
+      "date": "2025-10-27",
+      "np": 16.15,
+      "expected_np": 15.18446,
+      "dividend_per_holder": 38621.6
+    },
+    {
+      "date": "2025-10-29",
+      "np": 12.7,
+      "expected_np": 14.03865,
+      "dividend_per_holder": -53546.2
+    },
+    {
+      "date": "2025-10-31",
+      "np": 26.35,
+      "expected_np": 16.92007,
+      "dividend_per_holder": 377197.2
+    },
+    {
+      "date": "2025-11-02",
+      "np": 10.5,
+      "expected_np": 17.13104,
+      "dividend_per_holder": -265241.6
+    },
+    {
+      "date": "2025-11-05",
+      "np": 15.45,
+      "expected_np": 17.32474,
+      "dividend_per_holder": -74989.8
+    },
+    {
+      "date": "2025-11-07",
+      "np": 14.3,
+      "expected_np": 18.10908,
+      "dividend_per_holder": -152363.4
+    },
+    {
+      "date": "2025-11-08",
+      "np": 21.2,
+      "expected_np": 17.50699,
+      "dividend_per_holder": 147720.2
+    },
+    {
+      "date": "2025-11-10",
+      "np": 17.05,
+      "expected_np": 16.72434,
+      "dividend_per_holder": 13026.4
+    },
+    {
+      "date": "2025-11-13",
+      "np": 3.9,
+      "expected_np": 17.0798,
+      "dividend_per_holder": -527192.0
+    },
+    {
+      "date": "2025-11-15",
+      "np": 17.15,
+      "expected_np": 17.26064,
+      "dividend_per_holder": -4425.6
+    },
+    {
+      "date": "2025-11-17",
+      "np": 4.9,
+      "expected_np": 17.36239,
+      "dividend_per_holder": -498495.8
+    },
+    {
+      "date": "2025-11-19",
+      "np": 5.05,
+      "expected_np": 15.69437,
+      "dividend_per_holder": -425774.8
+    },
+    {
+      "date": "2025-11-21",
+      "np": 21.0,
+      "expected_np": 17.67931,
+      "dividend_per_holder": 132827.6
+    },
+    {
+      "date": "2025-11-23",
+      "np": 18.7,
+      "expected_np": 16.9124,
+      "dividend_per_holder": 71503.8
+    },
+    {
+      "date": "2025-11-24",
+      "np": 9.3,
+      "expected_np": 16.24122,
+      "dividend_per_holder": -277649.0
+    },
+    {
+      "date": "2025-11-28",
+      "np": 21.6,
+      "expected_np": 15.0214,
+      "dividend_per_holder": 263144.0
+    },
+    {
+      "date": "2025-11-30",
+      "np": 24.95,
+      "expected_np": 16.01728,
+      "dividend_per_holder": 357308.6
+    },
+    {
+      "date": "2025-12-01",
+      "np": 10.75,
+      "expected_np": 17.34946,
+      "dividend_per_holder": -263978.4
+    },
+    {
+      "date": "2025-12-03",
+      "np": 26.8,
+      "expected_np": 16.87659,
+      "dividend_per_holder": 396936.4
+    },
+    {
+      "date": "2025-12-05",
+      "np": 15.2,
+      "expected_np": 16.42592,
+      "dividend_per_holder": -49036.8
+    },
+    {
+      "date": "2025-12-06",
+      "np": 10.8,
+      "expected_np": 16.32984,
+      "dividend_per_holder": -221193.6
+    },
+    {
+      "date": "2025-12-12",
+      "np": 19.8,
+      "expected_np": 18.22432,
+      "dividend_per_holder": 63027.2
+    },
+    {
+      "date": "2025-12-25",
+      "np": 12.4,
+      "expected_np": 16.66295,
+      "dividend_per_holder": -170518.0
+    },
+    {
+      "date": "2025-12-27",
+      "np": -1.1,
+      "expected_np": 13.18552,
+      "dividend_per_holder": -571421.0
+    },
+    {
+      "date": "2025-12-29",
+      "np": 13.65,
+      "expected_np": 11.75003,
+      "dividend_per_holder": 75998.6
+    },
+    {
+      "date": "2025-12-31",
+      "np": 20.9,
+      "expected_np": 14.35566,
+      "dividend_per_holder": 261773.4
+    },
+    {
+      "date": "2026-01-02",
+      "np": 9.5,
+      "expected_np": 14.95585,
+      "dividend_per_holder": -218234.2
+    },
+    {
+      "date": "2026-01-04",
+      "np": 15.9,
+      "expected_np": 15.09501,
+      "dividend_per_holder": 32199.4
+    },
+    {
+      "date": "2026-01-06",
+      "np": 15.55,
+      "expected_np": 15.69945,
+      "dividend_per_holder": -5978.0
+    },
+    {
+      "date": "2026-01-08",
+      "np": 12.15,
+      "expected_np": 15.56298,
+      "dividend_per_holder": -136519.2
+    },
+    {
+      "date": "2026-01-10",
+      "np": 20.45,
+      "expected_np": 16.30721,
+      "dividend_per_holder": 165711.6
+    },
+    {
+      "date": "2026-01-12",
+      "np": 20.4,
+      "expected_np": 17.90575,
+      "dividend_per_holder": 99769.8
+    },
+    {
+      "date": "2026-01-14",
+      "np": 21.45,
+      "expected_np": 15.66662,
+      "dividend_per_holder": 231335.0
+    },
+    {
+      "date": "2026-01-16",
+      "np": 12.2,
+      "expected_np": 15.86537,
+      "dividend_per_holder": -146614.8
+    },
+    {
+      "date": "2026-01-19",
+      "np": 12.85,
+      "expected_np": 15.08465,
+      "dividend_per_holder": -89386.0
+    },
+    {
+      "date": "2026-01-21",
+      "np": 10.2,
+      "expected_np": 15.77892,
+      "dividend_per_holder": -223156.8
+    },
+    {
+      "date": "2026-01-23",
+      "np": 29.05,
+      "expected_np": 17.33497,
+      "dividend_per_holder": 468601.2
+    },
+    {
+      "date": "2026-01-24",
+      "np": 4.55,
+      "expected_np": 16.82801,
+      "dividend_per_holder": -491120.4
+    },
+    {
+      "date": "2026-01-26",
+      "np": 14.5,
+      "expected_np": 17.27515,
+      "dividend_per_holder": -111006.0
+    },
+    {
+      "date": "2026-02-19",
+      "np": 7.8,
+      "expected_np": 17.66941,
+      "dividend_per_holder": -394776.6
+    },
+    {
+      "date": "2026-02-22",
+      "np": 9.45,
+      "expected_np": 12.17092,
+      "dividend_per_holder": -108836.8
+    },
+    {
+      "date": "2026-02-24",
+      "np": 9.65,
+      "expected_np": 13.22311,
+      "dividend_per_holder": -142924.6
+    },
+    {
+      "date": "2026-02-27",
+      "np": 20.15,
+      "expected_np": 13.16303,
+      "dividend_per_holder": 279478.8
+    },
+    {
+      "date": "2026-03-01",
+      "np": 12.55,
+      "expected_np": 14.61349,
+      "dividend_per_holder": -82539.6
+    },
+    {
+      "date": "2026-03-03",
+      "np": 16.9,
+      "expected_np": 13.13465,
+      "dividend_per_holder": 150614.0
+    },
+    {
+      "date": "2026-03-08",
+      "np": 18.65,
+      "expected_np": 12.80407,
+      "dividend_per_holder": 233837.0
+    },
+    {
+      "date": "2026-03-09",
+      "np": 12.7,
+      "expected_np": 15.00608,
+      "dividend_per_holder": -92243.4
+    },
+    {
+      "date": "2026-03-11",
+      "np": 18.3,
+      "expected_np": 14.0522,
+      "dividend_per_holder": 169912.0
+    },
+    {
+      "date": "2026-03-13",
+      "np": 25.65,
+      "expected_np": 15.97318,
+      "dividend_per_holder": 387072.8
+    },
+    {
+      "date": "2026-03-15",
+      "np": 14.35,
+      "expected_np": 15.69905,
+      "dividend_per_holder": -53962.2
+    },
+    {
+      "date": "2026-03-17",
+      "np": 26.15,
+      "expected_np": 16.01738,
+      "dividend_per_holder": 405304.6
+    },
+    {
+      "date": "2026-03-19",
+      "np": 24.25,
+      "expected_np": 18.25595,
+      "dividend_per_holder": 239762.0
+    },
+    {
+      "date": "2026-03-21",
+      "np": 18.05,
+      "expected_np": 18.76167,
+      "dividend_per_holder": -28466.8
+    },
+    {
+      "date": "2026-03-24",
+      "np": 19.75,
+      "expected_np": 17.70836,
+      "dividend_per_holder": 81665.4
+    },
+    {
+      "date": "2026-03-25",
+      "np": 1.35,
+      "expected_np": 17.51337,
+      "dividend_per_holder": -646534.8
+    },
+    {
+      "date": "2026-03-27",
+      "np": 21.75,
+      "expected_np": 16.69412,
+      "dividend_per_holder": 202235.2
+    },
+    {
+      "date": "2026-03-30",
+      "np": 36.2,
+      "expected_np": 17.88195,
+      "dividend_per_holder": 732722.0
+    },
+    {
+      "date": "2026-03-31",
+      "np": 4.65,
+      "expected_np": 16.77436,
+      "dividend_per_holder": -484974.4
+    },
+    {
+      "date": "2026-04-02",
+      "np": 11.6,
+      "expected_np": 13.93262,
+      "dividend_per_holder": -93304.8
+    },
+    {
+      "date": "2026-04-06",
+      "np": 19.9,
+      "expected_np": 17.39049,
+      "dividend_per_holder": 100380.2
+    },
+    {
+      "date": "2026-04-08",
+      "np": 21.35,
+      "expected_np": 12.81172,
+      "dividend_per_holder": 341531.2
+    },
+    {
+      "date": "2026-04-10",
+      "np": 2.5,
+      "expected_np": 17.39853,
+      "dividend_per_holder": -595941.4
     }
   ],
   "3936299": [
     {
       "date": "2025-10-23",
       "np": 22.4,
-      "expected_np": 10.78121,
-      "dividend_per_holder": 464751.6
+      "expected_np": 11.21707,
+      "dividend_per_holder": 447317.0
     },
     {
       "date": "2025-10-25",
       "np": 17.0,
-      "expected_np": 14.20307,
-      "dividend_per_holder": 111877.2
+      "expected_np": 14.63893,
+      "dividend_per_holder": 94442.6
     },
     {
       "date": "2025-10-27",
       "np": 29.9,
-      "expected_np": 12.6178,
-      "dividend_per_holder": 691288.0
+      "expected_np": 13.05366,
+      "dividend_per_holder": 673853.4
     },
     {
       "date": "2025-10-29",
       "np": 12.55,
-      "expected_np": 15.87874,
-      "dividend_per_holder": -133149.4
+      "expected_np": 16.3146,
+      "dividend_per_holder": -150584.0
     },
     {
       "date": "2025-10-31",
       "np": 16.0,
-      "expected_np": 13.70355,
-      "dividend_per_holder": 91858.0
+      "expected_np": 14.13941,
+      "dividend_per_holder": 74423.4
     },
     {
       "date": "2025-11-03",
       "np": 8.25,
-      "expected_np": 14.63618,
-      "dividend_per_holder": -255447.2
+      "expected_np": 15.07204,
+      "dividend_per_holder": -272881.8
     },
     {
       "date": "2025-11-05",
       "np": 8.2,
-      "expected_np": 14.9852,
-      "dividend_per_holder": -271408.2
+      "expected_np": 15.42107,
+      "dividend_per_holder": -288842.8
     },
     {
       "date": "2025-11-07",
       "np": 23.9,
-      "expected_np": 14.54547,
-      "dividend_per_holder": 374181.2
+      "expected_np": 14.98133,
+      "dividend_per_holder": 356746.6
     },
     {
       "date": "2025-11-11",
       "np": 15.3,
-      "expected_np": 14.55777,
-      "dividend_per_holder": 29689.2
+      "expected_np": 14.99363,
+      "dividend_per_holder": 12254.6
     },
     {
       "date": "2025-11-12",
       "np": 9.9,
-      "expected_np": 13.75166,
-      "dividend_per_holder": -154066.4
+      "expected_np": 14.18752,
+      "dividend_per_holder": -171501.0
     },
     {
       "date": "2025-11-15",
       "np": 15.75,
-      "expected_np": 14.26309,
-      "dividend_per_holder": 59476.2
+      "expected_np": 14.69896,
+      "dividend_per_holder": 42041.6
     },
     {
       "date": "2025-11-17",
       "np": 26.85,
-      "expected_np": 17.26086,
-      "dividend_per_holder": 383565.8
+      "expected_np": 17.69672,
+      "dividend_per_holder": 366131.2
     },
     {
       "date": "2025-11-19",
       "np": 6.35,
-      "expected_np": 17.46308,
-      "dividend_per_holder": -444523.2
+      "expected_np": 17.89894,
+      "dividend_per_holder": -461957.8
     },
     {
       "date": "2025-11-21",
       "np": 21.3,
-      "expected_np": 14.459,
-      "dividend_per_holder": 273639.8
+      "expected_np": 14.89487,
+      "dividend_per_holder": 256205.2
     },
     {
       "date": "2025-11-22",
       "np": 19.1,
-      "expected_np": 18.06582,
-      "dividend_per_holder": 41367.4
+      "expected_np": 18.50168,
+      "dividend_per_holder": 23932.8
     },
     {
       "date": "2025-11-24",
       "np": 21.7,
-      "expected_np": 16.56339,
-      "dividend_per_holder": 205464.2
+      "expected_np": 16.99926,
+      "dividend_per_holder": 188029.6
     },
     {
       "date": "2025-11-28",
       "np": 31.9,
-      "expected_np": 16.49967,
-      "dividend_per_holder": 616013.0
+      "expected_np": 16.93554,
+      "dividend_per_holder": 598578.4
     },
     {
       "date": "2025-11-29",
       "np": 11.65,
-      "expected_np": 16.63846,
-      "dividend_per_holder": -199538.2
+      "expected_np": 17.07432,
+      "dividend_per_holder": -216972.8
     },
     {
       "date": "2025-12-01",
       "np": 9.05,
-      "expected_np": 17.19759,
-      "dividend_per_holder": -325903.4
+      "expected_np": 17.63345,
+      "dividend_per_holder": -343338.0
     },
     {
       "date": "2025-12-03",
       "np": 47.55,
-      "expected_np": 14.97404,
-      "dividend_per_holder": 1303038.4
+      "expected_np": 15.4099,
+      "dividend_per_holder": 1285603.8
     },
     {
       "date": "2025-12-05",
       "np": 22.1,
-      "expected_np": 15.52597,
-      "dividend_per_holder": 262961.0
+      "expected_np": 15.96184,
+      "dividend_per_holder": 245526.4
     },
     {
       "date": "2025-12-07",
       "np": 26.7,
-      "expected_np": 17.04544,
-      "dividend_per_holder": 386182.4
+      "expected_np": 17.4813,
+      "dividend_per_holder": 368747.8
     },
     {
       "date": "2025-12-11",
       "np": 9.5,
-      "expected_np": 17.81554,
-      "dividend_per_holder": -332621.4
+      "expected_np": 18.2514,
+      "dividend_per_holder": -350056.0
     },
     {
       "date": "2025-12-15",
       "np": 24.0,
-      "expected_np": 13.84556,
-      "dividend_per_holder": 406177.6
+      "expected_np": 14.28142,
+      "dividend_per_holder": 388743.0
     },
     {
       "date": "2025-12-18",
       "np": 21.8,
-      "expected_np": 16.63166,
-      "dividend_per_holder": 206733.6
+      "expected_np": 17.06752,
+      "dividend_per_holder": 189299.0
     },
     {
       "date": "2025-12-20",
       "np": 11.1,
-      "expected_np": 16.04032,
-      "dividend_per_holder": -197613.0
+      "expected_np": 16.47619,
+      "dividend_per_holder": -215047.6
     },
     {
       "date": "2025-12-22",
       "np": 22.75,
-      "expected_np": 18.44042,
-      "dividend_per_holder": 172383.0
+      "expected_np": 18.87629,
+      "dividend_per_holder": 154948.4
     },
     {
       "date": "2025-12-23",
       "np": 29.5,
-      "expected_np": 15.58309,
-      "dividend_per_holder": 556676.6
+      "expected_np": 16.01895,
+      "dividend_per_holder": 539242.0
     },
     {
       "date": "2025-12-25",
       "np": 18.9,
-      "expected_np": 16.86581,
-      "dividend_per_holder": 81367.6
+      "expected_np": 17.30167,
+      "dividend_per_holder": 63933.0
     },
     {
       "date": "2025-12-27",
       "np": 11.55,
-      "expected_np": 18.05938,
-      "dividend_per_holder": -260375.2
+      "expected_np": 18.49524,
+      "dividend_per_holder": -277809.8
     },
     {
       "date": "2025-12-29",
       "np": 15.65,
-      "expected_np": 18.33029,
-      "dividend_per_holder": -107211.8
+      "expected_np": 18.76616,
+      "dividend_per_holder": -124646.4
     },
     {
       "date": "2025-12-31",
       "np": 14.05,
-      "expected_np": 17.77321,
-      "dividend_per_holder": -148928.2
+      "expected_np": 18.20907,
+      "dividend_per_holder": -166362.8
     },
     {
       "date": "2026-01-02",
       "np": 23.65,
-      "expected_np": 18.17769,
-      "dividend_per_holder": 218892.6
+      "expected_np": 18.61355,
+      "dividend_per_holder": 201458.0
     },
     {
       "date": "2026-01-04",
       "np": 21.35,
-      "expected_np": 19.59234,
-      "dividend_per_holder": 70306.6
+      "expected_np": 20.0282,
+      "dividend_per_holder": 52872.0
     },
     {
       "date": "2026-01-07",
       "np": 24.3,
-      "expected_np": 18.59782,
-      "dividend_per_holder": 228087.2
+      "expected_np": 19.03368,
+      "dividend_per_holder": 210652.6
     },
     {
       "date": "2026-01-13",
       "np": 32.95,
-      "expected_np": 21.11883,
-      "dividend_per_holder": 473246.6
+      "expected_np": 21.5547,
+      "dividend_per_holder": 455812.0
     },
     {
       "date": "2026-01-14",
       "np": 20.6,
-      "expected_np": 19.84175,
-      "dividend_per_holder": 30329.8
+      "expected_np": 20.27762,
+      "dividend_per_holder": 12895.2
     },
     {
       "date": "2026-01-17",
       "np": 34.65,
-      "expected_np": 22.87713,
-      "dividend_per_holder": 470914.6
+      "expected_np": 23.313,
+      "dividend_per_holder": 453480.0
     },
     {
       "date": "2026-01-18",
       "np": 11.25,
-      "expected_np": 21.38166,
-      "dividend_per_holder": -405266.4
+      "expected_np": 21.81752,
+      "dividend_per_holder": -422701.0
     },
     {
       "date": "2026-01-20",
       "np": 22.2,
-      "expected_np": 18.17154,
-      "dividend_per_holder": 161138.2
+      "expected_np": 18.60741,
+      "dividend_per_holder": 143703.6
     },
     {
       "date": "2026-01-22",
       "np": 17.25,
-      "expected_np": 19.86364,
-      "dividend_per_holder": -104545.6
+      "expected_np": 20.2995,
+      "dividend_per_holder": -121980.2
     },
     {
       "date": "2026-01-27",
       "np": 15.65,
-      "expected_np": 17.51943,
-      "dividend_per_holder": -74777.2
+      "expected_np": 17.95529,
+      "dividend_per_holder": -92211.8
     },
     {
       "date": "2026-01-29",
       "np": 24.0,
-      "expected_np": 19.80823,
-      "dividend_per_holder": 167670.8
+      "expected_np": 20.24409,
+      "dividend_per_holder": 150236.2
     },
     {
       "date": "2026-01-30",
       "np": 18.65,
-      "expected_np": 17.67165,
-      "dividend_per_holder": 39134.0
+      "expected_np": 18.10751,
+      "dividend_per_holder": 21699.4
     },
     {
       "date": "2026-02-01",
       "np": 9.05,
-      "expected_np": 16.13727,
-      "dividend_per_holder": -283491.0
+      "expected_np": 16.57314,
+      "dividend_per_holder": -300925.6
     },
     {
       "date": "2026-02-03",
       "np": 27.65,
-      "expected_np": 16.20157,
-      "dividend_per_holder": 457937.0
+      "expected_np": 16.63744,
+      "dividend_per_holder": 440502.4
     },
     {
       "date": "2026-02-04",
       "np": 21.6,
-      "expected_np": 17.4032,
-      "dividend_per_holder": 167872.0
+      "expected_np": 17.83906,
+      "dividend_per_holder": 150437.4
     },
     {
       "date": "2026-02-07",
       "np": 24.0,
-      "expected_np": 19.92816,
-      "dividend_per_holder": 162873.6
+      "expected_np": 20.36402,
+      "dividend_per_holder": 145439.0
     },
     {
       "date": "2026-02-09",
       "np": 15.4,
-      "expected_np": 18.71309,
-      "dividend_per_holder": -132523.6
+      "expected_np": 19.14895,
+      "dividend_per_holder": -149958.2
     },
     {
       "date": "2026-02-11",
       "np": 16.3,
-      "expected_np": 19.68678,
-      "dividend_per_holder": -135471.2
+      "expected_np": 20.12264,
+      "dividend_per_holder": -152905.8
     },
     {
       "date": "2026-02-19",
       "np": 14.9,
-      "expected_np": 17.47667,
-      "dividend_per_holder": -103066.8
+      "expected_np": 17.91253,
+      "dividend_per_holder": -120501.4
     },
     {
       "date": "2026-02-20",
       "np": 22.55,
-      "expected_np": 18.77032,
-      "dividend_per_holder": 151187.2
+      "expected_np": 19.20618,
+      "dividend_per_holder": 133752.6
     },
     {
       "date": "2026-02-22",
       "np": 8.35,
-      "expected_np": 16.09949,
-      "dividend_per_holder": -309979.8
+      "expected_np": 16.53536,
+      "dividend_per_holder": -327414.4
     },
     {
       "date": "2026-02-25",
       "np": 0.0,
-      "expected_np": 16.41034,
-      "dividend_per_holder": -656413.6
+      "expected_np": 16.8462,
+      "dividend_per_holder": -673848.2
     },
     {
       "date": "2026-02-27",
       "np": 30.8,
-      "expected_np": 9.49738,
-      "dividend_per_holder": 852104.6
+      "expected_np": 9.93325,
+      "dividend_per_holder": 834670.0
     },
     {
       "date": "2026-03-01",
       "np": 10.45,
-      "expected_np": 16.90768,
-      "dividend_per_holder": -258307.2
+      "expected_np": 17.34354,
+      "dividend_per_holder": -275741.8
     },
     {
       "date": "2026-03-02",
       "np": 37.05,
-      "expected_np": 19.39263,
-      "dividend_per_holder": 706294.8
+      "expected_np": 19.82849,
+      "dividend_per_holder": 688860.2
     },
     {
       "date": "2026-03-05",
       "np": 20.15,
-      "expected_np": 19.37831,
-      "dividend_per_holder": 30867.6
+      "expected_np": 19.81417,
+      "dividend_per_holder": 13433.0
     },
     {
       "date": "2026-03-06",
       "np": 8.35,
-      "expected_np": 18.33674,
-      "dividend_per_holder": -399469.4
+      "expected_np": 18.7726,
+      "dividend_per_holder": -416904.0
     },
     {
       "date": "2026-03-09",
       "np": 13.85,
-      "expected_np": 13.14789,
-      "dividend_per_holder": 28084.6
+      "expected_np": 13.58375,
+      "dividend_per_holder": 10650.0
     },
     {
       "date": "2026-03-11",
       "np": 21.95,
-      "expected_np": 16.93126,
-      "dividend_per_holder": 200749.6
+      "expected_np": 17.36712,
+      "dividend_per_holder": 183315.0
     },
     {
       "date": "2026-03-12",
       "np": 28.9,
-      "expected_np": 16.07543,
-      "dividend_per_holder": 512982.6
+      "expected_np": 16.5113,
+      "dividend_per_holder": 495548.0
     },
     {
       "date": "2026-03-14",
       "np": -2.75,
-      "expected_np": 18.67113,
-      "dividend_per_holder": -856845.4
+      "expected_np": 19.107,
+      "dividend_per_holder": -874280.0
     },
     {
       "date": "2026-03-17",
       "np": 7.85,
-      "expected_np": 18.25373,
-      "dividend_per_holder": -416149.4
+      "expected_np": 18.6896,
+      "dividend_per_holder": -433584.0
     },
     {
       "date": "2026-03-18",
       "np": 17.65,
-      "expected_np": 16.43645,
-      "dividend_per_holder": 48541.8
+      "expected_np": 16.87232,
+      "dividend_per_holder": 31107.2
     },
     {
       "date": "2026-03-20",
       "np": 25.1,
-      "expected_np": 17.20533,
-      "dividend_per_holder": 315786.8
+      "expected_np": 17.64119,
+      "dividend_per_holder": 298352.2
     },
     {
       "date": "2026-03-22",
       "np": 16.0,
-      "expected_np": 18.76753,
-      "dividend_per_holder": -110701.0
+      "expected_np": 19.20339,
+      "dividend_per_holder": -128135.6
     },
     {
       "date": "2026-03-24",
       "np": 10.95,
-      "expected_np": 16.03865,
-      "dividend_per_holder": -203545.8
+      "expected_np": 16.47451,
+      "dividend_per_holder": -220980.4
     },
     {
       "date": "2026-03-25",
       "np": 42.15,
-      "expected_np": 18.40123,
-      "dividend_per_holder": 949951.0
+      "expected_np": 18.83709,
+      "dividend_per_holder": 932516.4
     },
     {
       "date": "2026-03-27",
       "np": 29.45,
-      "expected_np": 21.05924,
-      "dividend_per_holder": 335630.6
+      "expected_np": 21.4951,
+      "dividend_per_holder": 318196.0
     },
     {
       "date": "2026-03-29",
       "np": 17.7,
-      "expected_np": 19.58319,
-      "dividend_per_holder": -75327.8
+      "expected_np": 20.01906,
+      "dividend_per_holder": -92762.4
     },
     {
       "date": "2026-04-01",
       "np": 30.15,
-      "expected_np": 19.53519,
-      "dividend_per_holder": 424592.2
+      "expected_np": 19.97106,
+      "dividend_per_holder": 407157.6
     },
     {
       "date": "2026-04-04",
       "np": 10.85,
-      "expected_np": 17.9704,
-      "dividend_per_holder": -284816.2
+      "expected_np": 18.40627,
+      "dividend_per_holder": -302250.8
     },
     {
       "date": "2026-04-06",
       "np": 14.85,
-      "expected_np": 19.18188,
-      "dividend_per_holder": -173275.2
+      "expected_np": 19.61774,
+      "dividend_per_holder": -190709.8
     },
     {
       "date": "2026-04-08",
       "np": 17.05,
-      "expected_np": 18.54467,
-      "dividend_per_holder": -59787.0
+      "expected_np": 18.98054,
+      "dividend_per_holder": -77221.6
     }
   ],
-  "6430": [
-    {
-      "date": "2025-10-21",
-      "np": 26.45,
-      "expected_np": 13.02794,
-      "dividend_per_holder": 536882.4
-    },
-    {
-      "date": "2025-10-23",
-      "np": 19.15,
-      "expected_np": 14.80466,
-      "dividend_per_holder": 173813.4
-    },
-    {
-      "date": "2025-10-24",
-      "np": 10.85,
-      "expected_np": 15.78645,
-      "dividend_per_holder": -197457.8
-    },
-    {
-      "date": "2025-10-27",
-      "np": 13.25,
-      "expected_np": 15.43419,
-      "dividend_per_holder": -87367.4
-    },
-    {
-      "date": "2025-10-28",
-      "np": 19.0,
-      "expected_np": 13.73461,
-      "dividend_per_holder": 210615.4
-    },
-    {
-      "date": "2025-10-30",
-      "np": 17.75,
-      "expected_np": 13.87273,
-      "dividend_per_holder": 155090.6
-    },
-    {
-      "date": "2025-11-01",
-      "np": 21.2,
-      "expected_np": 16.08216,
-      "dividend_per_holder": 204713.6
-    },
-    {
-      "date": "2025-11-04",
-      "np": -0.95,
-      "expected_np": 17.22226,
-      "dividend_per_holder": -726890.4
-    },
-    {
-      "date": "2025-11-07",
-      "np": 12.2,
-      "expected_np": 11.43167,
-      "dividend_per_holder": 30733.2
-    },
-    {
-      "date": "2025-11-09",
-      "np": 23.6,
-      "expected_np": 13.16059,
-      "dividend_per_holder": 417576.4
-    },
-    {
-      "date": "2025-11-11",
-      "np": 14.15,
-      "expected_np": 11.97097,
-      "dividend_per_holder": 87161.4
-    },
-    {
-      "date": "2025-11-12",
-      "np": 31.45,
-      "expected_np": 10.83877,
-      "dividend_per_holder": 824449.2
-    },
-    {
-      "date": "2025-11-14",
-      "np": 17.1,
-      "expected_np": 13.90605,
-      "dividend_per_holder": 127758.2
-    },
-    {
-      "date": "2025-11-16",
-      "np": 18.8,
-      "expected_np": 15.81899,
-      "dividend_per_holder": 119240.2
-    },
-    {
-      "date": "2025-11-18",
-      "np": 29.05,
-      "expected_np": 14.55088,
-      "dividend_per_holder": 579965.0
-    },
-    {
-      "date": "2025-11-21",
-      "np": 19.8,
-      "expected_np": 17.40694,
-      "dividend_per_holder": 95722.4
-    },
-    {
-      "date": "2025-11-24",
-      "np": 19.75,
-      "expected_np": 19.03902,
-      "dividend_per_holder": 28439.2
-    },
-    {
-      "date": "2025-11-26",
-      "np": 20.95,
-      "expected_np": 14.84752,
-      "dividend_per_holder": 244099.2
-    },
-    {
-      "date": "2025-11-29",
-      "np": 20.55,
-      "expected_np": 17.55047,
-      "dividend_per_holder": 119981.0
-    },
-    {
-      "date": "2025-12-02",
-      "np": 1.85,
-      "expected_np": 16.22393,
-      "dividend_per_holder": -574957.2
-    },
-    {
-      "date": "2025-12-07",
-      "np": 18.45,
-      "expected_np": 12.09737,
-      "dividend_per_holder": 254105.2
-    },
-    {
-      "date": "2025-12-12",
-      "np": 12.65,
-      "expected_np": 12.41099,
-      "dividend_per_holder": 9560.6
-    },
-    {
-      "date": "2025-12-14",
-      "np": 12.35,
-      "expected_np": 16.84104,
-      "dividend_per_holder": -179641.6
-    },
-    {
-      "date": "2025-12-18",
-      "np": 24.25,
-      "expected_np": 16.57452,
-      "dividend_per_holder": 307019.2
-    },
-    {
-      "date": "2025-12-20",
-      "np": 14.05,
-      "expected_np": 17.15728,
-      "dividend_per_holder": -124291.0
-    },
-    {
-      "date": "2025-12-22",
-      "np": 19.25,
-      "expected_np": 16.97466,
-      "dividend_per_holder": 91013.6
-    },
-    {
-      "date": "2025-12-25",
-      "np": 12.55,
-      "expected_np": 16.54521,
-      "dividend_per_holder": -159808.6
-    },
-    {
-      "date": "2025-12-28",
-      "np": 9.6,
-      "expected_np": 15.85413,
-      "dividend_per_holder": -250165.0
-    },
-    {
-      "date": "2025-12-29",
-      "np": 19.15,
-      "expected_np": 16.19673,
-      "dividend_per_holder": 118131.0
-    },
-    {
-      "date": "2025-12-31",
-      "np": 16.4,
-      "expected_np": 15.99463,
-      "dividend_per_holder": 16215.0
-    },
-    {
-      "date": "2026-01-03",
-      "np": 14.3,
-      "expected_np": 17.02263,
-      "dividend_per_holder": -108905.2
-    },
-    {
-      "date": "2026-01-05",
-      "np": 22.05,
-      "expected_np": 15.03254,
-      "dividend_per_holder": 280698.4
-    },
-    {
-      "date": "2026-01-07",
-      "np": 13.25,
-      "expected_np": 16.53334,
-      "dividend_per_holder": -131333.4
-    },
-    {
-      "date": "2026-01-09",
-      "np": 14.3,
-      "expected_np": 17.31461,
-      "dividend_per_holder": -120584.2
-    },
-    {
-      "date": "2026-01-11",
-      "np": 26.6,
-      "expected_np": 15.20076,
-      "dividend_per_holder": 455969.6
-    },
-    {
-      "date": "2026-01-13",
-      "np": 16.0,
-      "expected_np": 16.69917,
-      "dividend_per_holder": -27966.8
-    },
-    {
-      "date": "2026-01-15",
-      "np": 31.75,
-      "expected_np": 15.61425,
-      "dividend_per_holder": 645429.8
-    },
-    {
-      "date": "2026-01-19",
-      "np": 15.8,
-      "expected_np": 17.09053,
-      "dividend_per_holder": -51621.0
-    }
-  ],
-  "3934719": [
+  "4433621": [
     {
       "date": "2025-10-22",
-      "np": 19.75,
-      "expected_np": 9.63427,
-      "dividend_per_holder": 404629.4
+      "np": 14.7,
+      "expected_np": 12.01952,
+      "dividend_per_holder": 107219.2
     },
     {
       "date": "2025-10-24",
-      "np": 4.3,
-      "expected_np": 11.50324,
-      "dividend_per_holder": -288129.8
+      "np": 8.0,
+      "expected_np": 10.05139,
+      "dividend_per_holder": -82055.6
     },
     {
       "date": "2025-10-26",
-      "np": 8.35,
-      "expected_np": 10.75156,
-      "dividend_per_holder": -96062.6
+      "np": 22.5,
+      "expected_np": 8.54786,
+      "dividend_per_holder": 558085.6
     },
     {
-      "date": "2025-10-28",
-      "np": 4.3,
-      "expected_np": 10.67801,
-      "dividend_per_holder": -255120.2
+      "date": "2025-10-27",
+      "np": 6.05,
+      "expected_np": 11.77086,
+      "dividend_per_holder": -228834.4
     },
     {
-      "date": "2025-10-31",
-      "np": 23.45,
-      "expected_np": 10.96395,
-      "dividend_per_holder": 499442.0
+      "date": "2025-10-29",
+      "np": 16.55,
+      "expected_np": 11.42715,
+      "dividend_per_holder": 204913.8
     },
     {
-      "date": "2025-11-02",
-      "np": 15.8,
-      "expected_np": 11.7422,
-      "dividend_per_holder": 162312.0
+      "date": "2025-11-01",
+      "np": 35.05,
+      "expected_np": 14.19789,
+      "dividend_per_holder": 834084.2
     },
     {
       "date": "2025-11-03",
-      "np": 16.05,
-      "expected_np": 13.00774,
-      "dividend_per_holder": 121690.2
+      "np": 11.2,
+      "expected_np": 16.31304,
+      "dividend_per_holder": -204521.8
     },
     {
       "date": "2025-11-05",
-      "np": 23.45,
-      "expected_np": 11.19086,
-      "dividend_per_holder": 490365.8
+      "np": 23.95,
+      "expected_np": 17.61726,
+      "dividend_per_holder": 253309.6
+    },
+    {
+      "date": "2025-11-07",
+      "np": 31.0,
+      "expected_np": 18.54824,
+      "dividend_per_holder": 498070.4
     },
     {
       "date": "2025-11-09",
-      "np": 17.75,
-      "expected_np": 12.62477,
-      "dividend_per_holder": 205009.4
+      "np": 21.65,
+      "expected_np": 17.9413,
+      "dividend_per_holder": 148348.0
     },
     {
-      "date": "2025-11-11",
-      "np": 5.1,
-      "expected_np": 11.64168,
-      "dividend_per_holder": -261667.2
+      "date": "2025-11-10",
+      "np": 15.7,
+      "expected_np": 20.63959,
+      "dividend_per_holder": -197583.8
     },
     {
-      "date": "2025-11-12",
-      "np": 3.9,
-      "expected_np": 11.86888,
-      "dividend_per_holder": -318755.0
+      "date": "2025-11-17",
+      "np": 31.95,
+      "expected_np": 14.18601,
+      "dividend_per_holder": 710559.4
     },
     {
-      "date": "2025-11-14",
-      "np": 0.8,
-      "expected_np": 12.00388,
-      "dividend_per_holder": -448155.2
+      "date": "2025-11-18",
+      "np": 23.75,
+      "expected_np": 12.37633,
+      "dividend_per_holder": 454946.6
+    },
+    {
+      "date": "2025-11-22",
+      "np": 13.95,
+      "expected_np": 11.57574,
+      "dividend_per_holder": 94970.2
+    },
+    {
+      "date": "2025-11-24",
+      "np": 12.5,
+      "expected_np": 14.84519,
+      "dividend_per_holder": -93807.8
+    },
+    {
+      "date": "2025-11-26",
+      "np": 7.4,
+      "expected_np": 15.22569,
+      "dividend_per_holder": -313027.8
+    },
+    {
+      "date": "2025-11-28",
+      "np": 15.55,
+      "expected_np": 16.61736,
+      "dividend_per_holder": -42694.6
+    },
+    {
+      "date": "2025-12-01",
+      "np": 16.4,
+      "expected_np": 18.07559,
+      "dividend_per_holder": -67023.6
+    },
+    {
+      "date": "2025-12-03",
+      "np": 8.0,
+      "expected_np": 18.03423,
+      "dividend_per_holder": -401369.4
     },
     {
       "date": "2025-12-05",
-      "np": 2.95,
-      "expected_np": 8.1405,
-      "dividend_per_holder": -207620.0
+      "np": 7.45,
+      "expected_np": 16.25653,
+      "dividend_per_holder": -352261.2
     },
     {
-      "date": "2025-12-07",
-      "np": 19.75,
-      "expected_np": 8.21904,
-      "dividend_per_holder": 461238.4
+      "date": "2025-12-06",
+      "np": 16.35,
+      "expected_np": 16.88499,
+      "dividend_per_holder": -21399.8
     },
     {
-      "date": "2025-12-09",
-      "np": 7.4,
-      "expected_np": 8.74607,
-      "dividend_per_holder": -53843.0
+      "date": "2025-12-12",
+      "np": 13.6,
+      "expected_np": 16.27039,
+      "dividend_per_holder": -106815.6
     },
     {
-      "date": "2025-12-13",
-      "np": 20.7,
-      "expected_np": 9.54329,
-      "dividend_per_holder": 446268.6
+      "date": "2025-12-15",
+      "np": 4.45,
+      "expected_np": 13.92892,
+      "dividend_per_holder": -379156.8
     },
     {
       "date": "2025-12-18",
-      "np": 6.85,
-      "expected_np": 13.41588,
-      "dividend_per_holder": -262635.0
+      "np": 13.7,
+      "expected_np": 15.41542,
+      "dividend_per_holder": -68616.8
     },
     {
-      "date": "2025-12-19",
-      "np": -7.2,
-      "expected_np": 12.45229,
-      "dividend_per_holder": -786091.4
+      "date": "2025-12-20",
+      "np": 17.15,
+      "expected_np": 17.46721,
+      "dividend_per_holder": -12688.6
     },
     {
-      "date": "2025-12-21",
-      "np": 10.4,
-      "expected_np": 11.69671,
-      "dividend_per_holder": -51868.2
+      "date": "2025-12-22",
+      "np": 29.1,
+      "expected_np": 16.79587,
+      "dividend_per_holder": 492165.2
     },
     {
-      "date": "2025-12-25",
-      "np": 2.15,
-      "expected_np": 11.57368,
-      "dividend_per_holder": -376947.2
+      "date": "2025-12-23",
+      "np": 23.6,
+      "expected_np": 16.27071,
+      "dividend_per_holder": 293171.4
     },
     {
-      "date": "2025-12-27",
-      "np": 16.55,
-      "expected_np": 11.09257,
-      "dividend_per_holder": 218297.4
+      "date": "2025-12-26",
+      "np": 4.3,
+      "expected_np": 18.09112,
+      "dividend_per_holder": -551644.8
     },
     {
-      "date": "2025-12-29",
-      "np": 15.65,
-      "expected_np": 12.11382,
-      "dividend_per_holder": 141447.4
+      "date": "2025-12-28",
+      "np": 18.15,
+      "expected_np": 14.76757,
+      "dividend_per_holder": 135297.2
     },
     {
-      "date": "2025-12-31",
-      "np": 3.25,
-      "expected_np": 11.7981,
-      "dividend_per_holder": -341923.8
+      "date": "2025-12-30",
+      "np": 14.3,
+      "expected_np": 16.97932,
+      "dividend_per_holder": -107173.0
     },
     {
-      "date": "2026-01-02",
-      "np": 11.65,
-      "expected_np": 12.59108,
-      "dividend_per_holder": -37643.4
-    },
-    {
-      "date": "2026-01-03",
-      "np": 16.1,
-      "expected_np": 12.34192,
-      "dividend_per_holder": 150323.2
-    },
-    {
-      "date": "2026-01-05",
-      "np": 2.85,
-      "expected_np": 11.90071,
-      "dividend_per_holder": -362028.4
-    },
-    {
-      "date": "2026-01-07",
-      "np": 14.25,
-      "expected_np": 10.87697,
-      "dividend_per_holder": 134921.0
-    },
-    {
-      "date": "2026-01-09",
-      "np": 8.95,
-      "expected_np": 10.02371,
-      "dividend_per_holder": -42948.4
-    },
-    {
-      "date": "2026-01-11",
-      "np": 19.85,
-      "expected_np": 10.95259,
-      "dividend_per_holder": 355896.4
-    },
-    {
-      "date": "2026-01-14",
-      "np": 8.95,
-      "expected_np": 11.79423,
-      "dividend_per_holder": -113769.0
+      "date": "2026-01-01",
+      "np": 7.1,
+      "expected_np": 17.53199,
+      "dividend_per_holder": -417279.6
     },
     {
       "date": "2026-01-15",
-      "np": 14.75,
-      "expected_np": 9.70106,
-      "dividend_per_holder": 201957.8
+      "np": 17.3,
+      "expected_np": 13.14459,
+      "dividend_per_holder": 166216.2
     },
     {
       "date": "2026-01-17",
-      "np": 15.0,
-      "expected_np": 11.52807,
-      "dividend_per_holder": 138877.2
+      "np": 12.65,
+      "expected_np": 16.39404,
+      "dividend_per_holder": -149761.6
     },
     {
       "date": "2026-01-19",
-      "np": 7.25,
-      "expected_np": 13.29609,
-      "dividend_per_holder": -241843.6
+      "np": 14.45,
+      "expected_np": 13.93931,
+      "dividend_per_holder": 20427.4
     },
     {
       "date": "2026-01-21",
-      "np": -0.3,
-      "expected_np": 12.46614,
-      "dividend_per_holder": -510645.6
+      "np": 22.8,
+      "expected_np": 17.94398,
+      "dividend_per_holder": 194240.8
     },
     {
-      "date": "2026-01-24",
-      "np": 20.85,
-      "expected_np": 10.34116,
-      "dividend_per_holder": 420353.8
+      "date": "2026-01-23",
+      "np": 10.4,
+      "expected_np": 16.22517,
+      "dividend_per_holder": -233007.0
+    },
+    {
+      "date": "2026-01-25",
+      "np": 20.6,
+      "expected_np": 17.73202,
+      "dividend_per_holder": 114719.2
     },
     {
       "date": "2026-01-27",
-      "np": 5.9,
-      "expected_np": 12.90361,
-      "dividend_per_holder": -280144.4
+      "np": 10.2,
+      "expected_np": 15.27184,
+      "dividend_per_holder": -202873.6
     },
     {
-      "date": "2026-01-28",
-      "np": 30.9,
-      "expected_np": 9.92897,
-      "dividend_per_holder": 838841.2
+      "date": "2026-01-29",
+      "np": 26.4,
+      "expected_np": 15.74826,
+      "dividend_per_holder": 426069.4
     },
     {
       "date": "2026-01-30",
-      "np": 17.45,
-      "expected_np": 12.11173,
-      "dividend_per_holder": 213530.8
+      "np": 19.3,
+      "expected_np": 15.8588,
+      "dividend_per_holder": 137647.8
     },
     {
       "date": "2026-02-01",
-      "np": 24.5,
-      "expected_np": 11.9359,
-      "dividend_per_holder": 502564.2
+      "np": 23.1,
+      "expected_np": 18.02404,
+      "dividend_per_holder": 203038.4
     },
     {
       "date": "2026-02-03",
-      "np": 15.15,
-      "expected_np": 12.97816,
-      "dividend_per_holder": 86873.6
+      "np": 17.85,
+      "expected_np": 17.20149,
+      "dividend_per_holder": 25940.2
     },
     {
-      "date": "2026-02-04",
-      "np": 12.15,
-      "expected_np": 11.89892,
-      "dividend_per_holder": 10043.4
+      "date": "2026-02-05",
+      "np": -1.85,
+      "expected_np": 19.84737,
+      "dividend_per_holder": -867895.0
     },
     {
-      "date": "2026-02-19",
-      "np": -0.5,
-      "expected_np": 7.43986,
-      "dividend_per_holder": -317594.4
+      "date": "2026-02-09",
+      "np": 14.8,
+      "expected_np": 10.0163,
+      "dividend_per_holder": 191348.0
     },
     {
       "date": "2026-02-21",
-      "np": 14.95,
-      "expected_np": 8.98666,
-      "dividend_per_holder": 238533.8
+      "np": 24.05,
+      "expected_np": 10.66274,
+      "dividend_per_holder": 535490.2
     },
     {
-      "date": "2026-02-22",
-      "np": 6.3,
-      "expected_np": 12.36823,
-      "dividend_per_holder": -242729.0
+      "date": "2026-02-23",
+      "np": 25.85,
+      "expected_np": 14.61027,
+      "dividend_per_holder": 449589.0
     },
     {
-      "date": "2026-02-24",
-      "np": -2.9,
-      "expected_np": 11.09061,
-      "dividend_per_holder": -559624.4
+      "date": "2026-02-25",
+      "np": 28.95,
+      "expected_np": 16.10143,
+      "dividend_per_holder": 513942.8
     },
     {
       "date": "2026-02-27",
-      "np": 23.15,
-      "expected_np": 11.1448,
-      "dividend_per_holder": 480208.0
+      "np": 33.7,
+      "expected_np": 19.11349,
+      "dividend_per_holder": 583460.2
     },
     {
       "date": "2026-03-01",
-      "np": 7.0,
-      "expected_np": 10.54709,
-      "dividend_per_holder": -141883.6
+      "np": 13.8,
+      "expected_np": 20.44614,
+      "dividend_per_holder": -265845.6
     },
     {
       "date": "2026-03-03",
-      "np": 9.45,
-      "expected_np": 10.3945,
-      "dividend_per_holder": -37780.2
+      "np": 22.25,
+      "expected_np": 20.34452,
+      "dividend_per_holder": 76219.0
     },
     {
-      "date": "2026-03-04",
-      "np": 6.75,
-      "expected_np": 9.38371,
-      "dividend_per_holder": -105348.4
+      "date": "2026-03-05",
+      "np": 4.9,
+      "expected_np": 18.38826,
+      "dividend_per_holder": -539530.4
     },
     {
-      "date": "2026-03-06",
-      "np": 38.85,
-      "expected_np": 10.56881,
-      "dividend_per_holder": 1131247.6
+      "date": "2026-03-07",
+      "np": 14.9,
+      "expected_np": 17.92074,
+      "dividend_per_holder": -120829.8
     },
     {
       "date": "2026-03-08",
-      "np": 6.8,
-      "expected_np": 11.20356,
-      "dividend_per_holder": -176142.4
+      "np": 20.9,
+      "expected_np": 18.33305,
+      "dividend_per_holder": 102677.8
     },
     {
-      "date": "2026-03-09",
-      "np": 14.05,
-      "expected_np": 10.9497,
-      "dividend_per_holder": 124011.8
+      "date": "2026-03-10",
+      "np": 28.65,
+      "expected_np": 18.90878,
+      "dividend_per_holder": 389648.6
     },
     {
-      "date": "2026-03-11",
-      "np": 20.0,
-      "expected_np": 13.20087,
-      "dividend_per_holder": 271965.4
+      "date": "2026-03-12",
+      "np": 17.25,
+      "expected_np": 17.93653,
+      "dividend_per_holder": -27461.4
     },
     {
       "date": "2026-03-13",
-      "np": 17.8,
-      "expected_np": 12.46357,
-      "dividend_per_holder": 213457.2
+      "np": 29.3,
+      "expected_np": 16.11939,
+      "dividend_per_holder": 527224.2
     },
     {
       "date": "2026-03-15",
-      "np": 9.65,
-      "expected_np": 12.357,
-      "dividend_per_holder": -108280.0
+      "np": 15.05,
+      "expected_np": 15.76002,
+      "dividend_per_holder": -28401.0
     },
     {
       "date": "2026-03-17",
-      "np": 25.8,
-      "expected_np": 12.7683,
-      "dividend_per_holder": 521267.8
+      "np": 34.05,
+      "expected_np": 20.92098,
+      "dividend_per_holder": 525160.8
+    },
+    {
+      "date": "2026-03-19",
+      "np": 22.95,
+      "expected_np": 22.44526,
+      "dividend_per_holder": 20189.4
     },
     {
       "date": "2026-03-20",
-      "np": 7.55,
-      "expected_np": 11.72286,
-      "dividend_per_holder": -166914.2
+      "np": 19.05,
+      "expected_np": 20.72836,
+      "dividend_per_holder": -67134.4
     },
     {
-      "date": "2026-03-22",
-      "np": -1.6,
-      "expected_np": 13.72737,
-      "dividend_per_holder": -613094.8
+      "date": "2026-03-23",
+      "np": 16.25,
+      "expected_np": 19.05668,
+      "dividend_per_holder": -112267.2
     },
     {
-      "date": "2026-03-24",
-      "np": 18.05,
-      "expected_np": 11.84118,
-      "dividend_per_holder": 248352.6
+      "date": "2026-03-25",
+      "np": 22.2,
+      "expected_np": 21.0535,
+      "dividend_per_holder": 45860.0
     },
     {
       "date": "2026-03-26",
-      "np": 10.1,
-      "expected_np": 11.00196,
-      "dividend_per_holder": -36078.2
+      "np": 34.25,
+      "expected_np": 22.82533,
+      "dividend_per_holder": 456986.8
     },
     {
-      "date": "2026-03-29",
-      "np": 2.6,
-      "expected_np": 9.97452,
-      "dividend_per_holder": -294980.6
+      "date": "2026-03-28",
+      "np": 9.75,
+      "expected_np": 21.19349,
+      "dividend_per_holder": -457739.6
     },
     {
       "date": "2026-03-31",
-      "np": 4.1,
-      "expected_np": 9.73772,
-      "dividend_per_holder": -225509.0
+      "np": 28.65,
+      "expected_np": 20.0784,
+      "dividend_per_holder": 342863.8
     },
     {
-      "date": "2026-04-01",
-      "np": 22.0,
-      "expected_np": 10.9819,
-      "dividend_per_holder": 440723.8
+      "date": "2026-04-02",
+      "np": 17.6,
+      "expected_np": 21.15514,
+      "dividend_per_holder": -142205.6
     },
     {
-      "date": "2026-04-03",
-      "np": 26.15,
-      "expected_np": 12.75455,
-      "dividend_per_holder": 535818.2
+      "date": "2026-04-04",
+      "np": 13.0,
+      "expected_np": 22.05647,
+      "dividend_per_holder": -362259.0
     },
     {
       "date": "2026-04-06",
-      "np": 13.45,
-      "expected_np": 10.94442,
-      "dividend_per_holder": 100223.4
+      "np": 14.0,
+      "expected_np": 21.08799,
+      "dividend_per_holder": -283519.8
     },
     {
-      "date": "2026-04-09",
-      "np": 7.25,
-      "expected_np": 10.64421,
-      "dividend_per_holder": -135768.6
+      "date": "2026-04-08",
+      "np": 22.5,
+      "expected_np": 21.07675,
+      "dividend_per_holder": 56929.8
     },
     {
       "date": "2026-04-10",
-      "np": 1.1,
-      "expected_np": 11.25616,
-      "dividend_per_holder": -406246.6
+      "np": 19.3,
+      "expected_np": 16.88395,
+      "dividend_per_holder": 96641.8
     }
   ],
   "3934672": [
     {
       "date": "2025-10-22",
       "np": 10.75,
-      "expected_np": 15.75949,
-      "dividend_per_holder": -200379.6
+      "expected_np": 16.19535,
+      "dividend_per_holder": -217814.2
     },
     {
       "date": "2025-10-24",
       "np": 21.7,
-      "expected_np": 17.15926,
-      "dividend_per_holder": 181629.6
+      "expected_np": 17.59512,
+      "dividend_per_holder": 164195.0
     },
     {
       "date": "2025-10-26",
       "np": 32.0,
-      "expected_np": 18.22137,
-      "dividend_per_holder": 551145.2
+      "expected_np": 18.65723,
+      "dividend_per_holder": 533710.6
     },
     {
       "date": "2025-10-28",
       "np": 26.4,
-      "expected_np": 18.28655,
-      "dividend_per_holder": 324538.0
+      "expected_np": 18.72241,
+      "dividend_per_holder": 307103.4
     },
     {
       "date": "2025-10-31",
       "np": 17.25,
-      "expected_np": 19.30979,
-      "dividend_per_holder": -82391.4
+      "expected_np": 19.74565,
+      "dividend_per_holder": -99826.0
     },
     {
       "date": "2025-11-02",
       "np": 22.25,
-      "expected_np": 20.22794,
-      "dividend_per_holder": 80882.6
+      "expected_np": 20.6638,
+      "dividend_per_holder": 63448.0
     },
     {
       "date": "2025-11-03",
       "np": 9.45,
-      "expected_np": 20.60468,
-      "dividend_per_holder": -446187.4
+      "expected_np": 21.04055,
+      "dividend_per_holder": -463622.0
     },
     {
       "date": "2025-11-05",
       "np": 17.3,
-      "expected_np": 18.17777,
-      "dividend_per_holder": -35110.6
+      "expected_np": 18.61363,
+      "dividend_per_holder": -52545.2
     },
     {
       "date": "2025-11-09",
       "np": 9.85,
-      "expected_np": 19.78554,
-      "dividend_per_holder": -397421.8
+      "expected_np": 20.22141,
+      "dividend_per_holder": -414856.4
     },
     {
       "date": "2025-11-11",
       "np": 23.65,
-      "expected_np": 18.19072,
-      "dividend_per_holder": 218371.4
+      "expected_np": 18.62658,
+      "dividend_per_holder": 200936.8
     },
     {
       "date": "2025-11-12",
       "np": 18.55,
-      "expected_np": 17.98039,
-      "dividend_per_holder": 22784.4
+      "expected_np": 18.41625,
+      "dividend_per_holder": 5349.8
     },
     {
       "date": "2025-11-19",
       "np": 19.3,
-      "expected_np": 19.24384,
-      "dividend_per_holder": 2246.6
+      "expected_np": 19.6797,
+      "dividend_per_holder": -15188.0
     },
     {
       "date": "2025-11-22",
       "np": 27.6,
-      "expected_np": 17.96716,
-      "dividend_per_holder": 385313.8
+      "expected_np": 18.40302,
+      "dividend_per_holder": 367879.2
     },
     {
       "date": "2025-11-24",
       "np": 20.6,
-      "expected_np": 20.58609,
-      "dividend_per_holder": 556.4
+      "expected_np": 21.02195,
+      "dividend_per_holder": -16878.2
     },
     {
       "date": "2025-11-26",
       "np": 16.9,
-      "expected_np": 19.28667,
-      "dividend_per_holder": -95467.0
+      "expected_np": 19.72254,
+      "dividend_per_holder": -112901.6
     },
     {
       "date": "2025-11-28",
       "np": 27.25,
-      "expected_np": 19.55812,
-      "dividend_per_holder": 307675.2
+      "expected_np": 19.99398,
+      "dividend_per_holder": 290240.6
     },
     {
       "date": "2025-11-30",
       "np": 9.1,
-      "expected_np": 19.9615,
-      "dividend_per_holder": -434460.0
+      "expected_np": 20.39736,
+      "dividend_per_holder": -451894.6
     },
     {
       "date": "2025-12-02",
       "np": 4.75,
-      "expected_np": 17.51929,
-      "dividend_per_holder": -510771.8
+      "expected_np": 17.95516,
+      "dividend_per_holder": -528206.4
     },
     {
       "date": "2025-12-03",
       "np": 21.6,
-      "expected_np": 20.39509,
-      "dividend_per_holder": 48196.4
+      "expected_np": 20.83095,
+      "dividend_per_holder": 30761.8
     },
     {
       "date": "2025-12-05",
       "np": 26.3,
-      "expected_np": 21.17406,
-      "dividend_per_holder": 205037.6
+      "expected_np": 21.60992,
+      "dividend_per_holder": 187603.0
     },
     {
       "date": "2025-12-07",
       "np": 19.05,
-      "expected_np": 17.93074,
-      "dividend_per_holder": 44770.6
+      "expected_np": 18.3666,
+      "dividend_per_holder": 27336.0
     },
     {
       "date": "2025-12-09",
       "np": 26.0,
-      "expected_np": 18.46141,
-      "dividend_per_holder": 301543.4
+      "expected_np": 18.89728,
+      "dividend_per_holder": 284108.8
     },
     {
       "date": "2025-12-13",
       "np": 31.9,
-      "expected_np": 17.97695,
-      "dividend_per_holder": 556922.2
+      "expected_np": 18.41281,
+      "dividend_per_holder": 539487.6
     },
     {
       "date": "2025-12-18",
       "np": 20.0,
-      "expected_np": 21.60982,
-      "dividend_per_holder": -64392.8
+      "expected_np": 22.04568,
+      "dividend_per_holder": -81827.4
     },
     {
       "date": "2025-12-19",
       "np": 14.6,
-      "expected_np": 20.04073,
-      "dividend_per_holder": -217629.2
+      "expected_np": 20.47659,
+      "dividend_per_holder": -235063.8
     },
     {
       "date": "2025-12-21",
       "np": 40.05,
-      "expected_np": 20.70745,
-      "dividend_per_holder": 773702.0
+      "expected_np": 21.14331,
+      "dividend_per_holder": 756267.4
     },
     {
       "date": "2025-12-25",
       "np": 19.95,
-      "expected_np": 21.59951,
-      "dividend_per_holder": -65980.4
+      "expected_np": 22.03537,
+      "dividend_per_holder": -83415.0
     },
     {
       "date": "2025-12-27",
       "np": 20.15,
-      "expected_np": 22.03708,
-      "dividend_per_holder": -75483.4
+      "expected_np": 22.47295,
+      "dividend_per_holder": -92918.0
     },
     {
       "date": "2025-12-29",
       "np": 20.4,
-      "expected_np": 22.52828,
-      "dividend_per_holder": -85131.0
+      "expected_np": 22.96414,
+      "dividend_per_holder": -102565.6
     },
     {
       "date": "2025-12-31",
       "np": 22.9,
-      "expected_np": 20.12966,
-      "dividend_per_holder": 110813.6
+      "expected_np": 20.56552,
+      "dividend_per_holder": 93379.0
     },
     {
       "date": "2026-01-02",
       "np": 12.95,
-      "expected_np": 22.0679,
-      "dividend_per_holder": -364716.0
+      "expected_np": 22.50376,
+      "dividend_per_holder": -382150.6
     },
     {
       "date": "2026-01-03",
       "np": 16.85,
-      "expected_np": 20.87488,
-      "dividend_per_holder": -160995.2
+      "expected_np": 21.31074,
+      "dividend_per_holder": -178429.8
     },
     {
       "date": "2026-01-05",
       "np": 7.45,
-      "expected_np": 19.76146,
-      "dividend_per_holder": -492458.4
+      "expected_np": 20.19732,
+      "dividend_per_holder": -509893.0
     },
     {
       "date": "2026-01-07",
       "np": 23.9,
-      "expected_np": 19.28179,
-      "dividend_per_holder": 184728.2
+      "expected_np": 19.71766,
+      "dividend_per_holder": 167293.6
     },
     {
       "date": "2026-01-09",
       "np": 14.85,
-      "expected_np": 17.76539,
-      "dividend_per_holder": -116615.6
+      "expected_np": 18.20125,
+      "dividend_per_holder": -134050.2
     },
     {
       "date": "2026-01-11",
       "np": 20.9,
-      "expected_np": 18.50095,
-      "dividend_per_holder": 95962.0
+      "expected_np": 18.93681,
+      "dividend_per_holder": 78527.4
     },
     {
       "date": "2026-01-14",
       "np": 1.5,
-      "expected_np": 19.56912,
-      "dividend_per_holder": -722764.8
+      "expected_np": 20.00498,
+      "dividend_per_holder": -740199.4
     },
     {
       "date": "2026-01-19",
       "np": 8.5,
-      "expected_np": 10.21662,
-      "dividend_per_holder": -68664.6
+      "expected_np": 10.65248,
+      "dividend_per_holder": -86099.2
     },
     {
       "date": "2026-01-21",
       "np": 11.05,
-      "expected_np": 14.00459,
-      "dividend_per_holder": -118183.6
+      "expected_np": 14.44045,
+      "dividend_per_holder": -135618.2
     },
     {
       "date": "2026-01-24",
       "np": 19.5,
-      "expected_np": 14.34671,
-      "dividend_per_holder": 206131.4
+      "expected_np": 14.78258,
+      "dividend_per_holder": 188696.8
     },
     {
       "date": "2026-01-27",
       "np": 19.45,
-      "expected_np": 18.86218,
-      "dividend_per_holder": 23512.8
+      "expected_np": 19.29804,
+      "dividend_per_holder": 6078.2
     },
     {
       "date": "2026-01-28",
       "np": 2.85,
-      "expected_np": 16.37429,
-      "dividend_per_holder": -540971.4
+      "expected_np": 16.81015,
+      "dividend_per_holder": -558406.0
     },
     {
       "date": "2026-01-30",
       "np": 16.8,
-      "expected_np": 16.75704,
-      "dividend_per_holder": 1718.6
+      "expected_np": 17.1929,
+      "dividend_per_holder": -15716.0
     },
     {
       "date": "2026-02-01",
       "np": 10.75,
-      "expected_np": 17.00655,
-      "dividend_per_holder": -250262.0
+      "expected_np": 17.44241,
+      "dividend_per_holder": -267696.6
     },
     {
       "date": "2026-02-03",
       "np": 15.55,
-      "expected_np": 18.33931,
-      "dividend_per_holder": -111572.6
+      "expected_np": 18.77518,
+      "dividend_per_holder": -129007.2
     },
     {
       "date": "2026-02-04",
       "np": 31.65,
-      "expected_np": 16.64917,
-      "dividend_per_holder": 600033.2
+      "expected_np": 17.08503,
+      "dividend_per_holder": 582598.6
     },
     {
       "date": "2026-02-06",
       "np": 1.95,
-      "expected_np": 16.12873,
-      "dividend_per_holder": -567149.2
+      "expected_np": 16.56459,
+      "dividend_per_holder": -584583.8
     },
     {
       "date": "2026-02-08",
       "np": 23.65,
-      "expected_np": 14.93367,
-      "dividend_per_holder": 348653.0
+      "expected_np": 15.36954,
+      "dividend_per_holder": 331218.4
     },
     {
       "date": "2026-02-10",
       "np": 29.8,
-      "expected_np": 18.09339,
-      "dividend_per_holder": 468264.6
+      "expected_np": 18.52925,
+      "dividend_per_holder": 450830.0
     },
     {
       "date": "2026-02-11",
       "np": 3.85,
-      "expected_np": 17.59213,
-      "dividend_per_holder": -549685.2
+      "expected_np": 18.02799,
+      "dividend_per_holder": -567119.8
     },
     {
       "date": "2026-02-19",
       "np": 26.05,
-      "expected_np": 15.60604,
-      "dividend_per_holder": 417758.6
+      "expected_np": 16.0419,
+      "dividend_per_holder": 400324.0
     },
     {
       "date": "2026-02-21",
       "np": 12.05,
-      "expected_np": 17.06602,
-      "dividend_per_holder": -200640.8
+      "expected_np": 17.50188,
+      "dividend_per_holder": -218075.4
     },
     {
       "date": "2026-02-22",
       "np": 11.0,
-      "expected_np": 18.11357,
-      "dividend_per_holder": -284543.0
+      "expected_np": 18.54944,
+      "dividend_per_holder": -301977.6
     },
     {
       "date": "2026-02-24",
       "np": 6.75,
-      "expected_np": 16.64637,
-      "dividend_per_holder": -395854.8
+      "expected_np": 17.08223,
+      "dividend_per_holder": -413289.4
     },
     {
       "date": "2026-02-27",
       "np": 21.05,
-      "expected_np": 16.95637,
-      "dividend_per_holder": 163745.2
+      "expected_np": 17.39223,
+      "dividend_per_holder": 146310.6
     },
     {
       "date": "2026-03-01",
       "np": 15.65,
-      "expected_np": 15.33484,
-      "dividend_per_holder": 12606.2
+      "expected_np": 15.77071,
+      "dividend_per_holder": -4828.4
     },
     {
       "date": "2026-03-03",
       "np": 20.0,
-      "expected_np": 14.92209,
-      "dividend_per_holder": 203116.4
+      "expected_np": 15.35795,
+      "dividend_per_holder": 185681.8
     },
     {
       "date": "2026-03-04",
       "np": 10.5,
-      "expected_np": 15.47858,
-      "dividend_per_holder": -199143.2
+      "expected_np": 15.91444,
+      "dividend_per_holder": -216577.8
     },
     {
       "date": "2026-03-06",
       "np": 9.15,
-      "expected_np": 17.14509,
-      "dividend_per_holder": -319803.6
+      "expected_np": 17.58095,
+      "dividend_per_holder": -337238.2
     },
     {
       "date": "2026-03-08",
       "np": 8.8,
-      "expected_np": 16.71752,
-      "dividend_per_holder": -316700.8
+      "expected_np": 17.15338,
+      "dividend_per_holder": -334135.4
     },
     {
       "date": "2026-03-09",
       "np": 19.35,
-      "expected_np": 16.74761,
-      "dividend_per_holder": 104095.4
+      "expected_np": 17.18348,
+      "dividend_per_holder": 86660.8
     },
     {
       "date": "2026-03-11",
       "np": 25.1,
-      "expected_np": 19.45429,
-      "dividend_per_holder": 225828.4
+      "expected_np": 19.89015,
+      "dividend_per_holder": 208393.8
     },
     {
       "date": "2026-03-13",
       "np": 20.4,
-      "expected_np": 18.58629,
-      "dividend_per_holder": 72548.4
+      "expected_np": 19.02215,
+      "dividend_per_holder": 55113.8
     },
     {
       "date": "2026-03-15",
       "np": 24.35,
-      "expected_np": 18.07423,
-      "dividend_per_holder": 251030.8
+      "expected_np": 18.51009,
+      "dividend_per_holder": 233596.2
     },
     {
       "date": "2026-03-20",
       "np": 8.55,
-      "expected_np": 18.5017,
-      "dividend_per_holder": -398067.8
+      "expected_np": 18.93756,
+      "dividend_per_holder": -415502.4
     },
     {
       "date": "2026-03-22",
       "np": 14.05,
-      "expected_np": 21.46904,
-      "dividend_per_holder": -296761.6
+      "expected_np": 21.9049,
+      "dividend_per_holder": -314196.2
     },
     {
       "date": "2026-03-24",
       "np": 23.35,
-      "expected_np": 18.38374,
-      "dividend_per_holder": 198650.4
+      "expected_np": 18.8196,
+      "dividend_per_holder": 181215.8
     },
     {
       "date": "2026-03-26",
       "np": 19.8,
-      "expected_np": 16.58274,
-      "dividend_per_holder": 128690.4
+      "expected_np": 17.0186,
+      "dividend_per_holder": 111255.8
     },
     {
       "date": "2026-03-29",
       "np": 20.8,
-      "expected_np": 16.2152,
-      "dividend_per_holder": 183392.2
+      "expected_np": 16.65106,
+      "dividend_per_holder": 165957.6
     },
     {
       "date": "2026-03-31",
       "np": 5.9,
-      "expected_np": 16.74775,
-      "dividend_per_holder": -433910.0
+      "expected_np": 17.18361,
+      "dividend_per_holder": -451344.6
     },
     {
       "date": "2026-04-03",
       "np": 12.8,
-      "expected_np": 19.22477,
-      "dividend_per_holder": -256990.6
+      "expected_np": 19.66063,
+      "dividend_per_holder": -274425.2
     },
     {
       "date": "2026-04-06",
       "np": 22.75,
-      "expected_np": 15.95861,
-      "dividend_per_holder": 271655.6
+      "expected_np": 16.39447,
+      "dividend_per_holder": 254221.0
     },
     {
       "date": "2026-04-09",
       "np": 18.9,
-      "expected_np": 16.56499,
-      "dividend_per_holder": 93400.6
+      "expected_np": 17.00085,
+      "dividend_per_holder": 75966.0
     },
     {
       "date": "2026-04-10",
       "np": 22.4,
-      "expected_np": 17.70362,
-      "dividend_per_holder": 187855.4
+      "expected_np": 18.13948,
+      "dividend_per_holder": 170420.8
+    }
+  ],
+  "4066320": [
+    {
+      "date": "2025-10-22",
+      "np": 11.65,
+      "expected_np": 12.93258,
+      "dividend_per_holder": -51303.2
+    },
+    {
+      "date": "2025-10-24",
+      "np": 6.5,
+      "expected_np": 14.20578,
+      "dividend_per_holder": -308231.2
+    },
+    {
+      "date": "2025-10-25",
+      "np": 8.05,
+      "expected_np": 14.73486,
+      "dividend_per_holder": -267394.6
+    },
+    {
+      "date": "2025-10-27",
+      "np": 15.85,
+      "expected_np": 12.6886,
+      "dividend_per_holder": 126455.8
+    },
+    {
+      "date": "2025-10-29",
+      "np": 2.25,
+      "expected_np": 12.86037,
+      "dividend_per_holder": -424414.8
+    },
+    {
+      "date": "2025-10-30",
+      "np": 2.7,
+      "expected_np": 13.40423,
+      "dividend_per_holder": -428169.4
+    },
+    {
+      "date": "2025-11-01",
+      "np": 5.65,
+      "expected_np": 13.25046,
+      "dividend_per_holder": -304018.4
+    },
+    {
+      "date": "2025-11-04",
+      "np": 3.15,
+      "expected_np": 10.55784,
+      "dividend_per_holder": -296313.6
+    },
+    {
+      "date": "2025-11-07",
+      "np": 20.45,
+      "expected_np": 9.67704,
+      "dividend_per_holder": 430918.4
+    },
+    {
+      "date": "2025-11-09",
+      "np": 4.9,
+      "expected_np": 12.13511,
+      "dividend_per_holder": -289404.4
+    },
+    {
+      "date": "2025-11-10",
+      "np": 13.05,
+      "expected_np": 12.96663,
+      "dividend_per_holder": 3334.8
+    },
+    {
+      "date": "2025-11-12",
+      "np": 16.1,
+      "expected_np": 12.13147,
+      "dividend_per_holder": 158741.2
+    },
+    {
+      "date": "2025-11-14",
+      "np": 5.15,
+      "expected_np": 14.66454,
+      "dividend_per_holder": -380581.6
+    },
+    {
+      "date": "2025-11-16",
+      "np": 15.85,
+      "expected_np": 12.20482,
+      "dividend_per_holder": 145807.2
+    },
+    {
+      "date": "2025-11-18",
+      "np": 20.95,
+      "expected_np": 14.30454,
+      "dividend_per_holder": 265818.4
+    },
+    {
+      "date": "2025-11-20",
+      "np": 8.85,
+      "expected_np": 14.77239,
+      "dividend_per_holder": -236895.8
+    },
+    {
+      "date": "2025-11-22",
+      "np": 20.85,
+      "expected_np": 14.0011,
+      "dividend_per_holder": 273956.0
+    },
+    {
+      "date": "2025-11-23",
+      "np": 13.25,
+      "expected_np": 12.58411,
+      "dividend_per_holder": 26635.6
+    },
+    {
+      "date": "2025-11-25",
+      "np": 10.4,
+      "expected_np": 12.79199,
+      "dividend_per_holder": -95679.6
+    },
+    {
+      "date": "2025-11-28",
+      "np": 28.6,
+      "expected_np": 12.84968,
+      "dividend_per_holder": 630012.6
+    },
+    {
+      "date": "2025-12-01",
+      "np": 33.95,
+      "expected_np": 17.10505,
+      "dividend_per_holder": 673798.0
+    },
+    {
+      "date": "2025-12-03",
+      "np": 6.55,
+      "expected_np": 16.46367,
+      "dividend_per_holder": -396546.8
+    },
+    {
+      "date": "2025-12-05",
+      "np": -8.95,
+      "expected_np": 16.72663,
+      "dividend_per_holder": -1027065.4
+    },
+    {
+      "date": "2025-12-07",
+      "np": 12.6,
+      "expected_np": 14.16598,
+      "dividend_per_holder": -62639.2
+    },
+    {
+      "date": "2025-12-09",
+      "np": 30.65,
+      "expected_np": 15.4779,
+      "dividend_per_holder": 606883.8
+    },
+    {
+      "date": "2025-12-13",
+      "np": 11.45,
+      "expected_np": 15.3657,
+      "dividend_per_holder": -156628.2
+    },
+    {
+      "date": "2025-12-18",
+      "np": 2.0,
+      "expected_np": 15.30154,
+      "dividend_per_holder": -532061.6
+    },
+    {
+      "date": "2025-12-20",
+      "np": 22.0,
+      "expected_np": 16.79357,
+      "dividend_per_holder": 208257.0
+    },
+    {
+      "date": "2025-12-22",
+      "np": 12.85,
+      "expected_np": 14.50015,
+      "dividend_per_holder": -66006.0
+    },
+    {
+      "date": "2025-12-23",
+      "np": 19.55,
+      "expected_np": 15.36875,
+      "dividend_per_holder": 167250.0
+    },
+    {
+      "date": "2025-12-26",
+      "np": 4.95,
+      "expected_np": 16.17774,
+      "dividend_per_holder": -449109.6
+    },
+    {
+      "date": "2025-12-27",
+      "np": 17.5,
+      "expected_np": 14.51455,
+      "dividend_per_holder": 119418.0
+    },
+    {
+      "date": "2025-12-29",
+      "np": 11.9,
+      "expected_np": 15.07628,
+      "dividend_per_holder": -127051.4
+    },
+    {
+      "date": "2025-12-31",
+      "np": 10.65,
+      "expected_np": 15.2968,
+      "dividend_per_holder": -185872.0
+    },
+    {
+      "date": "2026-01-02",
+      "np": 8.8,
+      "expected_np": 15.84467,
+      "dividend_per_holder": -281787.0
+    },
+    {
+      "date": "2026-01-04",
+      "np": 30.35,
+      "expected_np": 16.56148,
+      "dividend_per_holder": 551540.6
+    },
+    {
+      "date": "2026-01-06",
+      "np": 7.2,
+      "expected_np": 17.04229,
+      "dividend_per_holder": -393691.8
+    },
+    {
+      "date": "2026-01-07",
+      "np": -1.05,
+      "expected_np": 13.63147,
+      "dividend_per_holder": -587258.8
+    },
+    {
+      "date": "2026-01-09",
+      "np": 14.35,
+      "expected_np": 13.72175,
+      "dividend_per_holder": 25130.0
+    },
+    {
+      "date": "2026-01-11",
+      "np": 20.05,
+      "expected_np": 15.81088,
+      "dividend_per_holder": 169564.6
+    },
+    {
+      "date": "2026-01-15",
+      "np": 6.65,
+      "expected_np": 15.14085,
+      "dividend_per_holder": -339634.2
+    },
+    {
+      "date": "2026-01-18",
+      "np": 6.25,
+      "expected_np": 14.24313,
+      "dividend_per_holder": -319725.2
+    },
+    {
+      "date": "2026-01-22",
+      "np": 16.45,
+      "expected_np": 15.06133,
+      "dividend_per_holder": 55546.8
+    },
+    {
+      "date": "2026-01-24",
+      "np": 13.4,
+      "expected_np": 13.94474,
+      "dividend_per_holder": -21789.8
+    },
+    {
+      "date": "2026-01-26",
+      "np": 11.15,
+      "expected_np": 13.721,
+      "dividend_per_holder": -102840.2
+    },
+    {
+      "date": "2026-01-28",
+      "np": 19.05,
+      "expected_np": 14.13393,
+      "dividend_per_holder": 196642.8
+    },
+    {
+      "date": "2026-01-30",
+      "np": 23.7,
+      "expected_np": 14.15339,
+      "dividend_per_holder": 381864.4
+    },
+    {
+      "date": "2026-02-01",
+      "np": 18.45,
+      "expected_np": 13.39602,
+      "dividend_per_holder": 202159.0
+    },
+    {
+      "date": "2026-02-03",
+      "np": 4.35,
+      "expected_np": 12.21086,
+      "dividend_per_holder": -314434.6
+    },
+    {
+      "date": "2026-02-05",
+      "np": 20.35,
+      "expected_np": 12.76325,
+      "dividend_per_holder": 303470.0
+    },
+    {
+      "date": "2026-02-07",
+      "np": 11.35,
+      "expected_np": 14.31864,
+      "dividend_per_holder": -118745.6
+    },
+    {
+      "date": "2026-02-09",
+      "np": 18.2,
+      "expected_np": 13.69534,
+      "dividend_per_holder": 180186.4
+    },
+    {
+      "date": "2026-02-11",
+      "np": 25.7,
+      "expected_np": 13.23539,
+      "dividend_per_holder": 498584.4
+    },
+    {
+      "date": "2026-02-19",
+      "np": 16.35,
+      "expected_np": 14.29244,
+      "dividend_per_holder": 82302.4
+    },
+    {
+      "date": "2026-02-21",
+      "np": 29.55,
+      "expected_np": 11.95109,
+      "dividend_per_holder": 703956.4
+    },
+    {
+      "date": "2026-02-22",
+      "np": 30.9,
+      "expected_np": 11.732,
+      "dividend_per_holder": 766719.8
+    },
+    {
+      "date": "2026-02-24",
+      "np": 14.4,
+      "expected_np": 12.85956,
+      "dividend_per_holder": 61617.6
+    },
+    {
+      "date": "2026-02-26",
+      "np": 26.9,
+      "expected_np": 13.1546,
+      "dividend_per_holder": 549816.0
+    },
+    {
+      "date": "2026-03-01",
+      "np": 10.95,
+      "expected_np": 13.46113,
+      "dividend_per_holder": -100445.4
+    },
+    {
+      "date": "2026-03-03",
+      "np": 21.8,
+      "expected_np": 17.16812,
+      "dividend_per_holder": 185275.2
+    },
+    {
+      "date": "2026-03-05",
+      "np": 6.95,
+      "expected_np": 14.99586,
+      "dividend_per_holder": -321834.6
+    },
+    {
+      "date": "2026-03-07",
+      "np": 23.1,
+      "expected_np": 13.63775,
+      "dividend_per_holder": 378490.0
+    },
+    {
+      "date": "2026-03-08",
+      "np": 20.85,
+      "expected_np": 14.73896,
+      "dividend_per_holder": 244441.6
+    },
+    {
+      "date": "2026-03-11",
+      "np": 32.25,
+      "expected_np": 13.85443,
+      "dividend_per_holder": 735822.6
+    },
+    {
+      "date": "2026-03-12",
+      "np": 18.75,
+      "expected_np": 17.01785,
+      "dividend_per_holder": 69286.0
+    },
+    {
+      "date": "2026-03-14",
+      "np": 11.7,
+      "expected_np": 15.07837,
+      "dividend_per_holder": -135135.0
+    },
+    {
+      "date": "2026-03-16",
+      "np": 10.9,
+      "expected_np": 15.16832,
+      "dividend_per_holder": -170732.8
+    },
+    {
+      "date": "2026-03-17",
+      "np": 11.05,
+      "expected_np": 13.34321,
+      "dividend_per_holder": -91728.6
+    },
+    {
+      "date": "2026-03-19",
+      "np": 19.05,
+      "expected_np": 13.73197,
+      "dividend_per_holder": 212721.2
+    },
+    {
+      "date": "2026-03-21",
+      "np": 4.3,
+      "expected_np": 14.05683,
+      "dividend_per_holder": -390273.4
+    },
+    {
+      "date": "2026-03-23",
+      "np": 13.15,
+      "expected_np": 15.86777,
+      "dividend_per_holder": -108711.0
+    },
+    {
+      "date": "2026-03-24",
+      "np": 11.95,
+      "expected_np": 13.67808,
+      "dividend_per_holder": -69123.4
+    },
+    {
+      "date": "2026-03-26",
+      "np": 16.45,
+      "expected_np": 16.11962,
+      "dividend_per_holder": 13215.2
+    },
+    {
+      "date": "2026-03-29",
+      "np": 9.15,
+      "expected_np": 13.63456,
+      "dividend_per_holder": -179382.6
+    },
+    {
+      "date": "2026-03-31",
+      "np": 11.15,
+      "expected_np": 13.21938,
+      "dividend_per_holder": -82775.4
+    },
+    {
+      "date": "2026-04-01",
+      "np": 4.2,
+      "expected_np": 14.43516,
+      "dividend_per_holder": -409406.4
+    },
+    {
+      "date": "2026-04-03",
+      "np": 27.3,
+      "expected_np": 14.00662,
+      "dividend_per_holder": 531735.2
+    },
+    {
+      "date": "2026-04-05",
+      "np": 18.8,
+      "expected_np": 14.53491,
+      "dividend_per_holder": 170603.4
+    },
+    {
+      "date": "2026-04-06",
+      "np": 20.45,
+      "expected_np": 13.85418,
+      "dividend_per_holder": 263832.8
+    },
+    {
+      "date": "2026-04-08",
+      "np": 12.5,
+      "expected_np": 15.15287,
+      "dividend_per_holder": -106114.8
+    },
+    {
+      "date": "2026-04-10",
+      "np": 2.45,
+      "expected_np": 15.31629,
+      "dividend_per_holder": -514651.8
+    },
+    {
+      "date": "2026-04-12",
+      "np": 5.9,
+      "expected_np": 10.62619,
+      "dividend_per_holder": -189047.8
+    }
+  ],
+  "5105565": [
+    {
+      "date": "2025-10-22",
+      "np": 8.4,
+      "expected_np": 9.03724,
+      "dividend_per_holder": -25489.6
+    },
+    {
+      "date": "2025-10-24",
+      "np": 15.7,
+      "expected_np": 10.20048,
+      "dividend_per_holder": 219980.8
+    },
+    {
+      "date": "2025-10-26",
+      "np": 12.25,
+      "expected_np": 8.76942,
+      "dividend_per_holder": 139223.0
+    },
+    {
+      "date": "2025-10-27",
+      "np": 19.05,
+      "expected_np": 9.30486,
+      "dividend_per_holder": 389805.6
+    },
+    {
+      "date": "2025-10-29",
+      "np": 8.5,
+      "expected_np": 10.71123,
+      "dividend_per_holder": -88449.4
+    },
+    {
+      "date": "2025-10-31",
+      "np": 5.05,
+      "expected_np": 11.03214,
+      "dividend_per_holder": -239285.6
+    },
+    {
+      "date": "2025-11-03",
+      "np": 1.25,
+      "expected_np": 11.41397,
+      "dividend_per_holder": -406558.8
+    },
+    {
+      "date": "2025-11-05",
+      "np": 6.85,
+      "expected_np": 8.82945,
+      "dividend_per_holder": -79178.0
+    },
+    {
+      "date": "2025-11-08",
+      "np": 16.8,
+      "expected_np": 10.11031,
+      "dividend_per_holder": 267587.6
+    },
+    {
+      "date": "2025-11-10",
+      "np": -1.75,
+      "expected_np": 9.43947,
+      "dividend_per_holder": -447579.0
+    },
+    {
+      "date": "2025-11-12",
+      "np": 5.45,
+      "expected_np": 10.69036,
+      "dividend_per_holder": -209614.6
+    },
+    {
+      "date": "2025-11-14",
+      "np": 5.55,
+      "expected_np": 9.30305,
+      "dividend_per_holder": -150122.0
+    },
+    {
+      "date": "2025-11-16",
+      "np": 17.7,
+      "expected_np": 10.76214,
+      "dividend_per_holder": 277514.4
+    },
+    {
+      "date": "2025-11-18",
+      "np": 12.85,
+      "expected_np": 10.98762,
+      "dividend_per_holder": 74495.2
+    },
+    {
+      "date": "2025-11-19",
+      "np": 23.85,
+      "expected_np": 11.64972,
+      "dividend_per_holder": 488011.0
+    },
+    {
+      "date": "2025-11-21",
+      "np": 24.75,
+      "expected_np": 11.9654,
+      "dividend_per_holder": 511383.8
+    },
+    {
+      "date": "2025-11-23",
+      "np": 6.7,
+      "expected_np": 11.38023,
+      "dividend_per_holder": -187209.4
+    },
+    {
+      "date": "2025-11-24",
+      "np": 15.85,
+      "expected_np": 11.32922,
+      "dividend_per_holder": 180831.2
+    },
+    {
+      "date": "2025-11-26",
+      "np": 8.6,
+      "expected_np": 11.4914,
+      "dividend_per_holder": -115656.2
+    },
+    {
+      "date": "2025-12-02",
+      "np": 9.15,
+      "expected_np": 10.75927,
+      "dividend_per_holder": -64370.8
+    },
+    {
+      "date": "2025-12-03",
+      "np": 2.5,
+      "expected_np": 11.09696,
+      "dividend_per_holder": -343878.6
+    },
+    {
+      "date": "2025-12-14",
+      "np": 7.65,
+      "expected_np": 3.45739,
+      "dividend_per_holder": 167704.4
+    },
+    {
+      "date": "2025-12-18",
+      "np": 16.65,
+      "expected_np": 8.33209,
+      "dividend_per_holder": 332716.4
+    },
+    {
+      "date": "2025-12-20",
+      "np": 14.95,
+      "expected_np": 13.31563,
+      "dividend_per_holder": 65374.8
+    },
+    {
+      "date": "2025-12-22",
+      "np": 18.8,
+      "expected_np": 11.75082,
+      "dividend_per_holder": 281967.2
+    },
+    {
+      "date": "2025-12-23",
+      "np": 7.7,
+      "expected_np": 13.30715,
+      "dividend_per_holder": -224286.0
+    },
+    {
+      "date": "2025-12-26",
+      "np": 10.0,
+      "expected_np": 13.44343,
+      "dividend_per_holder": -137737.2
+    },
+    {
+      "date": "2025-12-28",
+      "np": 17.95,
+      "expected_np": 11.45283,
+      "dividend_per_holder": 259886.6
+    },
+    {
+      "date": "2025-12-29",
+      "np": 17.85,
+      "expected_np": 13.16633,
+      "dividend_per_holder": 187346.6
+    },
+    {
+      "date": "2025-12-31",
+      "np": 2.25,
+      "expected_np": 10.82951,
+      "dividend_per_holder": -343180.6
+    },
+    {
+      "date": "2026-01-02",
+      "np": 12.25,
+      "expected_np": 10.80729,
+      "dividend_per_holder": 57708.4
+    },
+    {
+      "date": "2026-01-03",
+      "np": 24.45,
+      "expected_np": 11.20335,
+      "dividend_per_holder": 529865.8
+    },
+    {
+      "date": "2026-01-05",
+      "np": 11.75,
+      "expected_np": 13.92425,
+      "dividend_per_holder": -86970.0
+    },
+    {
+      "date": "2026-01-07",
+      "np": 10.05,
+      "expected_np": 12.30498,
+      "dividend_per_holder": -90199.4
+    },
+    {
+      "date": "2026-01-09",
+      "np": 11.35,
+      "expected_np": 11.98292,
+      "dividend_per_holder": -25317.0
+    },
+    {
+      "date": "2026-01-11",
+      "np": 7.0,
+      "expected_np": 12.89449,
+      "dividend_per_holder": -235779.6
+    },
+    {
+      "date": "2026-01-13",
+      "np": 3.8,
+      "expected_np": 12.18451,
+      "dividend_per_holder": -335380.6
+    },
+    {
+      "date": "2026-01-15",
+      "np": 5.25,
+      "expected_np": 11.66416,
+      "dividend_per_holder": -256566.6
+    },
+    {
+      "date": "2026-01-17",
+      "np": 13.9,
+      "expected_np": 11.70893,
+      "dividend_per_holder": 87642.6
+    },
+    {
+      "date": "2026-01-18",
+      "np": 22.15,
+      "expected_np": 12.29978,
+      "dividend_per_holder": 394008.8
+    },
+    {
+      "date": "2026-01-22",
+      "np": 6.85,
+      "expected_np": 12.89967,
+      "dividend_per_holder": -241986.8
+    },
+    {
+      "date": "2026-01-23",
+      "np": 16.85,
+      "expected_np": 12.10191,
+      "dividend_per_holder": 189923.4
+    },
+    {
+      "date": "2026-01-26",
+      "np": 9.15,
+      "expected_np": 11.46426,
+      "dividend_per_holder": -92570.4
+    },
+    {
+      "date": "2026-01-27",
+      "np": 14.75,
+      "expected_np": 12.75865,
+      "dividend_per_holder": 79653.8
+    },
+    {
+      "date": "2026-01-30",
+      "np": 2.6,
+      "expected_np": 11.956,
+      "dividend_per_holder": -374240.0
+    },
+    {
+      "date": "2026-02-01",
+      "np": 11.7,
+      "expected_np": 12.04011,
+      "dividend_per_holder": -13604.4
+    },
+    {
+      "date": "2026-02-03",
+      "np": 18.55,
+      "expected_np": 11.08395,
+      "dividend_per_holder": 298641.8
+    },
+    {
+      "date": "2026-02-06",
+      "np": 12.2,
+      "expected_np": 12.36331,
+      "dividend_per_holder": -6532.6
+    },
+    {
+      "date": "2026-02-07",
+      "np": 22.1,
+      "expected_np": 13.09928,
+      "dividend_per_holder": 360028.8
+    },
+    {
+      "date": "2026-02-09",
+      "np": 15.3,
+      "expected_np": 13.48447,
+      "dividend_per_holder": 72621.2
+    },
+    {
+      "date": "2026-02-11",
+      "np": 8.9,
+      "expected_np": 13.2296,
+      "dividend_per_holder": -173184.0
+    },
+    {
+      "date": "2026-02-12",
+      "np": 30.4,
+      "expected_np": 14.09813,
+      "dividend_per_holder": 652074.6
+    },
+    {
+      "date": "2026-02-20",
+      "np": 14.05,
+      "expected_np": 13.74581,
+      "dividend_per_holder": 12167.4
+    },
+    {
+      "date": "2026-02-22",
+      "np": 22.05,
+      "expected_np": 10.93079,
+      "dividend_per_holder": 444768.2
+    },
+    {
+      "date": "2026-02-24",
+      "np": 17.5,
+      "expected_np": 14.01524,
+      "dividend_per_holder": 139390.2
+    },
+    {
+      "date": "2026-02-28",
+      "np": 7.7,
+      "expected_np": 13.96713,
+      "dividend_per_holder": -250685.4
+    },
+    {
+      "date": "2026-03-01",
+      "np": 10.1,
+      "expected_np": 13.66657,
+      "dividend_per_holder": -142662.8
+    },
+    {
+      "date": "2026-03-04",
+      "np": 11.55,
+      "expected_np": 14.66351,
+      "dividend_per_holder": -124540.4
+    },
+    {
+      "date": "2026-03-06",
+      "np": 14.75,
+      "expected_np": 10.45155,
+      "dividend_per_holder": 171938.0
+    },
+    {
+      "date": "2026-03-08",
+      "np": 9.55,
+      "expected_np": 12.09166,
+      "dividend_per_holder": -101666.6
+    },
+    {
+      "date": "2026-03-10",
+      "np": 11.7,
+      "expected_np": 11.36277,
+      "dividend_per_holder": 13489.2
+    },
+    {
+      "date": "2026-03-13",
+      "np": 29.6,
+      "expected_np": 14.17943,
+      "dividend_per_holder": 616822.8
+    },
+    {
+      "date": "2026-03-15",
+      "np": 15.45,
+      "expected_np": 15.21836,
+      "dividend_per_holder": 9265.6
+    },
+    {
+      "date": "2026-03-16",
+      "np": 12.2,
+      "expected_np": 15.46034,
+      "dividend_per_holder": -130413.6
+    },
+    {
+      "date": "2026-03-18",
+      "np": 26.8,
+      "expected_np": 14.72061,
+      "dividend_per_holder": 483175.6
+    },
+    {
+      "date": "2026-03-20",
+      "np": 25.3,
+      "expected_np": 13.93201,
+      "dividend_per_holder": 454719.6
+    },
+    {
+      "date": "2026-03-22",
+      "np": 14.3,
+      "expected_np": 15.61891,
+      "dividend_per_holder": -52756.6
+    },
+    {
+      "date": "2026-03-23",
+      "np": 8.7,
+      "expected_np": 16.60505,
+      "dividend_per_holder": -316202.0
+    },
+    {
+      "date": "2026-03-25",
+      "np": 23.45,
+      "expected_np": 13.61684,
+      "dividend_per_holder": 393326.4
+    },
+    {
+      "date": "2026-03-27",
+      "np": -1.05,
+      "expected_np": 14.50234,
+      "dividend_per_holder": -622093.6
+    },
+    {
+      "date": "2026-03-29",
+      "np": 8.65,
+      "expected_np": 17.50797,
+      "dividend_per_holder": -354319.0
+    },
+    {
+      "date": "2026-03-31",
+      "np": 0.65,
+      "expected_np": 13.31665,
+      "dividend_per_holder": -506666.0
+    },
+    {
+      "date": "2026-04-02",
+      "np": 5.0,
+      "expected_np": 14.6304,
+      "dividend_per_holder": -385216.0
+    },
+    {
+      "date": "2026-04-06",
+      "np": 15.2,
+      "expected_np": 12.14222,
+      "dividend_per_holder": 122311.0
+    },
+    {
+      "date": "2026-04-08",
+      "np": 17.25,
+      "expected_np": 11.92412,
+      "dividend_per_holder": 213035.0
+    },
+    {
+      "date": "2026-04-10",
+      "np": 18.05,
+      "expected_np": 12.41021,
+      "dividend_per_holder": 225591.4
+    },
+    {
+      "date": "2026-04-12",
+      "np": 12.7,
+      "expected_np": 13.65465,
+      "dividend_per_holder": -38186.2
+    }
+  ],
+  "3917376": [
+    {
+      "date": "2025-10-22",
+      "np": 15.5,
+      "expected_np": 12.59749,
+      "dividend_per_holder": 116100.2
+    },
+    {
+      "date": "2025-10-24",
+      "np": 9.4,
+      "expected_np": 13.5597,
+      "dividend_per_holder": -166388.2
+    },
+    {
+      "date": "2025-10-26",
+      "np": 26.9,
+      "expected_np": 13.81775,
+      "dividend_per_holder": 523290.0
+    },
+    {
+      "date": "2025-10-27",
+      "np": 9.65,
+      "expected_np": 15.6976,
+      "dividend_per_holder": -241904.2
+    },
+    {
+      "date": "2025-10-29",
+      "np": 24.35,
+      "expected_np": 13.64465,
+      "dividend_per_holder": 428214.0
+    },
+    {
+      "date": "2025-10-31",
+      "np": 25.65,
+      "expected_np": 13.93767,
+      "dividend_per_holder": 468493.2
+    },
+    {
+      "date": "2025-11-01",
+      "np": 3.6,
+      "expected_np": 13.42851,
+      "dividend_per_holder": -393140.6
+    },
+    {
+      "date": "2025-11-03",
+      "np": 22.75,
+      "expected_np": 15.37193,
+      "dividend_per_holder": 295122.6
+    },
+    {
+      "date": "2025-11-05",
+      "np": 30.6,
+      "expected_np": 17.86427,
+      "dividend_per_holder": 509429.0
+    },
+    {
+      "date": "2025-11-07",
+      "np": 19.2,
+      "expected_np": 15.42263,
+      "dividend_per_holder": 151094.8
+    },
+    {
+      "date": "2025-11-09",
+      "np": 12.7,
+      "expected_np": 16.70396,
+      "dividend_per_holder": -160158.4
+    },
+    {
+      "date": "2025-11-11",
+      "np": 15.0,
+      "expected_np": 17.3329,
+      "dividend_per_holder": -93316.2
+    },
+    {
+      "date": "2025-11-12",
+      "np": 14.4,
+      "expected_np": 19.34644,
+      "dividend_per_holder": -197857.6
+    },
+    {
+      "date": "2025-11-16",
+      "np": 22.6,
+      "expected_np": 16.94631,
+      "dividend_per_holder": 226147.4
+    },
+    {
+      "date": "2025-11-18",
+      "np": 14.25,
+      "expected_np": 20.39417,
+      "dividend_per_holder": -245767.0
+    },
+    {
+      "date": "2025-11-21",
+      "np": 19.6,
+      "expected_np": 20.06768,
+      "dividend_per_holder": -18707.4
+    },
+    {
+      "date": "2025-11-23",
+      "np": 27.85,
+      "expected_np": 18.19091,
+      "dividend_per_holder": 386363.4
+    },
+    {
+      "date": "2025-11-26",
+      "np": 21.05,
+      "expected_np": 19.93057,
+      "dividend_per_holder": 44777.2
+    },
+    {
+      "date": "2025-11-29",
+      "np": 35.8,
+      "expected_np": 19.59521,
+      "dividend_per_holder": 648191.4
+    },
+    {
+      "date": "2025-11-30",
+      "np": 11.8,
+      "expected_np": 21.17065,
+      "dividend_per_holder": -374826.0
+    },
+    {
+      "date": "2025-12-02",
+      "np": 31.4,
+      "expected_np": 21.4586,
+      "dividend_per_holder": 397655.8
+    },
+    {
+      "date": "2025-12-05",
+      "np": 22.55,
+      "expected_np": 22.48812,
+      "dividend_per_holder": 2475.2
+    },
+    {
+      "date": "2025-12-07",
+      "np": 24.25,
+      "expected_np": 20.80841,
+      "dividend_per_holder": 137663.6
+    },
+    {
+      "date": "2025-12-11",
+      "np": 19.75,
+      "expected_np": 21.71663,
+      "dividend_per_holder": -78665.2
+    },
+    {
+      "date": "2025-12-15",
+      "np": 26.05,
+      "expected_np": 18.81258,
+      "dividend_per_holder": 289496.8
+    },
+    {
+      "date": "2025-12-19",
+      "np": 22.15,
+      "expected_np": 22.85107,
+      "dividend_per_holder": -28042.8
+    },
+    {
+      "date": "2025-12-22",
+      "np": 21.75,
+      "expected_np": 22.37212,
+      "dividend_per_holder": -24885.0
+    },
+    {
+      "date": "2025-12-26",
+      "np": 26.45,
+      "expected_np": 21.08762,
+      "dividend_per_holder": 214495.0
+    },
+    {
+      "date": "2025-12-28",
+      "np": 23.2,
+      "expected_np": 20.40241,
+      "dividend_per_holder": 111903.4
+    },
+    {
+      "date": "2025-12-30",
+      "np": 20.25,
+      "expected_np": 22.71295,
+      "dividend_per_holder": -98518.2
+    },
+    {
+      "date": "2026-01-01",
+      "np": 14.4,
+      "expected_np": 21.92651,
+      "dividend_per_holder": -301060.6
+    },
+    {
+      "date": "2026-01-03",
+      "np": 41.25,
+      "expected_np": 20.16147,
+      "dividend_per_holder": 843541.2
+    },
+    {
+      "date": "2026-01-05",
+      "np": -1.05,
+      "expected_np": 23.23958,
+      "dividend_per_holder": -971583.4
+    },
+    {
+      "date": "2026-01-07",
+      "np": 16.5,
+      "expected_np": 21.45654,
+      "dividend_per_holder": -198261.6
+    },
+    {
+      "date": "2026-01-09",
+      "np": 16.4,
+      "expected_np": 21.11209,
+      "dividend_per_holder": -188483.6
+    },
+    {
+      "date": "2026-01-10",
+      "np": 10.9,
+      "expected_np": 20.64609,
+      "dividend_per_holder": -389843.8
+    },
+    {
+      "date": "2026-01-15",
+      "np": 9.75,
+      "expected_np": 22.14642,
+      "dividend_per_holder": -495857.0
+    },
+    {
+      "date": "2026-01-17",
+      "np": 29.75,
+      "expected_np": 20.74172,
+      "dividend_per_holder": 360331.2
+    },
+    {
+      "date": "2026-01-19",
+      "np": 16.55,
+      "expected_np": 18.97492,
+      "dividend_per_holder": -96996.8
+    },
+    {
+      "date": "2026-01-21",
+      "np": 23.2,
+      "expected_np": 23.26136,
+      "dividend_per_holder": -2454.4
+    },
+    {
+      "date": "2026-01-23",
+      "np": 16.7,
+      "expected_np": 21.89171,
+      "dividend_per_holder": -207668.6
+    },
+    {
+      "date": "2026-01-24",
+      "np": 23.45,
+      "expected_np": 22.3626,
+      "dividend_per_holder": 43496.0
+    },
+    {
+      "date": "2026-01-26",
+      "np": 18.05,
+      "expected_np": 22.96735,
+      "dividend_per_holder": -196694.0
+    },
+    {
+      "date": "2026-01-28",
+      "np": 10.5,
+      "expected_np": 22.44072,
+      "dividend_per_holder": -477629.0
+    },
+    {
+      "date": "2026-02-01",
+      "np": 22.95,
+      "expected_np": 20.69204,
+      "dividend_per_holder": 90318.2
+    },
+    {
+      "date": "2026-02-03",
+      "np": 21.5,
+      "expected_np": 19.41417,
+      "dividend_per_holder": 83433.2
+    },
+    {
+      "date": "2026-02-06",
+      "np": 10.3,
+      "expected_np": 21.09109,
+      "dividend_per_holder": -431643.8
+    },
+    {
+      "date": "2026-02-08",
+      "np": 14.95,
+      "expected_np": 20.13962,
+      "dividend_per_holder": -207585.0
+    },
+    {
+      "date": "2026-02-11",
+      "np": 13.7,
+      "expected_np": 21.83209,
+      "dividend_per_holder": -325283.8
+    },
+    {
+      "date": "2026-02-19",
+      "np": 23.3,
+      "expected_np": 18.24164,
+      "dividend_per_holder": 202334.2
+    },
+    {
+      "date": "2026-02-22",
+      "np": 19.45,
+      "expected_np": 21.32576,
+      "dividend_per_holder": -75030.6
+    },
+    {
+      "date": "2026-02-25",
+      "np": 11.9,
+      "expected_np": 20.89439,
+      "dividend_per_holder": -359775.6
+    },
+    {
+      "date": "2026-02-27",
+      "np": 30.4,
+      "expected_np": 22.61233,
+      "dividend_per_holder": 311506.8
+    },
+    {
+      "date": "2026-03-01",
+      "np": 19.4,
+      "expected_np": 20.20274,
+      "dividend_per_holder": -32109.6
+    },
+    {
+      "date": "2026-03-04",
+      "np": 11.6,
+      "expected_np": 20.80359,
+      "dividend_per_holder": -368143.6
+    },
+    {
+      "date": "2026-03-06",
+      "np": 20.8,
+      "expected_np": 21.58588,
+      "dividend_per_holder": -31435.2
+    },
+    {
+      "date": "2026-03-08",
+      "np": 15.35,
+      "expected_np": 19.07219,
+      "dividend_per_holder": -148887.8
+    },
+    {
+      "date": "2026-03-10",
+      "np": 7.95,
+      "expected_np": 18.88791,
+      "dividend_per_holder": -437516.6
+    },
+    {
+      "date": "2026-03-12",
+      "np": 21.95,
+      "expected_np": 14.99094,
+      "dividend_per_holder": 278362.2
+    },
+    {
+      "date": "2026-03-14",
+      "np": 8.8,
+      "expected_np": 21.55567,
+      "dividend_per_holder": -510226.8
+    },
+    {
+      "date": "2026-03-16",
+      "np": 32.35,
+      "expected_np": 17.99545,
+      "dividend_per_holder": 574181.8
+    },
+    {
+      "date": "2026-03-18",
+      "np": 24.45,
+      "expected_np": 20.11495,
+      "dividend_per_holder": 173401.8
+    },
+    {
+      "date": "2026-03-20",
+      "np": 20.95,
+      "expected_np": 20.61764,
+      "dividend_per_holder": 13294.2
+    },
+    {
+      "date": "2026-03-22",
+      "np": 12.85,
+      "expected_np": 20.98017,
+      "dividend_per_holder": -325207.0
+    },
+    {
+      "date": "2026-03-25",
+      "np": 25.5,
+      "expected_np": 19.23284,
+      "dividend_per_holder": 250686.4
+    },
+    {
+      "date": "2026-03-30",
+      "np": 11.65,
+      "expected_np": 21.01597,
+      "dividend_per_holder": -374638.8
+    },
+    {
+      "date": "2026-04-01",
+      "np": 33.35,
+      "expected_np": 22.52514,
+      "dividend_per_holder": 432994.4
+    },
+    {
+      "date": "2026-04-03",
+      "np": 18.8,
+      "expected_np": 23.14173,
+      "dividend_per_holder": -173669.2
+    },
+    {
+      "date": "2026-04-05",
+      "np": 16.7,
+      "expected_np": 20.57506,
+      "dividend_per_holder": -155002.6
+    },
+    {
+      "date": "2026-04-07",
+      "np": 19.05,
+      "expected_np": 20.147,
+      "dividend_per_holder": -43880.0
+    },
+    {
+      "date": "2026-04-10",
+      "np": 10.5,
+      "expected_np": 23.5744,
+      "dividend_per_holder": -522976.2
+    }
+  ],
+  "5061575": [
+    {
+      "date": "2025-10-22",
+      "np": 6.15,
+      "expected_np": 6.40672,
+      "dividend_per_holder": -10269.0
+    },
+    {
+      "date": "2025-10-25",
+      "np": 4.3,
+      "expected_np": 4.59679,
+      "dividend_per_holder": -11871.8
+    },
+    {
+      "date": "2025-10-26",
+      "np": 13.6,
+      "expected_np": 5.63421,
+      "dividend_per_holder": 318631.6
+    },
+    {
+      "date": "2025-10-28",
+      "np": 13.5,
+      "expected_np": 5.75985,
+      "dividend_per_holder": 309606.0
+    },
+    {
+      "date": "2025-10-30",
+      "np": -3.95,
+      "expected_np": 7.03547,
+      "dividend_per_holder": -439418.8
+    },
+    {
+      "date": "2025-11-01",
+      "np": -3.25,
+      "expected_np": 5.48001,
+      "dividend_per_holder": -349200.6
+    },
+    {
+      "date": "2025-11-02",
+      "np": 19.9,
+      "expected_np": 6.41752,
+      "dividend_per_holder": 539299.0
+    },
+    {
+      "date": "2025-11-04",
+      "np": 12.1,
+      "expected_np": 7.27872,
+      "dividend_per_holder": 192851.0
+    },
+    {
+      "date": "2025-11-07",
+      "np": 19.45,
+      "expected_np": 7.16938,
+      "dividend_per_holder": 491224.8
+    },
+    {
+      "date": "2025-11-10",
+      "np": 18.3,
+      "expected_np": 9.58144,
+      "dividend_per_holder": 348742.4
+    },
+    {
+      "date": "2025-11-12",
+      "np": 4.3,
+      "expected_np": 10.65605,
+      "dividend_per_holder": -254242.2
+    },
+    {
+      "date": "2025-11-14",
+      "np": 25.7,
+      "expected_np": 9.16026,
+      "dividend_per_holder": 661589.4
+    },
+    {
+      "date": "2025-11-15",
+      "np": -0.7,
+      "expected_np": 8.65768,
+      "dividend_per_holder": -374307.4
+    },
+    {
+      "date": "2025-11-17",
+      "np": 19.9,
+      "expected_np": 8.70027,
+      "dividend_per_holder": 447989.0
+    },
+    {
+      "date": "2025-11-19",
+      "np": 22.2,
+      "expected_np": 10.61143,
+      "dividend_per_holder": 463542.8
+    },
+    {
+      "date": "2025-11-22",
+      "np": 19.85,
+      "expected_np": 11.51155,
+      "dividend_per_holder": 333537.8
+    },
+    {
+      "date": "2025-11-23",
+      "np": 20.75,
+      "expected_np": 10.12454,
+      "dividend_per_holder": 425018.4
+    },
+    {
+      "date": "2025-11-26",
+      "np": -5.65,
+      "expected_np": 10.69592,
+      "dividend_per_holder": -653837.0
+    },
+    {
+      "date": "2025-11-28",
+      "np": 5.45,
+      "expected_np": 10.75549,
+      "dividend_per_holder": -212219.8
+    },
+    {
+      "date": "2025-11-29",
+      "np": 16.6,
+      "expected_np": 9.59643,
+      "dividend_per_holder": 280142.8
+    },
+    {
+      "date": "2025-12-01",
+      "np": 7.0,
+      "expected_np": 10.41864,
+      "dividend_per_holder": -136745.6
+    },
+    {
+      "date": "2025-12-03",
+      "np": 2.8,
+      "expected_np": 9.69864,
+      "dividend_per_holder": -275945.8
+    },
+    {
+      "date": "2025-12-05",
+      "np": 17.05,
+      "expected_np": 9.90873,
+      "dividend_per_holder": 285650.8
+    },
+    {
+      "date": "2025-12-07",
+      "np": 7.05,
+      "expected_np": 10.45849,
+      "dividend_per_holder": -136339.8
+    },
+    {
+      "date": "2025-12-12",
+      "np": 27.8,
+      "expected_np": 11.6155,
+      "dividend_per_holder": 647379.8
+    },
+    {
+      "date": "2025-12-14",
+      "np": 20.55,
+      "expected_np": 11.17395,
+      "dividend_per_holder": 375042.0
+    },
+    {
+      "date": "2025-12-18",
+      "np": 24.75,
+      "expected_np": 12.9269,
+      "dividend_per_holder": 472923.8
+    },
+    {
+      "date": "2025-12-20",
+      "np": 10.1,
+      "expected_np": 11.66584,
+      "dividend_per_holder": -62633.6
+    },
+    {
+      "date": "2025-12-22",
+      "np": 10.6,
+      "expected_np": 12.15736,
+      "dividend_per_holder": -62294.4
+    },
+    {
+      "date": "2025-12-23",
+      "np": 9.75,
+      "expected_np": 13.49547,
+      "dividend_per_holder": -149818.8
+    },
+    {
+      "date": "2025-12-26",
+      "np": 12.55,
+      "expected_np": 10.28337,
+      "dividend_per_holder": 90665.0
+    },
+    {
+      "date": "2025-12-31",
+      "np": 19.35,
+      "expected_np": 8.66384,
+      "dividend_per_holder": 427446.4
+    },
+    {
+      "date": "2026-01-02",
+      "np": 15.8,
+      "expected_np": 10.54055,
+      "dividend_per_holder": 210377.8
+    },
+    {
+      "date": "2026-01-03",
+      "np": 6.95,
+      "expected_np": 12.48669,
+      "dividend_per_holder": -221467.8
+    },
+    {
+      "date": "2026-01-05",
+      "np": 16.55,
+      "expected_np": 9.60956,
+      "dividend_per_holder": 277617.4
+    },
+    {
+      "date": "2026-01-07",
+      "np": 2.4,
+      "expected_np": 11.2718,
+      "dividend_per_holder": -354872.0
+    },
+    {
+      "date": "2026-01-08",
+      "np": 15.45,
+      "expected_np": 12.23818,
+      "dividend_per_holder": 128472.6
+    },
+    {
+      "date": "2026-01-10",
+      "np": 16.65,
+      "expected_np": 12.00973,
+      "dividend_per_holder": 185610.6
+    },
+    {
+      "date": "2026-01-12",
+      "np": 12.1,
+      "expected_np": 9.74477,
+      "dividend_per_holder": 94209.2
+    },
+    {
+      "date": "2026-01-15",
+      "np": 17.3,
+      "expected_np": 10.7597,
+      "dividend_per_holder": 261611.8
+    },
+    {
+      "date": "2026-01-17",
+      "np": 23.1,
+      "expected_np": 10.8475,
+      "dividend_per_holder": 490100.0
+    },
+    {
+      "date": "2026-01-18",
+      "np": 9.25,
+      "expected_np": 11.29345,
+      "dividend_per_holder": -81738.0
+    },
+    {
+      "date": "2026-01-21",
+      "np": 12.75,
+      "expected_np": 11.34978,
+      "dividend_per_holder": 56008.6
+    },
+    {
+      "date": "2026-01-22",
+      "np": 10.2,
+      "expected_np": 11.55512,
+      "dividend_per_holder": -54204.8
+    },
+    {
+      "date": "2026-01-24",
+      "np": 10.7,
+      "expected_np": 13.52593,
+      "dividend_per_holder": -113037.4
+    },
+    {
+      "date": "2026-01-26",
+      "np": 12.55,
+      "expected_np": 12.19012,
+      "dividend_per_holder": 14395.0
+    },
+    {
+      "date": "2026-01-28",
+      "np": 7.75,
+      "expected_np": 10.52632,
+      "dividend_per_holder": -111053.0
+    },
+    {
+      "date": "2026-01-29",
+      "np": 29.4,
+      "expected_np": 10.83418,
+      "dividend_per_holder": 742632.6
+    },
+    {
+      "date": "2026-01-31",
+      "np": 7.55,
+      "expected_np": 11.92459,
+      "dividend_per_holder": -174983.6
+    },
+    {
+      "date": "2026-02-02",
+      "np": 5.6,
+      "expected_np": 14.10146,
+      "dividend_per_holder": -340058.4
+    },
+    {
+      "date": "2026-02-05",
+      "np": 12.65,
+      "expected_np": 11.90783,
+      "dividend_per_holder": 29686.6
+    },
+    {
+      "date": "2026-02-07",
+      "np": 17.75,
+      "expected_np": 12.79637,
+      "dividend_per_holder": 198145.0
+    },
+    {
+      "date": "2026-02-09",
+      "np": 14.95,
+      "expected_np": 12.38666,
+      "dividend_per_holder": 102533.4
+    },
+    {
+      "date": "2026-02-11",
+      "np": 15.05,
+      "expected_np": 13.6119,
+      "dividend_per_holder": 57523.8
+    },
+    {
+      "date": "2026-02-19",
+      "np": 7.35,
+      "expected_np": 11.97734,
+      "dividend_per_holder": -185093.8
+    },
+    {
+      "date": "2026-02-20",
+      "np": 26.6,
+      "expected_np": 12.26942,
+      "dividend_per_holder": 573223.0
+    },
+    {
+      "date": "2026-02-22",
+      "np": 21.25,
+      "expected_np": 14.25305,
+      "dividend_per_holder": 279878.0
+    },
+    {
+      "date": "2026-02-24",
+      "np": 19.15,
+      "expected_np": 12.52895,
+      "dividend_per_holder": 264841.8
+    },
+    {
+      "date": "2026-02-26",
+      "np": 22.75,
+      "expected_np": 11.90581,
+      "dividend_per_holder": 433767.4
+    },
+    {
+      "date": "2026-02-28",
+      "np": 6.2,
+      "expected_np": 13.48227,
+      "dividend_per_holder": -291290.8
+    },
+    {
+      "date": "2026-03-03",
+      "np": 8.95,
+      "expected_np": 13.22428,
+      "dividend_per_holder": -170971.2
+    },
+    {
+      "date": "2026-03-04",
+      "np": 11.25,
+      "expected_np": 11.67253,
+      "dividend_per_holder": -16901.4
+    },
+    {
+      "date": "2026-03-06",
+      "np": 19.9,
+      "expected_np": 13.62292,
+      "dividend_per_holder": 251083.2
+    },
+    {
+      "date": "2026-03-08",
+      "np": 8.5,
+      "expected_np": 12.46614,
+      "dividend_per_holder": -158645.6
+    },
+    {
+      "date": "2026-03-10",
+      "np": 11.0,
+      "expected_np": 13.12517,
+      "dividend_per_holder": -85007.0
+    },
+    {
+      "date": "2026-03-11",
+      "np": 18.4,
+      "expected_np": 14.27393,
+      "dividend_per_holder": 165042.8
+    },
+    {
+      "date": "2026-03-14",
+      "np": 14.1,
+      "expected_np": 12.07822,
+      "dividend_per_holder": 80871.2
+    },
+    {
+      "date": "2026-03-17",
+      "np": 20.1,
+      "expected_np": 13.36656,
+      "dividend_per_holder": 269337.4
+    },
+    {
+      "date": "2026-03-19",
+      "np": 12.0,
+      "expected_np": 12.00205,
+      "dividend_per_holder": -82.2
+    },
+    {
+      "date": "2026-03-21",
+      "np": 4.45,
+      "expected_np": 12.84557,
+      "dividend_per_holder": -335823.0
+    },
+    {
+      "date": "2026-03-24",
+      "np": 8.3,
+      "expected_np": 12.00649,
+      "dividend_per_holder": -148259.6
+    },
+    {
+      "date": "2026-03-26",
+      "np": 24.35,
+      "expected_np": 9.98009,
+      "dividend_per_holder": 574796.2
+    },
+    {
+      "date": "2026-03-28",
+      "np": 0.8,
+      "expected_np": 13.56889,
+      "dividend_per_holder": -510755.8
+    },
+    {
+      "date": "2026-03-29",
+      "np": 3.0,
+      "expected_np": 12.58241,
+      "dividend_per_holder": -383296.6
+    },
+    {
+      "date": "2026-03-31",
+      "np": 2.9,
+      "expected_np": 13.28882,
+      "dividend_per_holder": -415553.0
+    },
+    {
+      "date": "2026-04-02",
+      "np": 11.4,
+      "expected_np": 12.13286,
+      "dividend_per_holder": -29314.4
+    },
+    {
+      "date": "2026-04-03",
+      "np": 16.95,
+      "expected_np": 14.02054,
+      "dividend_per_holder": 117178.4
+    },
+    {
+      "date": "2026-04-05",
+      "np": 1.05,
+      "expected_np": 11.88027,
+      "dividend_per_holder": -433210.8
+    },
+    {
+      "date": "2026-04-07",
+      "np": 3.15,
+      "expected_np": 11.27844,
+      "dividend_per_holder": -325137.8
+    },
+    {
+      "date": "2026-04-10",
+      "np": -0.85,
+      "expected_np": 12.0167,
+      "dividend_per_holder": -514668.2
+    },
+    {
+      "date": "2026-04-12",
+      "np": 10.55,
+      "expected_np": 10.52261,
+      "dividend_per_holder": 1095.4
+    }
+  ],
+  "4066259": [
+    {
+      "date": "2025-11-08",
+      "np": 18.7,
+      "expected_np": 14.02592,
+      "dividend_per_holder": 186963.2
+    },
+    {
+      "date": "2025-11-10",
+      "np": 10.15,
+      "expected_np": 14.07645,
+      "dividend_per_holder": -157058.0
+    },
+    {
+      "date": "2025-11-12",
+      "np": 0.55,
+      "expected_np": 14.57339,
+      "dividend_per_holder": -560935.8
+    },
+    {
+      "date": "2025-11-14",
+      "np": 21.55,
+      "expected_np": 14.28315,
+      "dividend_per_holder": 290674.0
+    },
+    {
+      "date": "2025-11-16",
+      "np": 24.25,
+      "expected_np": 15.69333,
+      "dividend_per_holder": 342266.6
+    },
+    {
+      "date": "2025-11-18",
+      "np": 17.95,
+      "expected_np": 16.01896,
+      "dividend_per_holder": 77241.6
+    },
+    {
+      "date": "2025-11-20",
+      "np": 25.95,
+      "expected_np": 15.08779,
+      "dividend_per_holder": 434488.2
+    },
+    {
+      "date": "2025-11-23",
+      "np": 17.55,
+      "expected_np": 15.10336,
+      "dividend_per_holder": 97865.4
+    },
+    {
+      "date": "2025-11-26",
+      "np": 32.45,
+      "expected_np": 15.09961,
+      "dividend_per_holder": 694015.6
+    },
+    {
+      "date": "2025-11-28",
+      "np": 8.4,
+      "expected_np": 15.03371,
+      "dividend_per_holder": -265348.4
+    },
+    {
+      "date": "2025-11-30",
+      "np": 18.6,
+      "expected_np": 16.12391,
+      "dividend_per_holder": 99043.6
+    },
+    {
+      "date": "2025-12-02",
+      "np": 22.55,
+      "expected_np": 16.4252,
+      "dividend_per_holder": 244992.0
+    },
+    {
+      "date": "2025-12-03",
+      "np": 17.5,
+      "expected_np": 14.65689,
+      "dividend_per_holder": 113724.2
+    },
+    {
+      "date": "2025-12-05",
+      "np": 17.8,
+      "expected_np": 15.51172,
+      "dividend_per_holder": 91531.2
+    },
+    {
+      "date": "2025-12-08",
+      "np": 8.15,
+      "expected_np": 17.00561,
+      "dividend_per_holder": -354224.6
+    },
+    {
+      "date": "2025-12-10",
+      "np": 14.35,
+      "expected_np": 15.10988,
+      "dividend_per_holder": -30395.2
+    },
+    {
+      "date": "2025-12-13",
+      "np": 17.9,
+      "expected_np": 13.37169,
+      "dividend_per_holder": 181132.2
+    },
+    {
+      "date": "2025-12-18",
+      "np": 2.75,
+      "expected_np": 17.71292,
+      "dividend_per_holder": -598517.0
+    },
+    {
+      "date": "2025-12-19",
+      "np": 6.65,
+      "expected_np": 13.76543,
+      "dividend_per_holder": -284617.4
+    },
+    {
+      "date": "2025-12-21",
+      "np": 23.2,
+      "expected_np": 14.65475,
+      "dividend_per_holder": 341810.0
+    },
+    {
+      "date": "2025-12-23",
+      "np": 2.1,
+      "expected_np": 13.44221,
+      "dividend_per_holder": -453688.6
+    },
+    {
+      "date": "2025-12-25",
+      "np": 24.85,
+      "expected_np": 13.01073,
+      "dividend_per_holder": 473570.8
+    },
+    {
+      "date": "2025-12-29",
+      "np": 4.5,
+      "expected_np": 15.03443,
+      "dividend_per_holder": -421377.4
+    },
+    {
+      "date": "2025-12-31",
+      "np": 22.3,
+      "expected_np": 14.64144,
+      "dividend_per_holder": 306342.2
+    },
+    {
+      "date": "2026-01-02",
+      "np": 16.45,
+      "expected_np": 16.32929,
+      "dividend_per_holder": 4828.4
+    },
+    {
+      "date": "2026-01-03",
+      "np": 17.95,
+      "expected_np": 16.59283,
+      "dividend_per_holder": 54286.6
+    },
+    {
+      "date": "2026-01-06",
+      "np": 0.9,
+      "expected_np": 15.24557,
+      "dividend_per_holder": -573822.8
+    },
+    {
+      "date": "2026-01-07",
+      "np": 5.2,
+      "expected_np": 15.48058,
+      "dividend_per_holder": -411223.2
+    },
+    {
+      "date": "2026-01-10",
+      "np": 17.3,
+      "expected_np": 14.02573,
+      "dividend_per_holder": 130970.8
+    },
+    {
+      "date": "2026-01-11",
+      "np": 2.2,
+      "expected_np": 15.01524,
+      "dividend_per_holder": -512609.8
+    },
+    {
+      "date": "2026-01-13",
+      "np": 10.55,
+      "expected_np": 13.44991,
+      "dividend_per_holder": -115996.4
+    },
+    {
+      "date": "2026-01-15",
+      "np": 11.05,
+      "expected_np": 15.08079,
+      "dividend_per_holder": -161231.8
+    },
+    {
+      "date": "2026-01-17",
+      "np": 22.4,
+      "expected_np": 13.3966,
+      "dividend_per_holder": 360136.0
+    },
+    {
+      "date": "2026-01-19",
+      "np": 16.7,
+      "expected_np": 16.28078,
+      "dividend_per_holder": 16768.8
+    },
+    {
+      "date": "2026-01-20",
+      "np": 5.7,
+      "expected_np": 12.69591,
+      "dividend_per_holder": -279836.6
+    },
+    {
+      "date": "2026-01-22",
+      "np": 28.4,
+      "expected_np": 15.2485,
+      "dividend_per_holder": 526060.0
+    },
+    {
+      "date": "2026-01-25",
+      "np": 4.3,
+      "expected_np": 15.23507,
+      "dividend_per_holder": -437402.8
+    },
+    {
+      "date": "2026-01-28",
+      "np": 12.45,
+      "expected_np": 12.07061,
+      "dividend_per_holder": 15175.4
+    },
+    {
+      "date": "2026-01-31",
+      "np": 7.95,
+      "expected_np": 12.76063,
+      "dividend_per_holder": -192425.2
+    },
+    {
+      "date": "2026-02-01",
+      "np": 10.85,
+      "expected_np": 12.93723,
+      "dividend_per_holder": -83489.4
+    },
+    {
+      "date": "2026-02-04",
+      "np": 18.7,
+      "expected_np": 11.98707,
+      "dividend_per_holder": 268517.0
+    },
+    {
+      "date": "2026-02-05",
+      "np": 9.65,
+      "expected_np": 12.86351,
+      "dividend_per_holder": -128540.4
+    },
+    {
+      "date": "2026-02-07",
+      "np": 7.9,
+      "expected_np": 13.61667,
+      "dividend_per_holder": -228667.0
+    },
+    {
+      "date": "2026-02-10",
+      "np": 11.8,
+      "expected_np": 12.69055,
+      "dividend_per_holder": -35622.0
+    },
+    {
+      "date": "2026-02-11",
+      "np": 26.85,
+      "expected_np": 9.72172,
+      "dividend_per_holder": 685131.0
+    },
+    {
+      "date": "2026-02-19",
+      "np": 13.25,
+      "expected_np": 11.83045,
+      "dividend_per_holder": 56782.0
+    },
+    {
+      "date": "2026-02-21",
+      "np": 11.3,
+      "expected_np": 11.52416,
+      "dividend_per_holder": -8966.6
+    },
+    {
+      "date": "2026-02-23",
+      "np": 2.9,
+      "expected_np": 10.50278,
+      "dividend_per_holder": -304111.4
+    },
+    {
+      "date": "2026-02-25",
+      "np": 7.8,
+      "expected_np": 12.78911,
+      "dividend_per_holder": -199564.4
+    },
+    {
+      "date": "2026-02-26",
+      "np": 16.4,
+      "expected_np": 13.43153,
+      "dividend_per_holder": 118738.8
+    },
+    {
+      "date": "2026-03-01",
+      "np": 0.35,
+      "expected_np": 11.42597,
+      "dividend_per_holder": -443038.8
+    },
+    {
+      "date": "2026-03-03",
+      "np": 13.25,
+      "expected_np": 12.2634,
+      "dividend_per_holder": 39463.8
+    },
+    {
+      "date": "2026-03-05",
+      "np": 23.7,
+      "expected_np": 10.75973,
+      "dividend_per_holder": 517610.6
+    },
+    {
+      "date": "2026-03-06",
+      "np": 14.3,
+      "expected_np": 12.46599,
+      "dividend_per_holder": 73360.2
+    },
+    {
+      "date": "2026-03-08",
+      "np": 16.5,
+      "expected_np": 12.46908,
+      "dividend_per_holder": 161236.8
+    },
+    {
+      "date": "2026-03-10",
+      "np": 25.4,
+      "expected_np": 12.75468,
+      "dividend_per_holder": 505812.8
+    },
+    {
+      "date": "2026-03-12",
+      "np": 19.1,
+      "expected_np": 14.78256,
+      "dividend_per_holder": 172697.6
+    },
+    {
+      "date": "2026-03-14",
+      "np": 12.65,
+      "expected_np": 14.76559,
+      "dividend_per_holder": -84623.8
+    },
+    {
+      "date": "2026-03-16",
+      "np": 14.75,
+      "expected_np": 14.33379,
+      "dividend_per_holder": 16648.2
+    },
+    {
+      "date": "2026-03-17",
+      "np": 15.45,
+      "expected_np": 14.89348,
+      "dividend_per_holder": 22260.6
+    },
+    {
+      "date": "2026-03-19",
+      "np": 13.3,
+      "expected_np": 13.08904,
+      "dividend_per_holder": 8438.2
+    },
+    {
+      "date": "2026-03-21",
+      "np": 7.75,
+      "expected_np": 15.35924,
+      "dividend_per_holder": -304369.6
+    },
+    {
+      "date": "2026-03-23",
+      "np": 7.95,
+      "expected_np": 11.68015,
+      "dividend_per_holder": -149206.2
+    },
+    {
+      "date": "2026-03-28",
+      "np": 11.5,
+      "expected_np": 13.17018,
+      "dividend_per_holder": -66807.2
+    },
+    {
+      "date": "2026-03-30",
+      "np": 4.7,
+      "expected_np": 12.60808,
+      "dividend_per_holder": -316323.4
+    },
+    {
+      "date": "2026-04-01",
+      "np": 11.95,
+      "expected_np": 11.44298,
+      "dividend_per_holder": 20280.6
+    },
+    {
+      "date": "2026-04-02",
+      "np": 21.75,
+      "expected_np": 10.88605,
+      "dividend_per_holder": 434558.0
+    },
+    {
+      "date": "2026-04-04",
+      "np": 2.8,
+      "expected_np": 10.94227,
+      "dividend_per_holder": -325690.8
+    },
+    {
+      "date": "2026-04-06",
+      "np": 7.6,
+      "expected_np": 13.26846,
+      "dividend_per_holder": -226738.6
+    },
+    {
+      "date": "2026-04-08",
+      "np": 19.65,
+      "expected_np": 13.58578,
+      "dividend_per_holder": 242568.6
+    },
+    {
+      "date": "2026-04-10",
+      "np": 14.2,
+      "expected_np": 14.90718,
+      "dividend_per_holder": -28287.4
+    },
+    {
+      "date": "2026-04-12",
+      "np": 15.95,
+      "expected_np": 13.52321,
+      "dividend_per_holder": 97071.4
+    }
+  ],
+  "3934719": [
+    {
+      "date": "2025-10-22",
+      "np": 19.75,
+      "expected_np": 10.07013,
+      "dividend_per_holder": 387194.8
+    },
+    {
+      "date": "2025-10-24",
+      "np": 4.3,
+      "expected_np": 11.93911,
+      "dividend_per_holder": -305564.4
+    },
+    {
+      "date": "2025-10-26",
+      "np": 8.35,
+      "expected_np": 11.18743,
+      "dividend_per_holder": -113497.2
+    },
+    {
+      "date": "2025-10-28",
+      "np": 4.3,
+      "expected_np": 11.11387,
+      "dividend_per_holder": -272554.8
+    },
+    {
+      "date": "2025-10-31",
+      "np": 23.45,
+      "expected_np": 11.39981,
+      "dividend_per_holder": 482007.4
+    },
+    {
+      "date": "2025-11-02",
+      "np": 15.8,
+      "expected_np": 12.17806,
+      "dividend_per_holder": 144877.4
+    },
+    {
+      "date": "2025-11-03",
+      "np": 16.05,
+      "expected_np": 13.44361,
+      "dividend_per_holder": 104255.6
+    },
+    {
+      "date": "2025-11-05",
+      "np": 23.45,
+      "expected_np": 11.62672,
+      "dividend_per_holder": 472931.2
+    },
+    {
+      "date": "2025-11-09",
+      "np": 17.75,
+      "expected_np": 13.06063,
+      "dividend_per_holder": 187574.8
+    },
+    {
+      "date": "2025-11-11",
+      "np": 5.1,
+      "expected_np": 12.07754,
+      "dividend_per_holder": -279101.8
+    },
+    {
+      "date": "2025-11-12",
+      "np": 3.9,
+      "expected_np": 12.30474,
+      "dividend_per_holder": -336189.6
+    },
+    {
+      "date": "2025-11-14",
+      "np": 0.8,
+      "expected_np": 12.43974,
+      "dividend_per_holder": -465589.8
+    },
+    {
+      "date": "2025-12-05",
+      "np": 2.95,
+      "expected_np": 8.57636,
+      "dividend_per_holder": -225054.6
+    },
+    {
+      "date": "2025-12-07",
+      "np": 19.75,
+      "expected_np": 8.6549,
+      "dividend_per_holder": 443803.8
+    },
+    {
+      "date": "2025-12-09",
+      "np": 7.4,
+      "expected_np": 9.18194,
+      "dividend_per_holder": -71277.6
+    },
+    {
+      "date": "2025-12-13",
+      "np": 20.7,
+      "expected_np": 9.97915,
+      "dividend_per_holder": 428834.0
+    },
+    {
+      "date": "2025-12-18",
+      "np": 6.85,
+      "expected_np": 13.85174,
+      "dividend_per_holder": -280069.6
+    },
+    {
+      "date": "2025-12-19",
+      "np": -7.2,
+      "expected_np": 12.88815,
+      "dividend_per_holder": -803526.0
+    },
+    {
+      "date": "2025-12-21",
+      "np": 10.4,
+      "expected_np": 12.13257,
+      "dividend_per_holder": -69302.8
+    },
+    {
+      "date": "2025-12-25",
+      "np": 2.15,
+      "expected_np": 12.00954,
+      "dividend_per_holder": -394381.8
+    },
+    {
+      "date": "2025-12-27",
+      "np": 16.55,
+      "expected_np": 11.52843,
+      "dividend_per_holder": 200862.8
+    },
+    {
+      "date": "2025-12-29",
+      "np": 15.65,
+      "expected_np": 12.54968,
+      "dividend_per_holder": 124012.8
+    },
+    {
+      "date": "2025-12-31",
+      "np": 3.25,
+      "expected_np": 12.23396,
+      "dividend_per_holder": -359358.4
+    },
+    {
+      "date": "2026-01-02",
+      "np": 11.65,
+      "expected_np": 13.02695,
+      "dividend_per_holder": -55078.0
+    },
+    {
+      "date": "2026-01-03",
+      "np": 16.1,
+      "expected_np": 12.77778,
+      "dividend_per_holder": 132888.6
+    },
+    {
+      "date": "2026-01-05",
+      "np": 2.85,
+      "expected_np": 12.33657,
+      "dividend_per_holder": -379463.0
+    },
+    {
+      "date": "2026-01-07",
+      "np": 14.25,
+      "expected_np": 11.31284,
+      "dividend_per_holder": 117486.4
+    },
+    {
+      "date": "2026-01-09",
+      "np": 8.95,
+      "expected_np": 10.45957,
+      "dividend_per_holder": -60383.0
+    },
+    {
+      "date": "2026-01-11",
+      "np": 19.85,
+      "expected_np": 11.38845,
+      "dividend_per_holder": 338461.8
+    },
+    {
+      "date": "2026-01-14",
+      "np": 8.95,
+      "expected_np": 12.23009,
+      "dividend_per_holder": -131203.6
+    },
+    {
+      "date": "2026-01-15",
+      "np": 14.75,
+      "expected_np": 10.13692,
+      "dividend_per_holder": 184523.2
+    },
+    {
+      "date": "2026-01-17",
+      "np": 15.0,
+      "expected_np": 11.96393,
+      "dividend_per_holder": 121442.6
+    },
+    {
+      "date": "2026-01-19",
+      "np": 7.25,
+      "expected_np": 13.73195,
+      "dividend_per_holder": -259278.2
+    },
+    {
+      "date": "2026-01-21",
+      "np": -0.3,
+      "expected_np": 12.902,
+      "dividend_per_holder": -528080.2
+    },
+    {
+      "date": "2026-01-24",
+      "np": 20.85,
+      "expected_np": 10.77702,
+      "dividend_per_holder": 402919.2
+    },
+    {
+      "date": "2026-01-27",
+      "np": 5.9,
+      "expected_np": 13.33947,
+      "dividend_per_holder": -297579.0
+    },
+    {
+      "date": "2026-01-28",
+      "np": 30.9,
+      "expected_np": 10.36483,
+      "dividend_per_holder": 821406.6
+    },
+    {
+      "date": "2026-01-30",
+      "np": 17.45,
+      "expected_np": 12.54759,
+      "dividend_per_holder": 196096.2
+    },
+    {
+      "date": "2026-02-01",
+      "np": 24.5,
+      "expected_np": 12.37176,
+      "dividend_per_holder": 485129.6
+    },
+    {
+      "date": "2026-02-03",
+      "np": 15.15,
+      "expected_np": 13.41402,
+      "dividend_per_holder": 69439.0
+    },
+    {
+      "date": "2026-02-04",
+      "np": 12.15,
+      "expected_np": 12.33478,
+      "dividend_per_holder": -7391.2
+    },
+    {
+      "date": "2026-02-19",
+      "np": -0.5,
+      "expected_np": 7.87572,
+      "dividend_per_holder": -335029.0
+    },
+    {
+      "date": "2026-02-21",
+      "np": 14.95,
+      "expected_np": 9.42252,
+      "dividend_per_holder": 221099.2
+    },
+    {
+      "date": "2026-02-22",
+      "np": 6.3,
+      "expected_np": 12.80409,
+      "dividend_per_holder": -260163.6
+    },
+    {
+      "date": "2026-02-24",
+      "np": -2.9,
+      "expected_np": 11.52647,
+      "dividend_per_holder": -577059.0
+    },
+    {
+      "date": "2026-02-27",
+      "np": 23.15,
+      "expected_np": 11.58066,
+      "dividend_per_holder": 462773.4
+    },
+    {
+      "date": "2026-03-01",
+      "np": 7.0,
+      "expected_np": 10.98295,
+      "dividend_per_holder": -159318.2
+    },
+    {
+      "date": "2026-03-03",
+      "np": 9.45,
+      "expected_np": 10.83037,
+      "dividend_per_holder": -55214.8
+    },
+    {
+      "date": "2026-03-04",
+      "np": 6.75,
+      "expected_np": 9.81957,
+      "dividend_per_holder": -122783.0
+    },
+    {
+      "date": "2026-03-06",
+      "np": 38.85,
+      "expected_np": 11.00467,
+      "dividend_per_holder": 1113813.0
+    },
+    {
+      "date": "2026-03-08",
+      "np": 6.8,
+      "expected_np": 11.63942,
+      "dividend_per_holder": -193577.0
+    },
+    {
+      "date": "2026-03-09",
+      "np": 14.05,
+      "expected_np": 11.38557,
+      "dividend_per_holder": 106577.2
+    },
+    {
+      "date": "2026-03-11",
+      "np": 20.0,
+      "expected_np": 13.63673,
+      "dividend_per_holder": 254530.8
+    },
+    {
+      "date": "2026-03-13",
+      "np": 17.8,
+      "expected_np": 12.89943,
+      "dividend_per_holder": 196022.6
+    },
+    {
+      "date": "2026-03-15",
+      "np": 9.65,
+      "expected_np": 12.79286,
+      "dividend_per_holder": -125714.6
+    },
+    {
+      "date": "2026-03-17",
+      "np": 25.8,
+      "expected_np": 13.20417,
+      "dividend_per_holder": 503833.2
+    },
+    {
+      "date": "2026-03-20",
+      "np": 7.55,
+      "expected_np": 12.15872,
+      "dividend_per_holder": -184348.8
+    },
+    {
+      "date": "2026-03-22",
+      "np": -1.6,
+      "expected_np": 14.16323,
+      "dividend_per_holder": -630529.4
+    },
+    {
+      "date": "2026-03-24",
+      "np": 18.05,
+      "expected_np": 12.27705,
+      "dividend_per_holder": 230918.0
+    },
+    {
+      "date": "2026-03-26",
+      "np": 10.1,
+      "expected_np": 11.43782,
+      "dividend_per_holder": -53512.8
+    },
+    {
+      "date": "2026-03-29",
+      "np": 2.6,
+      "expected_np": 10.41038,
+      "dividend_per_holder": -312415.2
+    },
+    {
+      "date": "2026-03-31",
+      "np": 4.1,
+      "expected_np": 10.17359,
+      "dividend_per_holder": -242943.6
+    },
+    {
+      "date": "2026-04-01",
+      "np": 22.0,
+      "expected_np": 11.41777,
+      "dividend_per_holder": 423289.2
+    },
+    {
+      "date": "2026-04-03",
+      "np": 26.15,
+      "expected_np": 13.19041,
+      "dividend_per_holder": 518383.6
+    },
+    {
+      "date": "2026-04-06",
+      "np": 13.45,
+      "expected_np": 11.38028,
+      "dividend_per_holder": 82788.8
+    },
+    {
+      "date": "2026-04-09",
+      "np": 7.25,
+      "expected_np": 11.08008,
+      "dividend_per_holder": -153203.2
+    },
+    {
+      "date": "2026-04-10",
+      "np": 1.1,
+      "expected_np": 11.69203,
+      "dividend_per_holder": -423681.2
+    }
+  ],
+  "4278585": [
+    {
+      "date": "2025-10-22",
+      "np": 6.1,
+      "expected_np": 3.90094,
+      "dividend_per_holder": 87962.4
+    },
+    {
+      "date": "2025-10-24",
+      "np": 8.7,
+      "expected_np": 4.97854,
+      "dividend_per_holder": 148858.2
+    },
+    {
+      "date": "2025-10-25",
+      "np": 3.6,
+      "expected_np": 6.57583,
+      "dividend_per_holder": -119033.4
+    },
+    {
+      "date": "2025-10-27",
+      "np": 16.9,
+      "expected_np": 6.39427,
+      "dividend_per_holder": 420229.0
+    },
+    {
+      "date": "2025-10-29",
+      "np": 13.7,
+      "expected_np": 8.6245,
+      "dividend_per_holder": 203020.0
+    },
+    {
+      "date": "2025-10-31",
+      "np": 12.8,
+      "expected_np": 10.32039,
+      "dividend_per_holder": 99184.2
+    },
+    {
+      "date": "2025-11-02",
+      "np": 12.45,
+      "expected_np": 9.16899,
+      "dividend_per_holder": 131240.4
+    },
+    {
+      "date": "2025-11-04",
+      "np": 5.15,
+      "expected_np": 8.42304,
+      "dividend_per_holder": -130921.6
+    },
+    {
+      "date": "2025-11-06",
+      "np": -0.2,
+      "expected_np": 7.63013,
+      "dividend_per_holder": -313205.2
+    },
+    {
+      "date": "2025-11-08",
+      "np": 7.55,
+      "expected_np": 6.96851,
+      "dividend_per_holder": 23259.4
+    },
+    {
+      "date": "2025-11-10",
+      "np": 5.25,
+      "expected_np": 9.2196,
+      "dividend_per_holder": -158784.0
+    },
+    {
+      "date": "2025-11-12",
+      "np": 3.55,
+      "expected_np": 7.08523,
+      "dividend_per_holder": -141409.2
+    },
+    {
+      "date": "2025-11-13",
+      "np": 4.05,
+      "expected_np": 8.21799,
+      "dividend_per_holder": -166719.6
+    },
+    {
+      "date": "2025-11-16",
+      "np": 14.05,
+      "expected_np": 7.7595,
+      "dividend_per_holder": 251620.0
+    },
+    {
+      "date": "2025-11-18",
+      "np": 14.85,
+      "expected_np": 9.52846,
+      "dividend_per_holder": 212861.4
+    },
+    {
+      "date": "2025-11-21",
+      "np": 16.35,
+      "expected_np": 9.94771,
+      "dividend_per_holder": 256091.6
+    },
+    {
+      "date": "2025-11-23",
+      "np": 12.55,
+      "expected_np": 11.09431,
+      "dividend_per_holder": 58227.4
+    },
+    {
+      "date": "2025-11-24",
+      "np": 12.05,
+      "expected_np": 10.23911,
+      "dividend_per_holder": 72435.4
+    },
+    {
+      "date": "2025-11-26",
+      "np": 17.55,
+      "expected_np": 11.24772,
+      "dividend_per_holder": 252091.0
+    },
+    {
+      "date": "2025-11-28",
+      "np": 15.8,
+      "expected_np": 9.73573,
+      "dividend_per_holder": 242570.8
+    },
+    {
+      "date": "2025-11-29",
+      "np": 5.65,
+      "expected_np": 12.06053,
+      "dividend_per_holder": -256421.2
+    },
+    {
+      "date": "2025-12-01",
+      "np": 22.8,
+      "expected_np": 10.96082,
+      "dividend_per_holder": 473567.0
+    },
+    {
+      "date": "2025-12-05",
+      "np": 4.9,
+      "expected_np": 10.3383,
+      "dividend_per_holder": -217532.2
+    },
+    {
+      "date": "2025-12-08",
+      "np": 13.1,
+      "expected_np": 11.09448,
+      "dividend_per_holder": 80220.8
+    },
+    {
+      "date": "2025-12-10",
+      "np": -0.55,
+      "expected_np": 10.39057,
+      "dividend_per_holder": -437622.8
+    },
+    {
+      "date": "2025-12-14",
+      "np": 6.9,
+      "expected_np": 10.67848,
+      "dividend_per_holder": -151139.2
+    },
+    {
+      "date": "2025-12-18",
+      "np": 12.5,
+      "expected_np": 11.57461,
+      "dividend_per_holder": 37015.6
+    },
+    {
+      "date": "2025-12-20",
+      "np": 12.1,
+      "expected_np": 11.16391,
+      "dividend_per_holder": 37443.6
+    },
+    {
+      "date": "2025-12-23",
+      "np": 18.7,
+      "expected_np": 12.70764,
+      "dividend_per_holder": 239694.2
+    },
+    {
+      "date": "2025-12-26",
+      "np": 11.15,
+      "expected_np": 12.16567,
+      "dividend_per_holder": -40626.8
+    },
+    {
+      "date": "2025-12-27",
+      "np": 15.7,
+      "expected_np": 13.02777,
+      "dividend_per_holder": 106889.0
+    },
+    {
+      "date": "2025-12-29",
+      "np": 24.75,
+      "expected_np": 13.82352,
+      "dividend_per_holder": 437059.2
+    },
+    {
+      "date": "2025-12-31",
+      "np": 14.7,
+      "expected_np": 11.21472,
+      "dividend_per_holder": 139411.2
+    },
+    {
+      "date": "2026-01-02",
+      "np": 13.35,
+      "expected_np": 13.16573,
+      "dividend_per_holder": 7370.6
+    },
+    {
+      "date": "2026-01-04",
+      "np": 2.05,
+      "expected_np": 10.42033,
+      "dividend_per_holder": -334813.2
+    },
+    {
+      "date": "2026-01-05",
+      "np": 9.1,
+      "expected_np": 9.17094,
+      "dividend_per_holder": -2837.6
+    },
+    {
+      "date": "2026-01-07",
+      "np": 9.6,
+      "expected_np": 10.84478,
+      "dividend_per_holder": -49791.2
+    },
+    {
+      "date": "2026-01-09",
+      "np": -1.5,
+      "expected_np": 10.84706,
+      "dividend_per_holder": -493882.4
+    },
+    {
+      "date": "2026-01-11",
+      "np": 4.45,
+      "expected_np": 12.02958,
+      "dividend_per_holder": -303183.4
+    },
+    {
+      "date": "2026-01-13",
+      "np": 11.75,
+      "expected_np": 10.53411,
+      "dividend_per_holder": 48635.4
+    },
+    {
+      "date": "2026-01-15",
+      "np": 14.3,
+      "expected_np": 9.59618,
+      "dividend_per_holder": 188152.8
+    },
+    {
+      "date": "2026-01-17",
+      "np": 7.45,
+      "expected_np": 10.45164,
+      "dividend_per_holder": -120065.6
+    },
+    {
+      "date": "2026-01-19",
+      "np": 22.75,
+      "expected_np": 10.16944,
+      "dividend_per_holder": 503222.4
+    },
+    {
+      "date": "2026-01-20",
+      "np": 7.7,
+      "expected_np": 9.75532,
+      "dividend_per_holder": -82212.8
+    },
+    {
+      "date": "2026-01-23",
+      "np": 13.55,
+      "expected_np": 10.0666,
+      "dividend_per_holder": 139335.8
+    },
+    {
+      "date": "2026-01-25",
+      "np": 0.75,
+      "expected_np": 12.00996,
+      "dividend_per_holder": -450398.6
+    },
+    {
+      "date": "2026-01-29",
+      "np": 8.55,
+      "expected_np": 10.19682,
+      "dividend_per_holder": -65873.0
+    },
+    {
+      "date": "2026-01-30",
+      "np": 16.1,
+      "expected_np": 10.13043,
+      "dividend_per_holder": 238782.8
+    },
+    {
+      "date": "2026-02-01",
+      "np": 6.05,
+      "expected_np": 9.88279,
+      "dividend_per_holder": -153311.6
+    },
+    {
+      "date": "2026-02-03",
+      "np": 31.95,
+      "expected_np": 9.93093,
+      "dividend_per_holder": 880762.6
+    },
+    {
+      "date": "2026-02-05",
+      "np": 5.25,
+      "expected_np": 11.3681,
+      "dividend_per_holder": -244724.0
+    },
+    {
+      "date": "2026-02-07",
+      "np": -0.2,
+      "expected_np": 11.34131,
+      "dividend_per_holder": -461652.6
+    },
+    {
+      "date": "2026-02-10",
+      "np": 3.6,
+      "expected_np": 11.36812,
+      "dividend_per_holder": -310724.8
+    },
+    {
+      "date": "2026-02-11",
+      "np": 3.45,
+      "expected_np": 10.08071,
+      "dividend_per_holder": -265228.4
+    },
+    {
+      "date": "2026-02-19",
+      "np": 3.4,
+      "expected_np": 9.34192,
+      "dividend_per_holder": -237677.0
+    },
+    {
+      "date": "2026-02-21",
+      "np": 10.95,
+      "expected_np": 10.03327,
+      "dividend_per_holder": 36669.2
+    },
+    {
+      "date": "2026-02-22",
+      "np": 7.85,
+      "expected_np": 12.36943,
+      "dividend_per_holder": -180777.4
+    },
+    {
+      "date": "2026-02-24",
+      "np": 10.95,
+      "expected_np": 10.90536,
+      "dividend_per_holder": 1785.6
+    },
+    {
+      "date": "2026-02-26",
+      "np": 14.2,
+      "expected_np": 11.15491,
+      "dividend_per_holder": 121803.6
+    },
+    {
+      "date": "2026-03-03",
+      "np": 17.75,
+      "expected_np": 11.18234,
+      "dividend_per_holder": 262706.4
+    },
+    {
+      "date": "2026-03-05",
+      "np": 1.1,
+      "expected_np": 12.12445,
+      "dividend_per_holder": -440978.2
+    },
+    {
+      "date": "2026-03-06",
+      "np": 9.95,
+      "expected_np": 10.96306,
+      "dividend_per_holder": -40522.6
+    },
+    {
+      "date": "2026-03-08",
+      "np": 17.4,
+      "expected_np": 10.54142,
+      "dividend_per_holder": 274343.0
+    },
+    {
+      "date": "2026-03-10",
+      "np": 14.6,
+      "expected_np": 11.18158,
+      "dividend_per_holder": 136736.6
+    },
+    {
+      "date": "2026-03-12",
+      "np": 2.8,
+      "expected_np": 11.9789,
+      "dividend_per_holder": -367156.0
+    },
+    {
+      "date": "2026-03-13",
+      "np": -2.35,
+      "expected_np": 9.42396,
+      "dividend_per_holder": -470958.4
+    },
+    {
+      "date": "2026-03-16",
+      "np": -0.5,
+      "expected_np": 8.20699,
+      "dividend_per_holder": -348279.6
+    },
+    {
+      "date": "2026-03-17",
+      "np": 7.6,
+      "expected_np": 8.51751,
+      "dividend_per_holder": -36700.6
+    },
+    {
+      "date": "2026-03-19",
+      "np": 21.95,
+      "expected_np": 9.27966,
+      "dividend_per_holder": 506813.6
+    },
+    {
+      "date": "2026-03-21",
+      "np": 12.8,
+      "expected_np": 11.30877,
+      "dividend_per_holder": 59649.0
+    },
+    {
+      "date": "2026-03-22",
+      "np": 12.9,
+      "expected_np": 10.79102,
+      "dividend_per_holder": 84359.0
+    },
+    {
+      "date": "2026-03-24",
+      "np": 5.4,
+      "expected_np": 9.67904,
+      "dividend_per_holder": -171161.8
+    },
+    {
+      "date": "2026-03-28",
+      "np": -2.75,
+      "expected_np": 10.63982,
+      "dividend_per_holder": -535592.8
+    },
+    {
+      "date": "2026-03-30",
+      "np": 4.85,
+      "expected_np": 10.25641,
+      "dividend_per_holder": -216256.6
+    },
+    {
+      "date": "2026-03-31",
+      "np": 8.15,
+      "expected_np": 9.8559,
+      "dividend_per_holder": -68236.0
+    },
+    {
+      "date": "2026-04-02",
+      "np": 1.15,
+      "expected_np": 8.87606,
+      "dividend_per_holder": -309042.4
+    },
+    {
+      "date": "2026-04-05",
+      "np": 5.6,
+      "expected_np": 9.32581,
+      "dividend_per_holder": -149032.6
+    },
+    {
+      "date": "2026-04-07",
+      "np": -2.75,
+      "expected_np": 8.43058,
+      "dividend_per_holder": -447223.2
+    },
+    {
+      "date": "2026-04-08",
+      "np": 6.95,
+      "expected_np": 9.09851,
+      "dividend_per_holder": -85940.6
+    },
+    {
+      "date": "2026-04-10",
+      "np": 4.9,
+      "expected_np": 9.54134,
+      "dividend_per_holder": -185653.8
     }
   ]
 };
@@ -11147,8 +12815,8 @@ export const trendSpotChecks: Record<string, Record<string, TrendPoint>> = {
     "2025-12-25": {
       "date": "2025-12-25",
       "np": 59.35,
-      "expected_np": 25.54725,
-      "dividend_per_holder": 1352109.8
+      "expected_np": 25.98312,
+      "dividend_per_holder": 1334675.2
     }
   }
 };

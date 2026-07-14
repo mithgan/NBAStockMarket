@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# These are content-addressed provider snapshots; preserve their exact bytes.
+data/snapshots/fv/*.csv -text whitespace=cr-at-eol

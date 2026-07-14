@@ -62,31 +62,36 @@ priced with minutes shrinkage; DARKO and EPM are already shrunk model outputs.
 
 ## 2. Predictive backtest — can season N-1 listings rank season N value?
 
-Opening prices built from season N-1 data only, scored against realized
-season-N **WAR** (production including minutes, from the LEBRON file).
-Baseline: naively carrying forward last season's WAR.
+Models use season N-1 data only and are scored against realized season-N
+**WAR** (production including minutes, from the LEBRON file). Eligibility is
+defined by the train season; players absent in season N receive zero WAR.
+The Projected WAR column validates the model's fair-value ranking before the 10%
+salary blend; its baseline uses the exact same LEBRON/EPM player cohort.
+These are retrospective model-selection windows, not untouched holdouts. The WAR
+mapping was refit on all 1,200 corrected player-seasons:
+`projected_WAR = 1.4821 + 2.5605 × blend`
 
-| Train → Test | LEBRON price rho (n) | EPM price rho (n) | Naive WAR baseline |
-|---|---:|---:|---:|
-| 2021-22 → 2022-23 | 0.577 (433) | 0.670 (422) | 0.722 |
-| 2022-23 → 2023-24 | 0.575 (450) | 0.725 (443) | 0.773 |
-| 2023-24 → 2024-25 | 0.537 (447) | 0.725 (445) | 0.771 |
-| 2024-25 → 2025-26 | 0.519 (464) | 0.686 (462) | 0.667 |
+| Train → Test | LEBRON rate-only rho (n) | EPM rate-only rho (n) | Projected WAR FV rho (n) | Same-cohort prior WAR rho (n) |
+|---|---:|---:|---:|---:|
+| 2021-22 → 2022-23 | 0.648 (300) | 0.655 (300) | 0.751 (300) | 0.712 (300) |
+| 2022-23 → 2023-24 | 0.691 (300) | 0.691 (300) | 0.772 (300) | 0.749 (300) |
+| 2023-24 → 2024-25 | 0.650 (300) | 0.689 (300) | 0.768 (300) | 0.725 (300) |
+| 2024-25 → 2025-26 | 0.576 (300) | 0.607 (300) | 0.655 (300) | 0.610 (300) |
 
 ### Decile check (2024-25 → 2025-26, LEBRON prices)
 
 | Price decile | Mean opening price | Mean realized WAR |
 |---:|---:|---:|
-| 1 | $30,213,319 | 5.60 |
-| 2 | $20,256,677 | 3.55 |
-| 3 | $15,376,398 | 2.81 |
-| 4 | $12,223,554 | 1.24 |
-| 5 | $10,859,489 | 1.08 |
-| 6 | $9,083,498 | 0.92 |
-| 7 | $7,242,056 | 1.15 |
-| 8 | $4,695,509 | 0.89 |
-| 9 | $2,486,561 | 0.68 |
-| 10 | $2,000,000 | 0.84 |
+| 1 | $34,035,184 | 4.84 |
+| 2 | $23,316,227 | 5.43 |
+| 3 | $19,656,359 | 3.42 |
+| 4 | $15,831,116 | 2.90 |
+| 5 | $12,865,240 | 2.43 |
+| 6 | $9,514,281 | 1.45 |
+| 7 | $6,971,970 | 1.41 |
+| 8 | $3,954,828 | 1.05 |
+| 9 | $2,129,477 | 1.12 |
+| 10 | $2,000,000 | 0.40 |
 
 Reading: decile 1 = the ten percent of players listed most expensive. A good FV
 model shows monotonically falling realized WAR down the deciles and a price→WAR

@@ -157,16 +157,24 @@ Run the bounded source check with `python3 -m nba_stock_market.bdl_data --smoke-
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e . pytest
-python scripts/fetch_backtest_data.py
 printf "DNT API key: " && read -rs DNT_API_KEY && export DNT_API_KEY && echo
+python scripts/prepare_fv_inputs.py
+python -m nba_stock_market.opening_prices
+python -m nba_stock_market.fv_validation
+python scripts/fetch_backtest_data.py
 python scripts/fetch_dnt_predictions.py
 python -m nba_stock_market.backtest
+python scripts/generate_app_snapshot.py
+python scripts/generate_app_trends.py
 python -m scripts.generate_expectation_comparison
 python -m pytest -q
 ```
 
-Both fetchers are idempotent and resume their caches. Once cached, report generation makes no
-network calls. The replay selects the top 150 players by regular-season minutes, lists them from
+The fetchers are idempotent and resume their caches. `prepare_fv_inputs.py` copies mutable
+DARKO/EPM inputs from committed snapshots and verifies every input against
+`data/manifests/fv-inputs.json`; `--refresh` checks live providers separately and reports drift.
+Once cached,
+report generation makes no network calls. The replay selects the top 150 players by regular-season minutes, lists them from
 `output/opening-prices-2026-27.csv` using Mith's impact + salary blend (with reported salary
 fallbacks), and evaluates 100 seeded buy-and-hold 10-player portfolios. The default expectation
 model is cached Dunks & Threes; missing projection rows use the salary-implied cold-start prior.

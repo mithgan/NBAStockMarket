@@ -23,7 +23,15 @@ from pathlib import Path
 
 from nba_stock_market.backtest import normalize_player_name
 from nba_stock_market.epm_data import load_epm_rows, snapshot_path
-from nba_stock_market.opening_prices import ImpactRow, OpeningPriceModel, load_impact_rows
+from nba_stock_market.opening_prices import (
+    ImpactRow,
+    OpeningPriceModel,
+    PlayerFeatures,
+    ProjectedWarModel,
+    UNIVERSE_SIZE,
+    build_player_features,
+    load_impact_rows,
+)
 
 
 DARKO_SHEET_URL = (
@@ -72,6 +80,14 @@ class ExternalBacktest:
     test_year: int
     players: int
     price_spearman: float
+    naive_war_spearman: float | None = None
+
+
+@dataclass(frozen=True)
+class WarCalibration:
+    players: int
+    intercept: float
+    slope: float
 
 
 def spearman(xs: list[float], ys: list[float]) -> float:
@@ -108,6 +124,29 @@ def spearman(xs: list[float], ys: list[float]) -> float:
     if var_x == 0 or var_y == 0:
         raise ValueError("cannot correlate a constant series")
     return cov / math.sqrt(var_x * var_y)
+
+
+def fit_war_calibration(blends: list[float], realized_wars: list[float]) -> WarCalibration:
+    """OLS map from a standardized blend to realized next-season WAR."""
+
+    if len(blends) != len(realized_wars) or len(blends) < 2:
+        raise ValueError("calibration series must have equal length and at least two rows")
+    if any(not math.isfinite(value) for value in blends + realized_wars):
+        raise ValueError("calibration values must be finite")
+    mean_blend = sum(blends) / len(blends)
+    mean_war = sum(realized_wars) / len(realized_wars)
+    variance = sum((value - mean_blend) ** 2 for value in blends)
+    if variance == 0:
+        raise ValueError("cannot calibrate a constant blend")
+    slope = sum(
+        (blend - mean_blend) * (war - mean_war)
+        for blend, war in zip(blends, realized_wars)
+    ) / variance
+    return WarCalibration(
+        players=len(blends),
+        intercept=mean_war - slope * mean_blend,
+        slope=slope,
+    )
 
 
 def load_darko_rows(path: Path) -> list[ImpactRow]:
@@ -184,23 +223,26 @@ def backtest_season_pair(
     test_year: int,
     *,
     decile_count: int = 10,
+    eligible_keys: tuple[str, ...] | None = None,
 ) -> SeasonBacktest:
     train = {normalize_player_name(row.player): row for row in all_rows_by_year[train_year]}
     test = {normalize_player_name(row.player): row for row in all_rows_by_year[test_year]}
-    shared = sorted(train.keys() & test.keys())
-    if len(shared) < decile_count:
+    eligible = list(eligible_keys) if eligible_keys is not None else sorted(train)
+    if any(key not in train for key in eligible):
+        raise ValueError("eligible cohort contains a player absent from the train season")
+    if len(eligible) < decile_count:
         raise ValueError(
-            f"only {len(shared)} shared players between {train_year} and {test_year}"
+            f"only {len(eligible)} eligible players in train season {train_year}"
         )
 
     prices, prior_wars, realized_wars = [], [], []
-    for key in shared:
+    for key in eligible:
         row = train[key]
         prices.append(SHRUNK_MODEL.opening_price(row.rating, row.minutes, None))
         prior_wars.append(row.war)
-        realized_wars.append(test[key].war)
+        realized_wars.append(test[key].war if key in test else 0.0)
 
-    ordered = sorted(range(len(shared)), key=lambda i: -prices[i])
+    ordered = sorted(range(len(eligible)), key=lambda i: -prices[i])
     deciles: list[tuple[int, float, float]] = []
     for decile in range(decile_count):
         start = decile * len(ordered) // decile_count
@@ -217,7 +259,7 @@ def backtest_season_pair(
     return SeasonBacktest(
         train_year=train_year,
         test_year=test_year,
-        players=len(shared),
+        players=len(eligible),
         price_spearman=spearman(prices, realized_wars),
         naive_war_spearman=spearman(prior_wars, realized_wars),
         deciles=tuple(deciles),
@@ -232,26 +274,140 @@ def backtest_external_rows(
     test_year: int,
     *,
     model: OpeningPriceModel = PRESHRUNK_MODEL,
+    eligible_keys: tuple[str, ...] | None = None,
 ) -> ExternalBacktest:
     """Score an external metric snapshot (e.g. EPM) against realized WAR."""
 
     train = {normalize_player_name(row.player): row for row in train_rows}
     test = {normalize_player_name(row.player): row for row in test_rows}
-    shared = sorted(train.keys() & test.keys())
-    if len(shared) < 10:
-        raise ValueError(f"only {len(shared)} shared players for {label}")
+    eligible = list(eligible_keys) if eligible_keys is not None else sorted(train)
+    if any(key not in train for key in eligible):
+        raise ValueError(f"eligible cohort contains a player absent from {label}")
+    if len(eligible) < 10:
+        raise ValueError(f"only {len(eligible)} eligible train players for {label}")
     prices = [
         model.opening_price(train[key].rating, train[key].minutes or 1.0, None)
-        for key in shared
+        for key in eligible
     ]
-    realized = [test[key].war for key in shared]
+    realized = [test[key].war if key in test else 0.0 for key in eligible]
     return ExternalBacktest(
         label=label,
         train_year=train_year,
         test_year=test_year,
-        players=len(shared),
+        players=len(eligible),
         price_spearman=spearman(prices, realized),
     )
+
+
+def backtest_projected_war_model(
+    train_rows: list[ImpactRow],
+    train_epm_rows: list[ImpactRow],
+    test_rows: list[ImpactRow],
+    train_year: int,
+    test_year: int,
+    *,
+    model: ProjectedWarModel | None = None,
+    eligible_keys: tuple[str, ...] | None = None,
+) -> ExternalBacktest:
+    """Score the v2 fair-value component on a train-defined player cohort."""
+
+    model = model or ProjectedWarModel()
+    epm_by_name = {
+        normalize_player_name(row.player): row.rating for row in train_epm_rows
+    }
+    features, _ = build_player_features(train_rows, epm_by_name)
+    if len(features) < 10:
+        raise ValueError(
+            f"only {len(features)} eligible train players for Projected WAR FV"
+        )
+    projected_wars = model.projected_wars(features)
+    selected = _select_projected_cohort(features, projected_wars, eligible_keys)
+    prices = [
+        model.opening_price(model.fair_value(projected_war), None)
+        for _, projected_war in selected
+    ]
+    test = {normalize_player_name(row.player): row for row in test_rows}
+    realized = [
+        test[key].war if key in test else 0.0
+        for key in (normalize_player_name(row.player) for row, _ in selected)
+    ]
+    return ExternalBacktest(
+        label="Projected WAR FV",
+        train_year=train_year,
+        test_year=test_year,
+        players=len(selected),
+        price_spearman=spearman(prices, realized),
+        naive_war_spearman=spearman(
+            [row.prior_war for row, _ in selected],
+            realized,
+        ),
+    )
+
+
+def projected_war_calibration_rows(
+    train_rows: list[ImpactRow],
+    train_epm_rows: list[ImpactRow],
+    test_rows: list[ImpactRow],
+    *,
+    eligible_keys: tuple[str, ...] | None = None,
+) -> tuple[list[float], list[float]]:
+    """Return uncalibrated blend scores and realized WAR for one season pair."""
+
+    epm_by_name = {
+        normalize_player_name(row.player): row.rating for row in train_epm_rows
+    }
+    features, _ = build_player_features(train_rows, epm_by_name)
+    blend_model = ProjectedWarModel(war_intercept=0.0, war_slope=1.0)
+    blends = blend_model.projected_wars(features)
+    selected = _select_projected_cohort(features, blends, eligible_keys)
+    test = {normalize_player_name(row.player): row for row in test_rows}
+    realized = [
+        test[key].war if key in test else 0.0
+        for key in (normalize_player_name(row.player) for row, _ in selected)
+    ]
+    return [blend for _, blend in selected], realized
+
+
+def listing_cohort_keys(
+    train_rows: list[ImpactRow],
+    train_epm_rows: list[ImpactRow],
+    *,
+    universe_size: int = UNIVERSE_SIZE,
+) -> tuple[str, ...]:
+    """The production listing cohort: top-minute players with both input sources."""
+
+    if universe_size <= 0:
+        raise ValueError("universe_size must be positive")
+    epm_keys = {normalize_player_name(row.player) for row in train_epm_rows}
+    shared = [
+        row for row in train_rows if normalize_player_name(row.player) in epm_keys
+    ]
+    cohort = sorted(shared, key=lambda row: (-row.minutes, row.player))[:universe_size]
+    if len(cohort) < 10:
+        raise ValueError("too few players shared by LEBRON and EPM")
+    return tuple(normalize_player_name(row.player) for row in cohort)
+
+
+def _select_projected_cohort(
+    features: list[PlayerFeatures],
+    projected: list[float],
+    eligible_keys: tuple[str, ...] | None,
+) -> list[tuple[PlayerFeatures, float]]:
+    if eligible_keys is None:
+        eligible_keys = tuple(
+            normalize_player_name(row.player)
+            for row in sorted(features, key=lambda row: (-row.minutes, row.player))[
+                :UNIVERSE_SIZE
+            ]
+        )
+    projected_by_key = {
+        normalize_player_name(row.player): (row, value)
+        for row, value in zip(features, projected)
+    }
+    missing = [key for key in eligible_keys if key not in projected_by_key]
+    if missing:
+        raise ValueError("eligible cohort contains a player absent from projected features")
+    return [projected_by_key[key] for key in eligible_keys]
 
 
 def load_all_seasons(path: Path, years: set[int]) -> dict[int, list[ImpactRow]]:
@@ -271,6 +427,8 @@ def write_report(
     comparisons: list[MetricComparison],
     backtests: list[SeasonBacktest],
     epm_backtests: list[ExternalBacktest],
+    projected_backtests: list[ExternalBacktest],
+    calibration: WarCalibration,
     path: Path,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -315,25 +473,45 @@ def write_report(
     lines += [
         "## 2. Predictive backtest — can season N-1 listings rank season N value?",
         "",
-        "Opening prices built from season N-1 data only, scored against realized",
-        "season-N **WAR** (production including minutes, from the LEBRON file).",
-        "Baseline: naively carrying forward last season's WAR.",
+        "Models use season N-1 data only and are scored against realized season-N",
+        "**WAR** (production including minutes, from the LEBRON file). Eligibility is",
+        "defined by the train season; players absent in season N receive zero WAR.",
+        "The Projected WAR column validates the model's fair-value ranking before the 10%",
+        "salary blend; its baseline uses the exact same LEBRON/EPM player cohort.",
+        "These are retrospective model-selection windows, not untouched holdouts. The WAR",
+        f"mapping was refit on all {calibration.players:,} corrected player-seasons:",
+        f"`projected_WAR = {calibration.intercept:.4f} + {calibration.slope:.4f} × blend`",
         "",
-        "| Train → Test | LEBRON price rho (n) | EPM price rho (n) | Naive WAR baseline |",
-        "|---|---:|---:|---:|",
+        "| Train → Test | LEBRON rate-only rho (n) | EPM rate-only rho (n) "
+        "| Projected WAR FV rho (n) | Same-cohort prior WAR rho (n) |",
+        "|---|---:|---:|---:|---:|",
     ]
     epm_by_pair = {(result.train_year, result.test_year): result for result in epm_backtests}
+    projected_by_pair = {
+        (result.train_year, result.test_year): result for result in projected_backtests
+    }
     for result in backtests:
         epm_result = epm_by_pair.get((result.train_year, result.test_year))
+        projected_result = projected_by_pair.get((result.train_year, result.test_year))
         epm_cell = (
             f"{epm_result.price_spearman:.3f} ({epm_result.players})"
             if epm_result
             else "—"
         )
+        projected_cell = (
+            f"{projected_result.price_spearman:.3f} ({projected_result.players})"
+            if projected_result
+            else "—"
+        )
+        projected_baseline_cell = (
+            f"{projected_result.naive_war_spearman:.3f} ({projected_result.players})"
+            if projected_result and projected_result.naive_war_spearman is not None
+            else "—"
+        )
         lines.append(
             f"| {_season_label(result.train_year, result.test_year)} "
-            f"| {result.price_spearman:.3f} ({result.players}) | {epm_cell} "
-            f"| {result.naive_war_spearman:.3f} |"
+            f"| {result.price_spearman:.3f} ({result.players}) | {epm_cell} | {projected_cell} "
+            f"| {projected_baseline_cell} |"
         )
     latest = backtests[-1]
     lines += [
@@ -382,37 +560,88 @@ def main() -> None:
 
     years = {year for pair in BACKTEST_SEASON_PAIRS for year in pair}
     rows_by_year = load_all_seasons(args.lebron_file, years)
-    backtests = [
-        backtest_season_pair(rows_by_year, train_year, test_year)
-        for train_year, test_year in BACKTEST_SEASON_PAIRS
-    ]
-    epm_backtests = []
+    pair_inputs: list[tuple[int, int, list[ImpactRow], tuple[str, ...]]] = []
+    calibration_blends: list[float] = []
+    calibration_realized: list[float] = []
     for train_year, test_year in BACKTEST_SEASON_PAIRS:
         train_path = snapshot_path(train_year, args.epm_cache)
         if not train_path.exists():
             continue
+        train_epm_rows = load_epm_rows(train_path)
+        eligible_keys = listing_cohort_keys(
+            rows_by_year[train_year],
+            train_epm_rows,
+        )
+        pair_inputs.append((train_year, test_year, train_epm_rows, eligible_keys))
+        pair_blends, pair_realized = projected_war_calibration_rows(
+            rows_by_year[train_year],
+            train_epm_rows,
+            rows_by_year[test_year],
+            eligible_keys=eligible_keys,
+        )
+        calibration_blends.extend(pair_blends)
+        calibration_realized.extend(pair_realized)
+
+    calibration = fit_war_calibration(calibration_blends, calibration_realized)
+    calibrated_model = ProjectedWarModel(
+        war_intercept=calibration.intercept,
+        war_slope=calibration.slope,
+    )
+    backtests: list[SeasonBacktest] = []
+    epm_backtests: list[ExternalBacktest] = []
+    projected_backtests: list[ExternalBacktest] = []
+    for train_year, test_year, train_epm_rows, eligible_keys in pair_inputs:
+        backtests.append(
+            backtest_season_pair(
+                rows_by_year,
+                train_year,
+                test_year,
+                eligible_keys=eligible_keys,
+            )
+        )
         epm_backtests.append(
             backtest_external_rows(
                 "EPM",
-                load_epm_rows(train_path),
+                train_epm_rows,
                 rows_by_year[test_year],
                 train_year,
                 test_year,
+                eligible_keys=eligible_keys,
             )
         )
-
-    write_report(comparisons, backtests, epm_backtests, args.report)
+        projected_backtests.append(
+            backtest_projected_war_model(
+                rows_by_year[train_year],
+                train_epm_rows,
+                rows_by_year[test_year],
+                train_year,
+                test_year,
+                model=calibrated_model,
+                eligible_keys=eligible_keys,
+            )
+        )
+    write_report(
+        comparisons,
+        backtests,
+        epm_backtests,
+        projected_backtests,
+        calibration,
+        args.report,
+    )
     print(f"wrote {args.report}")
     for comparison in comparisons:
         print(
             f"{comparison.label_a} vs {comparison.label_b}: rating rho="
             f"{comparison.rating_spearman:.3f} over {comparison.joined_players} players"
         )
-    for result, epm_result in zip(backtests, epm_backtests):
+    for result, epm_result, projected_result in zip(
+        backtests, epm_backtests, projected_backtests
+    ):
         print(
             f"{result.train_year}->{result.test_year}: LEBRON rho={result.price_spearman:.3f} "
             f"| EPM rho={epm_result.price_spearman:.3f} "
-            f"| naive WAR rho={result.naive_war_spearman:.3f}"
+            f"| FV rho={projected_result.price_spearman:.3f} "
+            f"| same-cohort WAR rho={projected_result.naive_war_spearman:.3f}"
         )
 
 

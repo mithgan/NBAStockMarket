@@ -8,9 +8,13 @@ from pathlib import Path
 from nba_stock_market.epm_data import EPMRow, load_epm_rows, write_snapshot
 from nba_stock_market.fv_validation import (
     backtest_external_rows,
+    backtest_projected_war_model,
     backtest_season_pair,
     compare_metrics,
+    fit_war_calibration,
+    listing_cohort_keys,
     load_darko_rows,
+    projected_war_calibration_rows,
     spearman,
 )
 from tests.test_opening_prices import impact_row
@@ -38,6 +42,13 @@ class SpearmanTest(unittest.TestCase):
             spearman([1.0, 2.0, 3.0], [1.0, 2.0])
         with self.assertRaises(ValueError):
             spearman([1.0, 1.0, 1.0], [1.0, 2.0, 3.0])
+
+    def test_war_calibration_recovers_linear_mapping(self) -> None:
+        result = fit_war_calibration([-1.0, 0.0, 1.0], [-1.0, 2.0, 5.0])
+
+        self.assertEqual(result.players, 3)
+        self.assertAlmostEqual(result.intercept, 2.0)
+        self.assertAlmostEqual(result.slope, 3.0)
 
 
 class DarkoLoaderTest(unittest.TestCase):
@@ -98,6 +109,68 @@ class ExternalBacktestTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             backtest_external_rows("EPM", train, test, 2025, 2026)
 
+    def test_train_cohort_includes_next_season_washouts(self) -> None:
+        train = [impact_row(f"P{i}", i * 0.3) for i in range(12)]
+        test = [impact_row(f"P{i}", 0.0, war=float(i)) for i in range(2, 12)]
+        result = backtest_external_rows("EPM", train, test, 2025, 2026)
+        self.assertEqual(result.players, 12)
+
+
+class ProjectedWarBacktestTest(unittest.TestCase):
+    def test_scores_production_model_on_train_defined_cohort(self) -> None:
+        train = [
+            impact_row(
+                f"P{i}",
+                i * 0.2,
+                war=float(i),
+                minutes=800.0 + i * 100,
+                age=35.0 - i * 0.5,
+            )
+            for i in range(12)
+        ]
+        epm = [impact_row(f"P{i}", i * 0.3) for i in range(12)]
+        test = [impact_row(f"P{i}", 0.0, war=float(i)) for i in range(2, 12)]
+        result = backtest_projected_war_model(train, epm, test, 2025, 2026)
+        self.assertEqual(result.label, "Projected WAR FV")
+        self.assertEqual(result.players, 12)
+        self.assertGreater(result.price_spearman, 0.8)
+        self.assertIsNotNone(result.naive_war_spearman)
+
+    def test_validation_and_calibration_use_the_requested_listing_cohort(self) -> None:
+        train = [
+            impact_row(
+                f"P{i}",
+                i * 0.2,
+                war=float(i),
+                minutes=500.0 + i * 100,
+                age=35.0 - i * 0.2,
+            )
+            for i in range(14)
+        ]
+        epm = [impact_row(f"P{i}", i * 0.3) for i in range(14)]
+        test = [impact_row(f"P{i}", 0.0, war=float(i)) for i in range(14)]
+        cohort = listing_cohort_keys(train, epm, universe_size=10)
+
+        result = backtest_projected_war_model(
+            train,
+            epm,
+            test,
+            2025,
+            2026,
+            eligible_keys=cohort,
+        )
+        blends, realized = projected_war_calibration_rows(
+            train,
+            epm,
+            test,
+            eligible_keys=cohort,
+        )
+
+        self.assertEqual(result.players, 10)
+        self.assertEqual(len(blends), 10)
+        self.assertEqual(len(realized), 10)
+        self.assertEqual(cohort[0], "p13")
+
 
 class CompareMetricsTest(unittest.TestCase):
     def test_agreeing_metrics_have_high_rho_and_small_delta(self) -> None:
@@ -147,6 +220,36 @@ class SeasonBacktestTest(unittest.TestCase):
         test = [impact_row("Only One", 1.0)]
         with self.assertRaises(ValueError):
             backtest_season_pair({2025: train, 2026: test}, 2025, 2026)
+
+    def test_train_cohort_includes_next_season_washouts(self) -> None:
+        train = [impact_row(f"P{i}", i * 0.3, war=float(i)) for i in range(20)]
+        test = [impact_row(f"P{i}", i * 0.3, war=float(i)) for i in range(18)]
+        result = backtest_season_pair({2025: train, 2026: test}, 2025, 2026)
+        self.assertEqual(result.players, 20)
+
+    def test_explicit_cohort_is_shared_by_metric_backtests(self) -> None:
+        lebron = [impact_row(f"P{i}", i * 0.2, war=float(i)) for i in range(15)]
+        epm = [impact_row(f"P{i}", i * 0.3) for i in range(2, 15)]
+        test = [impact_row(f"P{i}", 0.0, war=float(i)) for i in range(15)]
+        cohort = listing_cohort_keys(lebron, epm, universe_size=10)
+
+        lebron_result = backtest_season_pair(
+            {2025: lebron, 2026: test},
+            2025,
+            2026,
+            eligible_keys=cohort,
+        )
+        epm_result = backtest_external_rows(
+            "EPM",
+            epm,
+            test,
+            2025,
+            2026,
+            eligible_keys=cohort,
+        )
+
+        self.assertEqual(lebron_result.players, 10)
+        self.assertEqual(epm_result.players, 10)
 
 
 if __name__ == "__main__":
