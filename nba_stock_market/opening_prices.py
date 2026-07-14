@@ -1,18 +1,20 @@
-"""Season-start opening listing prices from an impact metric + salary blend.
+"""Season-start opening listing prices.
 
-The model implements the team-plan "initial pricing" deliverable: a
-transparent, linear impact-to-dollars mapping anchored to the real NBA salary
-scale, blended with the player's actual contract, with reliability shrinkage
-for small minute samples.
+Production model (v2, validated in docs/fv-research-log.md):
 
-    impact_implied = BASELINE_PRICE_AT_ZERO
-                   + DOLLARS_PER_IMPACT_POINT * rating * minutes / (minutes + SHRINKAGE_MINUTES)
-    opening_price  = clamp(w * impact_implied + (1 - w) * actual_salary)
+    blend         = 0.40*z(EPM) + 0.35*z(prior WAR) + 0.15*z(minutes) + 0.10*z(25 - age)
+    projected_WAR = 1.98 + 2.42 * blend
+    fair_value    = $1.2M (min salary) + projected_WAR * $5M (price of a win)
+    listing       = clamp(0.9 * fair_value + 0.1 * actual_salary, $2M, $70M)
 
-The metric column is configurable so LEBRON (available today in the
-gabriel1200/site_Data repository) can be swapped for DARKO or EPM without
-code changes.  The community-census adjustment described in
-docs/opening-price-model.md happens after this CSV is produced and is bounded
+Backtested out-of-sample against four historical season pairs: mean Spearman
+rho 0.77-0.79 vs realized next-season WAR, beating the naive carry-forward
+baseline (0.73) in every pair.  See ``ProjectedWarModel``.
+
+The earlier linear single-metric pricer (``OpeningPriceModel``) is retained:
+it is the comparison pricer used by ``fv_validation`` and the fallback when
+EPM data is unavailable.  The community-census adjustment described in
+docs/opening-price-model.md happens after the CSV is produced and is bounded
 so the crowd can nudge but never set prices.
 """
 
@@ -38,7 +40,19 @@ UNIVERSE_SIZE = 300
 STAR_PRICE = 30_000_000.0
 MID_PRICE = 10_000_000.0
 
+WAR_INTERCEPT = 1.98
+WAR_SLOPE = 2.42
+BLEND_W_EPM = 0.40
+BLEND_W_PRIOR_WAR = 0.35
+BLEND_W_MINUTES = 0.15
+BLEND_W_YOUTH = 0.10
+YOUTH_PIVOT_AGE = 25.0
+MIN_SALARY = 1_200_000.0
+DOLLARS_PER_WIN = 5_000_000.0
+FAIR_VALUE_BLEND_WEIGHT = 0.9
+
 DEFAULT_IMPACT_FILE = Path("data/raw/opening/lebron.csv")
+DEFAULT_EPM_FILE = Path("data/raw/opening/epm_2026.csv")
 DEFAULT_SALARY_FILE = Path("data/raw/opening/salary.csv")
 DEFAULT_OUTPUT_FILE = Path("output/opening-prices-2026-27.csv")
 
@@ -277,29 +291,276 @@ def write_listings_csv(listings: list[OpeningListing], path: Path) -> None:
             )
 
 
+@dataclass(frozen=True)
+class PlayerFeatures:
+    """Joined prior-season inputs for the production model."""
+
+    player: str
+    team: str
+    position: str
+    age: float
+    minutes: float
+    games: float
+    epm: float
+    prior_war: float
+
+
+@dataclass(frozen=True)
+class ProjectedListing:
+    rank: int
+    player: str
+    team: str
+    position: str
+    age: float
+    minutes: float
+    games: float
+    epm: float
+    prior_war: float
+    projected_war: float
+    fair_value: float
+    actual_salary: float
+    opening_price: float
+    tier: str
+
+
+def _zscores(values: list[float]) -> list[float]:
+    mean = sum(values) / len(values)
+    variance = sum((value - mean) ** 2 for value in values) / len(values)
+    deviation = math.sqrt(variance) or 1.0
+    return [(value - mean) / deviation for value in values]
+
+
+@dataclass(frozen=True)
+class ProjectedWarModel:
+    """The validated production model: blend -> projected WAR -> $ per win."""
+
+    war_intercept: float = WAR_INTERCEPT
+    war_slope: float = WAR_SLOPE
+    w_epm: float = BLEND_W_EPM
+    w_prior_war: float = BLEND_W_PRIOR_WAR
+    w_minutes: float = BLEND_W_MINUTES
+    w_youth: float = BLEND_W_YOUTH
+    min_salary: float = MIN_SALARY
+    dollars_per_win: float = DOLLARS_PER_WIN
+    fair_value_blend_weight: float = FAIR_VALUE_BLEND_WEIGHT
+    min_listing_price: float = MIN_LISTING_PRICE
+    max_listing_price: float = MAX_LISTING_PRICE
+
+    def __post_init__(self) -> None:
+        for name, value in self.__dict__.items():
+            if isinstance(value, bool) or not math.isfinite(float(value)):
+                raise ValueError(f"projected-war parameter {name} must be finite")
+        weights = (self.w_epm, self.w_prior_war, self.w_minutes, self.w_youth)
+        if any(weight < 0 for weight in weights):
+            raise ValueError("blend weights must be non-negative")
+        if not math.isclose(sum(weights), 1.0, abs_tol=1e-9):
+            raise ValueError("blend weights must sum to 1.0")
+        if not 0 <= self.fair_value_blend_weight <= 1:
+            raise ValueError("fair_value_blend_weight must be between 0 and 1")
+        if self.min_listing_price > self.max_listing_price:
+            raise ValueError("min_listing_price cannot exceed max_listing_price")
+
+    def projected_wars(self, features: list[PlayerFeatures]) -> list[float]:
+        """z-score the pool, blend, and map the blend to WAR units."""
+
+        if not features:
+            raise ValueError("at least one player is required")
+        z_epm = _zscores([row.epm for row in features])
+        z_war = _zscores([row.prior_war for row in features])
+        z_minutes = _zscores([row.minutes for row in features])
+        z_youth = _zscores([YOUTH_PIVOT_AGE - row.age for row in features])
+        return [
+            self.war_intercept
+            + self.war_slope
+            * (
+                self.w_epm * z_epm[index]
+                + self.w_prior_war * z_war[index]
+                + self.w_minutes * z_minutes[index]
+                + self.w_youth * z_youth[index]
+            )
+            for index in range(len(features))
+        ]
+
+    def fair_value(self, projected_war: float) -> float:
+        return self.min_salary + projected_war * self.dollars_per_win
+
+    def opening_price(self, fair_value: float, actual_salary: float | None) -> float:
+        if actual_salary is None or actual_salary <= 0:
+            blended = fair_value
+        else:
+            blended = (
+                self.fair_value_blend_weight * fair_value
+                + (1 - self.fair_value_blend_weight) * actual_salary
+            )
+        return min(self.max_listing_price, max(self.min_listing_price, blended))
+
+
+def load_epm_by_name(path: Path) -> dict[str, float]:
+    ratings: dict[str, float] = {}
+    with path.open(encoding="utf-8", newline="") as handle:
+        for raw in csv.DictReader(handle):
+            name = (raw.get("player_name") or "").strip()
+            epm = raw.get("epm")
+            if name and epm not in (None, ""):
+                ratings.setdefault(normalize_player_name(name), float(epm))
+    if not ratings:
+        raise ValueError(f"no EPM ratings in {path}")
+    return ratings
+
+
+def build_player_features(
+    impact_rows: list[ImpactRow],
+    epm_by_name: dict[str, float],
+    *,
+    universe_size: int = UNIVERSE_SIZE,
+) -> tuple[list[PlayerFeatures], int]:
+    """Top players by minutes with EPM coverage; returns (features, skipped)."""
+
+    if universe_size <= 0:
+        raise ValueError("universe_size must be positive")
+    universe = sorted(impact_rows, key=lambda row: (-row.minutes, row.player))
+    features: list[PlayerFeatures] = []
+    skipped = 0
+    for row in universe:
+        if len(features) >= universe_size:
+            break
+        epm = epm_by_name.get(normalize_player_name(row.player))
+        if epm is None:
+            skipped += 1
+            continue
+        features.append(
+            PlayerFeatures(
+                player=row.player,
+                team=row.team,
+                position=row.position,
+                age=row.age,
+                minutes=row.minutes,
+                games=row.games,
+                epm=epm,
+                prior_war=row.war,
+            )
+        )
+    if not features:
+        raise ValueError("no players with both impact and EPM data")
+    return features, skipped
+
+
+def build_projected_listings(
+    features: list[PlayerFeatures],
+    salaries: dict[str, float],
+    *,
+    model: ProjectedWarModel | None = None,
+) -> list[ProjectedListing]:
+    model = model or ProjectedWarModel()
+    projected = model.projected_wars(features)
+    listings: list[ProjectedListing] = []
+    for row, projected_war in zip(features, projected):
+        fair_value = model.fair_value(projected_war)
+        actual_salary = salaries.get(normalize_player_name(row.player))
+        price = model.opening_price(fair_value, actual_salary)
+        listings.append(
+            ProjectedListing(
+                rank=0,
+                player=row.player,
+                team=row.team,
+                position=row.position,
+                age=row.age,
+                minutes=row.minutes,
+                games=row.games,
+                epm=row.epm,
+                prior_war=row.prior_war,
+                projected_war=projected_war,
+                fair_value=fair_value,
+                actual_salary=actual_salary or 0.0,
+                opening_price=price,
+                tier=tier_for_price(price),
+            )
+        )
+    listings.sort(key=lambda listing: (-listing.opening_price, listing.player))
+    return [
+        ProjectedListing(**{**listing.__dict__, "rank": index + 1})
+        for index, listing in enumerate(listings)
+    ]
+
+
+def write_projected_listings_csv(listings: list[ProjectedListing], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fields = [
+        "rank",
+        "player",
+        "team",
+        "position",
+        "age",
+        "minutes",
+        "games",
+        "epm",
+        "prior_war",
+        "projected_war",
+        "fair_value",
+        "actual_salary",
+        "opening_price",
+        "tier",
+    ]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(fields)
+        for listing in listings:
+            writer.writerow(
+                [
+                    listing.rank,
+                    listing.player,
+                    listing.team,
+                    listing.position,
+                    round(listing.age, 1),
+                    round(listing.minutes, 1),
+                    int(listing.games),
+                    round(listing.epm, 3),
+                    round(listing.prior_war, 2),
+                    round(listing.projected_war, 2),
+                    round(listing.fair_value),
+                    round(listing.actual_salary),
+                    round(listing.opening_price),
+                    listing.tier,
+                ]
+            )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build season-start opening listing prices.")
     parser.add_argument("--impact-file", type=Path, default=DEFAULT_IMPACT_FILE)
+    parser.add_argument("--epm-file", type=Path, default=DEFAULT_EPM_FILE)
     parser.add_argument("--salary-file", type=Path, default=DEFAULT_SALARY_FILE)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_FILE)
     parser.add_argument("--season-year", type=int, default=2026)
-    parser.add_argument("--metric-column", default="LEBRON")
     parser.add_argument("--universe-size", type=int, default=UNIVERSE_SIZE)
+    parser.add_argument(
+        "--legacy-linear",
+        action="store_true",
+        help="Use the v1 single-metric linear pricer instead of the projected-WAR model",
+    )
     args = parser.parse_args()
 
-    impact_rows = load_impact_rows(
-        args.impact_file, season_year=args.season_year, metric_column=args.metric_column
-    )
+    impact_rows = load_impact_rows(args.impact_file, season_year=args.season_year)
     salaries = load_salaries(args.salary_file)
-    listings = build_opening_listings(
-        impact_rows, salaries, universe_size=args.universe_size
+
+    if args.legacy_linear:
+        listings = build_opening_listings(
+            impact_rows, salaries, universe_size=args.universe_size
+        )
+        write_listings_csv(listings, args.output)
+        print(f"wrote {len(listings)} legacy-linear listings to {args.output}")
+        return
+
+    epm_by_name = load_epm_by_name(args.epm_file)
+    features, skipped = build_player_features(
+        impact_rows, epm_by_name, universe_size=args.universe_size
     )
-    write_listings_csv(listings, args.output)
+    listings = build_projected_listings(features, salaries)
     priced_from_salary = sum(1 for listing in listings if listing.actual_salary > 0)
+    write_projected_listings_csv(listings, args.output)
     print(
-        f"wrote {len(listings)} listings to {args.output} "
-        f"({priced_from_salary} blended with actual salary, "
-        f"{len(listings) - priced_from_salary} impact-only)"
+        f"wrote {len(listings)} projected-WAR listings to {args.output} "
+        f"({priced_from_salary} blended with actual salary, {skipped} skipped without EPM)"
     )
 
 

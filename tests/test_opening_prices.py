@@ -8,11 +8,16 @@ from pathlib import Path
 from nba_stock_market.opening_prices import (
     ImpactRow,
     OpeningPriceModel,
+    PlayerFeatures,
+    ProjectedWarModel,
     build_opening_listings,
+    build_player_features,
+    build_projected_listings,
     load_impact_rows,
     load_salaries,
     tier_for_price,
     write_listings_csv,
+    write_projected_listings_csv,
 )
 
 
@@ -154,6 +159,104 @@ class OpeningPriceIoTest(unittest.TestCase):
         self.assertEqual(len(written), 1)
         self.assertEqual(written[0]["player"], "Round Trip")
         self.assertEqual(written[0]["tier"], listings[0].tier)
+
+
+def player_features(
+    player: str,
+    epm: float,
+    *,
+    prior_war: float = 2.0,
+    minutes: float = 2000.0,
+    age: float = 25.0,
+) -> PlayerFeatures:
+    return PlayerFeatures(
+        player=player,
+        team="TST",
+        position="SF",
+        age=age,
+        minutes=minutes,
+        games=70.0,
+        epm=epm,
+        prior_war=prior_war,
+    )
+
+
+class ProjectedWarModelTest(unittest.TestCase):
+    def pool(self) -> list[PlayerFeatures]:
+        return [
+            player_features("Star", 6.0, prior_war=10.0, minutes=2600.0, age=26.0),
+            player_features("Starter", 1.5, prior_war=4.0, minutes=2200.0, age=27.0),
+            player_features("Rotation", -0.5, prior_war=1.5, minutes=1500.0, age=24.0),
+            player_features("Bench", -2.0, prior_war=0.3, minutes=800.0, age=31.0),
+        ]
+
+    def test_projected_war_orders_by_blend(self) -> None:
+        projected = ProjectedWarModel().projected_wars(self.pool())
+        self.assertEqual(projected, sorted(projected, reverse=True))
+
+    def test_average_pool_member_projects_near_intercept(self) -> None:
+        identical = [player_features(f"P{i}", 2.0) for i in range(4)]
+        projected = ProjectedWarModel().projected_wars(identical)
+        for value in projected:
+            self.assertAlmostEqual(value, 1.98)
+
+    def test_fair_value_is_min_salary_plus_wins(self) -> None:
+        model = ProjectedWarModel()
+        self.assertAlmostEqual(model.fair_value(0.0), 1_200_000.0)
+        self.assertAlmostEqual(model.fair_value(10.0), 51_200_000.0)
+
+    def test_opening_price_blends_ninety_ten(self) -> None:
+        model = ProjectedWarModel()
+        self.assertAlmostEqual(
+            model.opening_price(40_000_000.0, 20_000_000.0),
+            0.9 * 40_000_000.0 + 0.1 * 20_000_000.0,
+        )
+        self.assertAlmostEqual(model.opening_price(40_000_000.0, None), 40_000_000.0)
+
+    def test_floor_and_cap_apply(self) -> None:
+        model = ProjectedWarModel()
+        self.assertEqual(model.opening_price(-3_000_000.0, None), 2_000_000.0)
+        self.assertEqual(model.opening_price(90_000_000.0, None), 70_000_000.0)
+
+    def test_weights_must_sum_to_one(self) -> None:
+        with self.assertRaises(ValueError):
+            ProjectedWarModel(w_epm=0.5, w_prior_war=0.5, w_minutes=0.5, w_youth=0.5)
+
+    def test_empty_pool_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            ProjectedWarModel().projected_wars([])
+
+
+class ProjectedPipelineTest(unittest.TestCase):
+    def test_features_skip_players_without_epm(self) -> None:
+        rows = [
+            impact_row("Has Epm", 2.0, minutes=2400.0),
+            impact_row("No Epm", 3.0, minutes=2300.0),
+            impact_row("Also Has", 1.0, minutes=2200.0),
+        ]
+        epm = {"hasepm": 2.5, "alsohas": 0.5}
+        features, skipped = build_player_features(rows, epm, universe_size=3)
+        self.assertEqual([f.player for f in features], ["Has Epm", "Also Has"])
+        self.assertEqual(skipped, 1)
+
+    def test_listings_rank_by_price_and_round_trip(self) -> None:
+        features = [
+            player_features("Alpha", 5.0, prior_war=9.0, minutes=2500.0, age=25.0),
+            player_features("Beta", 0.0, prior_war=2.0, minutes=1800.0, age=28.0),
+            player_features("Gamma", -1.5, prior_war=0.5, minutes=1000.0, age=33.0),
+        ]
+        listings = build_projected_listings(features, {"alpha": 50_000_000.0})
+        self.assertEqual(listings[0].player, "Alpha")
+        self.assertEqual([listing.rank for listing in listings], [1, 2, 3])
+        self.assertGreater(listings[0].projected_war, listings[-1].projected_war)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "out.csv"
+            write_projected_listings_csv(listings, path)
+            with path.open(encoding="utf-8", newline="") as handle:
+                written = list(csv.DictReader(handle))
+        self.assertEqual(len(written), 3)
+        self.assertEqual(written[0]["player"], "Alpha")
+        self.assertIn("projected_war", written[0])
 
 
 if __name__ == "__main__":
