@@ -110,7 +110,7 @@ posture is "not gambling.")*
 | Injury robustness (×2) | **5** | 2 | 4 |
 | Engine cost to implement (×1) | **5** | 2 | 3 |
 | Discourse / shareability (×1) | 3 | 4 | **5** |
-| **Weighted total (max 70)** | **56** | 36 | **61** |
+| **Weighted total (max 70)** | **56** | 39 | **61** |
 
 Design 1 is the safest and simplest but fails the assignment — its "long-term short" can't
 target price, which is the entire point of the slot. Design 2 nails price shorting but drags
@@ -137,10 +137,15 @@ everything else at Design 1's simplicity.
 
 ### B. Long-term short — 1 slot, a real price short
 
-- Open against any player you don't own: notional = his current price P₀. P&L on close =
-  **P₀ − P₁**, credited/debited to cash. Close anytime; think Russell's Brown example.
+- Open against any player you don't own: notional = his current price P₀. **No cash changes
+  hands at open** (no real-world "sale proceeds" — that would mint liquidity); P&L settles
+  only on close: **P₀ − P₁**, credited/debited to cash. Close anytime; think Russell's Brown
+  example.
 - **Collateral:** 30% of P₀ reserved while open. **Auto-close** if price rises to P₀ × 1.3
   (loss = collateral, never more — bounded like everything else, no cascading margin).
+  Note the deliberate constraint: shorting a $70M star locks up $21M of a bankroll that is
+  mostly spent on the roster — the big short is a real allocation decision, not a free
+  opinion.
 - **Price impact:** opening applies one share of sell-side impact; closing one share of
   buy-side — shorts are real market participants, which is what makes the market two-sided.
 - **Decay patch:** a player with open short interest counts as "active" — inactivity decay
