@@ -215,6 +215,31 @@ The replay harness can rehearse all of this against 2025-26 before any UI exists
 4. **Inflation audit:** full-season replay with all instruments active at plausible usage
    rates; require the cohort stays inside the agreed band (~−1.5% to +5%).
 
+## First simulation results (2026-07-15, `nba_stock_market/instruments_simulation.py`)
+
+60 mock traders (7 archetypes) replayed the full 2025-26 season with all instruments active —
+real box scores, cached D&T projections, Engine v2 trading. Report:
+`output/instruments-sim.md`. Four findings:
+
+1. **Weekly shorts work mechanically and the economy holds** (cohort +1.28% with everything
+   on; 1,408 shorts settled). Per-slot variance ≈ $0.6M — comfortably inside the $2M
+   reserve/cap, which look correctly sized.
+2. **Calibration flag: shorts on the top-150 universe carry a small systematic edge**
+   (~+$24K mean per short for BOTH informed and random shorters, ~53% win rate). The
+   league-wide bias correction (+0.436 NP) was fit across all players; the top 150 slightly
+   undershoot corrected projections, so shorting anyone in the listed universe is
+   mildly +EV. Fix candidates: tier-specific bias corrections, or accept and let the arming
+   fee absorb it (currently $2K vs ~$24K edge — too small).
+3. **Naive "fade the hot week" showed no skill edge over random shorting** (means within
+   noise of each other) — consistent with D&T projections already pricing in mean reversion.
+   Good news for economy safety; the skill ceiling question needs smarter strategies.
+4. **Boost fees are miscalibrated as ad valorem**: 0.25% of a star's price (~$100K+) to double
+   a zero-expectation dividend is structurally negative-EV — boosters finished last on fees
+   alone. Boosts should carry a flat fee (like the $2K short fee), pricing the *variance*,
+   not the player. Also: **price shorts never triggered** — with prototype impact (k=0.003)
+   and thin flows, no price ever ran 5% above listing; the season short's viability depends
+   on Ryan's order-flow calibration and should be re-tested with livelier markets.
+
 ## Open questions for the group
 
 1. Weekly-short slot notional: flat $2M/slot (proposed) or scaled to the shorted player's

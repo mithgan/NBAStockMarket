@@ -15,4 +15,5 @@ output/*
 !output/fv-validation.md
 !output/trader-simulation.md
 !output/trader-simulation.json
+!output/instruments-sim.md
 .env
