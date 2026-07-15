@@ -5,9 +5,9 @@ example, the short-term vs long-term short distinction, temporary-longs-at-a-pre
 injury concern, Ryan's simplicity constraint) and the current Economy v2 engine (one
 whole-player share per user, $140M bankroll, D&T-projection surprise dividends at $40K/NP).
 
-**Requested slot structure:** ten roster players + **3 short-term shorts + 1 long-term short +
-a form of longs.** This doc proposes three complete designs for how those slots pay, evaluates
-them, and recommends one.
+**Decided slot structure (Mith, 7/15):** ten roster players + **3 weekly shorts + 1
+season-long short + 2 long ("boost") slots.** This doc records the designs considered for how
+those slots pay, the evaluation, and the full spec of the chosen design.
 
 ---
 
@@ -77,10 +77,13 @@ Match the instrument to what actually moves at each timescale: **games move divi
 narratives move prices.** So short-term instruments settle on dividends, the long-term one
 settles on price.
 
-- **3 short-term shorts = per-game dividend mirrors** (from Design 1). The skill: matchup
-  reads, rest patterns, "that 83-point game was fake." Sexton-principle symmetric: shorting a
-  star's *routine* night pays nothing; calling a real dud pays big.
-- **1 long-term short = a price short** (from Design 2), the one place its complexity earns
+- **3 weekly shorts = week-window dividend mirrors** (Design 1 mechanics at a week horizon).
+  The skill: role/schedule reads, "that 83-point game was fake," "this stretch of opponents
+  buries him." Weekly rather than per-game because a single game's surprise is ~85-90% noise
+  (single-game σ ≈ 8-10 NP vs real effects of 1-3 NP); over a ~3-4 game window the noise
+  shrinks by √n while the signal persists — the skill-to-luck ratio nearly doubles. Weekly
+  cadence also matches fantasy rhythm and removes nightly micromanagement.
+- **1 season-long short = a price short** (from Design 2), the one place its complexity earns
   its keep — with three targeted guardrails instead of a general margin system (below).
 - **2 long boosts = per-game 2× dividend multipliers on owned players** (Russell's temporary
   long, priced at a premium: activation fee + doubled downside).
@@ -122,20 +125,29 @@ everything else at Design 1's simplicity.
 
 ## Recommended spec (Design 3, full detail)
 
-### A. Short-term shorts — 3 slots, per-game dividend mirrors
+### A. Weekly shorts — 3 slots, week-window dividend mirrors
 
-- Arm a slot any time before tip-off; it settles at final: **payout = −1 × (actual − projected
-  NP) × $40K**, same ±25 NP cap as regular dividends → max win/loss $1M per slot per night.
-- **Reserve requirement:** $1M cash per armed slot (covers the max loss; no margin calls ever).
-- **Void rules:** player DNP or plays <40% of projected minutes → void, fee refunded. No
-  projection published (two-way call-up) → not shortable.
-- **Friction:** flat 0.1% of $1M ($1K) arming fee per short — the sink that stops spray-and-pray.
-- **No self-overlap:** can't game-short a player you hold or have boosted tonight (blocks
-  wash-hedging and confusion); max one armed short per player per user.
-- Expected value under Option B projections is exactly $0 — this is a pure skill/variance
-  instrument, and in aggregate it adds **zero inflation** (fees make it net deflationary).
+- Arm a slot before a **Monday-Sunday window's** first game; it settles Sunday night:
+  **payout = −1 × Σ (actual − projected NP) × $40K** across every game the player plays that
+  week. Per-game surprise is capped at ±25 NP before summing; the weekly aggregate is capped
+  at **±50 NP → max win/loss $2M per slot per week**.
+- **Reserve requirement:** $2M cash per armed slot (covers the max loss; no margin calls ever).
+- **Void rules:** a DNP or <40%-of-projected-minutes game simply contributes $0 to the weekly
+  sum (no refund gymnastics); a window in which the player logs zero qualifying games settles
+  at $0 with the fee refunded. No projection published (two-way call-up) → not shortable.
+- **Friction:** flat $2K arming fee per short (0.1% of the slot) — the sink that stops
+  spray-and-pray.
+- **No self-overlap:** can't week-short a player you hold or boost during that window (blocks
+  wash-hedging and confusion); max one armed short per player per user at a time.
+- Expected value under Option B projections is ~$0 — a pure skill/variance instrument, and in
+  aggregate it adds **zero inflation** (fees make it net deflationary).
+- *Why weekly, not daily:* one game of surprise is overwhelmingly noise (σ ≈ 8-10 NP against
+  real, persistent effects of 1-3 NP/game). Aggregating ~3-4 games nearly doubles the
+  skill-to-luck ratio, simplifies DNP handling, and matches a check-in cadence casual users
+  can actually sustain. The single-matchup "bad defense tonight" call is deliberately
+  sacrificed — it was the noisiest and most prop-bet-flavored call in the design.
 
-### B. Long-term short — 1 slot, a real price short
+### B. Season-long short — 1 slot, a real price short
 
 - Open against any player you don't own: notional = his current price P₀. **No cash changes
   hands at open** (no real-world "sale proceeds" — that would mint liquidity); P&L settles
@@ -173,8 +185,8 @@ everything else at Design 1's simplicity.
 | Slot | Count | Settles on | Horizon | Max loss | The call it expresses |
 |---|---|---|---|---|---|
 | Roster | 10 | dividends + price | season | price paid | "I believe in him" |
-| Game short | 3 | dividends (inverted) | one game | $1M/slot | "He no-shows tonight" |
-| Price short | 1 | price | open-ended | 30% of notional | "The market is wrong about him" |
+| Weekly short | 3 | dividends (inverted, cumulative) | Mon-Sun window | $2M/slot | "He has a bad week coming" |
+| Price short | 1 | price | season / open-ended | 30% of notional | "The market is wrong about him" |
 | Boost | 2 | dividends (2×) | one game | 2× a bad night | "I want MORE of my guy tonight" |
 
 ### Playoffs (from the call, compatible)
@@ -189,9 +201,12 @@ per-game.
 
 The replay harness can rehearse all of this against 2025-26 before any UI exists:
 
-1. **Game shorts:** simulate naive strategies (short last night's over-performer; short vs
-   back-to-backs; random) — confirm ~zero mean, measure variance, and verify the $1K fee makes
-   random spraying clearly negative-EV.
+1. **Weekly shorts:** simulate naive strategies (short last week's over-performer; short
+   dense-schedule weeks; random) against the real 2025-26 season with cached D&T projections —
+   confirm ~zero mean, measure per-slot weekly variance (calibrates the ±50 NP cap and $2M
+   reserve), and verify the arming fee makes random spraying clearly negative-EV. Also measure
+   the horizon effect directly (1-game vs weekly windows) to document the noise-averaging
+   rationale with real numbers.
 2. **Price short:** replay with synthetic trader flows and confirm (a) decay-pause kills the
    ignored-player farm, (b) the 1.3× auto-close bounds every historical trajectory, (c) the
    injury settlement rule never pays more than the pre-injury mark.
@@ -202,13 +217,13 @@ The replay harness can rehearse all of this against 2025-26 before any UI exists
 
 ## Open questions for the group
 
-1. Game-short slot notional: flat $1M/slot (proposed) or scaled to the shorted player's price?
-   Flat is simpler and keeps bench-player shorts meaningful.
+1. Weekly-short slot notional: flat $2M/slot (proposed) or scaled to the shorted player's
+   price? Flat is simpler and keeps bench-player shorts meaningful.
 2. Should the price short be allowed on your own player (as a hedge)? Proposed **no** —
    hedging your own roster is real-market-correct but confusing, and 10 slots is few enough
    that "sell him instead" is the honest answer.
 3. Boost multiplier: 2× (proposed) or a premium-priced 3× tier later? Start 2×.
-4. Do game shorts appear on the public feed immediately (juicy, invites pile-ons) or only
-   after settlement (safer)? Proposed: after settlement, with a "most shorted tonight"
-   aggregate before tip-off.
+4. Do weekly shorts appear on the public feed immediately (juicy, invites pile-ons) or only
+   after settlement (safer)? Proposed: after settlement, with a "most shorted this week"
+   aggregate published when each window opens.
 5. Playoff mode scope — separate bankroll or carried over?
