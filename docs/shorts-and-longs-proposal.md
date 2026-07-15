@@ -224,15 +224,25 @@ real box scores, cached D&T projections, Engine v2 trading. Report:
 1. **Weekly shorts work mechanically and the economy holds** (cohort +1.28% with everything
    on; 1,408 shorts settled). Per-slot variance ≈ $0.6M — comfortably inside the $2M
    reserve/cap, which look correctly sized.
-2. **Calibration flag: shorts on the top-150 universe carry a small systematic edge**
-   (~+$24K mean per short for BOTH informed and random shorters, ~53% win rate). The
-   league-wide bias correction (+0.436 NP) was fit across all players; the top 150 slightly
-   undershoot corrected projections, so shorting anyone in the listed universe is
-   mildly +EV. Fix candidates: tier-specific bias corrections, or accept and let the arming
-   fee absorb it (currently $2K vs ~$24K edge — too small).
-3. **Naive "fade the hot week" showed no skill edge over random shorting** (means within
-   noise of each other) — consistent with D&T projections already pricing in mean reversion.
-   Good news for economy safety; the skill ceiling question needs smarter strategies.
+2. **Random shorting has no real edge — but projections have a within-season bias curve.**
+   (Corrected 7/15 after a 5-seed rerun + a population-level analysis of all 26,508
+   projected player-games.) The single-run "+$24K random-short edge" was seed noise: across
+   seeds 7/42/1337/9001/2027 random shorts averaged −$9K, +$0.3K, −$1K, +$9K, +$25K
+   (population-true mean ≈ +$1K vs per-short std ≈ $600K). The top-150 universe's overall
+   surprise mean is −0.009 NP/game — the league-wide bias correction is fine *on average*.
+   What IS structural is a **month-of-season curve**: top-150 players beat corrected
+   projections early (Oct +1.05, Nov +0.49 NP/game) and undershoot midseason (Jan −0.39,
+   Feb −0.44). Timed shorts ("short everyone in Jan-Feb") would earn ~$50-60K/slot-week
+   against a $2K fee. **Recommendation: replace the flat +0.436 bias constant with a
+   month-of-season bias curve** — it kills the timing exploit and the holders' mirror-image
+   seasonal drag at once.
+3. **"Fade the hot week" shows a modest, probably-real skill edge** (corrected 7/15): the
+   fader archetype was positive in **all five seeds** (+$10K to +$31K, pooled ≈ +$23K/short
+   over ~3,500 shorts ≈ 2.3σ above zero). D&T projections appear not to fully price
+   week-scale mean reversion. At ~10x the arming fee this is large enough that everyone
+   would eventually run it (~+1% bankroll/season at full usage): either raise the arming fee
+   toward ~$10K, or accept it as the instrument's "basic strategy" floor and let real skill
+   compete above it.
 4. **Boost fees are miscalibrated as ad valorem**: 0.25% of a star's price (~$100K+) to double
    a zero-expectation dividend is structurally negative-EV — boosters finished last on fees
    alone. Boosts should carry a flat fee (like the $2K short fee), pricing the *variance*,
