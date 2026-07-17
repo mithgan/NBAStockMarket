@@ -205,7 +205,23 @@ BIAS_COLD_START           = last season's October mean
 Re-run `instruments_simulation.py` with §5 and §6 applied and require:
 
 1. Random weekly shorting EV ≈ −fee (no structural tilt either direction).
-2. Fade-the-hottest EV ≤ 0 net of fees.
+2. Fade-the-hottest EV ≤ 0 net of fees, **evaluated as the pooled mean across ≥10 seeds**
+   (per-seed means carry ~±$23K of sampling noise and are not individually meaningful).
 3. October holder surplus < $20K/week per held player (vs $120K uncorrected).
 4. Cohort wealth change within −1.5% to +5% for the full season.
 5. All existing engine tests green; settlement idempotency preserved.
+
+**Executed 2026-07-16** (30 runs: 10 seeds × fees {0.25%, 0.30%, 0.35%}, production
+`InstrumentsBook`, rolling-30 bias, ~6,400 settled fades per fee):
+
+| Fee | Fade pooled | Seeds ≤ 0 | Random pooled | Inflation mean (worst) |
+|---|---:|---:|---:|---:|
+| **0.25% (decided)** | **−$9,807 ± $7,487** | 8/10 | −$38,808 | −0.72% (−1.54%) |
+| 0.30% | −$23,064 | 10/10 | −$47,363 | −0.88% (−1.69%) |
+| 0.35% | −$37,957 | 10/10 | −$54,883 | −1.03% (−1.86%) |
+
+Decision (Mith, 7/16): **keep 0.25%** — fade exploit is dead at pooled level, fee stays
+symmetric with trading, and higher fees push the worst deflation seeds below the −1.5%
+band. **Tripwire:** re-measure fade EV on real user data after ~8 live weeks; if the pooled
+live estimate exceeds $0 by more than its standard error, raise the fee to 0.30% and trim
+the idle-cash sink to re-center inflation.

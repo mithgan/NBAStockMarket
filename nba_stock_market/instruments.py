@@ -100,6 +100,7 @@ class InstrumentsBook:
     closed_price_shorts: list[PriceShort] = field(default_factory=list)
     boosts: list[Boost] = field(default_factory=list)
     reserved: dict[str, float] = field(default_factory=dict)
+    borrow_paid: dict[str, float] = field(default_factory=dict)
 
     # ------------------------------------------------------------------ util
 
@@ -163,6 +164,9 @@ class InstrumentsBook:
             raise InstrumentError("cannot short a player you boosted this week")
         if self.active_weekly_shorts(user_id=user_id, player_id=player_id):
             raise InstrumentError("already shorting this player")
+        open_price_short = self.price_shorts.get(user_id)
+        if open_price_short is not None and open_price_short.player_id == player_id:
+            raise InstrumentError("one position per player: price short already open")
         if len(self.active_weekly_shorts(user_id=user_id, week=week)) >= WEEKLY_SHORT_SLOTS:
             raise InstrumentError("all weekly short slots are armed")
         if len(self.active_weekly_shorts(player_id=player_id)) >= MAX_WEEKLY_SHORTS_PER_PLAYER:
@@ -202,6 +206,8 @@ class InstrumentsBook:
             raise InstrumentError("price short slot already in use")
         if user.shares(player_id) > 0:
             raise InstrumentError("cannot price-short a player you hold")
+        if self.active_weekly_shorts(user_id=user_id, player_id=player_id):
+            raise InstrumentError("one position per player: weekly short already armed")
         open_on_player = sum(
             1 for position in self.price_shorts.values() if position.player_id == player_id
         )
@@ -249,9 +255,12 @@ class InstrumentsBook:
             borrow = PRICE_SHORT_BORROW_DAILY * position.open_price
             if self.free_cash(user_id) < borrow:
                 self.close_price_short(user_id, reason="insolvency")
-                user.cash -= min(borrow, max(0.0, user.cash))
+                charged = min(borrow, max(0.0, user.cash))
+                user.cash -= charged
+                self.borrow_paid[user_id] = self.borrow_paid.get(user_id, 0.0) + charged
                 continue
             user.cash -= borrow
+            self.borrow_paid[user_id] = self.borrow_paid.get(user_id, 0.0) + borrow
             if player.current_price >= PRICE_SHORT_STOP_OUT * position.open_price:
                 self.close_price_short(user_id, reason="stop-out")
 

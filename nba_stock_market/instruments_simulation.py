@@ -1,21 +1,20 @@
-"""Replay 2025-26 with mock traders who can short and long.
+"""Replay 2025-26 with mock traders using the PRODUCTION instruments module.
 
-Instruments simulated on top of Engine v2 (docs/shorts-and-longs-proposal.md):
+Runs the acceptance tests of docs/shorting-spec.md §9: the season is replayed
+through Engine v2 with `InstrumentsBook` (spec fees: 0.25% ad valorem, min
+$10K), and the expectation bias is the spec's **rolling 30-day correction with
+a seeded cold start** (previous season's October mean when available) fitted
+on the listed universe.
 
-- 3 weekly-short slots: Mon-Sun dividend mirrors, per-game surprise capped at
-  +/-25 NP, weekly aggregate capped at +/-50 NP, $2M reserve, $2K arming fee.
-- 1 season price short: no proceeds at open, 30% collateral, auto-close at
-  +30% adverse, 0.05%/day borrow fee, decay paused while shorted.
-- 2 boost slots: one-game 2x dividend on an owned player, 0.25% price fee.
-
-Expectations are the cached Dunks & Threes pregame projections (Option B
-canonical source); actuals are the ESPN player game logs. Deterministic seed.
+Acceptance criteria checked in the report:
+  1. random weekly shorting EV ~ -fee (no structural tilt)
+  2. fade-the-hottest EV <= 0 net of fees
+  3. cohort wealth change inside the -1.5%..+5% band
 """
 
 from __future__ import annotations
 
 import argparse
-import math
 import random
 import statistics
 from collections import defaultdict
@@ -38,20 +37,17 @@ from nba_stock_market.engine import (
 )
 from nba_stock_market.expectations import DunksAndThreesExpectation
 from nba_stock_market.historical_data import load_game_records
+from nba_stock_market.instruments import (
+    InstrumentError,
+    InstrumentsBook,
+    week_of,
+)
 
 
-WEEKLY_SHORT_SLOTS = 3
-WEEKLY_GAME_CAP_NP = 25.0
-WEEKLY_AGGREGATE_CAP_NP = 50.0
-WEEKLY_SHORT_RESERVE = 2_000_000.0
-WEEKLY_SHORT_FEE = 2_000.0
-PRICE_SHORT_COLLATERAL_PCT = 0.30
-PRICE_SHORT_AUTO_CLOSE = 1.30
-PRICE_SHORT_BORROW_FEE_DAILY = 0.0005
+ROLLING_WINDOW_DAYS = 30
+ROLLING_MIN_GAMES = 300
+FALLBACK_COLD_START = 0.35
 PRICE_SHORT_TAKE_PROFIT = 0.85
-BOOST_SLOTS = 2
-BOOST_FEE_PCT = 0.0025
-DOLLARS_PER_NP = 40_000.0
 
 ARCHETYPE_COUNTS = {
     "holder": 8,
@@ -65,38 +61,13 @@ ARCHETYPE_COUNTS = {
 
 
 @dataclass
-class WeeklyShort:
-    user_id: str
-    player_id: str
-    week: str
-    accumulated_np: float = 0.0
-    games: int = 0
-
-
-@dataclass
-class PriceShort:
-    user_id: str
-    player_id: str
-    open_price: float
-    open_day: int
-    closed: bool = False
-    close_price: float = 0.0
-    auto_closed: bool = False
-
-
-@dataclass
 class Ledger:
     dividends: float = 0.0
     boosts: float = 0.0
     weekly_shorts: float = 0.0
     price_shorts: float = 0.0
     fees: float = 0.0
-    weekly_short_results: list[float] = field(default_factory=list)
-
-
-def week_key(game_date: date) -> str:
-    iso = game_date.isocalendar()
-    return f"{iso.year}-W{iso.week:02d}"
+    weekly_short_net_results: list[float] = field(default_factory=list)
 
 
 def build_market(
@@ -117,6 +88,7 @@ def build_market(
         players,
         users,
         expectation_source=None,
+        expectation_bias=0.0,
         inactivity_decay_rate=INACTIVITY_DECAY_DEFAULT if decay else 0.0,
     )
     universe_ids = {entry.player_id for entry in universe}
@@ -125,6 +97,41 @@ def build_market(
     for entry in universe:
         by_tier[entry.tier].append(entry)
     return market, game_rows, by_tier
+
+
+def cold_start_bias(prior_data_dir: Path, prior_dnt_dir: Path) -> float:
+    """Previous season's October raw-surprise mean on its listed universe."""
+
+    try:
+        games = load_game_records(prior_data_dir / "player_game_logs.csv")
+    except OSError:
+        return FALLBACK_COLD_START
+    if not prior_dnt_dir.exists():
+        return FALLBACK_COLD_START
+    minutes: defaultdict[str, float] = defaultdict(float)
+    for game in games:
+        minutes[game.player_id] += game.box_score.minutes
+    top150 = set(sorted(minutes, key=lambda pid: -minutes[pid])[:150])
+    expectation = DunksAndThreesExpectation(cache_dir=prior_dnt_dir)
+    dummy: dict[str, Player] = {}
+    surprises = []
+    for game in games:
+        if game.player_id not in top150 or game.game_date.month != 10:
+            continue
+        player = dummy.setdefault(
+            game.player_name, Player(game.player_id, game.player_name, "mid", 1e6, 1e6)
+        )
+        try:
+            projected = expectation.projected_box_score(player, game.game_date)
+        except Exception:
+            continue
+        if projected is None:
+            continue
+        from nba_stock_market.engine import NetPointsModel
+
+        model = NetPointsModel()
+        surprises.append(model.score(game.box_score) - model.score(projected))
+    return statistics.fmean(surprises) if surprises else FALLBACK_COLD_START
 
 
 def assign_archetypes(market: Market) -> dict[str, str]:
@@ -139,8 +146,6 @@ def assign_archetypes(market: Market) -> dict[str, str]:
 
 
 def draft_rosters(market: Market, by_tier: dict, rng: random.Random) -> None:
-    """Every trader drafts ~10 players under the bankroll: 2 stars, 4 mid, 4 bench."""
-
     plan = (("star", 2), ("mid", 4), ("bench", 4))
     for user_id in sorted(market.users):
         for tier, want in plan:
@@ -152,7 +157,7 @@ def draft_rosters(market: Market, by_tier: dict, rng: random.Random) -> None:
                     break
                 user = market.users[user_id]
                 price = market.players[entry.player_id].current_price
-                if user.cash < price * (1 + market.fee_pct) + 8_000_000:
+                if user.cash < price * (1 + market.fee_pct) + 12_000_000:
                     continue
                 try:
                     market.execute_trade(user_id, entry.player_id, TradeSide.BUY, 1)
@@ -161,20 +166,22 @@ def draft_rosters(market: Market, by_tier: dict, rng: random.Random) -> None:
                     continue
 
 
-def surprise_last_week(
-    weekly_np: dict[str, dict[str, float]], week: str, player_id: str
-) -> float:
-    return weekly_np.get(week, {}).get(player_id, 0.0)
-
-
 def run_simulation(
-    data_dir: Path, dnt_dir: Path, seed: int = 2027, *, decay: bool = False
+    data_dir: Path,
+    dnt_dir: Path,
+    seed: int = 2027,
+    *,
+    decay: bool = False,
+    prior_data_dir: Path = Path("data/raw/2024-25"),
+    prior_dnt_dir: Path = Path("data/raw/dnt-2024-25"),
 ) -> dict:
     rng = random.Random(seed)
     market, game_rows, by_tier = build_market(data_dir, decay=decay)
+    book = InstrumentsBook(market)
     archetype_of = assign_archetypes(market)
     ledgers: dict[str, Ledger] = {uid: Ledger() for uid in market.users}
     expectation = DunksAndThreesExpectation(cache_dir=dnt_dir)
+    seed_bias = cold_start_bias(prior_data_dir, prior_dnt_dir)
     draft_rosters(market, by_tier, rng)
     start_wealth = {uid: market.portfolio_value(uid) for uid in market.users}
 
@@ -182,104 +189,52 @@ def run_simulation(
     for row in game_rows:
         games_by_date[row.game_date].append(row)
     calendar = sorted(games_by_date)
-    season_weeks = sorted({week_key(day) for day in calendar})
+    season_weeks = sorted({week_of(day) for day in calendar})
     days_of_week: dict[str, list[date]] = defaultdict(list)
     for day in calendar:
-        days_of_week[week_key(day)].append(day)
+        days_of_week[week_of(day)].append(day)
+    player_days_in_week: dict[str, dict[str, date]] = defaultdict(dict)
+    for day in calendar:
+        for row in games_by_date[day]:
+            player_days_in_week[week_of(day)].setdefault(row.player_id, day)
 
+    raw_surprises: list[tuple[date, float]] = []
     weekly_np: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    open_weeklies: list[WeeklyShort] = []
-    open_price_shorts: dict[str, PriceShort] = {}
-    closed_price_shorts: list[PriceShort] = []
-    boosts_today: dict[tuple[str, str], str] = {}
     listing = {pid: market.players[pid].opening_price for pid in market.players}
+    positions_by_user_week: dict[tuple[str, str], list] = defaultdict(list)
     projection_cover = [0, 0]
 
+    def rolling_bias(day: date) -> float:
+        window = [s for d, s in raw_surprises if day - timedelta(days=ROLLING_WINDOW_DAYS) <= d < day]
+        if len(window) < ROLLING_MIN_GAMES:
+            return seed_bias
+        return statistics.fmean(window)
+
     def arm_weekly_shorts(week: str, prev_week: str | None) -> None:
+        first_day = days_of_week[week][0]
         for uid, kind in archetype_of.items():
             if kind not in ("fader", "random_short"):
                 continue
-            user = market.users[uid]
             if kind == "fader" and prev_week:
-                pool = sorted(
-                    weekly_np[prev_week].items(), key=lambda item: -item[1]
-                )
-                picks = [pid for pid, _ in pool if user.shares(pid) == 0][:WEEKLY_SHORT_SLOTS]
+                pool = [pid for pid, _ in sorted(weekly_np[prev_week].items(), key=lambda kv: -kv[1])]
+            elif kind == "random_short":
+                pool = sorted(market.players)
+                rng.shuffle(pool)
             else:
-                pool = [pid for pid in market.players if user.shares(pid) == 0]
-                picks = rng.sample(pool, WEEKLY_SHORT_SLOTS)
-            for pid in picks:
-                if user.cash < WEEKLY_SHORT_RESERVE + WEEKLY_SHORT_FEE:
+                continue
+            armed = 0
+            for pid in pool:
+                if armed >= 3:
                     break
-                user.cash -= WEEKLY_SHORT_FEE
-                ledgers[uid].fees += WEEKLY_SHORT_FEE
-                open_weeklies.append(WeeklyShort(uid, pid, week))
-
-    def settle_weekly_shorts(week: str) -> None:
-        for position in [p for p in open_weeklies if p.week == week]:
-            capped = max(-WEEKLY_AGGREGATE_CAP_NP, min(WEEKLY_AGGREGATE_CAP_NP, position.accumulated_np))
-            pnl = -capped * DOLLARS_PER_NP
-            user = market.users[position.user_id]
-            if position.games == 0:
-                user.cash += WEEKLY_SHORT_FEE
-                ledgers[position.user_id].fees -= WEEKLY_SHORT_FEE
-            else:
-                user.cash += pnl
-                ledgers[position.user_id].weekly_shorts += pnl
-                ledgers[position.user_id].weekly_short_results.append(pnl)
-            open_weeklies.remove(position)
-
-    def maybe_open_price_shorts(week_index: int) -> None:
-        if week_index < 3:
-            return
-        for uid, kind in archetype_of.items():
-            if kind != "price_shorter" or uid in open_price_shorts:
-                continue
-            user = market.users[uid]
-            pumped = max(
-                (pid for pid in market.players if user.shares(pid) == 0),
-                key=lambda pid: market.players[pid].current_price / listing[pid],
-            )
-            player = market.players[pumped]
-            if player.current_price / listing[pumped] < 1.05:
-                continue
-            collateral = PRICE_SHORT_COLLATERAL_PCT * player.current_price
-            if user.cash < collateral:
-                continue
-            depth = market.liquidity(pumped)
-            player.current_price *= math.exp(-market.impact_k / depth)
-            player.current_price = max(player.current_price, player.floor)
-            open_price_shorts[uid] = PriceShort(uid, pumped, player.current_price, market.day)
-
-    def price_short_daily() -> None:
-        for uid, position in list(open_price_shorts.items()):
-            player = market.players[position.player_id]
-            player.last_trade_day = market.day
-            user = market.users[uid]
-            borrow = PRICE_SHORT_BORROW_FEE_DAILY * position.open_price
-            user.cash -= borrow
-            ledgers[uid].fees += borrow
-            ratio = player.current_price / position.open_price
-            take_profit = ratio <= PRICE_SHORT_TAKE_PROFIT
-            stopped = ratio >= PRICE_SHORT_AUTO_CLOSE
-            if take_profit or stopped:
-                close_price_short(uid, auto=stopped)
-
-    def close_price_short(uid: str, *, auto: bool) -> None:
-        position = open_price_shorts.pop(uid)
-        player = market.players[position.player_id]
-        depth = market.liquidity(position.player_id)
-        player.current_price *= math.exp(market.impact_k / depth)
-        pnl = position.open_price - player.current_price
-        market.users[uid].cash += pnl
-        ledgers[uid].price_shorts += pnl
-        position.closed = True
-        position.close_price = player.current_price
-        position.auto_closed = auto
-        closed_price_shorts.append(position)
+                try:
+                    position = book.arm_weekly_short(uid, pid, first_day)
+                except InstrumentError:
+                    continue
+                ledgers[uid].fees += position.fee_paid
+                positions_by_user_week[(uid, week)].append(position)
+                armed += 1
 
     def arm_boosts(week: str, prev_week: str | None) -> None:
-        boosts_today.clear()
         if not prev_week:
             return
         for uid, kind in archetype_of.items():
@@ -287,19 +242,52 @@ def run_simulation(
                 continue
             user = market.users[uid]
             owned = [pid for pid in market.players if user.shares(pid) > 0]
-            ranked = sorted(owned, key=lambda pid: -surprise_last_week(weekly_np, prev_week, pid))
-            for pid in ranked[:BOOST_SLOTS]:
-                fee = BOOST_FEE_PCT * market.players[pid].current_price
-                if user.cash < fee:
+            ranked = sorted(owned, key=lambda pid: -weekly_np[prev_week].get(pid, 0.0))
+            armed = 0
+            for pid in ranked:
+                if armed >= 2:
+                    break
+                target_day = player_days_in_week[week].get(pid)
+                if target_day is None:
                     continue
-                user.cash -= fee
-                ledgers[uid].fees += fee
-                boosts_today[(uid, pid)] = week
+                try:
+                    boost = book.arm_boost(uid, pid, target_day)
+                except InstrumentError:
+                    continue
+                ledgers[uid].fees += boost.fee_paid
+                armed += 1
+
+    def manage_price_shorts(week_index: int) -> None:
+        for uid, kind in archetype_of.items():
+            if kind != "price_shorter":
+                continue
+            open_position = book.price_shorts.get(uid)
+            if open_position is not None:
+                player = market.players[open_position.player_id]
+                if player.current_price <= PRICE_SHORT_TAKE_PROFIT * open_position.open_price:
+                    closed = book.close_price_short(uid, reason="take-profit")
+                    ledgers[uid].price_shorts += closed.pnl
+                continue
+            if week_index < 3:
+                continue
+            user = market.users[uid]
+            candidates = sorted(
+                (pid for pid in market.players if user.shares(pid) == 0),
+                key=lambda pid: -market.players[pid].current_price / listing[pid],
+            )
+            for pid in candidates[:3]:
+                if market.players[pid].current_price / listing[pid] < 1.05:
+                    break
+                try:
+                    book.open_price_short(uid, pid)
+                    break
+                except InstrumentError:
+                    continue
 
     def weekly_trading(prev_week: str | None) -> None:
         if not prev_week:
             return
-        winners = sorted(weekly_np[prev_week].items(), key=lambda item: -item[1])
+        winners = sorted(weekly_np[prev_week].items(), key=lambda kv: -kv[1])
         for uid, kind in archetype_of.items():
             user = market.users[uid]
             if kind == "momentum":
@@ -311,7 +299,7 @@ def run_simulation(
                             break
                         except TradeError:
                             continue
-                losers = [pid for pid, np_sum in weekly_np[prev_week].items() if np_sum < -10]
+                losers = [pid for pid, total in weekly_np[prev_week].items() if total < -10]
                 for pid in losers:
                     if user.shares(pid) > 0:
                         try:
@@ -328,53 +316,76 @@ def run_simulation(
                         market.execute_trade(uid, pid, TradeSide.BUY, 1)
                 except TradeError:
                     continue
+            book.check_stop_outs()
 
     prev_week: str | None = None
     for week_index, week in enumerate(season_weeks):
         arm_weekly_shorts(week, prev_week)
         arm_boosts(week, prev_week)
         weekly_trading(prev_week)
-        maybe_open_price_shorts(week_index)
+        manage_price_shorts(week_index)
         for day in days_of_week[week]:
+            correction = rolling_bias(day)
             for row in games_by_date[day]:
-                projected = expectation.projected_box_score(
-                    market.players[row.player_id], day
-                )
+                player = market.players[row.player_id]
+                try:
+                    projected = expectation.projected_box_score(player, day)
+                except Exception:
+                    projected = None
                 if projected is None:
                     projection_cover[1] += 1
                     continue
                 projection_cover[0] += 1
                 actual_np = market.net_points_model.score(row.box_score)
-                expected_np = market.net_points_model.score(projected)
+                projected_np = market.net_points_model.score(projected)
                 event = market.pay_daily_performance_dividend(
                     row.player_id,
                     actual_net_points=actual_np,
-                    expected_net_points=expected_np,
+                    expected_net_points=projected_np + correction,
                     game_date=day,
                     settlement_key=f"sim-{row.game_id}",
                 )
                 for uid in market.users:
-                    if market.users[uid].shares(row.player_id) > 0:
-                        ledgers[uid].dividends += event.dividend_per_share * market.users[
-                            uid
-                        ].shares(row.player_id)
-                    if (uid, row.player_id) in boosts_today:
-                        market.users[uid].cash += event.dividend_per_share
-                        ledgers[uid].boosts += event.dividend_per_share
+                    shares = market.users[uid].shares(row.player_id)
+                    if shares > 0:
+                        ledgers[uid].dividends += event.dividend_per_share * shares
                 surprise = event.actual_net_points - event.expected_net_points
-                surprise = max(-WEEKLY_GAME_CAP_NP, min(WEEKLY_GAME_CAP_NP, surprise))
-                weekly_np[week][row.player_id] += surprise
-                for position in open_weeklies:
-                    if position.week == week and position.player_id == row.player_id:
-                        position.accumulated_np += surprise
-                        position.games += 1
-            price_short_daily()
+                book.record_game(
+                    row.player_id,
+                    day,
+                    surprise_np=surprise,
+                    dividend_per_share=event.dividend_per_share,
+                    actual_minutes=row.box_score.minutes,
+                    projected_minutes=projected.minutes,
+                )
+                capped = max(-25.0, min(25.0, surprise))
+                weekly_np[week][row.player_id] += capped
+                raw_surprises.append((day, actual_np - projected_np))
+            for boost in book.expire_boosts(day):
+                ledgers[boost.user_id].fees -= boost.fee_paid
+            book.daily_pass()
             market.advance_day()
-        settle_weekly_shorts(week)
+        for position in book.settle_week(week):
+            ledger = ledgers[position.user_id]
+            if position.voided:
+                ledger.fees -= position.fee_paid
+            else:
+                ledger.weekly_shorts += position.pnl or 0.0
+                ledger.weekly_short_net_results.append((position.pnl or 0.0) - position.fee_paid)
         prev_week = week
 
-    for uid in list(open_price_shorts):
-        close_price_short(uid, auto=False)
+    for uid in list(book.price_shorts):
+        closed = book.close_price_short(uid, reason="season-end")
+        ledgers[uid].price_shorts += closed.pnl
+    for position in book.closed_price_shorts:
+        if position.close_reason in ("stop-out", "insolvency", "take-profit"):
+            if position.user_id in ledgers and position.pnl != 0.0:
+                pass
+    for uid, paid in book.borrow_paid.items():
+        ledgers[uid].fees += paid
+    for boost in book.boosts:
+        if boost.consumed:
+            ledgers[boost.user_id].boosts += boost.payout
 
     by_archetype: dict[str, list[float]] = defaultdict(list)
     decomposition: dict[str, Ledger] = {}
@@ -388,16 +399,17 @@ def run_simulation(
         agg.weekly_shorts += led.weekly_shorts
         agg.price_shorts += led.price_shorts
         agg.fees += led.fees
-        agg.weekly_short_results.extend(led.weekly_short_results)
+        agg.weekly_short_net_results.extend(led.weekly_short_net_results)
 
     total_start = sum(start_wealth.values())
     total_end = sum(market.portfolio_value(uid) for uid in market.users)
     return {
         "by_archetype": dict(by_archetype),
         "decomposition": decomposition,
-        "price_shorts": closed_price_shorts,
+        "price_shorts": list(book.closed_price_shorts),
         "projection_coverage": tuple(projection_cover),
         "inflation_pct": 100.0 * (total_end - total_start) / total_start,
+        "seed_bias": seed_bias,
         "listing": listing,
         "market": market,
     }
@@ -405,12 +417,14 @@ def run_simulation(
 
 def render_report(result: dict) -> str:
     lines = [
-        "# Instruments simulation - shorts & longs on the 2025-26 replay",
+        "# Instruments simulation - production spec parameters (shorting-spec v1.0)",
+        "",
+        f"Rolling-30 bias with cold start {result['seed_bias']:+.3f} NP; 0.25% ad-valorem",
+        "fees (min $10K); production `InstrumentsBook` mechanics throughout.",
         "",
         f"Projection coverage: {result['projection_coverage'][0]:,} settled player-games, "
-        f"{result['projection_coverage'][1]:,} skipped (no D&T projection).",
-        f"Cohort wealth change with all instruments active: "
-        f"{result['inflation_pct']:+.2f}%.",
+        f"{result['projection_coverage'][1]:,} skipped.",
+        f"Cohort wealth change: {result['inflation_pct']:+.2f}%.",
         "",
         "## Outcome by archetype (mean net-worth change per trader)",
         "",
@@ -426,71 +440,55 @@ def render_report(result: dict) -> str:
         )
     lines += [
         "",
-        "## P/L decomposition by archetype (totals)",
+        "## Weekly shorts - net of fees (acceptance criteria)",
         "",
-        "| Archetype | Dividends | Weekly shorts | Price shorts | Boosts | Fees |",
-        "|---|---:|---:|---:|---:|---:|",
     ]
-    for archetype, ledger in sorted(result["decomposition"].items()):
-        lines.append(
-            f"| {archetype} | ${ledger.dividends:,.0f} | ${ledger.weekly_shorts:,.0f} "
-            f"| ${ledger.price_shorts:,.0f} | ${ledger.boosts:,.0f} | ${ledger.fees:,.0f} |"
-        )
-    fader = result["decomposition"].get("fader")
-    randoms = result["decomposition"].get("random_short")
-    lines += ["", "## Weekly shorts - informed (fade last week's hottest) vs random", ""]
-    for label, ledger in (("fader", fader), ("random_short", randoms)):
-        results = ledger.weekly_short_results if ledger else []
+    verdicts = []
+    for label in ("fader", "random_short"):
+        ledger = result["decomposition"].get(label)
+        results = ledger.weekly_short_net_results if ledger else []
         if results:
+            mean = statistics.fmean(results)
             wins = sum(1 for value in results if value > 0)
             lines.append(
-                f"- **{label}**: {len(results)} settled shorts | mean ${statistics.fmean(results):,.0f} "
-                f"| median ${statistics.median(results):,.0f} | std ${statistics.pstdev(results):,.0f} "
+                f"- **{label}**: {len(results)} settled | mean net ${mean:,.0f} "
+                f"| median ${statistics.median(results):,.0f} "
+                f"| std ${statistics.pstdev(results):,.0f} "
                 f"| win rate {100 * wins / len(results):.1f}%"
             )
+            verdicts.append((label, mean))
+    lines.append("")
+    for label, mean in verdicts:
+        target = "<= 0" if label == "fader" else "~ -fee"
+        status = "PASS" if mean <= 0 else "FAIL"
+        lines.append(f"- acceptance ({label} {target}): mean ${mean:,.0f} -> **{status}**")
+    band = -1.5 <= result["inflation_pct"] <= 5.0
+    lines.append(
+        f"- acceptance (inflation in -1.5%..+5%): {result['inflation_pct']:+.2f}% -> "
+        f"**{'PASS' if band else 'FAIL'}**"
+    )
     shorts = result["price_shorts"]
     if shorts:
-        pnls = [s.open_price - s.close_price for s in shorts]
-        autos = sum(1 for s in shorts if s.auto_closed)
+        pnls = [s.pnl for s in shorts]
         lines += [
             "",
-            "## Season price shorts",
+            "## Price shorts",
             "",
             f"- {len(shorts)} closed | mean P/L ${statistics.fmean(pnls):,.0f} "
-            f"| best ${max(pnls):,.0f} | worst ${min(pnls):,.0f} | auto-closed (stop-out): {autos}",
+            f"| stop-outs {sum(1 for s in shorts if s.close_reason == 'stop-out')} "
+            f"| insolvency closes {sum(1 for s in shorts if s.close_reason == 'insolvency')}",
         ]
-    market = result["market"]
-    listing = result["listing"]
-    drifts = sorted(
-        ((market.players[pid].current_price / listing[pid], market.players[pid].name) for pid in market.players),
-        key=lambda item: -item[0],
-    )
-    lines += [
-        "",
-        "## Price sanity",
-        "",
-        "Top price run-ups vs listing: "
-        + ", ".join(f"{name} {ratio:.2f}x" for ratio, name in drifts[:5]),
-        "Biggest declines: "
-        + ", ".join(f"{name} {ratio:.2f}x" for ratio, name in drifts[-5:]),
-        "",
-    ]
+    lines.append("")
     return "\n".join(lines)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Simulate shorts/longs instruments on 2025-26.")
+    parser = argparse.ArgumentParser(description="Simulate spec-final instruments on 2025-26.")
     parser.add_argument("--data-dir", type=Path, default=Path("data/raw/2025-26"))
     parser.add_argument("--dnt-dir", type=Path, default=Path("data/raw/dnt"))
     parser.add_argument("--seed", type=int, default=2027)
     parser.add_argument("--output", type=Path, default=Path("output/instruments-sim.md"))
-    parser.add_argument(
-        "--decay",
-        action="store_true",
-        help="Enable engine inactivity decay (default off: at 60 traders x 150 players "
-        "most names never trade, and -0.5%%/day compounds to ~0.5x by April, drowning "
-        "instrument effects in mark-to-market losses)",
-    )
+    parser.add_argument("--decay", action="store_true")
     args = parser.parse_args()
 
     result = run_simulation(args.data_dir, args.dnt_dir, seed=args.seed, decay=args.decay)

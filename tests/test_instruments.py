@@ -249,6 +249,22 @@ class BoostTest(unittest.TestCase):
             book2.arm_boost("u0", "mid", TUESDAY)
 
 
+class CrossInstrumentExclusivityTest(unittest.TestCase):
+    def test_cannot_weekly_short_a_price_shorted_player(self) -> None:
+        book = make_book()
+        book.open_price_short("u0", "star")
+        with self.assertRaises(InstrumentError):
+            book.arm_weekly_short("u0", "star", MONDAY)
+        book.arm_weekly_short("u0", "mid", MONDAY)
+
+    def test_cannot_price_short_a_weekly_shorted_player(self) -> None:
+        book = make_book()
+        book.arm_weekly_short("u0", "star", MONDAY)
+        with self.assertRaises(InstrumentError):
+            book.open_price_short("u0", "star")
+        book.open_price_short("u0", "mid")
+
+
 class NetLiquidationTest(unittest.TestCase):
     def test_marks_open_short_with_bust_cap(self) -> None:
         book = make_book()
