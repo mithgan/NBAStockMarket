@@ -11,6 +11,14 @@ export function selectTrendRange<T>(points: readonly T[], range: TrendRange): T[
   return points.slice(-Number(range.slice(1)));
 }
 
+export function selectSettledTrendPoints<T extends { date: string }>(
+  points: readonly T[],
+  latestSettledDate: string | null,
+): T[] {
+  if (latestSettledDate === null) return [];
+  return points.filter((point) => point.date <= latestSettledDate);
+}
+
 export function cumulativeValues(values: readonly number[]): number[] {
   let total = 0;
   return values.map((value) => (total += value));

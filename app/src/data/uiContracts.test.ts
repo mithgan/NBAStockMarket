@@ -16,14 +16,14 @@ test('tab pills use their exact equal-width 44px Pressable bounds', () => {
 
 test('market actions expose concise player-specific button labels', () => {
   assert.match(marketSource, /accessibilityLabel=\{`View \$\{player\.name\} details`\}/);
-  assert.match(marketSource, /accessibilityLabel=\{held \? `Sell \$\{player\.name\}` : `Buy \$\{player\.name\} for \$\{formatMoney\(player\.listing_price\)\}`\}/);
+  assert.match(marketSource, /accessibilityLabel=\{held \? `Sell \$\{player\.name\}` : `Buy \$\{player\.name\} for \$\{formatMoney\(currentPrice\)\} plus fee`\}/);
   assert.match(marketSource, /accessibilityLabel=\{`Close \$\{player\.name\} details`\}/);
   assert.match(marketSource, /option === 'Season' \? 'Full season' : `Last \$\{option\.slice\(1\)\} games`/);
 });
 
 test('detail dividend chart follows the selected range and renders labeled extrema', () => {
   assert.match(marketSource, /const rangeTotal = visiblePoints\.reduce/);
-  assert.match(marketSource, /range === 'Season' \? 'This season'/);
+  assert.match(marketSource, /range === 'Season' \? 'Settled season'/);
   assert.match(marketSource, /\['L5', 'L15', 'Season'\]/);
   assert.match(marketSource, /<Path d=\{linePath\}/);
   assert.match(marketSource, /\['HIGH', extrema\.high\]/);

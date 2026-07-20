@@ -1,5 +1,7 @@
 export function formatMoney(value: number): string {
-  return `$${Math.round(value).toLocaleString('en-US')}`;
+  const rounded = Math.round(value);
+  const sign = rounded < 0 ? '-' : '';
+  return `${sign}$${Math.abs(rounded).toLocaleString('en-US')}`;
 }
 
 export function formatSignedMoney(value: number): string {
