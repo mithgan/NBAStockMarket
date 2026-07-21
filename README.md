@@ -177,8 +177,28 @@ this API configuration.
 
 For deployment, use `postgresql+psycopg://...` for `NBA_STOCK_DATABASE_URL`, set
 `NBA_STOCK_ENVIRONMENT=production`, and leave `NBA_STOCK_AUTO_CREATE_SCHEMA=false`. Production
-schema creation must happen through a separately reviewed migration; this foundation does not
-change any remote database. `/docs` is disabled in production.
+schema changes must happen through separately reviewed migrations; the API process must never
+create or mutate its own schema. `/docs` is disabled in production.
+
+The market database is intentionally separate from the Databallr production database. Databallr
+Supabase remains the authentication issuer, while `NBA_STOCK_DATABASE_URL` points at the dedicated
+NBA Stock Market Postgres project. Link the dedicated project and apply its checked-in schema and
+canonical 30-player seed before starting the API against a new database. Keep the password out of
+command arguments by letting the CLI read it from its environment:
+
+```bash
+read -rsp "Supabase database password: " SUPABASE_DB_PASSWORD && echo
+export SUPABASE_DB_PASSWORD
+npx supabase link --project-ref "$SUPABASE_PROJECT_REF"
+npx supabase db push --dry-run
+npx supabase db push
+unset SUPABASE_DB_PASSWORD
+```
+
+The schema migration enables RLS and revokes `anon` and `authenticated` table privileges. The seed
+migration is idempotent and never overwrites listings that already exist. Mobile clients must use
+the FastAPI routes; they never read or mutate market balances, holdings, prices, or trades through
+Supabase's Data API.
 
 ## Backtest
 
