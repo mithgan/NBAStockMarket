@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.generate_app_snapshot import generate_snapshot
+from scripts.generate_app_snapshot import generate_api_seed, generate_snapshot
 
 
 def test_snapshot_uses_canonical_ids_prices_and_bias_corrected_examples(
@@ -49,3 +49,34 @@ def test_snapshot_uses_canonical_ids_prices_and_bias_corrected_examples(
     assert "expected_net_points: 25.9831" in rendered
     assert "dividend_per_holder: 1334675.2" in rendered
     assert "Demo opponents until the multiplayer leaderboard API is wired" in rendered
+
+
+def test_api_seed_uses_integer_cents_and_same_canonical_players(tmp_path: Path) -> None:
+    openings = tmp_path / "openings.csv"
+    openings.write_text(
+        "player,tier,opening_price,actual_salary\n"
+        "nikola jokic,star,51823282,59033114\n",
+        encoding="utf-8",
+    )
+    game_log = tmp_path / "games.csv"
+    game_log.write_text(
+        "player_id,player_name\n3112335,Nikola Jokic\n",
+        encoding="utf-8",
+    )
+
+    seed = json.loads(generate_api_seed(openings, game_log, limit=1))
+
+    assert seed == {
+        "schema_version": 1,
+        "players": [
+            {
+                "id": "3112335",
+                "name": "Nikola Jokic",
+                "tier": "star",
+                "current_price_cents": 5_182_328_200,
+                "opening_price_cents": 5_182_328_200,
+                "actual_salary_cents": 5_903_311_400,
+                "shares_outstanding": 100,
+            }
+        ],
+    }

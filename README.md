@@ -142,6 +142,44 @@ the strongest candidate that stayed below the prototype price-safety gates. The 
 the fee decision lowers the base fee to 0.25% and caps the softened flip surcharge at 1.5%, keeping
 anti-churn friction while sharply reducing wealth destruction under high turnover.
 
+## Backend API (Phase 1 foundation)
+
+The FastAPI service in `nba_stock_market/api/` is the authoritative first backend slice. It owns
+account creation, the $140M starting balance, listings, one-whole-player holdings, fees, price
+impact, idempotent buys/sells, and the portfolio leaderboard. The initial market is generated from
+the same 30-player source used by the Expo replay, so the app and API do not maintain separate
+handwritten player lists.
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `GET /healthz` | Public | Liveness check |
+| `GET /api/v1/market` | Bearer | Current listings, float, ownership, and volume |
+| `GET /api/v1/portfolio` | Bearer | Cash, holdings, P&L, and recent trades |
+| `POST /api/v1/trades` | Bearer + `Idempotency-Key` | Authoritative whole-player buy or sell |
+| `GET /api/v1/leaderboard` | Bearer | Current portfolio-value ranking |
+
+Create the generated market seed and start a local database:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+python scripts/generate_app_snapshot.py
+set -a && source .env && set +a
+uvicorn nba_stock_market.api.main:app --host 127.0.0.1 --port 8011 --reload
+```
+
+Copy `.env.example` to the gitignored `.env` before sourcing it. Protected routes fail closed until
+`NBA_STOCK_SUPABASE_URL` is configured. Asymmetric Supabase user JWTs are verified locally against
+the project's JWKS; legacy HS256 user tokens are checked through Supabase Auth and additionally
+require `NBA_STOCK_SUPABASE_PUBLISHABLE_KEY`. A service-role key is neither required nor accepted by
+this API configuration.
+
+For deployment, use `postgresql+psycopg://...` for `NBA_STOCK_DATABASE_URL`, set
+`NBA_STOCK_ENVIRONMENT=production`, and leave `NBA_STOCK_AUTO_CREATE_SCHEMA=false`. Production
+schema creation must happen through a separately reviewed migration; this foundation does not
+change any remote database. `/docs` is disabled in production.
+
 ## Backtest
 
 The historical replay covers the complete 2025-26 NBA regular season using cached ESPN
