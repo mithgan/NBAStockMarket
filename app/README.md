@@ -14,8 +14,9 @@ cd app
 cp .env.example .env
 ```
 
-For local web or simulator development, start FastAPI on `127.0.0.1:8011` and keep the template's
-API URL. A physical device cannot reach your computer through `127.0.0.1`; use an HTTPS development
+For local web or iOS Simulator development, start FastAPI on `127.0.0.1:8011` and keep the template's
+API URL. Android Emulator users should set `EXPO_PUBLIC_NBA_STOCK_API_URL=http://10.0.2.2:8011`.
+A physical device cannot reach your computer through `127.0.0.1`; use an HTTPS development
 endpoint that the device can reach instead. Remote API and Supabase URLs must use HTTPS.
 
 Then run:

@@ -1,6 +1,7 @@
 import {
   ContractError,
   parseActivity,
+  parseBootstrap,
   parseCursorPage,
   parseDataEnvelope,
   parseGameState,
@@ -153,50 +154,9 @@ export class MarketApiClient {
   }
 
   async bootstrap(): Promise<ServerBootstrap> {
-    // Portfolio creation is the account boundary. Finish it before fan-out so a
-    // first sign-in cannot race multiple account-creation reads.
-    let portfolioBefore = await this.portfolio();
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const [
-        market,
-        game,
-        activity,
-        portfolioHistory,
-        settlements,
-        leaderboard,
-      ] = await Promise.all([
-        this.market(),
-        this.game(),
-        this.activity(),
-        this.portfolioHistory(),
-        this.settlements(),
-        this.leaderboard(),
-      ]);
-      const [portfolioAfter, gameAfter] = await Promise.all([
-        this.portfolio(),
-        this.game(),
-      ]);
-      if (
-        portfolioBefore.version === portfolioAfter.version
-        && game.version === gameAfter.version
-      ) {
-        return {
-          market,
-          portfolio: portfolioAfter,
-          game: gameAfter,
-          activity,
-          portfolioHistory,
-          settlements,
-          leaderboard,
-        };
-      }
-      portfolioBefore = portfolioAfter;
-    }
-    throw new MarketApiError(
-      'Your account changed while it was loading. Try again.',
-      'snapshot_conflict',
-      409,
-    );
+    return this.request('/api/v1/bootstrap', {
+      parse: (value) => parseDataEnvelope(value, parseBootstrap),
+    });
   }
 
   async trade(playerId: string, side: 'buy' | 'sell'): Promise<ServerMutationResult> {

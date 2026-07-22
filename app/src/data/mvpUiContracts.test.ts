@@ -44,8 +44,10 @@ test('the market removes nonessential sparklines from narrow phone rows', () => 
 });
 
 test('market charts only receive results through the latest settled replay date', () => {
-  assert.match(marketSource, /selectSettledTrendPoints\(playerTrends\[player\.id\] \?\? \[\], latestSettledDate\)/);
+  assert.match(marketSource, /playerTrends\[player\.id\] \?\? \[\]/);
   assert.match(marketSource, /latestSettledDate=\{latestSettledDate\}/);
+  assert.doesNotMatch(marketSource, /data\/trends/);
+  assert.doesNotMatch(serverStateSource, /data\/replay/);
   assert.match(marketSource, /No settled games yet/);
 });
 
@@ -127,13 +129,16 @@ test('portfolio provides server-backed activity, history, and exact cost basis',
 
 test('global server action notices are visible and dismissible', () => {
   assert.match(appSource, /dismissNotice/);
-  assert.match(appSource, /message \? <NoticeBanner/);
+  assert.match(appSource, /message \? \(/);
+  assert.match(appSource, /message=\{message\}/);
   assert.match(appSource, /accessibilityLiveRegion="polite"/);
 });
 
 test('ordinary sign out only revokes the current device session', () => {
   assert.match(authContextSource, /signOut\(\{ scope: 'local' \}\)/);
   assert.doesNotMatch(authContextSource, /auth\.signOut\(\)/);
+  assert.match(appSource, /error: authError/);
+  assert.match(appSource, /message=\{authError\}/);
 });
 
 test('server and transition failures lock every gameplay surface until recovery', () => {

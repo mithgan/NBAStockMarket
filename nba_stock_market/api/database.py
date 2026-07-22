@@ -774,6 +774,39 @@ class Database:
         return self._sessions()
 
     @contextmanager
+    def snapshot_session(self):
+        """Yield one consistent read snapshot across all bootstrap queries."""
+        if self.engine.dialect.name == "postgresql":
+            with self.engine.connect().execution_options(
+                isolation_level="REPEATABLE READ"
+            ) as connection:
+                with Session(
+                    bind=connection,
+                    expire_on_commit=False,
+                ) as session, session.begin():
+                    yield session
+            return
+
+        if self.engine.dialect.name == "sqlite":
+            # sqlite3's legacy transaction mode does not start a transaction
+            # for SELECT statements. Emit BEGIN explicitly so every bootstrap
+            # query observes the same database snapshot.
+            with self.engine.connect() as connection:
+                connection.exec_driver_sql("BEGIN")
+                try:
+                    with Session(
+                        bind=connection,
+                        expire_on_commit=False,
+                    ) as session:
+                        yield session
+                finally:
+                    connection.rollback()
+            return
+
+        with self.session() as session, session.begin():
+            yield session
+
+    @contextmanager
     def market_write_transaction(
         self,
         *,

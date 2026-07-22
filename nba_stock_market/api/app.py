@@ -161,6 +161,12 @@ def create_app(
     ) -> dict[str, list[dict[str, object]]]:
         return {"data": service.market(principal)}
 
+    @app.get("/api/v1/bootstrap")
+    def bootstrap(
+        principal: Principal = Depends(current_principal),
+    ) -> dict[str, dict[str, object]]:
+        return {"data": service.bootstrap(principal)}
+
     @app.get("/api/v1/portfolio")
     def portfolio(
         principal: Principal = Depends(current_principal),

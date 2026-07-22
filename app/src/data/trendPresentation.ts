@@ -1,6 +1,13 @@
 export type TrendDirection = 'up' | 'down';
 export type TrendRange = 'L5' | 'L15' | 'Season';
 
+export interface TrendPoint {
+  date: string;
+  np: number;
+  expected_np: number;
+  dividend_per_holder: number;
+}
+
 export interface IndexedValue {
   index: number;
   value: number;

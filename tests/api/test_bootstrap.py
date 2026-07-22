@@ -93,6 +93,31 @@ def test_local_bootstrap_creates_schema_and_loads_seed_file(tmp_path) -> None:
     assert game.json()["data"]["next_game_date"] == "2025-10-21"
 
 
+def test_sqlite_snapshot_session_is_repeatable(tmp_path) -> None:
+    database = Database(f"sqlite+pysqlite:///{tmp_path / 'snapshot.db'}")
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql("PRAGMA journal_mode=WAL")
+        connection.exec_driver_sql(
+            "CREATE TABLE snapshot_probe (id INTEGER PRIMARY KEY, value INTEGER NOT NULL)"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO snapshot_probe (id, value) VALUES (1, 1)"
+        )
+
+    with database.snapshot_session() as snapshot:
+        driver_connection = snapshot.connection().connection.driver_connection
+        assert driver_connection.in_transaction is True
+        assert snapshot.scalar(text("SELECT value FROM snapshot_probe WHERE id = 1")) == 1
+
+        with database.session() as writer, writer.begin():
+            writer.execute(text("UPDATE snapshot_probe SET value = 2 WHERE id = 1"))
+
+        assert snapshot.scalar(text("SELECT value FROM snapshot_probe WHERE id = 1")) == 1
+
+    with database.session() as session, session.begin():
+        assert session.scalar(text("SELECT value FROM snapshot_probe WHERE id = 1")) == 2
+
+
 def test_production_startup_requires_migrated_seeded_database(tmp_path) -> None:
     database = Database(f"sqlite+pysqlite:///{tmp_path / 'empty.db'}")
     database.create_schema()

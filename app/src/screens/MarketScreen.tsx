@@ -26,9 +26,9 @@ import {
   selectTrendRange,
   sparklineHeights,
   trendDirection,
+  type TrendPoint,
   type TrendRange,
 } from '../data/trendPresentation';
-import { playerTrends, type TrendPoint } from '../data/trends';
 import type { Player } from '../data/types';
 import { formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
@@ -163,17 +163,19 @@ export function PlayerDetail({
   player,
   currentPrice = player.listing_price,
   latestSettledDate,
+  trendPoints,
   onClose,
   backLabel = 'Market',
 }: {
   player: Player;
   currentPrice?: number;
   latestSettledDate: string | null;
+  trendPoints: TrendPoint[];
   onClose: () => void;
   backLabel?: string;
 }) {
   const [range, setRange] = useState<TrendRange>('L15');
-  const points = selectSettledTrendPoints(playerTrends[player.id] ?? [], latestSettledDate);
+  const points = selectSettledTrendPoints(trendPoints, latestSettledDate);
   const visiblePoints = selectTrendRange(points, range);
   const rangeTotal = visiblePoints.reduce((sum, point) => sum + point.dividend_per_holder, 0);
   const bestPayout = points.length > 0
@@ -394,7 +396,16 @@ function MarketRow({ compact, freeCash, currentPrice, player, held, trendPoints,
 }
 
 export function MarketScreen() {
-  const { latestSettledDate, owns, pendingActions, players, state, summary, trade } = usePortfolio();
+  const {
+    latestSettledDate,
+    owns,
+    pendingActions,
+    players,
+    playerTrends,
+    state,
+    summary,
+    trade,
+  } = usePortfolio();
   const { width } = useWindowDimensions();
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [query, setQuery] = useState('');
@@ -423,6 +434,7 @@ export function MarketScreen() {
         latestSettledDate={latestSettledDate}
         onClose={() => setSelectedPlayer(null)}
         player={selectedPlayer}
+        trendPoints={playerTrends[selectedPlayer.id] ?? []}
       />
     );
   }

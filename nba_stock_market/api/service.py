@@ -170,6 +170,43 @@ class MarketService:
                 account = self._ensure_account(session, principal, for_update=True)
                 return self._portfolio_payload(session, account)
 
+    def bootstrap(self, principal: Principal) -> dict[str, object]:
+        """Return one authoritative, settled-only application snapshot."""
+        with self.locks.acquire(f"account:{principal.id}"):
+            # Account creation is the only write in this read path. Commit it
+            # before opening the repeatable-read snapshot used for all payloads.
+            with self.database.session() as session, session.begin():
+                self._ensure_account(session, principal, for_update=True)
+
+            with self.database.snapshot_session() as session:
+                account = session.get(AccountRow, principal.id)
+                if account is None:
+                    raise ApiProblem(
+                        status_code=503,
+                        code="account_unavailable",
+                        message="Your account could not be loaded.",
+                    )
+                state = self._game_state(session)
+                return {
+                    "market": self._bootstrap_market(session, account),
+                    "portfolio": self._portfolio_payload(session, account),
+                    "game": self._game_state_payload(state),
+                    "activity": self._bootstrap_activity(session, account),
+                    "portfolio_history": self._bootstrap_portfolio_history(
+                        session,
+                        account,
+                    ),
+                    "settlements": self._bootstrap_settlements(session, account),
+                    "leaderboard": self._bootstrap_leaderboard(
+                        session,
+                        principal,
+                    ),
+                    "settled_results": self._bootstrap_settled_results(
+                        session,
+                        state,
+                    ),
+                }
+
     def activity_history(
         self,
         principal: Principal,
@@ -622,13 +659,7 @@ class MarketService:
     def game_state(self, principal: Principal) -> dict[str, object]:
         with self.database.session() as session, session.begin():
             self._ensure_account(session, principal)
-            state = session.get(GameStateRow, GAME_STATE_ID)
-            if state is None:
-                raise ApiProblem(
-                    status_code=503,
-                    code="game_unavailable",
-                    message="Historical replay data is not available.",
-                )
+            state = self._game_state(session)
             return self._game_state_payload(state)
 
     def settlement_history(
@@ -1461,6 +1492,260 @@ class MarketService:
                 )
                 return payload
 
+    def _bootstrap_market(
+        self,
+        session: Session,
+        account: AccountRow,
+    ) -> list[dict[str, object]]:
+        now = utcnow()
+        cutoff = now - timedelta(days=30)
+        volumes = (
+            select(
+                TradeRow.player_id.label("player_id"),
+                func.count(TradeRow.id).label("volume_30d"),
+            )
+            .where(TradeRow.created_at >= cutoff)
+            .group_by(TradeRow.player_id)
+            .subquery()
+        )
+        rows = session.execute(
+            select(
+                PlayerListingRow,
+                func.coalesce(volumes.c.volume_30d, 0),
+            )
+            .outerjoin(volumes, volumes.c.player_id == PlayerListingRow.id)
+            .order_by(PlayerListingRow.name)
+        ).all()
+        recent_trades_by_player: dict[str, list[TradeRow]] = {}
+        recent_trades = session.scalars(
+            select(TradeRow)
+            .where(
+                TradeRow.account_id == account.id,
+                TradeRow.created_at >= now - timedelta(days=7),
+            )
+            .order_by(TradeRow.created_at.desc(), TradeRow.id.desc())
+        ).all()
+        for trade in recent_trades:
+            recent_trades_by_player.setdefault(trade.player_id, []).append(trade)
+        return [
+            self._listing_payload(
+                player,
+                volume_30d=int(volume_30d),
+                buy_fee_cents=self._trade_fee_quote(
+                    recent_trades_by_player.get(player.id, []),
+                    side="buy",
+                    execution_price_cents=player.current_price_cents,
+                    now=now,
+                )[0],
+            )
+            for player, volume_30d in rows
+        ]
+
+    def _bootstrap_activity(
+        self,
+        session: Session,
+        account: AccountRow,
+        *,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        rows = session.scalars(
+            select(AccountActivityRow)
+            .where(AccountActivityRow.account_id == account.id)
+            .order_by(
+                AccountActivityRow.occurred_at.desc(),
+                AccountActivityRow.id.desc(),
+            )
+            .limit(limit + 1)
+        ).all()
+        page = rows[:limit]
+        next_cursor = None
+        if len(rows) > limit:
+            last = page[-1]
+            next_cursor = self._encode_cursor(
+                {
+                    "v": 1,
+                    "resource": "activity",
+                    "account_id": account.id,
+                    "occurred_at": last.occurred_at.isoformat(),
+                    "id": last.id,
+                }
+            )
+        return {
+            "items": [self._activity_payload(row) for row in page],
+            "next_cursor": next_cursor,
+        }
+
+    def _bootstrap_portfolio_history(
+        self,
+        session: Session,
+        account: AccountRow,
+        *,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        rows = session.scalars(
+            select(PortfolioSnapshotRow)
+            .where(PortfolioSnapshotRow.account_id == account.id)
+            .order_by(PortfolioSnapshotRow.game_date.desc())
+            .limit(limit + 1)
+        ).all()
+        page = rows[:limit]
+        next_cursor = None
+        if len(rows) > limit:
+            next_cursor = self._encode_cursor(
+                {
+                    "v": 1,
+                    "resource": "portfolio_history",
+                    "account_id": account.id,
+                    "game_date": page[-1].game_date.isoformat(),
+                }
+            )
+        return {
+            "items": [self._portfolio_snapshot_payload(row) for row in page],
+            "next_cursor": next_cursor,
+        }
+
+    def _bootstrap_settlements(
+        self,
+        session: Session,
+        account: AccountRow,
+        *,
+        limit: int = 30,
+    ) -> list[dict[str, object]]:
+        settlements = session.scalars(
+            select(SettlementRow)
+            .outerjoin(
+                PortfolioSnapshotRow,
+                and_(
+                    PortfolioSnapshotRow.game_date == SettlementRow.game_date,
+                    PortfolioSnapshotRow.account_id == account.id,
+                ),
+            )
+            .outerjoin(
+                AccountSettlementMembershipRow,
+                and_(
+                    AccountSettlementMembershipRow.game_date
+                    == SettlementRow.game_date,
+                    AccountSettlementMembershipRow.account_id == account.id,
+                ),
+            )
+            .where(
+                or_(
+                    PortfolioSnapshotRow.account_id.is_not(None),
+                    AccountSettlementMembershipRow.account_id.is_not(None),
+                )
+            )
+            .order_by(SettlementRow.game_date.desc())
+            .limit(limit)
+        ).all()
+        dividends = dict(
+            session.execute(
+                select(
+                    DividendRow.game_date,
+                    func.coalesce(func.sum(DividendRow.amount_cents), 0),
+                )
+                .where(
+                    DividendRow.account_id == account.id,
+                    DividendRow.game_date.in_(
+                        [settlement.game_date for settlement in settlements]
+                    ),
+                )
+                .group_by(DividendRow.game_date)
+            ).all()
+        ) if settlements else {}
+        return [
+            {
+                "game_date": settlement.game_date.isoformat(),
+                "event_count": settlement.event_count,
+                "payout_count": settlement.payout_count,
+                "net_cash_cents": settlement.net_cash_cents,
+                "current_user_dividend_cents": int(
+                    dividends.get(settlement.game_date, 0)
+                ),
+                "settled_at": settlement.settled_at.isoformat() + "Z",
+            }
+            for settlement in settlements
+        ]
+
+    def _bootstrap_leaderboard(
+        self,
+        session: Session,
+        principal: Principal,
+        *,
+        limit: int = 100,
+    ) -> list[dict[str, object]]:
+        holding_value = func.coalesce(
+            func.sum(HoldingRow.shares * PlayerListingRow.current_price_cents),
+            0,
+        )
+        rows = session.execute(
+            select(
+                AccountRow.id,
+                AccountRow.display_name,
+                (AccountRow.cash_cents + holding_value).label("total_value_cents"),
+            )
+            .outerjoin(HoldingRow, HoldingRow.account_id == AccountRow.id)
+            .outerjoin(
+                PlayerListingRow,
+                PlayerListingRow.id == HoldingRow.player_id,
+            )
+            .group_by(
+                AccountRow.id,
+                AccountRow.display_name,
+                AccountRow.cash_cents,
+            )
+        ).all()
+        ordered = sorted(
+            (
+                (account_id, display_name, int(total_value_cents))
+                for account_id, display_name, total_value_cents in rows
+            ),
+            key=lambda row: (-row[2], row[0]),
+        )[:limit]
+        return [
+            {
+                "rank": index,
+                "account_id": account_id,
+                "display_name": display_name,
+                "total_value_cents": total_value,
+                "return_bps": round(
+                    (total_value - round(STARTING_CASH * 100))
+                    * 10_000
+                    / round(STARTING_CASH * 100)
+                ),
+                "is_current_user": account_id == principal.id,
+            }
+            for index, (account_id, display_name, total_value) in enumerate(
+                ordered,
+                start=1,
+            )
+        ]
+
+    @staticmethod
+    def _bootstrap_settled_results(
+        session: Session,
+        state: GameStateRow,
+    ) -> list[dict[str, object]]:
+        if state.last_settled_date is None:
+            return []
+        rows = session.scalars(
+            select(ReplayEventRow)
+            .where(
+                ReplayEventRow.game_date <= state.last_settled_date,
+                ReplayEventRow.actual_minutes_micros > 0,
+            )
+            .order_by(ReplayEventRow.game_date, ReplayEventRow.player_id)
+        ).all()
+        return [
+            {
+                "player_id": row.player_id,
+                "game_date": row.game_date.isoformat(),
+                "actual_net_points_micros": row.actual_net_points_micros,
+                "expected_net_points_micros": row.expected_net_points_micros,
+                "dividend_cents": row.dividend_cents,
+            }
+            for row in rows
+        ]
+
     def _ensure_account(
         self,
         session: Session,
@@ -1825,7 +2110,7 @@ class MarketService:
             )
 
     @staticmethod
-    def _available_game_state(session: Session) -> GameStateRow:
+    def _game_state(session: Session) -> GameStateRow:
         state = session.get(GameStateRow, GAME_STATE_ID)
         if state is None:
             raise ApiProblem(
@@ -1833,6 +2118,11 @@ class MarketService:
                 code="game_unavailable",
                 message="Historical replay data is not available.",
             )
+        return state
+
+    @classmethod
+    def _available_game_state(cls, session: Session) -> GameStateRow:
+        state = cls._game_state(session)
         if state.next_game_date is None:
             raise ApiProblem(
                 status_code=409,

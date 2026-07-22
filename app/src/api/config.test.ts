@@ -43,4 +43,10 @@ test('public app config accepts only explicit HTTP URLs and a publishable key', 
     supabaseUrl: 'https://example.supabase.co',
     supabasePublishableKey: `header.${servicePayload}.signature`,
   }).error ?? '', /service-role key/);
+
+  assert.equal(resolvePublicAppConfig({
+    apiUrl: 'http://10.0.2.2:8011',
+    supabaseUrl: 'https://example.supabase.co',
+    supabasePublishableKey: 'public-key',
+  }).config?.apiUrl, 'http://10.0.2.2:8011');
 });

@@ -12,7 +12,7 @@ import {
 
 import { MarketApiClient, MarketApiError } from '../api/client';
 import type { ServerBootstrap } from '../api/contracts';
-import type { ReplayDay } from '../data/replay';
+import type { TrendPoint } from '../data/trendPresentation';
 import type { Player } from '../data/types';
 import { ActionLock } from './actionLock';
 import { type GameLeaderboardEntry, type GameState, getGameSummary, type TradeSide } from './game';
@@ -47,7 +47,9 @@ interface PortfolioContextValue {
   boostSlots: { used: number; total: number; remaining: number };
   weeklyShortTargets: ServerPresentationState['weeklyShortTargets'];
   boostTargets: ServerPresentationState['boostTargets'];
-  nextReplayDay: ReplayDay | null;
+  playerTrends: Record<string, TrendPoint[]>;
+  nextGameDate: string | null;
+  settledGameDateCount: number;
   latestSettledDate: string | null;
   currentWeek: string | null;
   trade: (player: Player, side: TradeSide) => Promise<boolean>;
@@ -291,7 +293,9 @@ export function PortfolioProvider({
       : { used: 0, total: 0, remaining: 0 },
     weeklyShortTargets: presentation?.weeklyShortTargets ?? [],
     boostTargets: presentation?.boostTargets ?? [],
-    nextReplayDay: presentation?.nextReplayDay ?? null,
+    playerTrends: presentation?.playerTrends ?? {},
+    nextGameDate: presentation?.nextGameDate ?? null,
+    settledGameDateCount: presentation?.settledGameDateCount ?? 0,
     latestSettledDate: presentation?.latestSettledDate ?? null,
     currentWeek: presentation?.currentWeek ?? null,
     trade,

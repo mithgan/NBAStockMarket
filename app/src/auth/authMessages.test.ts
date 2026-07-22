@@ -12,3 +12,9 @@ test('authentication errors replace raw transport failures with actionable copy'
   assert.equal(authErrorMessage('Invalid login credentials', 'Sign in failed.'), 'Invalid login credentials');
   assert.equal(authErrorMessage(undefined, 'Sign in failed.'), 'Sign in failed.');
 });
+
+test('authentication errors replace empty provider payloads with action-specific copy', () => {
+  assert.equal(authErrorMessage('{}', 'Sign out failed.'), 'Sign out failed.');
+  assert.equal(authErrorMessage('[object Object]', 'Sign out failed.'), 'Sign out failed.');
+  assert.equal(authErrorMessage('Unknown error', 'Sign in failed.'), 'Sign in failed.');
+});

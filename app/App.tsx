@@ -77,7 +77,12 @@ function NoticeBanner({ message, onDismiss }: { message: string; onDismiss: () =
 function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('portfolio');
   const insets = useSafeAreaInsets();
-  const { isSubmitting, signOut } = useAuth();
+  const {
+    clearMessage: clearAuthMessage,
+    error: authError,
+    isSubmitting,
+    signOut,
+  } = useAuth();
   const {
     confirmLocalTransition,
     dismissNotice,
@@ -155,7 +160,11 @@ function AppContent() {
       </View>
 
       {isGameplayReady ? <SeasonControl /> : null}
-      {message ? <NoticeBanner message={message} onDismiss={dismissNotice} /> : null}
+      {authError ? (
+        <NoticeBanner message={authError} onDismiss={clearAuthMessage} />
+      ) : message ? (
+        <NoticeBanner message={message} onDismiss={dismissNotice} />
+      ) : null}
 
       <View style={styles.screen}>{body}</View>
 

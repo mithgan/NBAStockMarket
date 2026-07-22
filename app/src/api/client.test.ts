@@ -35,6 +35,20 @@ const market = [{
   available_shares: 100, buy_fee_cents: 12_500_000, ownership_bps: 0, volume_30d: 0,
 }];
 
+const bootstrapPayload = {
+  market,
+  portfolio,
+  game: {
+    season_id: '2025-26', last_settled_date: null,
+    next_game_date: '2025-10-20', is_complete: false, version: 0,
+  },
+  activity: { items: [], next_cursor: null },
+  portfolio_history: { items: [], next_cursor: null },
+  settlements: [],
+  leaderboard: [],
+  settled_results: [],
+};
+
 const aliceToken = async () => ({ accessToken: 'token', userId: 'alice' });
 
 test('the default fetch keeps its browser global binding', async () => {
@@ -253,9 +267,7 @@ test('public FastAPI problem codes survive for user-safe conflict handling', asy
   );
 });
 
-test('bootstrap creates the portfolio before parallel account reads begin', async () => {
-  let releasePortfolio!: () => void;
-  const portfolioGate = new Promise<void>((resolve) => { releasePortfolio = resolve; });
+test('bootstrap loads one server-owned snapshot instead of stitching client reads', async () => {
   const requestedPaths: string[] = [];
   const client = new MarketApiClient({
     baseUrl: 'https://api.example.com',
@@ -264,85 +276,36 @@ test('bootstrap creates the portfolio before parallel account reads begin', asyn
     fetchImpl: async (input) => {
       const path = new URL(String(input)).pathname;
       requestedPaths.push(path);
-      if (path === '/api/v1/portfolio') {
-        await portfolioGate;
-        return new Response(JSON.stringify({ data: portfolio }), { status: 200 });
-      }
-      const payloads: Record<string, unknown> = {
-        '/api/v1/market': market,
-        '/api/v1/game': {
-          season_id: '2025-26', last_settled_date: null,
-          next_game_date: '2025-10-20', is_complete: false, version: 0,
-        },
-        '/api/v1/activity': { items: [], next_cursor: null },
-        '/api/v1/portfolio/history': { items: [], next_cursor: null },
-        '/api/v1/settlements': [],
-        '/api/v1/leaderboard': [],
-      };
-      return new Response(JSON.stringify({ data: payloads[path] }), { status: 200 });
-    },
-  });
-
-  const pending = client.bootstrap();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(requestedPaths, ['/api/v1/portfolio']);
-
-  releasePortfolio();
-  const result = await pending;
-  assert.equal(result.portfolio.account_id, 'alice');
-  assert.deepEqual(new Set(requestedPaths.slice(1)), new Set([
-    '/api/v1/market',
-    '/api/v1/game',
-    '/api/v1/activity',
-    '/api/v1/portfolio',
-    '/api/v1/portfolio/history',
-    '/api/v1/settlements',
-    '/api/v1/leaderboard',
-  ]));
-  assert.equal(requestedPaths.filter((path) => path === '/api/v1/portfolio').length, 2);
-  assert.equal(requestedPaths.filter((path) => path === '/api/v1/game').length, 2);
-});
-
-test('bootstrap retries when the account changes across its read window', async () => {
-  let portfolioReads = 0;
-  let gameReads = 0;
-  let marketReads = 0;
-  const client = new MarketApiClient({
-    baseUrl: 'https://api.example.com',
-    expectedUserId: 'alice',
-    getAccessToken: aliceToken,
-    fetchImpl: async (input) => {
-      const path = new URL(String(input)).pathname;
-      if (path === '/api/v1/portfolio') {
-        portfolioReads += 1;
-        const version = portfolioReads === 1 ? 1 : 2;
-        return new Response(JSON.stringify({ data: { ...portfolio, version } }), { status: 200 });
-      }
-      if (path === '/api/v1/game') {
-        gameReads += 1;
-        return new Response(JSON.stringify({ data: {
-          season_id: '2025-26', last_settled_date: null,
-          next_game_date: '2025-10-20', is_complete: false, version: 0,
-        } }), { status: 200 });
-      }
-      if (path === '/api/v1/market') {
-        marketReads += 1;
-        return new Response(JSON.stringify({ data: market }), { status: 200 });
-      }
-      const payloads: Record<string, unknown> = {
-        '/api/v1/activity': { items: [], next_cursor: null },
-        '/api/v1/portfolio/history': { items: [], next_cursor: null },
-        '/api/v1/settlements': [],
-        '/api/v1/leaderboard': [],
-      };
-      return new Response(JSON.stringify({ data: payloads[path] }), { status: 200 });
+      return new Response(JSON.stringify({ data: bootstrapPayload }), { status: 200 });
     },
   });
 
   const result = await client.bootstrap();
 
-  assert.equal(result.portfolio.version, 2);
-  assert.equal(portfolioReads, 3);
-  assert.equal(gameReads, 4);
-  assert.equal(marketReads, 2);
+  assert.equal(result.portfolio.account_id, 'alice');
+  assert.deepEqual(requestedPaths, ['/api/v1/bootstrap']);
+});
+
+test('bootstrap rejects future-result contract corruption before it becomes app state', async () => {
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    fetchImpl: async () => new Response(JSON.stringify({
+      data: {
+        ...bootstrapPayload,
+        settled_results: [{
+          player_id: 'sga', game_date: 'not-a-date',
+          actual_net_points_micros: 1,
+          expected_net_points_micros: 1,
+          dividend_cents: 0,
+        }],
+      },
+    }), { status: 200 }),
+  });
+
+  await assert.rejects(
+    client.bootstrap(),
+    (error: unknown) => error instanceof MarketApiError && error.code === 'invalid_response',
+  );
 });

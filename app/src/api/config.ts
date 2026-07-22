@@ -26,7 +26,7 @@ function normalizedHttpUrl(value: string | undefined, label: string): string {
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     throw new Error(`${label} must use HTTP or HTTPS.`);
   }
-  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+  const loopback = ['localhost', '127.0.0.1', '[::1]', '10.0.2.2'].includes(parsed.hostname);
   if (parsed.protocol === 'http:' && !loopback) {
     throw new Error(`${label} must use HTTPS outside local development.`);
   }

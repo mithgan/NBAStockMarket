@@ -4,7 +4,8 @@ import type {
   ServerLeaderboardRow,
   ServerPortfolio,
 } from '../api/contracts';
-import { replayDayByDate, replayDays, weekKey, type ReplayDay } from '../data/replay';
+import { weekKey } from '../data/calendar';
+import type { TrendPoint } from '../data/trendPresentation';
 import type { Player } from '../data/types';
 import {
   GAME_STATE_VERSION,
@@ -22,7 +23,9 @@ export interface ServerPresentationState {
   state: GameState;
   players: Player[];
   leaderboard: GameLeaderboardEntry[];
-  nextReplayDay: ReplayDay | null;
+  playerTrends: Record<string, TrendPoint[]>;
+  nextGameDate: string | null;
+  settledGameDateCount: number;
   latestSettledDate: string | null;
   currentWeek: string | null;
   isComplete: boolean;
@@ -144,13 +147,28 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
   }));
   const names = new Map(players.map((player) => [player.id, player.name]));
   const latestSettledDate = bootstrap.game.last_settled_date;
-  const settledDays = latestSettledDate === null
+  const settledResults = latestSettledDate === null
     ? []
-    : replayDays.filter((day) => day.date <= latestSettledDate);
-  const settledDates = settledDays.map((day) => day.date);
-  const settledPlayerWeeks = [...new Set(settledDays.flatMap((day) => (
-    day.events.map((event) => `${weekKey(day.date)}:${event.playerId}`)
-  )))];
+    : bootstrap.settledResults.filter(
+      (result) => result.game_date <= latestSettledDate,
+    );
+  const settledDates = [...new Set([
+    ...settledResults.map((result) => result.game_date),
+    ...bootstrap.settlements.map((settlement) => settlement.game_date),
+  ])].sort();
+  const settledPlayerWeeks = [...new Set(settledResults.map(
+    (result) => `${weekKey(result.game_date)}:${result.player_id}`,
+  ))];
+  const playerTrends: Record<string, TrendPoint[]> = {};
+  for (const result of settledResults) {
+    const point = {
+      date: result.game_date,
+      np: result.actual_net_points_micros / MICROS_PER_POINT,
+      expected_np: result.expected_net_points_micros / MICROS_PER_POINT,
+      dividend_per_holder: dollars(result.dividend_cents),
+    };
+    (playerTrends[result.player_id] ??= []).push(point);
+  }
   const portfolioHistory = [...bootstrap.portfolioHistory.items]
     .sort((left, right) => left.game_date.localeCompare(right.game_date))
     .map((point, index, rows) => {
@@ -176,9 +194,6 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
   );
   const instruments = bootstrap.portfolio.instruments;
   const nextDate = bootstrap.game.next_game_date;
-  const nextReplayDay = nextDate === null
-    ? null
-    : replayDayByDate[nextDate] ?? { date: nextDate, events: [] };
   const state: GameState = {
     version: GAME_STATE_VERSION,
     cash: dollars(bootstrap.portfolio.cash_cents),
@@ -220,7 +235,9 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
     state,
     players,
     leaderboard: mapLeaderboard(bootstrap.leaderboard),
-    nextReplayDay,
+    playerTrends,
+    nextGameDate: nextDate,
+    settledGameDateCount: bootstrap.game.version,
     latestSettledDate,
     currentWeek: nextDate === null ? null : weekKey(nextDate),
     isComplete: bootstrap.game.is_complete,

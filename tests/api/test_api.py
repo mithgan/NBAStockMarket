@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from nba_stock_market.api.database import Database, TradeRow, utcnow
+from nba_stock_market.api.database import Database, ReplayEventRow, TradeRow, utcnow
 from nba_stock_market.api.service import KeyedLockRegistry
 
 
@@ -49,6 +49,56 @@ def test_market_requires_authentication(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "unauthorized"
+
+
+def test_bootstrap_is_atomic_and_never_exposes_unsettled_results(
+    client: TestClient,
+    alice_headers: dict[str, str],
+    database: Database,
+) -> None:
+    assert client.get("/api/v1/bootstrap").status_code == 401
+    with database.session() as session, session.begin():
+        session.add(
+            ReplayEventRow(
+                game_date=date(2025, 10, 22),
+                player_id="sga",
+                actual_net_points_micros=99_000_000,
+                expected_net_points_micros=1_000_000,
+                dividend_cents=392_000_000,
+                actual_minutes_micros=40_000_000,
+                projected_minutes_micros=30_000_000,
+                qualifies_for_instruments=True,
+            )
+        )
+
+    before = client.get("/api/v1/bootstrap", headers=alice_headers)
+    assert before.status_code == 200
+    assert before.json()["data"]["settled_results"] == []
+
+    client.app.state.market_service.settle_next(
+        expected_game_date=date(2025, 10, 21),
+        idempotency_key="bootstrap-settlement-0001",
+    )
+    after = client.get("/api/v1/bootstrap", headers=alice_headers)
+
+    assert after.status_code == 200
+    payload = after.json()["data"]
+    assert set(payload) == {
+        "activity",
+        "game",
+        "leaderboard",
+        "market",
+        "portfolio",
+        "portfolio_history",
+        "settled_results",
+        "settlements",
+    }
+    assert [row["game_date"] for row in payload["settled_results"]] == [
+        "2025-10-21"
+    ]
+    assert payload["game"]["next_game_date"] == "2025-10-22"
+    assert payload["market"][0]["current_price_cents"] > 0
+    assert payload["leaderboard"][0]["account_id"] == "alice"
 
 
 def test_non_json_trade_body_returns_serializable_validation_error(

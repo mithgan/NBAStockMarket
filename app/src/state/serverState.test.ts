@@ -104,6 +104,12 @@ function bootstrapFixture(): ServerBootstrap {
       total_value_cents: 13_987_250_000, return_bps: -9,
       is_current_user: true,
     }],
+    settledResults: [{
+      player_id: 'sga', game_date: '2025-10-21',
+      actual_net_points_micros: 35_000_000,
+      expected_net_points_micros: 25_000_000,
+      dividend_cents: 40_000_000,
+    }],
   };
 }
 
@@ -130,7 +136,11 @@ test('mapServerBootstrap converts exact server cents and state into screen data'
     playerId: 'sga', gameDate: '2025-10-23', fee: 127_500,
   }]);
   assert.equal(mapped.currentWeek, '2025-W43');
-  assert.equal(mapped.nextReplayDay?.date, '2025-10-22');
+  assert.equal(mapped.nextGameDate, '2025-10-22');
+  assert.equal(mapped.settledGameDateCount, 1);
+  assert.deepEqual(mapped.playerTrends.sga, [{
+    date: '2025-10-21', np: 35, expected_np: 25, dividend_per_holder: 400_000,
+  }]);
   assert.equal(mapped.leaderboard[0].returnPct, -0.09);
   assert.equal(mapped.leaderboard[0].id, 'alice');
 });
@@ -174,5 +184,20 @@ test('an unknown server replay date remains visible without exposing fabricated 
 
   const mapped = mapServerBootstrap(fixture);
 
-  assert.deepEqual(mapped.nextReplayDay, { date: '2026-10-20', events: [] });
+  assert.equal(mapped.nextGameDate, '2026-10-20');
+});
+
+test('mapping refuses results after the authoritative settled date', () => {
+  const fixture = bootstrapFixture();
+  fixture.settledResults.push({
+    player_id: 'sga', game_date: '2025-10-22',
+    actual_net_points_micros: 99_000_000,
+    expected_net_points_micros: 1_000_000,
+    dividend_cents: 999_000_000,
+  });
+
+  const mapped = mapServerBootstrap(fixture);
+
+  assert.equal(mapped.playerTrends.sga.length, 1);
+  assert.equal(mapped.playerTrends.sga[0].date, '2025-10-21');
 });

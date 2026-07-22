@@ -143,6 +143,14 @@ export interface ServerSettlement {
   settled_at: string;
 }
 
+export interface ServerSettledResult {
+  player_id: string;
+  game_date: string;
+  actual_net_points_micros: number;
+  expected_net_points_micros: number;
+  dividend_cents: number;
+}
+
 export interface ServerLeaderboardRow {
   rank: number;
   account_id: string;
@@ -174,6 +182,7 @@ export interface ServerBootstrap {
   portfolioHistory: CursorPage<ServerPortfolioPoint>;
   settlements: ServerSettlement[];
   leaderboard: ServerLeaderboardRow[];
+  settledResults: ServerSettledResult[];
 }
 
 type Parser<T> = (value: unknown, path?: string) => T;
@@ -463,6 +472,23 @@ export function parseSettlement(value: unknown, path = 'settlement'): ServerSett
   };
 }
 
+export function parseSettledResult(value: unknown, path = 'settled_result'): ServerSettledResult {
+  const row = record(value, path);
+  return {
+    player_id: text(row.player_id, `${path}.player_id`),
+    game_date: isoDate(row.game_date, `${path}.game_date`),
+    actual_net_points_micros: integer(
+      row.actual_net_points_micros,
+      `${path}.actual_net_points_micros`,
+    ),
+    expected_net_points_micros: integer(
+      row.expected_net_points_micros,
+      `${path}.expected_net_points_micros`,
+    ),
+    dividend_cents: integer(row.dividend_cents, `${path}.dividend_cents`),
+  };
+}
+
 export function parseLeaderboardRow(value: unknown, path = 'leaderboard'): ServerLeaderboardRow {
   const row = record(value, path);
   return {
@@ -472,6 +498,28 @@ export function parseLeaderboardRow(value: unknown, path = 'leaderboard'): Serve
     total_value_cents: integer(row.total_value_cents, `${path}.total_value_cents`),
     return_bps: integer(row.return_bps, `${path}.return_bps`),
     is_current_user: flag(row.is_current_user, `${path}.is_current_user`),
+  };
+}
+
+export function parseBootstrap(value: unknown, path = 'bootstrap'): ServerBootstrap {
+  const row = record(value, path);
+  return {
+    market: list(row.market, `${path}.market`, parseMarketListing),
+    portfolio: parsePortfolio(row.portfolio, `${path}.portfolio`),
+    game: parseGameState(row.game, `${path}.game`),
+    activity: parseCursorPage(row.activity, `${path}.activity`, parseActivity),
+    portfolioHistory: parseCursorPage(
+      row.portfolio_history,
+      `${path}.portfolio_history`,
+      parsePortfolioPoint,
+    ),
+    settlements: list(row.settlements, `${path}.settlements`, parseSettlement),
+    leaderboard: list(row.leaderboard, `${path}.leaderboard`, parseLeaderboardRow),
+    settledResults: list(
+      row.settled_results,
+      `${path}.settled_results`,
+      parseSettledResult,
+    ),
   };
 }
 

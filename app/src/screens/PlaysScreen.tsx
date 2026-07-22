@@ -29,7 +29,7 @@ export function PlaysScreen() {
     boostTargets,
     boostSlots,
     currentWeek,
-    nextReplayDay,
+    nextGameDate,
     owns,
     pendingActions,
     players,
@@ -118,7 +118,7 @@ export function PlaysScreen() {
       <Text style={styles.subtle}>Pick an unowned player before his first game of the week.</Text>
       {shortCandidates.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>{nextReplayDay ? 'No eligible players right now.' : 'Replay complete.'}</Text>
+          <Text style={styles.emptyTitle}>{nextGameDate ? 'No eligible players right now.' : 'Replay complete.'}</Text>
           <Text style={styles.subtle}>Refresh after the next server settlement or free a slot to see more options.</Text>
         </View>
       ) : (

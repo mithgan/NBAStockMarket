@@ -510,6 +510,15 @@ def test_final_settlement_completes_replay_and_rejects_another_advance(
     assert state["is_complete"] is True
     assert state["version"] == 2
 
+    bootstrap = settlement_client.get("/api/v1/bootstrap", headers=auth())
+    assert bootstrap.status_code == 200
+    bootstrap_data = bootstrap.json()["data"]
+    assert bootstrap_data["game"]["next_game_date"] is None
+    assert bootstrap_data["game"]["is_complete"] is True
+    assert {
+        result["game_date"] for result in bootstrap_data["settled_results"]
+    } == {"2025-10-21", "2025-10-22"}
+
 
 def test_settlement_failure_rolls_back_every_mutation(
     settlement_client: TestClient,

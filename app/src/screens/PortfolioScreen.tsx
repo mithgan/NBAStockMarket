@@ -22,6 +22,7 @@ export function PortfolioScreen() {
   const {
     latestSettledDate,
     players,
+    playerTrends,
     state,
     summary,
   } = usePortfolio();
@@ -39,6 +40,7 @@ export function PortfolioScreen() {
         latestSettledDate={latestSettledDate}
         onClose={() => setSelectedPlayer(null)}
         player={selectedPlayer}
+        trendPoints={playerTrends[selectedPlayer.id] ?? []}
       />
     );
   }

@@ -1,6 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { replayDays } from '../data/replay';
 import { usePortfolio } from '../state/PortfolioContext';
 import { colors } from '../theme';
 
@@ -18,21 +17,21 @@ export function SeasonControl() {
   const {
     isGameplayReady,
     isRefreshing,
-    nextReplayDay,
+    nextGameDate,
     pendingActions,
     refreshData,
+    settledGameDateCount,
     state,
   } = usePortfolio();
   if (!state) return null;
   const disabled = !isGameplayReady || isRefreshing || pendingActions.size > 0;
-  const progress = Math.min(state.settledDates.length, replayDays.length);
 
   return (
     <View style={styles.container}>
       <View style={styles.copy}>
         <Text style={styles.label}>2025-26 SERVER REPLAY</Text>
-        <Text numberOfLines={1} style={styles.date}>{displayDate(nextReplayDay?.date ?? null)}</Text>
-        <Text style={styles.progress}>{progress} of {replayDays.length} game dates settled</Text>
+        <Text numberOfLines={1} style={styles.date}>{displayDate(nextGameDate)}</Text>
+        <Text style={styles.progress}>{settledGameDateCount} game dates settled</Text>
       </View>
       <Pressable
         accessibilityLabel="Refresh server game state"
