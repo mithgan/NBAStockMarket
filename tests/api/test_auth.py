@@ -325,6 +325,20 @@ def test_settings_keep_publishable_key_secret() -> None:
 
 
 def test_production_settings_require_postgres_auth_and_migrations() -> None:
+    empty_admin_key = ApiSettings(
+        environment="test",
+        settlement_admin_key=SecretStr(""),
+    )
+    empty_admin_key.validate_runtime()
+    assert empty_admin_key.settlement_admin_key is None
+
+    weak_admin_key = ApiSettings(
+        environment="test",
+        settlement_admin_key=SecretStr("too-short"),
+    )
+    with pytest.raises(RuntimeError, match="at least 32 characters"):
+        weak_admin_key.validate_runtime()
+
     settings = ApiSettings(environment="production")
     with pytest.raises(RuntimeError):
         settings.validate_runtime()
@@ -357,7 +371,25 @@ def test_production_settings_require_postgres_auth_and_migrations() -> None:
     settings = ApiSettings(
         environment="production",
         database_url="postgresql+psycopg://market:password@db.example/market",
+        supabase_url="https://example.supabase.co",
+    )
+    with pytest.raises(RuntimeError, match="settlement admin key"):
+        settings.validate_runtime()
+
+    settings = ApiSettings(
+        environment="production",
+        database_url="postgresql+psycopg://market:password@db.example/market",
+        supabase_url="https://example.supabase.co",
+        settlement_admin_key=SecretStr("雪" * 32),
+    )
+    with pytest.raises(RuntimeError, match="ASCII settlement admin key"):
+        settings.validate_runtime()
+
+    settings = ApiSettings(
+        environment="production",
+        database_url="postgresql+psycopg://market:password@db.example/market",
         supabase_url="HTTPS://EXAMPLE.SUPABASE.CO:443/",
+        settlement_admin_key=SecretStr("test-settlement-admin-key-at-least-32"),
     )
     settings.validate_runtime()
 

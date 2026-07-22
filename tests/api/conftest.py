@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
 
 from nba_stock_market.api.app import create_app
 from nba_stock_market.api.auth import Principal, TokenVerifier
-from nba_stock_market.api.database import Database, SeedPlayer
+from nba_stock_market.api.database import Database, SeedPlayer, SeedReplayEvent
 from nba_stock_market.api.settings import ApiSettings
 
 
@@ -60,6 +61,18 @@ def database(tmp_path, players: list[SeedPlayer]) -> Database:
     db = Database(f"sqlite+pysqlite:///{tmp_path / 'api.db'}")
     db.create_schema()
     db.seed_players(players)
+    db.seed_replay_events(
+        season_id="2025-26",
+        events=[
+            SeedReplayEvent(
+                game_date=date(2025, 10, 21),
+                player_id="sga",
+                actual_net_points_micros=40_000_000,
+                expected_net_points_micros=20_000_000,
+                dividend_cents=80_000_000,
+            )
+        ],
+    )
     yield db
     db.dispose()
 

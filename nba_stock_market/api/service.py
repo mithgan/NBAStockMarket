@@ -6,7 +6,7 @@ import json
 import math
 import threading
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from typing import Literal
 from uuid import uuid4
 
@@ -18,8 +18,13 @@ from nba_stock_market.api.auth import Principal
 from nba_stock_market.api.database import (
     AccountRow,
     Database,
+    DividendRow,
+    GAME_STATE_ID,
+    GameStateRow,
     HoldingRow,
     PlayerListingRow,
+    ReplayEventRow,
+    SettlementRow,
     TradeRow,
     utcnow,
 )
@@ -110,6 +115,205 @@ class MarketService:
                 account = self._ensure_account(session, principal, for_update=True)
                 return self._portfolio_payload(session, account)
 
+    def game_state(self, principal: Principal) -> dict[str, object]:
+        with self.database.session() as session, session.begin():
+            self._ensure_account(session, principal)
+            state = session.get(GameStateRow, GAME_STATE_ID)
+            if state is None:
+                raise ApiProblem(
+                    status_code=503,
+                    code="game_unavailable",
+                    message="Historical replay data is not available.",
+                )
+            return self._game_state_payload(state)
+
+    def settlement_history(
+        self,
+        principal: Principal,
+        *,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        with self.database.session() as session, session.begin():
+            self._ensure_account(session, principal)
+            settlements = session.scalars(
+                select(SettlementRow)
+                .order_by(SettlementRow.game_date.desc())
+                .limit(limit)
+            ).all()
+            history: list[dict[str, object]] = []
+            for settlement in settlements:
+                user_dividend = session.scalar(
+                    select(func.coalesce(func.sum(DividendRow.amount_cents), 0)).where(
+                        DividendRow.account_id == principal.id,
+                        DividendRow.game_date == settlement.game_date,
+                    )
+                )
+                history.append(
+                    {
+                        "game_date": settlement.game_date.isoformat(),
+                        "event_count": settlement.event_count,
+                        "payout_count": settlement.payout_count,
+                        "net_cash_cents": settlement.net_cash_cents,
+                        "current_user_dividend_cents": int(user_dividend or 0),
+                        "settled_at": settlement.settled_at.isoformat() + "Z",
+                    }
+                )
+            return history
+
+    def settle_next(
+        self,
+        *,
+        expected_game_date: date,
+        idempotency_key: str,
+    ) -> dict[str, object]:
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {"expected_game_date": expected_game_date.isoformat()},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        with self.locks.acquire("settlement:global"):
+            with self.database.market_write_transaction(
+                settlement_exclusive=True
+            ) as session:
+                state = session.scalar(
+                    select(GameStateRow)
+                    .where(GameStateRow.id == GAME_STATE_ID)
+                    .with_for_update()
+                )
+                if state is None:
+                    raise ApiProblem(
+                        status_code=503,
+                        code="game_unavailable",
+                        message="Historical replay data is not available.",
+                    )
+
+                existing = session.scalar(
+                    select(SettlementRow).where(
+                        SettlementRow.idempotency_key == idempotency_key
+                    )
+                )
+                if existing is not None:
+                    if existing.request_fingerprint != fingerprint:
+                        raise ApiProblem(
+                            status_code=409,
+                            code="idempotency_conflict",
+                            message="Idempotency key was already used for another request.",
+                        )
+                    replay = copy.deepcopy(existing.response_payload)
+                    replay["replayed"] = True
+                    return replay
+
+                if state.next_game_date is None:
+                    raise ApiProblem(
+                        status_code=409,
+                        code="replay_complete",
+                        message="The historical replay is complete.",
+                    )
+                if state.next_game_date != expected_game_date:
+                    raise ApiProblem(
+                        status_code=409,
+                        code="clock_conflict",
+                        message="Expected game date does not match the server clock.",
+                    )
+
+                events = session.scalars(
+                    select(ReplayEventRow)
+                    .where(ReplayEventRow.game_date == expected_game_date)
+                    .order_by(ReplayEventRow.player_id)
+                ).all()
+                if not events:
+                    raise ApiProblem(
+                        status_code=503,
+                        code="replay_data_missing",
+                        message="No replay events exist for the server clock date.",
+                    )
+                next_game_date = session.scalar(
+                    select(func.min(ReplayEventRow.game_date)).where(
+                        ReplayEventRow.game_date > expected_game_date
+                    )
+                )
+                now = utcnow()
+                settlement = SettlementRow(
+                    game_date=expected_game_date,
+                    season_id=state.season_id,
+                    idempotency_key=idempotency_key,
+                    request_fingerprint=fingerprint,
+                    event_count=len(events),
+                    payout_count=0,
+                    net_cash_cents=0,
+                    response_payload={},
+                    settled_at=now,
+                )
+                session.add(settlement)
+                session.flush()
+                payout_count, net_cash_cents = self._apply_dividends(
+                    session,
+                    game_date=expected_game_date,
+                    now=now,
+                )
+
+                state.last_settled_date = expected_game_date
+                state.next_game_date = next_game_date
+                state.version += 1
+                settlement.payout_count = payout_count
+                settlement.net_cash_cents = net_cash_cents
+                payload: dict[str, object] = {
+                    "replayed": False,
+                    "game_date": expected_game_date.isoformat(),
+                    "next_game_date": (
+                        next_game_date.isoformat() if next_game_date is not None else None
+                    ),
+                    "is_complete": next_game_date is None,
+                    "event_count": len(events),
+                    "payout_count": payout_count,
+                    "net_cash_cents": net_cash_cents,
+                }
+                settlement.response_payload = copy.deepcopy(payload)
+                return payload
+
+    def _apply_dividends(
+        self,
+        session: Session,
+        *,
+        game_date: date,
+        now: datetime,
+    ) -> tuple[int, int]:
+        rows = session.execute(
+            select(AccountRow, ReplayEventRow)
+            .join(HoldingRow, HoldingRow.account_id == AccountRow.id)
+            .join(
+                ReplayEventRow,
+                ReplayEventRow.player_id == HoldingRow.player_id,
+            )
+            .where(ReplayEventRow.game_date == game_date)
+            .order_by(AccountRow.id, ReplayEventRow.player_id)
+            .with_for_update(of=AccountRow)
+        ).all()
+        account_totals: dict[str, int] = {}
+        accounts: dict[str, AccountRow] = {}
+        for account, event in rows:
+            session.add(
+                DividendRow(
+                    account_id=account.id,
+                    game_date=game_date,
+                    player_id=event.player_id,
+                    amount_cents=event.dividend_cents,
+                    created_at=now,
+                )
+            )
+            accounts[account.id] = account
+            account_totals[account.id] = (
+                account_totals.get(account.id, 0) + event.dividend_cents
+            )
+
+        for account_id, amount_cents in account_totals.items():
+            account = accounts[account_id]
+            account.cash_cents += amount_cents
+            account.version += 1
+        return len(rows), sum(account_totals.values())
+
     def leaderboard(
         self,
         principal: Principal,
@@ -181,7 +385,9 @@ class MarketService:
             ).encode("utf-8")
         ).hexdigest()
         with self.locks.acquire(f"account:{principal.id}", f"player:{player_id}"):
-            with self.database.session() as session, session.begin():
+            with self.database.market_write_transaction(
+                settlement_exclusive=False
+            ) as session:
                 account = self._ensure_account(session, principal, for_update=True)
                 existing = session.scalar(
                     select(TradeRow).where(
@@ -365,6 +571,24 @@ class MarketService:
             if account is None:
                 raise
         return account
+
+    @staticmethod
+    def _game_state_payload(state: GameStateRow) -> dict[str, object]:
+        return {
+            "season_id": state.season_id,
+            "last_settled_date": (
+                state.last_settled_date.isoformat()
+                if state.last_settled_date is not None
+                else None
+            ),
+            "next_game_date": (
+                state.next_game_date.isoformat()
+                if state.next_game_date is not None
+                else None
+            ),
+            "is_complete": state.next_game_date is None,
+            "version": state.version,
+        }
 
     @staticmethod
     def _listing_payload(

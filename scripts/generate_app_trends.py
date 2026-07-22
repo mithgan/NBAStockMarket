@@ -44,6 +44,7 @@ SALARY_FILES = (
 DNT_CACHE = ROOT / "data/raw/dnt"
 SNAPSHOT = ROOT / "app/src/data/snapshot.ts"
 DEFAULT_OUTPUT = ROOT / "app/src/data/trends.ts"
+DEFAULT_API_OUTPUT = ROOT / "data/generated/replay-seed.json"
 MIN_GAME_COUNT = 15
 CALIBRATION_UNIVERSE_SIZE = 150
 PER_HOLDER_DOLLARS_PER_NP = NET_POINTS_TO_DOLLARS / SHARES_OUT
@@ -231,10 +232,81 @@ def render_typescript(generated: dict[str, Any]) -> str:
     )
 
 
+def render_api_seed(generated: dict[str, Any]) -> dict[str, Any]:
+    events_by_date: defaultdict[str, list[dict[str, int | str]]] = defaultdict(list)
+    for player_id, points in generated["player_trends"].items():
+        for point in points:
+            game_date = str(point["date"])
+            events_by_date[game_date].append(
+                {
+                    "player_id": player_id,
+                    "game_date": game_date,
+                    "actual_net_points_micros": round(float(point["np"]) * 1_000_000),
+                    "expected_net_points_micros": round(
+                        float(point["expected_np"]) * 1_000_000
+                    ),
+                    "dividend_cents": round(
+                        float(point["dividend_per_holder"]) * 100
+                    ),
+                }
+            )
+
+    return {
+        "schema_version": 1,
+        "season_id": "2025-26",
+        "days": [
+            {
+                "date": game_date,
+                "events": sorted(
+                    events_by_date[game_date],
+                    key=lambda event: str(event["player_id"]),
+                ),
+            }
+            for game_date in sorted(events_by_date)
+        ],
+    }
+
+
+def render_api_seed_sql(seed: dict[str, Any]) -> str:
+    rows = [
+        (
+            f"    ('{event['game_date']}', '{event['player_id']}', "
+            f"{event['actual_net_points_micros']}, "
+            f"{event['expected_net_points_micros']}, {event['dividend_cents']})"
+        )
+        for day in seed["days"]
+        for event in day["events"]
+    ]
+    season_id = str(seed["season_id"]).replace("'", "''")
+    values = ",\n".join(rows)
+    return (
+        "begin;\n\n"
+        "insert into public.market_replay_events (\n"
+        "    game_date,\n"
+        "    player_id,\n"
+        "    actual_net_points_micros,\n"
+        "    expected_net_points_micros,\n"
+        "    dividend_cents\n"
+        ") values\n"
+        f"{values}\n"
+        "on conflict (game_date, player_id) do nothing;\n\n"
+        "insert into public.market_game_state (\n"
+        "    id, season_id, last_settled_date, next_game_date, version\n"
+        ") values (\n"
+        f"    'historical-{season_id}', '{season_id}', null,\n"
+        "    (select min(game_date) from public.market_replay_events), 0\n"
+        ")\n"
+        "on conflict (id) do nothing;\n\n"
+        "commit;\n"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--json-output", type=Path)
+    parser.add_argument("--api-output", type=Path, default=DEFAULT_API_OUTPUT)
+    parser.add_argument("--api-sql-output", type=Path)
     args = parser.parse_args(argv)
 
     generated = generate()
@@ -244,6 +316,19 @@ def main(argv: list[str] | None = None) -> int:
         args.json_output.parent.mkdir(parents=True, exist_ok=True)
         args.json_output.write_text(
             json.dumps(generated, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+    api_seed = render_api_seed(generated)
+    if args.api_output is not None:
+        args.api_output.parent.mkdir(parents=True, exist_ok=True)
+        args.api_output.write_text(
+            json.dumps(api_seed, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+    if args.api_sql_output is not None:
+        args.api_sql_output.parent.mkdir(parents=True, exist_ok=True)
+        args.api_sql_output.write_text(
+            render_api_seed_sql(api_seed),
             encoding="utf-8",
         )
     return 0

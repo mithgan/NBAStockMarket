@@ -4,14 +4,27 @@ import json
 import os
 import re
 import subprocess
+from datetime import date
 from pathlib import Path
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Integer, JSON, String
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    Integer,
+    JSON,
+    String,
+)
 
 from nba_stock_market.api.database import (
     Base,
+    EXPECTED_MARKET_MIGRATIONS,
     EXPECTED_MARKET_SEED,
+    EXPECTED_REPLAY_SEED_SHA256,
     database_connect_args,
+    replay_seed_digest,
 )
 
 
@@ -27,12 +40,33 @@ SEED_MIGRATION = (
     / "migrations"
     / "20260721010000_seed_market_players.sql"
 )
+SETTLEMENT_MIGRATION = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "20260722000000_create_market_settlement.sql"
+)
+SCHEMA_MIGRATIONS = (MIGRATION, SETTLEMENT_MIGRATION)
 MARKET_SEED = Path(__file__).parents[2] / "data" / "generated" / "market-seed.json"
+REPLAY_SEED = Path(__file__).parents[2] / "data" / "generated" / "replay-seed.json"
+REPLAY_SEED_MIGRATION = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "20260722010000_seed_replay_events.sql"
+)
 PUSH_SCRIPT = Path(__file__).parents[2] / "scripts" / "push_supabase_schema.sh"
 
 
 def normalized_sql() -> str:
-    return re.sub(r"\s+", " ", MIGRATION.read_text(encoding="utf-8").lower()).strip()
+    return re.sub(r"\s+", " ", cumulative_sql()).strip()
+
+
+def cumulative_sql() -> str:
+    return "\n".join(
+        migration.read_text(encoding="utf-8").lower()
+        for migration in SCHEMA_MIGRATIONS
+    )
 
 
 def normalized_constraint_sql(value: object) -> str:
@@ -64,6 +98,8 @@ def expected_sql_type(column_type: object) -> str:
         return "integer"
     if isinstance(column_type, DateTime):
         return "timestamp without time zone"
+    if isinstance(column_type, Date):
+        return "date"
     if isinstance(column_type, Boolean):
         return "boolean"
     if isinstance(column_type, JSON):
@@ -72,7 +108,7 @@ def expected_sql_type(column_type: object) -> str:
 
 
 def test_supabase_migration_matches_orm_table_structure() -> None:
-    sql = MIGRATION.read_text(encoding="utf-8").lower()
+    sql = cumulative_sql()
 
     for table in Base.metadata.sorted_tables:
         definition = table_definition(sql, table.name)
@@ -142,6 +178,7 @@ def test_supabase_migration_preserves_authoritative_economy_constraints() -> Non
     assert "constraint ck_market_holding_whole_player check (shares = 1)" in sql
     assert "unique (account_id, idempotency_key)" in sql
     assert "held_shares >= 0 and held_shares <= shares_outstanding" in sql
+    assert "drop constraint if exists ck_market_account_cash" in sql
 
 
 def test_seed_migration_reproduces_the_canonical_market_without_overwriting() -> None:
@@ -175,6 +212,46 @@ def test_seed_migration_reproduces_the_canonical_market_without_overwriting() ->
         assert row in sql
 
     assert "on conflict (id) do nothing" in sql
+
+
+def test_replay_seed_migration_reproduces_generated_events_without_overwriting() -> None:
+    payload = json.loads(REPLAY_SEED.read_text(encoding="utf-8"))
+    sql = REPLAY_SEED_MIGRATION.read_text(encoding="utf-8").lower()
+    events = [event for day in payload["days"] for event in day["events"]]
+
+    assert payload["schema_version"] == 1
+    assert payload["season_id"] == "2025-26"
+    assert len(payload["days"]) == 164
+    assert len(events) == 2_123
+    assert replay_seed_digest(
+        [
+            (
+                date.fromisoformat(event["game_date"]),
+                event["player_id"],
+                event["actual_net_points_micros"],
+                event["expected_net_points_micros"],
+                event["dividend_cents"],
+            )
+            for event in events
+        ]
+    ) == EXPECTED_REPLAY_SEED_SHA256
+    for event in events:
+        row = (
+            f"('{event['game_date']}', '{event['player_id']}', "
+            f"{event['actual_net_points_micros']}, "
+            f"{event['expected_net_points_micros']}, {event['dividend_cents']})"
+        )
+        assert row in sql
+
+    assert "on conflict (game_date, player_id) do nothing" in sql
+    assert "'historical-2025-26', '2025-26', null" in sql
+    assert "on conflict (id) do nothing" in sql
+    assert EXPECTED_MARKET_MIGRATIONS == {
+        "20260721000000",
+        "20260721010000",
+        "20260722000000",
+        "20260722010000",
+    }
 
 
 def test_database_connection_args_support_supabase_transaction_pooler() -> None:

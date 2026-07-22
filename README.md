@@ -146,9 +146,11 @@ anti-churn friction while sharply reducing wealth destruction under high turnove
 
 The FastAPI service in `nba_stock_market/api/` is the authoritative first backend slice. It owns
 account creation, the $140M starting balance, listings, one-whole-player holdings, fees, price
-impact, idempotent buys/sells, and the portfolio leaderboard. The initial market is generated from
-the same 30-player source used by the Expo replay, so the app and API do not maintain separate
-handwritten player lists.
+impact, idempotent buys/sells, the portfolio leaderboard, and the global historical replay clock.
+Daily settlements are atomic and idempotent: the server pays the signed canonical dividend to each
+current holder, records a per-account ledger row, advances exactly one date, and stores
+reconciliation totals in one transaction. The initial market and replay events are generated from
+the same sources used by Expo, so the app and API do not maintain separate calculation paths.
 
 | Route | Auth | Purpose |
 |---|---|---|
@@ -156,8 +158,11 @@ handwritten player lists.
 | `GET /readyz` | Public | Database migration, connectivity, and seed readiness |
 | `GET /api/v1/market` | Bearer | Current listings, float, ownership, and volume |
 | `GET /api/v1/portfolio` | Bearer | Cash, holdings, P&L, and recent trades |
+| `GET /api/v1/game` | Bearer | Global replay date and completion state |
+| `GET /api/v1/settlements` | Bearer | Daily settlement totals and the current user's dividends |
 | `POST /api/v1/trades` | Bearer + `Idempotency-Key` | Authoritative whole-player buy or sell |
 | `GET /api/v1/leaderboard` | Bearer | Current portfolio-value ranking |
+| `POST /api/v1/admin/settlements/next` | `X-Settlement-Key` + `Idempotency-Key` | Scheduler-only, expected-date-guarded clock advancement |
 
 Create the generated market seed and start a local database:
 
@@ -166,6 +171,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
 python scripts/generate_app_snapshot.py
+python scripts/generate_app_trends.py
 set -a && source .env && set +a
 uvicorn nba_stock_market.api.main:app --host 127.0.0.1 --port 8011 --reload
 ```
@@ -181,8 +187,10 @@ For deployment, use `postgresql+psycopg://...` for `NBA_STOCK_DATABASE_URL`, set
 session-pooler connection on port 5432 is preferred for a persistent backend. Supabase transaction
 pooler URLs on port 6543 are also supported; the API automatically disables psycopg prepared
 statements for that mode. Production schema changes must happen through separately reviewed
-migrations; the API process must never create or mutate its own schema. `/docs` is disabled in
-production.
+migrations; the API process must never create or mutate its own schema. Set a separate random
+`NBA_STOCK_SETTLEMENT_ADMIN_KEY` only on the API and scheduler; it must never ship in the mobile
+client. Signed settlement losses may take cash below zero, but the existing trade balance check
+blocks new buys until the account recovers. `/docs` is disabled in production.
 
 The market database is intentionally separate from the Databallr production database. Databallr
 Supabase remains the authentication issuer, while `NBA_STOCK_DATABASE_URL` points at the dedicated

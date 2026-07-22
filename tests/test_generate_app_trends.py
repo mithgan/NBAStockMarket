@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_generator_emits_full_season_real_games_for_snapshot_players(tmp_path: Path) -> None:
     output = tmp_path / "trends.ts"
     debug_json = tmp_path / "trends.json"
+    api_seed = tmp_path / "replay-seed.json"
+    api_seed_sql = tmp_path / "replay-seed.sql"
 
     result = subprocess.run(
         [
@@ -21,6 +23,10 @@ def test_generator_emits_full_season_real_games_for_snapshot_players(tmp_path: P
             str(output),
             "--json-output",
             str(debug_json),
+            "--api-output",
+            str(api_seed),
+            "--api-sql-output",
+            str(api_seed_sql),
         ],
         cwd=ROOT,
         capture_output=True,
@@ -53,7 +59,45 @@ def test_generator_emits_full_season_real_games_for_snapshot_players(tmp_path: P
     assert metadata["bias_corrections"]["2025-12-25"] == 0.42548589
     assert len(set(metadata["bias_corrections"].values())) > 100
 
+    replay = json.loads(api_seed.read_text(encoding="utf-8"))
+    assert replay["schema_version"] == 1
+    assert replay["season_id"] == "2025-26"
+    assert [day["date"] for day in replay["days"]] == sorted(
+        day["date"] for day in replay["days"]
+    )
+    assert len(replay["days"]) > 150
+    assert all(
+        [event["player_id"] for event in day["events"]]
+        == sorted(event["player_id"] for event in day["events"])
+        for day in replay["days"]
+    )
+    events = [event for day in replay["days"] for event in day["events"]]
+    assert len(events) == sum(len(series) for series in generated["player_trends"].values())
+    assert len({(event["game_date"], event["player_id"]) for event in events}) == len(events)
+    christmas = next(
+        event
+        for event in events
+        if event["player_id"] == "3112335" and event["game_date"] == "2025-12-25"
+    )
+    assert christmas == {
+        "player_id": "3112335",
+        "game_date": "2025-12-25",
+        "actual_net_points_micros": 59_350_000,
+        "expected_net_points_micros": 25_972_740,
+        "dividend_cents": 133_509_036,
+    }
+    seed_sql = api_seed_sql.read_text(encoding="utf-8")
+    assert seed_sql.count("\n    ('20") == len(events)
+    assert (
+        "('2025-12-25', '3112335', 59350000, 25972740, 133509036)"
+        in seed_sql
+    )
+    assert "on conflict (game_date, player_id) do nothing" in seed_sql
+    assert "'historical-2025-26', '2025-26', null" in seed_sql
+
     first = output.read_bytes()
+    first_api_seed = api_seed.read_bytes()
+    first_api_seed_sql = api_seed_sql.read_bytes()
     subprocess.run(
         [
             sys.executable,
@@ -62,8 +106,14 @@ def test_generator_emits_full_season_real_games_for_snapshot_players(tmp_path: P
             str(output),
             "--json-output",
             str(debug_json),
+            "--api-output",
+            str(api_seed),
+            "--api-sql-output",
+            str(api_seed_sql),
         ],
         cwd=ROOT,
         check=True,
     )
     assert output.read_bytes() == first
+    assert api_seed.read_bytes() == first_api_seed
+    assert api_seed_sql.read_bytes() == first_api_seed_sql
