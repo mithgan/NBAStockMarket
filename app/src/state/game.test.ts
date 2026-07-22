@@ -370,7 +370,12 @@ test('boost limits, duplicate targets, ownership, short conflicts, and dates are
   assertAtomicError(
     armBoost(first, players[0], monday, week),
     first,
-    'Already boosting this player for this game',
+    'Already have an armed boost for this player',
+  );
+  assertAtomicError(
+    armBoost(first, players[0], '2025-12-30', week),
+    first,
+    'Already have an armed boost for this player',
   );
   const second = armBoost(first, players[1], '2025-12-30', week).state;
   assertAtomicError(

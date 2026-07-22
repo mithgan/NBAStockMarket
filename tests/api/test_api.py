@@ -115,10 +115,21 @@ def test_first_authenticated_read_creates_starting_portfolio(
         "account_id": "alice",
         "display_name": "Alice",
         "cash_cents": 14_000_000_000,
+        "free_cash_cents": 14_000_000_000,
+        "reserved_collateral_cents": 0,
         "market_value_cents": 0,
         "total_value_cents": 14_000_000_000,
         "holdings": [],
         "recent_trades": [],
+        "instruments": {
+            "week_start": "2025-10-20",
+            "reserved_collateral_cents": 0,
+            "free_cash_cents": 14_000_000_000,
+            "weekly_short_slots": {"limit": 3, "used": 0, "remaining": 3},
+            "boost_slots": {"limit": 2, "used": 0, "remaining": 2},
+            "weekly_shorts": [],
+            "boosts": [],
+        },
     }
 
 

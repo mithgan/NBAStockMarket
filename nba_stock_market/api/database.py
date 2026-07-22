@@ -49,11 +49,13 @@ EXPECTED_MARKET_MIGRATIONS = {
     "20260721010000",
     "20260722000000",
     "20260722010000",
+    "20260723000000",
+    "20260723010000",
 }
 GAME_STATE_ID = "historical-2025-26"
-EXPECTED_REPLAY_EVENT_COUNT = 2_123
+EXPECTED_REPLAY_EVENT_COUNT = 2_126
 EXPECTED_REPLAY_SEED_SHA256 = (
-    "7442b6f6f7fdab45892f118b192c3a1f9e61de1963a1df113785da0652b7e352"
+    "64c229b14261500f2a605b8f96d09959e19ce28628a490d42409c6746324354a"
 )
 
 
@@ -62,13 +64,23 @@ def utcnow() -> datetime:
 
 
 def replay_seed_digest(
-    rows: Sequence[tuple[date, str, int, int, int]],
+    rows: Sequence[tuple[date, str, int, int, int, int, int | None, bool]],
 ) -> str:
     digest = hashlib.sha256()
-    for game_date, player_id, actual, expected, dividend in rows:
+    for (
+        game_date,
+        player_id,
+        actual,
+        expected,
+        dividend,
+        actual_minutes,
+        projected_minutes,
+        qualifies,
+    ) in rows:
         digest.update(
             (
-                f"{game_date.isoformat()}|{player_id}|{actual}|{expected}|{dividend}\n"
+                f"{game_date.isoformat()}|{player_id}|{actual}|{expected}|{dividend}|"
+                f"{actual_minutes}|{projected_minutes}|{int(qualifies)}\n"
             ).encode("utf-8")
         )
     return digest.hexdigest()
@@ -221,6 +233,19 @@ class ReplayEventRow(Base):
             "expected_net_points_micros <= 1000000000",
             name="ck_market_replay_expected_range",
         ),
+        CheckConstraint(
+            "actual_minutes_micros >= 0 AND actual_minutes_micros <= 100000000",
+            name="ck_market_replay_actual_minutes",
+        ),
+        CheckConstraint(
+            "projected_minutes_micros IS NULL OR "
+            "(projected_minutes_micros > 0 AND projected_minutes_micros <= 100000000)",
+            name="ck_market_replay_projected_minutes",
+        ),
+        CheckConstraint(
+            "NOT qualifies_for_instruments OR projected_minutes_micros IS NOT NULL",
+            name="ck_market_replay_qualification_projection",
+        ),
         Index("ix_market_replay_events_player_date", "player_id", "game_date"),
     )
 
@@ -232,6 +257,13 @@ class ReplayEventRow(Base):
     actual_net_points_micros: Mapped[int] = mapped_column(BigInteger, nullable=False)
     expected_net_points_micros: Mapped[int] = mapped_column(BigInteger, nullable=False)
     dividend_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    actual_minutes_micros: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    projected_minutes_micros: Mapped[int | None] = mapped_column(BigInteger)
+    qualifies_for_instruments: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
 
 
 class GameStateRow(Base):
@@ -300,6 +332,178 @@ class DividendRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
 
 
+class WeeklyShortRow(Base):
+    __tablename__ = "market_weekly_shorts"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "player_id",
+            "week_start",
+            name="uq_market_weekly_short_account_player_week",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'settled', 'voided')",
+            name="ck_market_weekly_short_status",
+        ),
+        CheckConstraint(
+            "opening_price_cents > 0",
+            name="ck_market_weekly_short_opening_price",
+        ),
+        CheckConstraint("fee_cents >= 0", name="ck_market_weekly_short_fee"),
+        CheckConstraint(
+            "collateral_cents = 200000000",
+            name="ck_market_weekly_short_collateral",
+        ),
+        CheckConstraint(
+            "qualifying_games >= 0",
+            name="ck_market_weekly_short_games",
+        ),
+        CheckConstraint(
+            "(status = 'active' AND payout_cents IS NULL AND settled_game_date IS NULL) "
+            "OR (status IN ('settled', 'voided') AND payout_cents IS NOT NULL "
+            "AND settled_game_date IS NOT NULL)",
+            name="ck_market_weekly_short_terminal",
+        ),
+        Index(
+            "ix_market_weekly_shorts_account_week_status",
+            "account_id",
+            "week_start",
+            "status",
+        ),
+        Index(
+            "ix_market_weekly_shorts_player_week_status",
+            "player_id",
+            "week_start",
+            "status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    account_id: Mapped[str] = mapped_column(
+        ForeignKey("market_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    player_id: Mapped[str] = mapped_column(
+        ForeignKey("market_players.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    opening_price_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    fee_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    collateral_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    accrued_net_points_micros: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+    )
+    qualifying_games: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    payout_cents: Mapped[int | None] = mapped_column(BigInteger)
+    settled_game_date: Mapped[date | None] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+
+class BoostRow(Base):
+    __tablename__ = "market_boosts"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "player_id",
+            "target_game_date",
+            name="uq_market_boost_account_player_game",
+        ),
+        CheckConstraint(
+            "status IN ('armed', 'consumed', 'refunded')",
+            name="ck_market_boost_status",
+        ),
+        CheckConstraint(
+            "opening_price_cents > 0",
+            name="ck_market_boost_opening_price",
+        ),
+        CheckConstraint("fee_cents >= 0", name="ck_market_boost_fee"),
+        CheckConstraint(
+            "(status = 'armed' AND payout_cents IS NULL "
+            "AND settled_game_date IS NULL) OR "
+            "(status IN ('consumed', 'refunded') AND payout_cents IS NOT NULL "
+            "AND settled_game_date IS NOT NULL)",
+            name="ck_market_boost_terminal",
+        ),
+        Index(
+            "ix_market_boosts_account_week_status",
+            "account_id",
+            "week_start",
+            "status",
+        ),
+        Index(
+            "ix_market_boosts_game_status",
+            "target_game_date",
+            "status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    account_id: Mapped[str] = mapped_column(
+        ForeignKey("market_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    player_id: Mapped[str] = mapped_column(
+        ForeignKey("market_players.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)
+    target_game_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="armed")
+    opening_price_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    fee_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payout_cents: Mapped[int | None] = mapped_column(BigInteger)
+    settled_game_date: Mapped[date | None] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+
+class InstrumentCommandRow(Base):
+    __tablename__ = "market_instrument_commands"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "idempotency_key",
+            name="uq_market_instrument_command_account_idempotency",
+        ),
+        CheckConstraint(
+            "kind IN ('weekly_short', 'boost')",
+            name="ck_market_instrument_command_kind",
+        ),
+        Index(
+            "ix_market_instrument_commands_account_created",
+            "account_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    account_id: Mapped[str] = mapped_column(
+        ForeignKey("market_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    position_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    response_payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
 @dataclass(frozen=True)
 class SeedPlayer:
     id: str
@@ -318,6 +522,9 @@ class SeedReplayEvent:
     actual_net_points_micros: int
     expected_net_points_micros: int
     dividend_cents: int
+    actual_minutes_micros: int = 30_000_000
+    projected_minutes_micros: int | None = 30_000_000
+    qualifies_for_instruments: bool = True
 
 
 @dataclass
@@ -461,7 +668,43 @@ class Database:
     def create_schema(self) -> None:
         Base.metadata.create_all(self.engine)
         if self.engine.dialect.name == "sqlite":
+            self._migrate_sqlite_replay_instrument_columns()
             self._migrate_sqlite_account_cash_constraint()
+
+    def _migrate_sqlite_replay_instrument_columns(self) -> None:
+        raw_connection = self.engine.raw_connection()
+        cursor = raw_connection.cursor()
+        try:
+            columns = {
+                str(row[1])
+                for row in cursor.execute(
+                    "PRAGMA table_info(market_replay_events)"
+                ).fetchall()
+            }
+            additions = (
+                (
+                    "actual_minutes_micros",
+                    "BIGINT NOT NULL DEFAULT 0",
+                ),
+                ("projected_minutes_micros", "BIGINT"),
+                (
+                    "qualifies_for_instruments",
+                    "BOOLEAN NOT NULL DEFAULT 0",
+                ),
+            )
+            for column, definition in additions:
+                if column not in columns:
+                    cursor.execute(
+                        f"ALTER TABLE market_replay_events "
+                        f"ADD COLUMN {column} {definition}"
+                    )
+            raw_connection.commit()
+        except Exception:
+            raw_connection.rollback()
+            raise
+        finally:
+            cursor.close()
+            raw_connection.close()
 
     def _migrate_sqlite_account_cash_constraint(self) -> None:
         raw_connection = self.engine.raw_connection()
@@ -628,6 +871,9 @@ class Database:
                             row.actual_net_points_micros,
                             row.expected_net_points_micros,
                             row.dividend_cents,
+                            row.actual_minutes_micros,
+                            row.projected_minutes_micros,
+                            row.qualifies_for_instruments,
                         )
                         for row in connection.execute(
                             select(
@@ -636,6 +882,9 @@ class Database:
                                 ReplayEventRow.actual_net_points_micros,
                                 ReplayEventRow.expected_net_points_micros,
                                 ReplayEventRow.dividend_cents,
+                                ReplayEventRow.actual_minutes_micros,
+                                ReplayEventRow.projected_minutes_micros,
+                                ReplayEventRow.qualifies_for_instruments,
                             ).order_by(
                                 ReplayEventRow.game_date,
                                 ReplayEventRow.player_id,
@@ -738,6 +987,21 @@ class Database:
         event_keys = {(event.game_date, event.player_id) for event in events}
         if len(event_keys) != len(events):
             raise ValueError("replay event keys must be unique")
+        for event in events:
+            if event.actual_minutes_micros < 0:
+                raise ValueError("replay event actual minutes are invalid")
+            if (
+                event.projected_minutes_micros is not None
+                and event.projected_minutes_micros <= 0
+            ):
+                raise ValueError("replay event projected minutes are invalid")
+            expected_qualification = bool(
+                event.projected_minutes_micros is not None
+                and event.actual_minutes_micros * 100
+                >= event.projected_minutes_micros * 40
+            )
+            if event.qualifies_for_instruments != expected_qualification:
+                raise ValueError("replay event instrument qualification is invalid")
 
         with self.session() as session, session.begin():
             player_ids = {event.player_id for event in events}
@@ -750,11 +1014,7 @@ class Database:
                 raise ValueError("replay seed references an unknown player")
 
             existing_events = {
-                (row.game_date, row.player_id): (
-                    row.actual_net_points_micros,
-                    row.expected_net_points_micros,
-                    row.dividend_cents,
-                )
+                (row.game_date, row.player_id): row
                 for row in session.scalars(
                     select(ReplayEventRow).where(
                         ReplayEventRow.player_id.in_(player_ids)
@@ -762,15 +1022,41 @@ class Database:
                 )
             }
             for event in events:
-                existing = existing_events.get((event.game_date, event.player_id))
+                existing_row = existing_events.get(
+                    (event.game_date, event.player_id)
+                )
                 expected = (
                     event.actual_net_points_micros,
                     event.expected_net_points_micros,
                     event.dividend_cents,
+                    event.actual_minutes_micros,
+                    event.projected_minutes_micros,
+                    event.qualifies_for_instruments,
                 )
-                if existing is not None:
-                    if existing != expected:
+                if existing_row is not None:
+                    existing = (
+                        existing_row.actual_net_points_micros,
+                        existing_row.expected_net_points_micros,
+                        existing_row.dividend_cents,
+                        existing_row.actual_minutes_micros,
+                        existing_row.projected_minutes_micros,
+                        existing_row.qualifies_for_instruments,
+                    )
+                    if existing == expected:
+                        continue
+                    if existing[:3] != expected[:3] or existing[3:] != (
+                        0,
+                        None,
+                        False,
+                    ):
                         raise ValueError("replay seed conflicts with an existing event")
+                    existing_row.actual_minutes_micros = event.actual_minutes_micros
+                    existing_row.projected_minutes_micros = (
+                        event.projected_minutes_micros
+                    )
+                    existing_row.qualifies_for_instruments = (
+                        event.qualifies_for_instruments
+                    )
                     continue
                 session.add(
                     ReplayEventRow(
@@ -779,6 +1065,9 @@ class Database:
                         actual_net_points_micros=event.actual_net_points_micros,
                         expected_net_points_micros=event.expected_net_points_micros,
                         dividend_cents=event.dividend_cents,
+                        actual_minutes_micros=event.actual_minutes_micros,
+                        projected_minutes_micros=event.projected_minutes_micros,
+                        qualifies_for_instruments=event.qualifies_for_instruments,
                     )
                 )
 
@@ -817,6 +1106,30 @@ class Database:
                     event_date = str(raw_event["game_date"])
                     if event_date != raw_day_date:
                         raise ValueError("replay event date does not match its day")
+                    has_instrument_metadata = all(
+                        key in raw_event
+                        for key in (
+                            "actual_minutes_micros",
+                            "projected_minutes_micros",
+                            "qualifies_for_instruments",
+                        )
+                    )
+                    qualifies = raw_event.get("qualifies_for_instruments", False)
+                    if not isinstance(qualifies, bool):
+                        raise ValueError(
+                            "replay event qualification must be boolean"
+                        )
+                    if not has_instrument_metadata and any(
+                        key in raw_event
+                        for key in (
+                            "actual_minutes_micros",
+                            "projected_minutes_micros",
+                            "qualifies_for_instruments",
+                        )
+                    ):
+                        raise ValueError(
+                            "replay event instrument metadata must be complete"
+                        )
                     events.append(
                         SeedReplayEvent(
                             game_date=date.fromisoformat(event_date),
@@ -828,6 +1141,18 @@ class Database:
                                 raw_event["expected_net_points_micros"]
                             ),
                             dividend_cents=int(raw_event["dividend_cents"]),
+                            actual_minutes_micros=(
+                                int(raw_event["actual_minutes_micros"])
+                                if has_instrument_metadata
+                                else 0
+                            ),
+                            projected_minutes_micros=(
+                                int(raw_event["projected_minutes_micros"])
+                                if has_instrument_metadata
+                                and raw_event["projected_minutes_micros"] is not None
+                                else None
+                            ),
+                            qualifies_for_instruments=qualifies,
                         )
                     )
                 except (KeyError, TypeError, ValueError) as exc:

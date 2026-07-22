@@ -283,9 +283,14 @@ def test_daily_settlement_pays_holders_once_and_reconciles_history(
         "next_game_date": "2025-10-22",
         "is_complete": False,
         "event_count": 2,
-        "payout_count": 1,
-        "net_cash_cents": 80_000_000,
-    }
+            "payout_count": 1,
+            "net_cash_cents": 80_000_000,
+            "cash_breakdown_cents": {
+                "dividends": 80_000_000,
+                "boosts": 0,
+                "weekly_shorts": 0,
+            },
+        }
 
     after = settlement_client.get("/api/v1/portfolio", headers=auth()).json()["data"]
     assert after["cash_cents"] - before["cash_cents"] == 80_000_000

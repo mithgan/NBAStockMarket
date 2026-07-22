@@ -722,11 +722,10 @@ export function armBoost(
     state.boosts.some(
       (boost) =>
         boost.playerId === player.id &&
-        boost.gameDate === gameDate &&
-        boost.status !== 'refunded',
+        boost.status === 'armed',
     )
   ) {
-    return failure(state, 'Already boosting this player for this game');
+    return failure(state, 'Already have an armed boost for this player');
   }
   if (
     state.boosts.filter(

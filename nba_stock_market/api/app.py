@@ -36,6 +36,18 @@ class SettlementRequest(BaseModel):
     expected_game_date: date
 
 
+class WeeklyShortRequest(BaseModel):
+    player_id: str = Field(
+        min_length=1,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+
+
+class BoostRequest(WeeklyShortRequest):
+    game_date: date
+
+
 def create_app(
     *,
     settings: ApiSettings | None = None,
@@ -155,6 +167,53 @@ def create_app(
         principal: Principal = Depends(current_principal),
     ) -> dict[str, dict[str, object]]:
         return {"data": service.game_state(principal)}
+
+    @app.get("/api/v1/instruments")
+    def instruments(
+        principal: Principal = Depends(current_principal),
+    ) -> dict[str, dict[str, object]]:
+        return {"data": service.instruments(principal)}
+
+    @app.post("/api/v1/instruments/weekly-shorts", status_code=201)
+    def arm_weekly_short(
+        body: WeeklyShortRequest,
+        response: Response,
+        principal: Principal = Depends(current_principal),
+        idempotency_key: str = Header(
+            alias="Idempotency-Key",
+            min_length=8,
+            max_length=128,
+        ),
+    ) -> dict[str, dict[str, object]]:
+        result = service.arm_weekly_short(
+            principal,
+            player_id=body.player_id,
+            idempotency_key=idempotency_key,
+        )
+        if result["replayed"]:
+            response.status_code = 200
+        return {"data": result}
+
+    @app.post("/api/v1/instruments/boosts", status_code=201)
+    def arm_boost(
+        body: BoostRequest,
+        response: Response,
+        principal: Principal = Depends(current_principal),
+        idempotency_key: str = Header(
+            alias="Idempotency-Key",
+            min_length=8,
+            max_length=128,
+        ),
+    ) -> dict[str, dict[str, object]]:
+        result = service.arm_boost(
+            principal,
+            player_id=body.player_id,
+            game_date=body.game_date,
+            idempotency_key=idempotency_key,
+        )
+        if result["replayed"]:
+            response.status_code = 200
+        return {"data": result}
 
     @app.get("/api/v1/settlements")
     def settlements(

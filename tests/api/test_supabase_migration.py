@@ -46,7 +46,13 @@ SETTLEMENT_MIGRATION = (
     / "migrations"
     / "20260722000000_create_market_settlement.sql"
 )
-SCHEMA_MIGRATIONS = (MIGRATION, SETTLEMENT_MIGRATION)
+INSTRUMENT_MIGRATION = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "20260723000000_create_market_instruments.sql"
+)
+SCHEMA_MIGRATIONS = (MIGRATION, SETTLEMENT_MIGRATION, INSTRUMENT_MIGRATION)
 MARKET_SEED = Path(__file__).parents[2] / "data" / "generated" / "market-seed.json"
 REPLAY_SEED = Path(__file__).parents[2] / "data" / "generated" / "replay-seed.json"
 REPLAY_SEED_MIGRATION = (
@@ -54,6 +60,12 @@ REPLAY_SEED_MIGRATION = (
     / "supabase"
     / "migrations"
     / "20260722010000_seed_replay_events.sql"
+)
+REPLAY_INSTRUMENT_MIGRATION = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "20260723010000_seed_replay_instrument_metadata.sql"
 )
 PUSH_SCRIPT = Path(__file__).parents[2] / "scripts" / "push_supabase_schema.sh"
 
@@ -117,6 +129,11 @@ def test_supabase_migration_matches_orm_table_structure() -> None:
                 rf"(?m)^\s*{re.escape(column.name)}\s+([^,\n]+)",
                 definition,
             )
+            if declaration is None:
+                declaration = re.search(
+                    rf"add column\s+{re.escape(column.name)}\s+([^,;\n]+)",
+                    sql,
+                )
             assert declaration, (
                 f"{table.name}.{column.name} is missing from its table definition"
             )
@@ -143,7 +160,7 @@ def test_supabase_migration_matches_orm_table_structure() -> None:
                 in re.sub(r"\s+", " ", sql)
             )
 
-        normalized_definition = normalized_constraint_sql(definition)
+        normalized_definition = normalized_constraint_sql(sql)
         for constraint in table.constraints:
             if not isinstance(constraint, CheckConstraint):
                 continue
@@ -222,35 +239,73 @@ def test_replay_seed_migration_reproduces_generated_events_without_overwriting()
     assert payload["schema_version"] == 1
     assert payload["season_id"] == "2025-26"
     assert len(payload["days"]) == 164
-    assert len(events) == 2_123
+    assert len(events) == 2_126
+    played_events = [event for event in events if event["actual_minutes_micros"] > 0]
+    void_events = [event for event in events if event["actual_minutes_micros"] == 0]
+    assert len(played_events) == 2_123
+    assert len(void_events) == 3
+    digest_rows = [
+        (
+            date.fromisoformat(event["game_date"]),
+            event["player_id"],
+            event["actual_net_points_micros"],
+            event["expected_net_points_micros"],
+            event["dividend_cents"],
+            event["actual_minutes_micros"],
+            event["projected_minutes_micros"],
+            event["qualifies_for_instruments"],
+        )
+        for event in events
+    ]
     assert replay_seed_digest(
-        [
-            (
-                date.fromisoformat(event["game_date"]),
-                event["player_id"],
-                event["actual_net_points_micros"],
-                event["expected_net_points_micros"],
-                event["dividend_cents"],
-            )
-            for event in events
-        ]
+        sorted(digest_rows, key=lambda row: (row[0], row[1]))
     ) == EXPECTED_REPLAY_SEED_SHA256
-    for event in events:
+    for event in played_events:
         row = (
             f"('{event['game_date']}', '{event['player_id']}', "
             f"{event['actual_net_points_micros']}, "
             f"{event['expected_net_points_micros']}, {event['dividend_cents']})"
         )
         assert row in sql
+    for event in void_events:
+        row = (
+            f"('{event['game_date']}', '{event['player_id']}', "
+            f"{event['actual_net_points_micros']}, "
+            f"{event['expected_net_points_micros']}, {event['dividend_cents']})"
+        )
+        assert row not in sql
 
     assert "on conflict (game_date, player_id) do nothing" in sql
     assert "'historical-2025-26', '2025-26', null" in sql
     assert "on conflict (id) do nothing" in sql
+    instrument_sql = REPLAY_INSTRUMENT_MIGRATION.read_text(encoding="utf-8").lower()
+    for event in events:
+        projected_minutes = (
+            str(event["projected_minutes_micros"])
+            if event["projected_minutes_micros"] is not None
+            else "null"
+        )
+        qualifies = "true" if event["qualifies_for_instruments"] else "false"
+        row = (
+            f"('{event['game_date']}', '{event['player_id']}', "
+            f"{event['actual_net_points_micros']}, "
+            f"{event['expected_net_points_micros']}, "
+            f"{event['dividend_cents']}, {event['actual_minutes_micros']}, "
+            f"{projected_minutes}, {qualifies})"
+        )
+        assert row in instrument_sql
+    assert "create temporary table market_replay_instrument_seed" in instrument_sql
+    assert "raise exception 'canonical replay event conflict'" in instrument_sql
+    assert "qualifies_for_instruments = excluded.qualifies_for_instruments" in (
+        instrument_sql
+    )
     assert EXPECTED_MARKET_MIGRATIONS == {
         "20260721000000",
         "20260721010000",
         "20260722000000",
         "20260722010000",
+        "20260723000000",
+        "20260723010000",
     }
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from threading import Event, Thread
 from time import monotonic
 
@@ -12,7 +13,7 @@ from sqlalchemy import text
 from tests.api.conftest import FixtureTokenVerifier
 from nba_stock_market.api.app import create_app
 from nba_stock_market.api.auth import Principal
-from nba_stock_market.api.database import Database
+from nba_stock_market.api.database import Database, SeedPlayer, SeedReplayEvent
 from nba_stock_market.api.settings import ApiSettings
 import nba_stock_market.api.database as database_module
 
@@ -189,6 +190,98 @@ def test_local_schema_upgrade_removes_legacy_nonnegative_cash_constraint(
         assert tuple(account) == ("Alice", -1)
         assert "ck_market_account_cash" not in str(table_sql)
         assert foreign_key_errors == []
+    finally:
+        database.dispose()
+
+
+def test_local_schema_upgrade_adds_and_backfills_replay_instrument_metadata(
+    tmp_path,
+) -> None:
+    database = Database(f"sqlite+pysqlite:///{tmp_path / 'legacy-replay.db'}")
+    database.create_schema()
+    database.seed_players(
+        [
+            SeedPlayer(
+                id="sga",
+                name="Shai Gilgeous-Alexander",
+                tier="star",
+                current_price_cents=5_000_000_000,
+                opening_price_cents=5_000_000_000,
+                actual_salary_cents=4_080_615_000,
+            )
+        ]
+    )
+    with database.engine.begin() as connection:
+        connection.execute(text("DROP TABLE market_replay_events"))
+        connection.execute(
+            text(
+                """
+                CREATE TABLE market_replay_events (
+                    game_date date not null,
+                    player_id varchar(64) not null,
+                    actual_net_points_micros bigint not null,
+                    expected_net_points_micros bigint not null,
+                    dividend_cents bigint not null,
+                    primary key (game_date, player_id),
+                    foreign key(player_id) references market_players (id)
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO market_replay_events (
+                    game_date, player_id, actual_net_points_micros,
+                    expected_net_points_micros, dividend_cents
+                ) VALUES (
+                    '2025-10-21', 'sga', 40000000, 20000000, 80000000
+                )
+                """
+            )
+        )
+
+    try:
+        database.create_schema()
+        database.seed_replay_events(
+            season_id="2025-26",
+            events=[
+                SeedReplayEvent(
+                    game_date=date(2025, 10, 21),
+                    player_id="sga",
+                    actual_net_points_micros=40_000_000,
+                    expected_net_points_micros=20_000_000,
+                    dividend_cents=80_000_000,
+                    actual_minutes_micros=2_100_000,
+                    projected_minutes_micros=3_000_000,
+                    qualifies_for_instruments=True,
+                )
+            ],
+        )
+        with database.engine.connect() as connection:
+            columns = {
+                row[1]
+                for row in connection.execute(
+                    text("PRAGMA table_info(market_replay_events)")
+                )
+            }
+            metadata = connection.execute(
+                text(
+                    """
+                    SELECT actual_minutes_micros, projected_minutes_micros,
+                           qualifies_for_instruments
+                    FROM market_replay_events
+                    WHERE game_date = '2025-10-21' AND player_id = 'sga'
+                    """
+                )
+            ).one()
+
+        assert {
+            "actual_minutes_micros",
+            "projected_minutes_micros",
+            "qualifies_for_instruments",
+        } <= columns
+        assert tuple(metadata) == (2_100_000, 3_000_000, 1)
     finally:
         database.dispose()
 

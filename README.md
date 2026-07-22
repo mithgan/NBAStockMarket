@@ -159,6 +159,9 @@ the same sources used by Expo, so the app and API do not maintain separate calcu
 | `GET /api/v1/market` | Bearer | Current listings, float, ownership, and volume |
 | `GET /api/v1/portfolio` | Bearer | Cash, holdings, P&L, and recent trades |
 | `GET /api/v1/game` | Bearer | Global replay date and completion state |
+| `GET /api/v1/instruments` | Bearer | Weekly slot usage, reserved collateral, and current short/boost positions |
+| `POST /api/v1/instruments/weekly-shorts` | Bearer + `Idempotency-Key` | Arm a server-dated weekly performance short |
+| `POST /api/v1/instruments/boosts` | Bearer + `Idempotency-Key` | Boost one owned player's signed dividend for a specified replay date |
 | `GET /api/v1/settlements` | Bearer | Daily settlement totals and the current user's dividends |
 | `POST /api/v1/trades` | Bearer + `Idempotency-Key` | Authoritative whole-player buy or sell |
 | `GET /api/v1/leaderboard` | Bearer | Current portfolio-value ranking |
@@ -189,8 +192,15 @@ pooler URLs on port 6543 are also supported; the API automatically disables psyc
 statements for that mode. Production schema changes must happen through separately reviewed
 migrations; the API process must never create or mutate its own schema. Set a separate random
 `NBA_STOCK_SETTLEMENT_ADMIN_KEY` only on the API and scheduler; it must never ship in the mobile
-client. Signed settlement losses may take cash below zero, but the existing trade balance check
-blocks new buys until the account recovers. `/docs` is disabled in production.
+client. Signed settlement losses may take cash below zero, but affordability checks block new buys
+and instrument risk until the account recovers. Active weekly-short collateral is reserved rather
+than removed from cash and is excluded from every affordability check. Weekly shorts and boosts use
+the server's Monday-Sunday replay week, enforce their per-user slot and cross-position rules
+transactionally, and settle in the same transaction as the base dividend. Historical replay uses
+the current replay date as its arming cutoff; production live-season wiring must replace that guard
+with authoritative game tipoff timestamps. Projection-only DNP rows carry a zero base dividend so
+armed boosts refund and zero-qualifying-game shorts void without inventing a played result. `/docs`
+is disabled in production.
 
 The market database is intentionally separate from the Databallr production database. Databallr
 Supabase remains the authentication issuer, while `NBA_STOCK_DATABASE_URL` points at the dedicated
@@ -210,6 +220,11 @@ The schema migration enables RLS and revokes `anon` and `authenticated` table pr
 migration is idempotent and never overwrites listings that already exist. Mobile clients must use
 the FastAPI routes; they never read or mutate market balances, holdings, prices, or trades through
 Supabase's Data API.
+
+`generate_app_trends.py` updates only the unversioned app and replay JSON artifacts by default. If
+replay instrument data changes after a migration is applied, pass
+`--api-instruments-sql-output supabase/migrations/<new-version>_seed_replay_instruments.sql`; never
+reuse an applied migration filename.
 
 ## Backtest
 

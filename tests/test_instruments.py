@@ -193,6 +193,15 @@ class BoostTest(unittest.TestCase):
         with self.assertRaises(InstrumentError):
             book.arm_boost("u0", "star", MONDAY)
 
+    def test_cannot_arm_same_player_for_two_future_games(self) -> None:
+        book = self.make_owned()
+        book.arm_boost("u0", "star", MONDAY)
+
+        with self.assertRaisesRegex(
+            InstrumentError, "already have an armed boost for this player"
+        ):
+            book.arm_boost("u0", "star", TUESDAY)
+
     def test_boost_doubles_dividend(self) -> None:
         book = self.make_owned()
         book.arm_boost("u0", "star", MONDAY)
