@@ -4,7 +4,7 @@
 
 **Goal:** Add durable, deterministic account activity, dividends, daily portfolio history, and safe account reset APIs.
 
-**Architecture:** Add append-only activity and daily snapshot read models to the existing SQLAlchemy transaction boundary. Record rows while trades, instruments, and settlements are committed; expose cursor-paginated authenticated reads; reset one account with optimistic version and idempotency guards.
+**Architecture:** Add append-only activity and daily snapshot read models to the existing SQLAlchemy transaction boundary. Record rows while trades, instruments, and settlements are committed; expose cursor-paginated authenticated reads; allow one idempotent local-save transition only while an account is pristine.
 
 **Tech Stack:** FastAPI, Pydantic, SQLAlchemy 2, PostgreSQL/Supabase, SQLite tests, pytest.
 
@@ -19,11 +19,13 @@
 - Modify: `tests/api/test_bootstrap.py`
 - Modify: `tests/api/test_supabase_migration.py`
 
-- [ ] Add a failing schema test for `reset_at`, activity, snapshots, and reset commands.
-- [ ] Add SQLAlchemy rows with unique source keys, money checks, account/date indexes,
+- [x] Add a failing schema test for `reset_at`, activity, durable legacy settlement
+  membership, snapshots, and reset commands.
+- [x] Add SQLAlchemy rows with unique source keys, money checks, account/date indexes,
   and service-role-only Supabase grants.
-- [ ] Add a SQLite upgrade for `market_accounts.reset_at` so old local databases open.
-- [ ] Add migration/readiness assertions and run:
+- [x] Add SQLite upgrades for `market_accounts.reset_at` and reconstructable activity
+  so old local databases open without losing history.
+- [x] Add migration/readiness assertions and run:
 
 ```bash
 .venv/bin/pytest -q tests/api/test_bootstrap.py tests/api/test_supabase_migration.py
@@ -38,12 +40,12 @@ Expected: all selected tests pass.
 - Test: `tests/api/test_account_history.py`
 - Test: `tests/api/test_instruments_api.py`
 
-- [ ] Write failing tests showing a retried trade/instrument creates one activity row.
-- [ ] Add one activity insert per committed trade, weekly short, and boost using source
+- [x] Write failing tests showing a retried trade/instrument creates one activity row.
+- [x] Add one activity insert per committed trade, weekly short, and boost using source
   keys `trade:<id>`, `weekly_short:<id>:opened`, and `boost:<id>:armed`.
-- [ ] Record signed cash amounts and structured fee/collateral details without accepting
+- [x] Record signed cash amounts and structured fee/collateral details without accepting
   client calculations.
-- [ ] Run:
+- [x] Run:
 
 ```bash
 .venv/bin/pytest -q tests/api/test_account_history.py tests/api/test_instruments_api.py
@@ -58,14 +60,14 @@ Expected: all selected tests pass.
 - Test: `tests/api/test_account_history.py`
 - Test: `tests/api/test_settlements.py`
 
-- [ ] Write failing tests for per-player dividend activity, instrument outcomes, one
+- [x] Write failing tests for per-player dividend activity, instrument outcomes, one
   snapshot per account/date, and an account created after prior settlements.
-- [ ] During the existing exclusive settlement transaction, insert immutable activity
+- [x] During the existing exclusive settlement transaction, insert immutable activity
   rows and calculate one portfolio snapshot for every existing account after all cash
   and instrument updates.
-- [ ] Use unique source keys and `(account_id, game_date)` so a retry cannot duplicate
+- [x] Use unique source keys and `(account_id, game_date)` so a retry cannot duplicate
   events or history.
-- [ ] Run:
+- [x] Run:
 
 ```bash
 .venv/bin/pytest -q tests/api/test_account_history.py tests/api/test_settlements.py
@@ -80,12 +82,12 @@ Expected: all selected tests pass.
 - Modify: `nba_stock_market/api/service.py`
 - Test: `tests/api/test_account_history.py`
 
-- [ ] Write failing authentication, empty-page, partial-page, invalid-cursor, and
+- [x] Write failing authentication, empty-page, partial-page, invalid-cursor, and
   foreign-cursor tests.
-- [ ] Add authenticated activity, dividend, and portfolio-history endpoints with bounded
+- [x] Add authenticated activity, dividend, and portfolio-history endpoints with bounded
   limits and stable opaque cursors.
-- [ ] Return `{items, next_cursor}` and integer cents only.
-- [ ] Run:
+- [x] Return `{items, next_cursor}` and integer cents only.
+- [x] Run:
 
 ```bash
 .venv/bin/pytest -q tests/api/test_account_history.py
@@ -93,7 +95,7 @@ Expected: all selected tests pass.
 
 Expected: all selected tests pass.
 
-### Task 5: Add Idempotent Account Reset
+### Task 5: Add Idempotent Pre-Play Transition
 
 **Files:**
 - Modify: `nba_stock_market/api/app.py`
@@ -101,14 +103,14 @@ Expected: all selected tests pass.
 - Test: `tests/api/test_account_history.py`
 - Modify: `README.md`
 
-- [ ] Write failing tests for confirmation, stale version, exact retry, held-float
-  release, read-model clearing, and isolation from another account.
-- [ ] Add `POST /api/v1/account/reset` using the account lock, shared market-write
+- [x] Write failing tests for confirmation, stale version, exact retry, snapshot
+  clearing, isolation from another account, and rejection after any trade/instrument.
+- [x] Add `POST /api/v1/account/reset` using the account lock, shared market-write
   transaction, expected version, and reset-command idempotency row.
-- [ ] Preserve old trade/instrument command rows while clearing financial positions and
-  current read-model rows.
-- [ ] Document endpoints and the no-import AsyncStorage transition policy.
-- [ ] Run:
+- [x] Fail with `reset_not_eligible` after server-side participation so reset cannot
+  erase losses while preserving shared market effects.
+- [x] Document endpoints and the no-import AsyncStorage transition policy.
+- [x] Run:
 
 ```bash
 .venv/bin/pytest -q tests/api
@@ -121,15 +123,15 @@ Expected: all API tests pass.
 **Files:**
 - Modify: `.loop/nba-activity-history/state/*` (ignored local evidence only)
 
-- [ ] Run full Python, Expo, type, export, compile, deterministic-data, diff, and secret
+- [x] Run full Python, Expo, type, export, compile, deterministic-data, diff, and secret
   checks.
-- [ ] Run final structured review:
+- [x] Run final structured review:
 
 ```bash
 /Users/ryanyin/.codex/skills/autoreview/scripts/autoreview \
   --mode local --parallel-tests ".venv/bin/pytest -q tests/api"
 ```
 
-- [ ] Fix every verified finding and repeat affected checks plus autoreview until clean.
-- [ ] Commit locally, exclude `uv.lock`, update NBA-27 in Linear, and do not push or
+- [x] Fix every verified finding and repeat affected checks plus autoreview until clean.
+- [x] Commit locally, exclude `uv.lock`, update NBA-27 in Linear, and do not push or
   apply the Supabase migration.

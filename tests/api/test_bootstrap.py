@@ -194,6 +194,105 @@ def test_local_schema_upgrade_removes_legacy_nonnegative_cash_constraint(
         database.dispose()
 
 
+def test_local_schema_upgrade_adds_and_backfills_account_reset_boundary(
+    tmp_path,
+) -> None:
+    database = Database(f"sqlite+pysqlite:///{tmp_path / 'legacy-account.db'}")
+    with database.engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE market_accounts (
+                    id varchar(128) primary key,
+                    display_name varchar(80) not null,
+                    cash_cents bigint not null,
+                    version integer not null,
+                    created_at timestamp not null,
+                    updated_at timestamp not null,
+                    constraint ck_market_account_version check (version >= 0)
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO market_accounts (
+                    id, display_name, cash_cents, version, created_at, updated_at
+                ) VALUES (
+                    'alice', 'Alice', 14000000000, 0,
+                    '2026-07-20 10:00:00', '2026-07-20 11:00:00'
+                )
+                """
+            )
+        )
+
+    try:
+        database.create_schema()
+        with database.engine.connect() as connection:
+            columns = {
+                row[1]
+                for row in connection.execute(
+                    text("PRAGMA table_info(market_accounts)")
+                )
+            }
+            reset_at = connection.scalar(
+                text("SELECT reset_at FROM market_accounts WHERE id = 'alice'")
+            )
+
+        assert "reset_at" in columns
+        assert str(reset_at).startswith("2026-07-20 10:00:00")
+    finally:
+        database.dispose()
+
+
+def test_local_schema_upgrade_retries_partial_reset_boundary_backfill(
+    tmp_path,
+) -> None:
+    database = Database(f"sqlite+pysqlite:///{tmp_path / 'partial-reset.db'}")
+    with database.engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE market_accounts (
+                    id varchar(128) primary key,
+                    display_name varchar(80) not null,
+                    cash_cents bigint not null,
+                    version integer not null,
+                    created_at timestamp not null,
+                    updated_at timestamp not null,
+                    reset_at timestamp,
+                    constraint ck_market_account_version check (version >= 0)
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO market_accounts (
+                    id, display_name, cash_cents, version,
+                    created_at, updated_at, reset_at
+                ) VALUES (
+                    'alice', 'Alice', 14000000000, 0,
+                    '2026-07-20 10:00:00', '2026-07-20 11:00:00', null
+                )
+                """
+            )
+        )
+
+    try:
+        database.create_schema()
+        with database.engine.connect() as connection:
+            reset_at = connection.scalar(
+                text("SELECT reset_at FROM market_accounts WHERE id = 'alice'")
+            )
+
+        assert str(reset_at).startswith("2026-07-20 10:00:00")
+    finally:
+        database.dispose()
+
+
 def test_local_schema_upgrade_adds_and_backfills_replay_instrument_metadata(
     tmp_path,
 ) -> None:

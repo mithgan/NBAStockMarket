@@ -158,12 +158,16 @@ the same sources used by Expo, so the app and API do not maintain separate calcu
 | `GET /readyz` | Public | Database migration, connectivity, and seed readiness |
 | `GET /api/v1/market` | Bearer | Current listings, float, ownership, and volume |
 | `GET /api/v1/portfolio` | Bearer | Cash, holdings, P&L, and recent trades |
+| `GET /api/v1/portfolio/history` | Bearer | Cursor-paginated daily closing portfolio values |
+| `GET /api/v1/activity` | Bearer | Cursor-paginated trades, instruments, and settlement activity |
+| `GET /api/v1/dividends` | Bearer | Cursor-paginated per-player dividend activity |
 | `GET /api/v1/game` | Bearer | Global replay date and completion state |
 | `GET /api/v1/instruments` | Bearer | Weekly slot usage, reserved collateral, and current short/boost positions |
 | `POST /api/v1/instruments/weekly-shorts` | Bearer + `Idempotency-Key` | Arm a server-dated weekly performance short |
 | `POST /api/v1/instruments/boosts` | Bearer + `Idempotency-Key` | Boost one owned player's signed dividend for a specified replay date |
 | `GET /api/v1/settlements` | Bearer | Daily settlement totals and the current user's dividends |
 | `POST /api/v1/trades` | Bearer + `Idempotency-Key` | Authoritative whole-player buy or sell |
+| `POST /api/v1/account/reset` | Bearer + `Idempotency-Key` | One-time, pre-play local-save transition |
 | `GET /api/v1/leaderboard` | Bearer | Current portfolio-value ranking |
 | `POST /api/v1/admin/settlements/next` | `X-Settlement-Key` + `Idempotency-Key` | Scheduler-only, expected-date-guarded clock advancement |
 
@@ -201,6 +205,29 @@ the current replay date as its arming cutoff; production live-season wiring must
 with authoritative game tipoff timestamps. Projection-only DNP rows carry a zero base dividend so
 armed boosts refund and zero-qualifying-game shorts void without inventing a played result. `/docs`
 is disabled in production.
+
+Activity and portfolio-history pages are ordered deterministically and use opaque, account-scoped
+cursors. The portfolio response exposes an account `version` for optimistic writes and `reset_at`
+as an informational transition timestamp. History membership uses durable account rows and daily
+snapshots plus migration-captured legacy membership rather than comparing application-worker
+clocks. Reset requires the exact `RESET`
+confirmation plus the latest account version and is available only once, before the first
+server-side trade or instrument. It clears idle-account snapshots while preserving global market
+prices and the replay clock. Once an account participates in the economy, reset fails with
+`reset_not_eligible` and cannot erase losses or retain market impact while restoring cash.
+Retrying the original successful reset key returns the stored response.
+The account-history migration backfills activity from the authoritative trade, dividend, short,
+and boost ledgers. Exact portfolio-value history begins with the migration because historical
+closing market values cannot be reconstructed safely; the existing settlement feed preserves
+all older global dates for accounts present at cutover through durable account/settlement
+membership rows. The migration takes the NBA-26 global write barrier, locks accounts before the
+source ledgers, then leaves compatibility triggers in place so older rolling-deployment workers
+cannot create activity or settlement-history gaps. Deploy through NBA-26 before applying it.
+
+The Expo API cutover intentionally does not import the historical AsyncStorage prototype save into
+the authoritative economy. On first authenticated launch, the client must explain the one-time
+reset, load a valid server portfolio, and only then clear the old gameplay save. If authentication
+or the portfolio load fails, the local save remains untouched and the transition can be retried.
 
 The market database is intentionally separate from the Databallr production database. Databallr
 Supabase remains the authentication issuer, while `NBA_STOCK_DATABASE_URL` points at the dedicated

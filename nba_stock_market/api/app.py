@@ -48,6 +48,11 @@ class BoostRequest(WeeklyShortRequest):
     game_date: date
 
 
+class AccountResetRequest(BaseModel):
+    confirmation: Literal["RESET"]
+    expected_account_version: int = Field(ge=0)
+
+
 def create_app(
     *,
     settings: ApiSettings | None = None,
@@ -162,6 +167,48 @@ def create_app(
     ) -> dict[str, dict[str, object]]:
         return {"data": service.portfolio(principal)}
 
+    @app.get("/api/v1/activity")
+    def activity(
+        principal: Principal = Depends(current_principal),
+        limit: int = Query(default=30, ge=1, le=100),
+        cursor: str | None = Query(default=None, min_length=1, max_length=512),
+    ) -> dict[str, dict[str, object]]:
+        return {
+            "data": service.activity_history(
+                principal,
+                limit=limit,
+                cursor=cursor,
+            )
+        }
+
+    @app.get("/api/v1/dividends")
+    def dividends(
+        principal: Principal = Depends(current_principal),
+        limit: int = Query(default=30, ge=1, le=100),
+        cursor: str | None = Query(default=None, min_length=1, max_length=512),
+    ) -> dict[str, dict[str, object]]:
+        return {
+            "data": service.dividend_history(
+                principal,
+                limit=limit,
+                cursor=cursor,
+            )
+        }
+
+    @app.get("/api/v1/portfolio/history")
+    def portfolio_history(
+        principal: Principal = Depends(current_principal),
+        limit: int = Query(default=30, ge=1, le=100),
+        cursor: str | None = Query(default=None, min_length=1, max_length=512),
+    ) -> dict[str, dict[str, object]]:
+        return {
+            "data": service.portfolio_history(
+                principal,
+                limit=limit,
+                cursor=cursor,
+            )
+        }
+
     @app.get("/api/v1/game")
     def game_state(
         principal: Principal = Depends(current_principal),
@@ -237,6 +284,26 @@ def create_app(
             principal,
             player_id=body.player_id,
             side=body.side,
+            idempotency_key=idempotency_key,
+        )
+        if result["replayed"]:
+            response.status_code = 200
+        return {"data": result}
+
+    @app.post("/api/v1/account/reset", status_code=201)
+    def reset_account(
+        body: AccountResetRequest,
+        response: Response,
+        principal: Principal = Depends(current_principal),
+        idempotency_key: str = Header(
+            alias="Idempotency-Key",
+            min_length=8,
+            max_length=128,
+        ),
+    ) -> dict[str, dict[str, object]]:
+        result = service.reset_account(
+            principal,
+            expected_account_version=body.expected_account_version,
             idempotency_key=idempotency_key,
         )
         if result["replayed"]:

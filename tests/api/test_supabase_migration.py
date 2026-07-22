@@ -52,7 +52,18 @@ INSTRUMENT_MIGRATION = (
     / "migrations"
     / "20260723000000_create_market_instruments.sql"
 )
-SCHEMA_MIGRATIONS = (MIGRATION, SETTLEMENT_MIGRATION, INSTRUMENT_MIGRATION)
+ACCOUNT_HISTORY_MIGRATION = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "20260724000000_create_market_account_history.sql"
+)
+SCHEMA_MIGRATIONS = (
+    MIGRATION,
+    SETTLEMENT_MIGRATION,
+    INSTRUMENT_MIGRATION,
+    ACCOUNT_HISTORY_MIGRATION,
+)
 MARKET_SEED = Path(__file__).parents[2] / "data" / "generated" / "market-seed.json"
 REPLAY_SEED = Path(__file__).parents[2] / "data" / "generated" / "replay-seed.json"
 REPLAY_SEED_MIGRATION = (
@@ -198,6 +209,70 @@ def test_supabase_migration_preserves_authoritative_economy_constraints() -> Non
     assert "drop constraint if exists ck_market_account_cash" in sql
 
 
+def test_account_history_migration_backfills_authoritative_activity_ledgers() -> None:
+    sql = re.sub(
+        r"\s+",
+        " ",
+        ACCOUNT_HISTORY_MIGRATION.read_text(encoding="utf-8").lower(),
+    ).strip()
+    backfill_sql = sql.split("-- compatibility triggers", maxsplit=1)[0]
+
+    assert backfill_sql.count("insert into public.market_account_activity") == 6
+    for table in (
+        "market_trades",
+        "market_dividends",
+        "market_weekly_shorts",
+        "market_boosts",
+    ):
+        assert f"from public.{table}" in backfill_sql
+    for source_key in (
+        "'trade:'",
+        "'dividend:'",
+        "'weekly_short:'",
+        "'boost:'",
+    ):
+        assert source_key in backfill_sql
+    assert backfill_sql.count("on conflict (account_id, source_key) do nothing") == 6
+
+
+def test_account_history_migration_bridges_rolling_api_workers() -> None:
+    sql = re.sub(
+        r"\s+",
+        " ",
+        ACCOUNT_HISTORY_MIGRATION.read_text(encoding="utf-8").lower(),
+    ).strip()
+
+    advisory_lock = "select pg_advisory_xact_lock(1846237911)"
+    account_lock = "lock table public.market_accounts in access exclusive mode"
+    source_lock = (
+        "lock table public.market_trades, public.market_dividends, "
+        "public.market_weekly_shorts, public.market_boosts, "
+        "public.market_settlements in share row exclusive mode"
+    )
+    assert advisory_lock in sql
+    assert account_lock in sql
+    assert source_lock in sql
+    assert sql.index(advisory_lock) < sql.index(account_lock) < sql.index(source_lock)
+    for trigger in (
+        "market_history_trade_activity_compat",
+        "market_history_dividend_activity_compat",
+        "market_history_short_opened_compat",
+        "market_history_short_terminal_compat",
+        "market_history_boost_armed_compat",
+        "market_history_boost_terminal_compat",
+    ):
+        assert f"create trigger {trigger}" in sql
+    assert (
+        "create constraint trigger market_history_settlement_snapshot_compat "
+        "after insert on public.market_settlements deferrable initially deferred"
+    ) in sql
+    assert (
+        "on conflict (account_id, game_date) do nothing; return new; end; $$;"
+    ) in sql
+    assert "cross join public.market_settlements" in sql
+    assert "s.settled_at >= a.created_at" not in sql
+
+
 def test_seed_migration_reproduces_the_canonical_market_without_overwriting() -> None:
     payload = json.loads(MARKET_SEED.read_text(encoding="utf-8"))
     sql = re.sub(
@@ -306,6 +381,7 @@ def test_replay_seed_migration_reproduces_generated_events_without_overwriting()
         "20260722010000",
         "20260723000000",
         "20260723010000",
+        "20260724000000",
     }
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import copy
 import hashlib
 import json
@@ -8,15 +10,18 @@ import threading
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from typing import Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from nba_stock_market.api.auth import Principal
 from nba_stock_market.api.database import (
+    AccountActivityRow,
     AccountRow,
+    AccountResetCommandRow,
+    AccountSettlementMembershipRow,
     BoostRow,
     Database,
     DividendRow,
@@ -25,6 +30,7 @@ from nba_stock_market.api.database import (
     HoldingRow,
     InstrumentCommandRow,
     PlayerListingRow,
+    PortfolioSnapshotRow,
     ReplayEventRow,
     SettlementRow,
     TradeRow,
@@ -142,6 +148,73 @@ class MarketService:
             with self.database.session() as session, session.begin():
                 account = self._ensure_account(session, principal, for_update=True)
                 return self._portfolio_payload(session, account)
+
+    def activity_history(
+        self,
+        principal: Principal,
+        *,
+        limit: int,
+        cursor: str | None,
+    ) -> dict[str, object]:
+        return self._activity_page(
+            principal,
+            limit=limit,
+            cursor=cursor,
+            resource="activity",
+            kind=None,
+        )
+
+    def dividend_history(
+        self,
+        principal: Principal,
+        *,
+        limit: int,
+        cursor: str | None,
+    ) -> dict[str, object]:
+        return self._activity_page(
+            principal,
+            limit=limit,
+            cursor=cursor,
+            resource="dividends",
+            kind="dividend",
+        )
+
+    def portfolio_history(
+        self,
+        principal: Principal,
+        *,
+        limit: int,
+        cursor: str | None,
+    ) -> dict[str, object]:
+        with self.database.session() as session, session.begin():
+            account = self._ensure_account(session, principal)
+            cursor_date = self._decode_portfolio_cursor(
+                cursor,
+                account_id=account.id,
+            )
+            query = select(PortfolioSnapshotRow).where(
+                PortfolioSnapshotRow.account_id == account.id
+            )
+            if cursor_date is not None:
+                query = query.where(PortfolioSnapshotRow.game_date < cursor_date)
+            rows = session.scalars(
+                query.order_by(PortfolioSnapshotRow.game_date.desc()).limit(limit + 1)
+            ).all()
+            page = rows[:limit]
+            next_cursor = None
+            if len(rows) > limit:
+                next_cursor = self._encode_cursor(
+                    {
+                        "v": 1,
+                        "resource": "portfolio_history",
+                        "account_id": account.id,
+                        "game_date": page[-1].game_date.isoformat(),
+                    }
+                )
+            return {
+                "items": [self._portfolio_snapshot_payload(row) for row in page],
+                "next_cursor": next_cursor,
+            }
 
     def instruments(self, principal: Principal) -> dict[str, object]:
         with self.locks.acquire(f"account:{principal.id}"):
@@ -321,6 +394,22 @@ class MarketService:
                 )
                 session.add(position)
                 session.flush()
+                self._record_activity(
+                    session,
+                    account_id=account.id,
+                    kind="weekly_short_opened",
+                    player_id=player.id,
+                    game_date=None,
+                    amount_cents=-fee_cents,
+                    source_key=f"weekly_short:{position.id}:opened",
+                    details={
+                        "opening_price_cents": player.current_price_cents,
+                        "fee_cents": fee_cents,
+                        "collateral_cents": WEEKLY_SHORT_COLLATERAL_CENTS,
+                        "week_start": week_start.isoformat(),
+                    },
+                    occurred_at=now,
+                )
                 payload: dict[str, object] = {
                     "replayed": False,
                     "position": self._weekly_short_payload(position),
@@ -476,6 +565,22 @@ class MarketService:
                 )
                 session.add(position)
                 session.flush()
+                self._record_activity(
+                    session,
+                    account_id=account.id,
+                    kind="boost_armed",
+                    player_id=player.id,
+                    game_date=game_date,
+                    amount_cents=-fee_cents,
+                    source_key=f"boost:{position.id}:armed",
+                    details={
+                        "opening_price_cents": player.current_price_cents,
+                        "fee_cents": fee_cents,
+                        "week_start": week_start.isoformat(),
+                        "target_game_date": game_date.isoformat(),
+                    },
+                    occurred_at=now,
+                )
                 payload = {
                     "replayed": False,
                     "position": self._boost_payload(position),
@@ -512,9 +617,30 @@ class MarketService:
         limit: int,
     ) -> list[dict[str, object]]:
         with self.database.session() as session, session.begin():
-            self._ensure_account(session, principal)
+            account = self._ensure_account(session, principal)
             settlements = session.scalars(
                 select(SettlementRow)
+                .outerjoin(
+                    PortfolioSnapshotRow,
+                    and_(
+                        PortfolioSnapshotRow.game_date == SettlementRow.game_date,
+                        PortfolioSnapshotRow.account_id == account.id,
+                    ),
+                )
+                .outerjoin(
+                    AccountSettlementMembershipRow,
+                    and_(
+                        AccountSettlementMembershipRow.game_date
+                        == SettlementRow.game_date,
+                        AccountSettlementMembershipRow.account_id == account.id,
+                    ),
+                )
+                .where(
+                    or_(
+                        PortfolioSnapshotRow.account_id.is_not(None),
+                        AccountSettlementMembershipRow.account_id.is_not(None),
+                    )
+                )
                 .order_by(SettlementRow.game_date.desc())
                 .limit(limit)
             ).all()
@@ -732,6 +858,20 @@ class MarketService:
                 account_totals.get(holding.account_id, 0) + event.dividend_cents
             )
             dividend_total += event.dividend_cents
+            self._record_activity(
+                session,
+                account_id=holding.account_id,
+                kind="dividend",
+                player_id=event.player_id,
+                game_date=game_date,
+                amount_cents=event.dividend_cents,
+                source_key=f"dividend:{game_date.isoformat()}:{event.player_id}",
+                details={
+                    "actual_net_points_micros": event.actual_net_points_micros,
+                    "expected_net_points_micros": event.expected_net_points_micros,
+                },
+                occurred_at=now,
+            )
 
         weekly_shorts = session.scalars(
             select(WeeklyShortRow)
@@ -788,6 +928,25 @@ class MarketService:
             )
             boost_total += cash_delta_cents
             boost_settlement_count += 1
+            self._record_activity(
+                session,
+                account_id=boost.account_id,
+                kind=(
+                    "boost_consumed"
+                    if boost.status == "consumed"
+                    else "boost_refunded"
+                ),
+                player_id=boost.player_id,
+                game_date=game_date,
+                amount_cents=cash_delta_cents,
+                source_key=f"boost:{boost.id}:{boost.status}",
+                details={
+                    "fee_cents": boost.fee_cents,
+                    "payout_cents": payout_cents,
+                    "target_game_date": boost.target_game_date.isoformat(),
+                },
+                occurred_at=now,
+            )
 
         short_total = 0
         short_settlement_count = 0
@@ -804,6 +963,21 @@ class MarketService:
                 )
                 boost_total += boost.fee_cents
                 boost_settlement_count += 1
+                self._record_activity(
+                    session,
+                    account_id=boost.account_id,
+                    kind="boost_refunded",
+                    player_id=boost.player_id,
+                    game_date=game_date,
+                    amount_cents=boost.fee_cents,
+                    source_key=f"boost:{boost.id}:refunded",
+                    details={
+                        "fee_cents": boost.fee_cents,
+                        "payout_cents": 0,
+                        "target_game_date": boost.target_game_date.isoformat(),
+                    },
+                    occurred_at=now,
+                )
 
             for position in weekly_shorts:
                 if position.qualifying_games == 0:
@@ -829,11 +1003,38 @@ class MarketService:
                 )
                 short_total += payout_cents
                 short_settlement_count += 1
+                self._record_activity(
+                    session,
+                    account_id=position.account_id,
+                    kind=(
+                        "weekly_short_settled"
+                        if position.status == "settled"
+                        else "weekly_short_voided"
+                    ),
+                    player_id=position.player_id,
+                    game_date=game_date,
+                    amount_cents=payout_cents,
+                    source_key=f"weekly_short:{position.id}:{position.status}",
+                    details={
+                        "fee_cents": position.fee_cents,
+                        "collateral_cents": position.collateral_cents,
+                        "qualifying_games": position.qualifying_games,
+                        "accrued_net_points_micros": (
+                            position.accrued_net_points_micros
+                        ),
+                    },
+                    occurred_at=now,
+                )
 
         for account_id, amount_cents in account_totals.items():
             account = accounts[account_id]
             account.cash_cents += amount_cents
             account.version += 1
+        self._record_portfolio_snapshots(
+            session,
+            game_date=game_date,
+            created_at=now,
+        )
         return {
             "payout_count": (
                 len(holding_rows)
@@ -1104,12 +1305,155 @@ class MarketService:
                 )
                 session.add(trade)
                 session.flush()
+                cash_delta_cents = (
+                    -(execution_price + fee_cents)
+                    if side == "buy"
+                    else execution_price - fee_cents
+                )
+                self._record_activity(
+                    session,
+                    account_id=account.id,
+                    kind=f"trade_{side}",
+                    player_id=player.id,
+                    game_date=None,
+                    amount_cents=cash_delta_cents,
+                    source_key=f"trade:{trade.id}",
+                    details={
+                        "side": side,
+                        "execution_price_cents": execution_price,
+                        "fee_cents": fee_cents,
+                        "new_price_cents": new_price,
+                    },
+                    occurred_at=now,
+                )
                 payload = {
                     "replayed": False,
                     "trade": self._trade_payload(trade),
                     "portfolio": self._portfolio_payload(session, account),
                 }
                 trade.response_payload = copy.deepcopy(payload)
+                return payload
+
+    def reset_account(
+        self,
+        principal: Principal,
+        *,
+        expected_account_version: int,
+        idempotency_key: str,
+    ) -> dict[str, object]:
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    "confirmation": "RESET",
+                    "expected_account_version": expected_account_version,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        with self.locks.acquire(f"account:{principal.id}"):
+            with self.database.market_write_transaction(
+                settlement_exclusive=False
+            ) as session:
+                account = self._ensure_account(session, principal, for_update=True)
+                existing = session.scalar(
+                    select(AccountResetCommandRow).where(
+                        AccountResetCommandRow.account_id == account.id,
+                        AccountResetCommandRow.idempotency_key == idempotency_key,
+                    )
+                )
+                if existing is not None:
+                    if existing.request_fingerprint != fingerprint:
+                        raise ApiProblem(
+                            status_code=409,
+                            code="idempotency_conflict",
+                            message="Idempotency key was already used for another request.",
+                        )
+                    replay = copy.deepcopy(existing.response_payload)
+                    replay["replayed"] = True
+                    return replay
+
+                if account.version != expected_account_version:
+                    raise ApiProblem(
+                        status_code=409,
+                        code="account_version_conflict",
+                        message="Account changed. Refresh before resetting it.",
+                    )
+
+                participation_queries = (
+                    select(HoldingRow.account_id).where(
+                        HoldingRow.account_id == account.id
+                    ),
+                    select(TradeRow.id).where(TradeRow.account_id == account.id),
+                    select(InstrumentCommandRow.id).where(
+                        InstrumentCommandRow.account_id == account.id
+                    ),
+                    select(WeeklyShortRow.id).where(
+                        WeeklyShortRow.account_id == account.id
+                    ),
+                    select(BoostRow.id).where(BoostRow.account_id == account.id),
+                    select(DividendRow.account_id).where(
+                        DividendRow.account_id == account.id
+                    ),
+                    select(AccountActivityRow.id).where(
+                        AccountActivityRow.account_id == account.id
+                    ),
+                    select(AccountResetCommandRow.id).where(
+                        AccountResetCommandRow.account_id == account.id
+                    ),
+                )
+                has_started = (
+                    account.version != 0
+                    or account.cash_cents != round(STARTING_CASH * 100)
+                    or any(
+                        session.scalar(query.limit(1)) is not None
+                        for query in participation_queries
+                    )
+                )
+                if has_started:
+                    raise ApiProblem(
+                        status_code=409,
+                        code="reset_not_eligible",
+                        message=(
+                            "Account reset is only available before the first "
+                            "server-side trade or instrument."
+                        ),
+                    )
+
+                # Idle accounts can accumulate daily snapshots before the client
+                # completes its one-time local-save transition.
+                session.execute(
+                    delete(PortfolioSnapshotRow).where(
+                        PortfolioSnapshotRow.account_id == account.id
+                    )
+                )
+                session.execute(
+                    delete(AccountSettlementMembershipRow).where(
+                        AccountSettlementMembershipRow.account_id == account.id
+                    )
+                )
+
+                now = utcnow()
+                account.cash_cents = round(STARTING_CASH * 100)
+                account.version += 1
+                account.reset_at = now
+                account.updated_at = now
+                session.flush()
+                payload: dict[str, object] = {
+                    "replayed": False,
+                    "reset_at": now.isoformat() + "Z",
+                    "portfolio": self._portfolio_payload(session, account),
+                }
+                session.add(
+                    AccountResetCommandRow(
+                        id=str(uuid4()),
+                        account_id=account.id,
+                        idempotency_key=idempotency_key,
+                        request_fingerprint=fingerprint,
+                        response_payload=copy.deepcopy(payload),
+                        created_at=now,
+                    )
+                )
                 return payload
 
     def _ensure_account(
@@ -1139,6 +1483,187 @@ class MarketService:
             if account is None:
                 raise
         return account
+
+    def _activity_page(
+        self,
+        principal: Principal,
+        *,
+        limit: int,
+        cursor: str | None,
+        resource: str,
+        kind: str | None,
+    ) -> dict[str, object]:
+        with self.database.session() as session, session.begin():
+            account = self._ensure_account(session, principal)
+            position = self._decode_activity_cursor(
+                cursor,
+                resource=resource,
+                account_id=account.id,
+            )
+            query = select(AccountActivityRow).where(
+                AccountActivityRow.account_id == account.id
+            )
+            if kind is not None:
+                query = query.where(AccountActivityRow.kind == kind)
+            if position is not None:
+                occurred_at, row_id = position
+                query = query.where(
+                    or_(
+                        AccountActivityRow.occurred_at < occurred_at,
+                        and_(
+                            AccountActivityRow.occurred_at == occurred_at,
+                            AccountActivityRow.id < row_id,
+                        ),
+                    )
+                )
+            rows = session.scalars(
+                query.order_by(
+                    AccountActivityRow.occurred_at.desc(),
+                    AccountActivityRow.id.desc(),
+                ).limit(limit + 1)
+            ).all()
+            page = rows[:limit]
+            next_cursor = None
+            if len(rows) > limit:
+                last = page[-1]
+                next_cursor = self._encode_cursor(
+                    {
+                        "v": 1,
+                        "resource": resource,
+                        "account_id": account.id,
+                        "occurred_at": last.occurred_at.isoformat(),
+                        "id": last.id,
+                    }
+                )
+            return {
+                "items": [self._activity_payload(row) for row in page],
+                "next_cursor": next_cursor,
+            }
+
+    @staticmethod
+    def _encode_cursor(payload: dict[str, object]) -> str:
+        raw = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+    @staticmethod
+    def _decode_cursor(cursor: str | None) -> dict[str, object] | None:
+        if cursor is None:
+            return None
+        try:
+            padding = "=" * (-len(cursor) % 4)
+            raw = base64.b64decode(
+                cursor + padding,
+                altchars=b"-_",
+                validate=True,
+            )
+            payload = json.loads(raw.decode("utf-8"))
+        except (
+            binascii.Error,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            ValueError,
+        ) as exc:
+            raise ApiProblem(
+                status_code=400,
+                code="invalid_cursor",
+                message="The pagination cursor is invalid.",
+            ) from exc
+        if not isinstance(payload, dict):
+            raise ApiProblem(
+                status_code=400,
+                code="invalid_cursor",
+                message="The pagination cursor is invalid.",
+            )
+        return payload
+
+    def _decode_activity_cursor(
+        self,
+        cursor: str | None,
+        *,
+        resource: str,
+        account_id: str,
+    ) -> tuple[datetime, str] | None:
+        payload = self._decode_cursor(cursor)
+        if payload is None:
+            return None
+        if (
+            set(payload) != {"v", "resource", "account_id", "occurred_at", "id"}
+            or payload.get("v") != 1
+            or payload.get("resource") != resource
+            or payload.get("account_id") != account_id
+            or not isinstance(payload.get("occurred_at"), str)
+            or not isinstance(payload.get("id"), str)
+            or not payload["id"]
+            or len(payload["id"]) > 36
+        ):
+            raise ApiProblem(
+                status_code=400,
+                code="invalid_cursor",
+                message="The pagination cursor is invalid.",
+            )
+        try:
+            occurred_at = datetime.fromisoformat(payload["occurred_at"])
+        except ValueError as exc:
+            raise ApiProblem(
+                status_code=400,
+                code="invalid_cursor",
+                message="The pagination cursor is invalid.",
+            ) from exc
+        if occurred_at.tzinfo is not None:
+            raise ApiProblem(
+                status_code=400,
+                code="invalid_cursor",
+                message="The pagination cursor is invalid.",
+            )
+        try:
+            row_id = UUID(payload["id"])
+        except ValueError as exc:
+            raise ApiProblem(
+                status_code=400,
+                code="invalid_cursor",
+                message="The pagination cursor is invalid.",
+            ) from exc
+        if str(row_id) != payload["id"]:
+            raise ApiProblem(
+                status_code=400,
+                code="invalid_cursor",
+                message="The pagination cursor is invalid.",
+            )
+        return occurred_at, str(row_id)
+
+    def _decode_portfolio_cursor(
+        self,
+        cursor: str | None,
+        *,
+        account_id: str,
+    ) -> date | None:
+        payload = self._decode_cursor(cursor)
+        if payload is None:
+            return None
+        if (
+            set(payload) != {"v", "resource", "account_id", "game_date"}
+            or payload.get("v") != 1
+            or payload.get("resource") != "portfolio_history"
+            or payload.get("account_id") != account_id
+            or not isinstance(payload.get("game_date"), str)
+        ):
+            raise ApiProblem(
+                status_code=400,
+                code="invalid_cursor",
+                message="The pagination cursor is invalid.",
+            )
+        try:
+            return date.fromisoformat(payload["game_date"])
+        except ValueError as exc:
+            raise ApiProblem(
+                status_code=400,
+                code="invalid_cursor",
+                message="The pagination cursor is invalid.",
+            ) from exc
 
     @staticmethod
     def _instrument_fingerprint(
@@ -1203,6 +1728,96 @@ class MarketService:
                 created_at=now,
             )
         )
+
+    @staticmethod
+    def _record_activity(
+        session: Session,
+        *,
+        account_id: str,
+        kind: str,
+        player_id: str | None,
+        game_date: date | None,
+        amount_cents: int,
+        source_key: str,
+        details: dict[str, object],
+        occurred_at: datetime,
+    ) -> None:
+        # PostgreSQL compatibility triggers bridge rolling deployments from an
+        # older worker. SQLite and trigger-free databases still write here.
+        existing = session.scalar(
+            select(AccountActivityRow.id)
+            .where(
+                AccountActivityRow.account_id == account_id,
+                AccountActivityRow.source_key == source_key,
+            )
+            .limit(1)
+        )
+        if existing is not None:
+            return
+        session.add(
+            AccountActivityRow(
+                id=str(uuid4()),
+                account_id=account_id,
+                kind=kind,
+                player_id=player_id,
+                game_date=game_date,
+                amount_cents=amount_cents,
+                source_key=source_key,
+                details=copy.deepcopy(details),
+                occurred_at=occurred_at,
+            )
+        )
+
+    def _record_portfolio_snapshots(
+        self,
+        session: Session,
+        *,
+        game_date: date,
+        created_at: datetime,
+    ) -> None:
+        market_values = {
+            account_id: int(value or 0)
+            for account_id, value in session.execute(
+                select(
+                    HoldingRow.account_id,
+                    func.sum(
+                        HoldingRow.shares * PlayerListingRow.current_price_cents
+                    ),
+                )
+                .join(
+                    PlayerListingRow,
+                    PlayerListingRow.id == HoldingRow.player_id,
+                )
+                .group_by(HoldingRow.account_id)
+            )
+        }
+        reserved_values = {
+            account_id: int(value or 0)
+            for account_id, value in session.execute(
+                select(
+                    WeeklyShortRow.account_id,
+                    func.sum(WeeklyShortRow.collateral_cents),
+                )
+                .where(WeeklyShortRow.status == "active")
+                .group_by(WeeklyShortRow.account_id)
+            )
+        }
+        accounts = session.scalars(select(AccountRow).order_by(AccountRow.id)).all()
+        for account in accounts:
+            market_value = market_values.get(account.id, 0)
+            reserved = reserved_values.get(account.id, 0)
+            session.add(
+                PortfolioSnapshotRow(
+                    account_id=account.id,
+                    game_date=game_date,
+                    cash_cents=account.cash_cents,
+                    free_cash_cents=account.cash_cents - reserved,
+                    reserved_collateral_cents=reserved,
+                    market_value_cents=market_value,
+                    total_value_cents=account.cash_cents + market_value,
+                    created_at=created_at,
+                )
+            )
 
     @staticmethod
     def _available_game_state(session: Session) -> GameStateRow:
@@ -1380,6 +1995,34 @@ class MarketService:
             "volume_30d": volume_30d,
         }
 
+    @staticmethod
+    def _activity_payload(row: AccountActivityRow) -> dict[str, object]:
+        return {
+            "id": row.id,
+            "kind": row.kind,
+            "player_id": row.player_id,
+            "game_date": (
+                row.game_date.isoformat() if row.game_date is not None else None
+            ),
+            "amount_cents": row.amount_cents,
+            "details": copy.deepcopy(row.details),
+            "occurred_at": row.occurred_at.isoformat() + "Z",
+        }
+
+    @staticmethod
+    def _portfolio_snapshot_payload(
+        row: PortfolioSnapshotRow,
+    ) -> dict[str, object]:
+        return {
+            "game_date": row.game_date.isoformat(),
+            "cash_cents": row.cash_cents,
+            "free_cash_cents": row.free_cash_cents,
+            "reserved_collateral_cents": row.reserved_collateral_cents,
+            "market_value_cents": row.market_value_cents,
+            "total_value_cents": row.total_value_cents,
+            "created_at": row.created_at.isoformat() + "Z",
+        }
+
     def _portfolio_payload(
         self,
         session: Session,
@@ -1417,6 +2060,8 @@ class MarketService:
         return {
             "account_id": account.id,
             "display_name": account.display_name,
+            "version": account.version,
+            "reset_at": account.reset_at.isoformat() + "Z",
             "cash_cents": account.cash_cents,
             "free_cash_cents": instruments["free_cash_cents"],
             "reserved_collateral_cents": instruments[

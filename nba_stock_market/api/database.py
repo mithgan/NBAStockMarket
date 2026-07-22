@@ -10,6 +10,7 @@ from pathlib import Path
 from threading import Event as ThreadEvent
 from threading import Lock as ThreadLock
 from threading import Thread
+from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import (
     BigInteger,
@@ -29,6 +30,7 @@ from sqlalchemy import (
     inspect,
     select,
     text,
+    true,
 )
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import SQLAlchemyError
@@ -51,6 +53,7 @@ EXPECTED_MARKET_MIGRATIONS = {
     "20260722010000",
     "20260723000000",
     "20260723010000",
+    "20260724000000",
 }
 GAME_STATE_ID = "historical-2025-26"
 EXPECTED_REPLAY_EVENT_COUNT = 2_126
@@ -113,6 +116,11 @@ class AccountRow(Base):
         nullable=False,
         default=utcnow,
         onupdate=utcnow,
+    )
+    reset_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow,
     )
 
 
@@ -504,6 +512,136 @@ class InstrumentCommandRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
 
 
+class AccountActivityRow(Base):
+    __tablename__ = "market_account_activity"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "source_key",
+            name="uq_market_account_activity_source",
+        ),
+        CheckConstraint(
+            "kind IN ('trade_buy', 'trade_sell', 'weekly_short_opened', "
+            "'boost_armed', 'dividend', 'weekly_short_settled', "
+            "'weekly_short_voided', 'boost_consumed', 'boost_refunded')",
+            name="ck_market_account_activity_kind",
+        ),
+        CheckConstraint(
+            "amount_cents >= -9000000000000000000 "
+            "AND amount_cents <= 9000000000000000000",
+            name="ck_market_account_activity_amount_range",
+        ),
+        Index(
+            "ix_market_account_activity_account_occurred",
+            "account_id",
+            "occurred_at",
+            "id",
+        ),
+        Index(
+            "ix_market_account_activity_account_kind_occurred",
+            "account_id",
+            "kind",
+            "occurred_at",
+            "id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    account_id: Mapped[str] = mapped_column(
+        ForeignKey("market_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    player_id: Mapped[str | None] = mapped_column(
+        ForeignKey("market_players.id", ondelete="RESTRICT")
+    )
+    game_date: Mapped[date | None] = mapped_column(Date)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    source_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    details: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utcnow,
+    )
+
+
+class PortfolioSnapshotRow(Base):
+    __tablename__ = "market_portfolio_snapshots"
+    __table_args__ = (
+        CheckConstraint(
+            "reserved_collateral_cents >= 0",
+            name="ck_market_portfolio_snapshot_reserved",
+        ),
+        CheckConstraint(
+            "market_value_cents >= 0",
+            name="ck_market_portfolio_snapshot_market_value",
+        ),
+        CheckConstraint(
+            "free_cash_cents = cash_cents - reserved_collateral_cents",
+            name="ck_market_portfolio_snapshot_free_cash",
+        ),
+        CheckConstraint(
+            "total_value_cents = cash_cents + market_value_cents",
+            name="ck_market_portfolio_snapshot_total_value",
+        ),
+    )
+
+    account_id: Mapped[str] = mapped_column(
+        ForeignKey("market_accounts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    game_date: Mapped[date] = mapped_column(
+        ForeignKey("market_settlements.game_date", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    cash_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    free_cash_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    reserved_collateral_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    market_value_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    total_value_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class AccountSettlementMembershipRow(Base):
+    __tablename__ = "market_account_settlement_memberships"
+
+    account_id: Mapped[str] = mapped_column(
+        ForeignKey("market_accounts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    game_date: Mapped[date] = mapped_column(
+        ForeignKey("market_settlements.game_date", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+
+class AccountResetCommandRow(Base):
+    __tablename__ = "market_account_reset_commands"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "idempotency_key",
+            name="uq_market_reset_account_idempotency",
+        ),
+        Index(
+            "ix_market_account_reset_commands_account_created",
+            "account_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    account_id: Mapped[str] = mapped_column(
+        ForeignKey("market_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    response_payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
 @dataclass(frozen=True)
 class SeedPlayer:
     id: str
@@ -670,6 +808,9 @@ class Database:
         if self.engine.dialect.name == "sqlite":
             self._migrate_sqlite_replay_instrument_columns()
             self._migrate_sqlite_account_cash_constraint()
+            self._migrate_sqlite_account_reset_at()
+            self._backfill_sqlite_account_activity()
+            self._migrate_sqlite_settlement_memberships()
 
     def _migrate_sqlite_replay_instrument_columns(self) -> None:
         raw_connection = self.engine.raw_connection()
@@ -718,28 +859,43 @@ class Database:
             if "ck_market_account_cash" not in table_sql:
                 return
 
+            columns = {
+                str(column[1])
+                for column in cursor.execute(
+                    "PRAGMA table_info(market_accounts)"
+                ).fetchall()
+            }
+            reset_definition = (
+                ",\n                    reset_at DATETIME NOT NULL"
+                if "reset_at" in columns
+                else ""
+            )
+            reset_insert = ", reset_at" if "reset_at" in columns else ""
+
             cursor.execute("PRAGMA foreign_keys=OFF")
             cursor.execute("BEGIN IMMEDIATE")
             cursor.execute(
-                """
+                f"""
                 CREATE TABLE market_accounts_without_cash_check (
                     id VARCHAR(128) NOT NULL,
                     display_name VARCHAR(80) NOT NULL,
                     cash_cents BIGINT NOT NULL,
                     version INTEGER NOT NULL,
                     created_at DATETIME NOT NULL,
-                    updated_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL{reset_definition},
                     PRIMARY KEY (id),
                     CONSTRAINT ck_market_account_version CHECK (version >= 0)
                 )
                 """
             )
             cursor.execute(
-                """
+                f"""
                 INSERT INTO market_accounts_without_cash_check (
                     id, display_name, cash_cents, version, created_at, updated_at
+                    {reset_insert}
                 )
                 SELECT id, display_name, cash_cents, version, created_at, updated_at
+                       {reset_insert}
                 FROM market_accounts
                 """
             )
@@ -758,6 +914,275 @@ class Database:
             finally:
                 cursor.close()
                 raw_connection.close()
+
+    def _migrate_sqlite_account_reset_at(self) -> None:
+        raw_connection = self.engine.raw_connection()
+        cursor = raw_connection.cursor()
+        try:
+            columns = {
+                str(row[1])
+                for row in cursor.execute(
+                    "PRAGMA table_info(market_accounts)"
+                ).fetchall()
+            }
+            if "reset_at" not in columns:
+                cursor.execute(
+                    "ALTER TABLE market_accounts ADD COLUMN reset_at DATETIME"
+                )
+            cursor.execute(
+                "UPDATE market_accounts SET reset_at = created_at WHERE reset_at IS NULL"
+            )
+            raw_connection.commit()
+        except Exception:
+            raw_connection.rollback()
+            raise
+        finally:
+            cursor.close()
+            raw_connection.close()
+
+    @staticmethod
+    def _sqlite_activity_id(account_id: str, source_key: str) -> str:
+        return str(
+            uuid5(
+                NAMESPACE_URL,
+                f"nba-stock-market:activity:{account_id}:{source_key}",
+            )
+        )
+
+    def _backfill_sqlite_account_activity(self) -> None:
+        with self.session() as session, session.begin():
+            existing = {
+                (account_id, source_key)
+                for account_id, source_key in session.execute(
+                    select(
+                        AccountActivityRow.account_id,
+                        AccountActivityRow.source_key,
+                    )
+                )
+            }
+
+            def add_activity(
+                *,
+                account_id: str,
+                kind: str,
+                player_id: str,
+                game_date: date | None,
+                amount_cents: int,
+                source_key: str,
+                details: dict[str, object],
+                occurred_at: datetime,
+            ) -> None:
+                identity = (account_id, source_key)
+                if identity in existing:
+                    return
+                session.add(
+                    AccountActivityRow(
+                        id=self._sqlite_activity_id(account_id, source_key),
+                        account_id=account_id,
+                        kind=kind,
+                        player_id=player_id,
+                        game_date=game_date,
+                        amount_cents=amount_cents,
+                        source_key=source_key,
+                        details=details,
+                        occurred_at=occurred_at,
+                    )
+                )
+                existing.add(identity)
+
+            for trade in session.scalars(select(TradeRow)).all():
+                source_key = f"trade:{trade.id}"
+                add_activity(
+                    account_id=trade.account_id,
+                    kind=f"trade_{trade.side}",
+                    player_id=trade.player_id,
+                    game_date=None,
+                    amount_cents=(
+                        -(trade.execution_price_cents + trade.fee_cents)
+                        if trade.side == "buy"
+                        else trade.execution_price_cents - trade.fee_cents
+                    ),
+                    source_key=source_key,
+                    details={
+                        "side": trade.side,
+                        "execution_price_cents": trade.execution_price_cents,
+                        "fee_cents": trade.fee_cents,
+                        "new_price_cents": trade.new_price_cents,
+                    },
+                    occurred_at=trade.created_at,
+                )
+
+            dividend_rows = session.execute(
+                select(DividendRow, ReplayEventRow).outerjoin(
+                    ReplayEventRow,
+                    (ReplayEventRow.game_date == DividendRow.game_date)
+                    & (ReplayEventRow.player_id == DividendRow.player_id),
+                )
+            ).all()
+            for dividend, event in dividend_rows:
+                source_key = (
+                    f"dividend:{dividend.game_date.isoformat()}:"
+                    f"{dividend.player_id}"
+                )
+                add_activity(
+                    account_id=dividend.account_id,
+                    kind="dividend",
+                    player_id=dividend.player_id,
+                    game_date=dividend.game_date,
+                    amount_cents=dividend.amount_cents,
+                    source_key=source_key,
+                    details={
+                        "actual_net_points_micros": (
+                            event.actual_net_points_micros
+                            if event is not None
+                            else None
+                        ),
+                        "expected_net_points_micros": (
+                            event.expected_net_points_micros
+                            if event is not None
+                            else None
+                        ),
+                    },
+                    occurred_at=dividend.created_at,
+                )
+
+            for position in session.scalars(select(WeeklyShortRow)).all():
+                opened_key = f"weekly_short:{position.id}:opened"
+                add_activity(
+                    account_id=position.account_id,
+                    kind="weekly_short_opened",
+                    player_id=position.player_id,
+                    game_date=None,
+                    amount_cents=-position.fee_cents,
+                    source_key=opened_key,
+                    details={
+                        "opening_price_cents": position.opening_price_cents,
+                        "fee_cents": position.fee_cents,
+                        "collateral_cents": position.collateral_cents,
+                        "week_start": position.week_start.isoformat(),
+                    },
+                    occurred_at=position.created_at,
+                )
+                if position.status not in {"settled", "voided"}:
+                    continue
+                terminal_key = f"weekly_short:{position.id}:{position.status}"
+                add_activity(
+                    account_id=position.account_id,
+                    kind=f"weekly_short_{position.status}",
+                    player_id=position.player_id,
+                    game_date=position.settled_game_date,
+                    amount_cents=(
+                        position.fee_cents
+                        if position.status == "voided"
+                        else int(position.payout_cents or 0)
+                    ),
+                    source_key=terminal_key,
+                    details={
+                        "fee_cents": position.fee_cents,
+                        "collateral_cents": position.collateral_cents,
+                        "qualifying_games": position.qualifying_games,
+                        "accrued_net_points_micros": (
+                            position.accrued_net_points_micros
+                        ),
+                    },
+                    occurred_at=position.updated_at,
+                )
+
+            for position in session.scalars(select(BoostRow)).all():
+                opened_key = f"boost:{position.id}:armed"
+                add_activity(
+                    account_id=position.account_id,
+                    kind="boost_armed",
+                    player_id=position.player_id,
+                    game_date=position.target_game_date,
+                    amount_cents=-position.fee_cents,
+                    source_key=opened_key,
+                    details={
+                        "opening_price_cents": position.opening_price_cents,
+                        "fee_cents": position.fee_cents,
+                        "week_start": position.week_start.isoformat(),
+                        "target_game_date": position.target_game_date.isoformat(),
+                    },
+                    occurred_at=position.created_at,
+                )
+                if position.status not in {"consumed", "refunded"}:
+                    continue
+                terminal_key = f"boost:{position.id}:{position.status}"
+                add_activity(
+                    account_id=position.account_id,
+                    kind=f"boost_{position.status}",
+                    player_id=position.player_id,
+                    game_date=position.settled_game_date,
+                    amount_cents=(
+                        int(position.payout_cents or 0)
+                        if position.status == "consumed"
+                        else position.fee_cents
+                    ),
+                    source_key=terminal_key,
+                    details={
+                        "fee_cents": position.fee_cents,
+                        "payout_cents": int(position.payout_cents or 0),
+                        "target_game_date": position.target_game_date.isoformat(),
+                    },
+                    occurred_at=position.updated_at,
+                )
+
+    def _migrate_sqlite_settlement_memberships(self) -> None:
+        with self.session() as session, session.begin():
+            session.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS market_local_schema_migrations ("
+                    "version VARCHAR(64) PRIMARY KEY, "
+                    "applied_at DATETIME NOT NULL)"
+                )
+            )
+            version = "20260724000000_settlement_memberships"
+            applied = session.scalar(
+                text(
+                    "SELECT version FROM market_local_schema_migrations "
+                    "WHERE version = :version"
+                ),
+                {"version": version},
+            )
+            if applied is not None:
+                return
+
+            existing = set(
+                session.execute(
+                    select(
+                        AccountSettlementMembershipRow.account_id,
+                        AccountSettlementMembershipRow.game_date,
+                    )
+                )
+            )
+            rows = session.execute(
+                select(AccountRow.id, SettlementRow.game_date)
+                .select_from(AccountRow)
+                .join(
+                    SettlementRow,
+                    true(),
+                )
+                .order_by(AccountRow.id, SettlementRow.game_date)
+            ).all()
+            session.add_all(
+                AccountSettlementMembershipRow(
+                    account_id=account_id,
+                    game_date=game_date,
+                )
+                for account_id, game_date in rows
+                if (account_id, game_date) not in existing
+            )
+            session.flush()
+            session.execute(
+                text(
+                    "INSERT INTO market_local_schema_migrations "
+                    "(version, applied_at) VALUES (:version, :applied_at)"
+                ),
+                {
+                    "version": version,
+                    "applied_at": utcnow().isoformat(sep=" "),
+                },
+            )
 
     def assert_ready(
         self,

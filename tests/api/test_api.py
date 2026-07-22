@@ -111,9 +111,12 @@ def test_first_authenticated_read_creates_starting_portfolio(
     assert market.status_code == 200
     assert [item["id"] for item in market.json()["data"]] == ["jokic", "one-share", "sga"]
     assert portfolio.status_code == 200
-    assert portfolio.json()["data"] == {
+    portfolio_data = portfolio.json()["data"]
+    assert portfolio_data == {
         "account_id": "alice",
         "display_name": "Alice",
+        "version": 0,
+        "reset_at": portfolio_data["reset_at"],
         "cash_cents": 14_000_000_000,
         "free_cash_cents": 14_000_000_000,
         "reserved_collateral_cents": 0,
@@ -131,6 +134,7 @@ def test_first_authenticated_read_creates_starting_portfolio(
             "boosts": [],
         },
     }
+    assert portfolio_data["reset_at"].endswith("Z")
 
 
 def test_buy_and_sell_are_server_authoritative_and_charge_fees(
