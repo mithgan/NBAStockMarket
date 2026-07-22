@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, Query, Request, Response
-from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -37,16 +37,25 @@ def create_app(
     token_verifier: TokenVerifier | None = None,
 ) -> FastAPI:
     settings = settings or ApiSettings()
-    database = database or Database(settings.database_url)
+    settings.validate_runtime()
+    database = database or Database(settings.database_url.get_secret_value())
     token_verifier = token_verifier or verifier_from_settings(settings)
     service = MarketService(database)
     security = HTTPBearer(auto_error=False)
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        del application
+        if settings.environment == "production":
+            database.assert_ready()
+        yield
 
     app = FastAPI(
         title="NBA Stock Market API",
         version="0.1.0",
         docs_url="/docs" if settings.environment != "production" else None,
         redoc_url=None,
+        lifespan=lifespan,
     )
     app.state.database = database
     app.state.settings = settings
@@ -84,7 +93,7 @@ def create_app(
                 "error": {
                     "code": "validation_error",
                     "message": "Request validation failed.",
-                    "details": jsonable_encoder(exc.errors()),
+                    "details": public_validation_errors(exc),
                 }
             },
         )
@@ -110,6 +119,15 @@ def create_app(
     @app.get("/healthz")
     def health() -> dict[str, dict[str, str]]:
         return {"data": {"status": "ok", "service": "nba-stock-market-api"}}
+
+    @app.get("/readyz")
+    def readiness(response: Response) -> dict[str, dict[str, str]]:
+        try:
+            database.assert_ready()
+        except RuntimeError:
+            response.status_code = 503
+            return {"data": {"status": "unavailable"}}
+        return {"data": {"status": "ready"}}
 
     @app.get("/api/v1/market")
     def market(
@@ -152,3 +170,14 @@ def create_app(
         return {"data": service.leaderboard(principal, limit=limit)}
 
     return app
+
+
+def public_validation_errors(exc: RequestValidationError) -> list[dict[str, object]]:
+    return [
+        {
+            "type": str(error.get("type", "validation_error")),
+            "loc": list(error.get("loc", ())),
+            "msg": str(error.get("msg", "Invalid request.")),
+        }
+        for error in exc.errors()
+    ]

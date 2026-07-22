@@ -21,6 +21,29 @@ def test_health_is_public(client: TestClient) -> None:
     assert response.json() == {"data": {"status": "ok", "service": "nba-stock-market-api"}}
 
 
+def test_readiness_checks_database(client: TestClient) -> None:
+    response = client.get("/readyz")
+
+    assert response.status_code == 200
+    assert response.json() == {"data": {"status": "ready"}}
+
+
+def test_readiness_fails_closed_when_database_is_unavailable(
+    client: TestClient,
+    database: Database,
+    monkeypatch,
+) -> None:
+    def unavailable() -> None:
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(database, "assert_ready", unavailable)
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    assert response.json() == {"data": {"status": "unavailable"}}
+
+
 def test_market_requires_authentication(client: TestClient) -> None:
     response = client.get("/api/v1/market")
 
@@ -43,6 +66,25 @@ def test_non_json_trade_body_returns_serializable_validation_error(
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "validation_error"
+
+
+def test_non_utf8_trade_body_returns_serializable_validation_error(
+    client: TestClient,
+    alice_headers: dict[str, str],
+) -> None:
+    response = client.post(
+        "/api/v1/trades",
+        headers={
+            **trade_headers(alice_headers, "invalid-binary-0001"),
+            "Content-Type": "text/plain",
+        },
+        content=b"\xff",
+    )
+
+    assert response.status_code == 422
+    payload = response.json()["error"]
+    assert payload["code"] == "validation_error"
+    assert all("input" not in detail for detail in payload["details"])
 
 
 def test_player_id_rejects_database_control_characters(

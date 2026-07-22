@@ -153,6 +153,7 @@ handwritten player lists.
 | Route | Auth | Purpose |
 |---|---|---|
 | `GET /healthz` | Public | Liveness check |
+| `GET /readyz` | Public | Database migration, connectivity, and seed readiness |
 | `GET /api/v1/market` | Bearer | Current listings, float, ownership, and volume |
 | `GET /api/v1/portfolio` | Bearer | Cash, holdings, P&L, and recent trades |
 | `POST /api/v1/trades` | Bearer + `Idempotency-Key` | Authoritative whole-player buy or sell |
@@ -176,23 +177,25 @@ require `NBA_STOCK_SUPABASE_PUBLISHABLE_KEY`. A service-role key is neither requ
 this API configuration.
 
 For deployment, use `postgresql+psycopg://...` for `NBA_STOCK_DATABASE_URL`, set
-`NBA_STOCK_ENVIRONMENT=production`, and leave `NBA_STOCK_AUTO_CREATE_SCHEMA=false`. Production
-schema changes must happen through separately reviewed migrations; the API process must never
-create or mutate its own schema. `/docs` is disabled in production.
+`NBA_STOCK_ENVIRONMENT=production`, and leave `NBA_STOCK_AUTO_CREATE_SCHEMA=false`. A direct or
+session-pooler connection on port 5432 is preferred for a persistent backend. Supabase transaction
+pooler URLs on port 6543 are also supported; the API automatically disables psycopg prepared
+statements for that mode. Production schema changes must happen through separately reviewed
+migrations; the API process must never create or mutate its own schema. `/docs` is disabled in
+production.
 
 The market database is intentionally separate from the Databallr production database. Databallr
 Supabase remains the authentication issuer, while `NBA_STOCK_DATABASE_URL` points at the dedicated
-NBA Stock Market Postgres project. Link the dedicated project and apply its checked-in schema and
-canonical 30-player seed before starting the API against a new database. Keep the password out of
-command arguments by letting the CLI read it from its environment:
+NBA Stock Market Postgres project. Authenticate the Supabase CLI, identify the dedicated project,
+then use the fail-closed helper to apply the checked-in schema and canonical 30-player seed. The
+helper stops if linking or the dry run fails, verifies the linked project before mutation, and
+prompts for the password without putting it in command arguments:
 
 ```bash
-read -rsp "Supabase database password: " SUPABASE_DB_PASSWORD && echo
-export SUPABASE_DB_PASSWORD
-npx supabase link --project-ref "$SUPABASE_PROJECT_REF"
-npx supabase db push --dry-run
-npx supabase db push
-unset SUPABASE_DB_PASSWORD
+npx supabase login
+export SUPABASE_PROJECT_REF="vykoykabweuemstpqljg"
+./scripts/push_supabase_schema.sh
+unset SUPABASE_PROJECT_REF
 ```
 
 The schema migration enables RLS and revokes `anon` and `authenticated` table privileges. The seed

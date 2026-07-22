@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
+from threading import Event, Lock
+from time import monotonic
 from typing import Protocol, runtime_checkable
 
 import httpx
@@ -11,6 +14,10 @@ from nba_stock_market.api.settings import ApiSettings
 
 
 MAX_DISPLAY_NAME_LENGTH = 80
+MAX_JWT_KID_LENGTH = 256
+JWKS_REFRESH_COOLDOWN_SECONDS = 30.0
+NEGATIVE_KID_CACHE_SIZE = 256
+JWKS_CACHE_LIFESPAN_SECONDS = 600.0
 
 
 class AuthenticationError(ValueError):
@@ -53,10 +60,17 @@ class SupabaseTokenVerifier:
         self.audience = audience
         self.timeout_seconds = timeout_seconds
         self.issuer = f"{self.supabase_url}/auth/v1"
+        self._jwks_lock = Lock()
+        self._last_forced_refresh_at = float("-inf")
+        self._keys_loaded_at = float("-inf")
+        self._signing_keys: dict[str, object] = {}
+        self._negative_kids: OrderedDict[str, float] = OrderedDict()
+        self._refresh_event: Event | None = None
         self.jwks = PyJWKClient(
             f"{self.issuer}/.well-known/jwks.json",
             cache_keys=False,
             lifespan=600,
+            timeout=timeout_seconds,
         )
 
     def verify(self, token: str) -> Principal:
@@ -71,7 +85,14 @@ class SupabaseTokenVerifier:
 
         try:
             if algorithm in self._ASYMMETRIC_ALGORITHMS:
-                signing_key = self.jwks.get_signing_key_from_jwt(token).key
+                kid = jwt.get_unverified_header(token).get("kid")
+                if (
+                    not isinstance(kid, str)
+                    or not kid
+                    or len(kid) > MAX_JWT_KID_LENGTH
+                ):
+                    raise AuthenticationError("invalid bearer token")
+                signing_key = self._get_signing_key(kid)
                 claims = jwt.decode(
                     token,
                     signing_key,
@@ -96,8 +117,77 @@ class SupabaseTokenVerifier:
         if isinstance(metadata, dict):
             candidate = metadata.get("full_name") or metadata.get("name")
             if isinstance(candidate, str):
-                display_name = " ".join(candidate.split())[:MAX_DISPLAY_NAME_LENGTH]
+                display_name = normalize_display_name(candidate)
         return Principal(id=subject, display_name=display_name or f"Trader {subject[:6]}")
+
+    def _get_signing_key(self, kid: str):
+        with self._jwks_lock:
+            now = monotonic()
+            self._prune_negative_kids(now)
+            cached_key = self._signing_keys.get(kid)
+            cache_is_fresh = (
+                now - self._keys_loaded_at < JWKS_CACHE_LIFESPAN_SECONDS
+            )
+            if cached_key is not None and (cache_is_fresh or self._refresh_event):
+                return cached_key
+            if kid in self._negative_kids:
+                raise AuthenticationError("invalid bearer token")
+
+            if self._refresh_event is not None:
+                refresh_event = self._refresh_event
+                should_refresh = False
+            elif (
+                now - self._last_forced_refresh_at
+                >= JWKS_REFRESH_COOLDOWN_SECONDS
+            ):
+                refresh_event = Event()
+                self._refresh_event = refresh_event
+                self._last_forced_refresh_at = now
+                should_refresh = True
+                force_refresh = bool(self._signing_keys)
+            else:
+                self._cache_negative_kid(kid, now)
+                raise AuthenticationError("invalid bearer token")
+
+        if should_refresh:
+            try:
+                signing_keys = self.jwks.get_signing_keys(refresh=force_refresh)
+            except Exception:
+                with self._jwks_lock:
+                    self._refresh_event = None
+                    refresh_event.set()
+                raise
+            with self._jwks_lock:
+                self._signing_keys = {
+                    key.key_id: key.key for key in signing_keys if key.key_id
+                }
+                self._keys_loaded_at = monotonic()
+                self._refresh_event = None
+                refresh_event.set()
+        else:
+            refresh_event.wait(timeout=self.timeout_seconds + 1.0)
+
+        with self._jwks_lock:
+            signing_key = self._signing_keys.get(kid)
+            if signing_key is not None:
+                self._negative_kids.pop(kid, None)
+                return signing_key
+            now = monotonic()
+            self._cache_negative_kid(kid, now)
+        raise AuthenticationError("invalid bearer token")
+
+    def _cache_negative_kid(self, kid: str, now: float) -> None:
+        self._negative_kids[kid] = now + JWKS_REFRESH_COOLDOWN_SECONDS
+        self._negative_kids.move_to_end(kid)
+        while len(self._negative_kids) > NEGATIVE_KID_CACHE_SIZE:
+            self._negative_kids.popitem(last=False)
+
+    def _prune_negative_kids(self, now: float) -> None:
+        expired = [
+            kid for kid, expires_at in self._negative_kids.items() if expires_at <= now
+        ]
+        for kid in expired:
+            del self._negative_kids[kid]
 
     def _verify_legacy_token(self, token: str) -> dict[str, object]:
         if not self.publishable_key:
@@ -135,3 +225,8 @@ def verifier_from_settings(settings: ApiSettings) -> TokenVerifier:
         publishable_key=key,
         audience=settings.supabase_jwt_audience,
     )
+
+
+def normalize_display_name(value: str) -> str:
+    printable = "".join(character if character.isprintable() else " " for character in value)
+    return " ".join(printable.split())[:MAX_DISPLAY_NAME_LENGTH]

@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 from pathlib import Path
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Integer, JSON, String
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Integer, JSON, String
 
-from nba_stock_market.api.database import Base
+from nba_stock_market.api.database import (
+    Base,
+    EXPECTED_MARKET_SEED,
+    database_connect_args,
+)
 
 
 MIGRATION = (
@@ -22,10 +28,17 @@ SEED_MIGRATION = (
     / "20260721010000_seed_market_players.sql"
 )
 MARKET_SEED = Path(__file__).parents[2] / "data" / "generated" / "market-seed.json"
+PUSH_SCRIPT = Path(__file__).parents[2] / "scripts" / "push_supabase_schema.sh"
 
 
 def normalized_sql() -> str:
     return re.sub(r"\s+", " ", MIGRATION.read_text(encoding="utf-8").lower()).strip()
+
+
+def normalized_constraint_sql(value: object) -> str:
+    normalized = re.sub(r"\s+", " ", str(value).lower()).strip()
+    normalized = re.sub(r"\(\s+", "(", normalized)
+    return re.sub(r"\s+\)", ")", normalized)
 
 
 def table_definition(sql: str, table_name: str) -> str:
@@ -94,6 +107,16 @@ def test_supabase_migration_matches_orm_table_structure() -> None:
                 in re.sub(r"\s+", " ", sql)
             )
 
+        normalized_definition = normalized_constraint_sql(definition)
+        for constraint in table.constraints:
+            if not isinstance(constraint, CheckConstraint):
+                continue
+            expression = normalized_constraint_sql(constraint.sqltext)
+            assert (
+                f"constraint {constraint.name} check ({expression})"
+                in normalized_definition
+            )
+
 
 def test_supabase_migration_keeps_market_data_server_only() -> None:
     sql = normalized_sql()
@@ -128,9 +151,20 @@ def test_seed_migration_reproduces_the_canonical_market_without_overwriting() ->
         " ",
         SEED_MIGRATION.read_text(encoding="utf-8").lower(),
     ).strip()
+    expected_seed = {
+        player["id"]: (
+            player["name"],
+            player["tier"],
+            player["opening_price_cents"],
+            player["actual_salary_cents"],
+            player["shares_outstanding"],
+        )
+        for player in payload["players"]
+    }
 
     assert payload["schema_version"] == 1
     assert len(payload["players"]) == 30
+    assert EXPECTED_MARKET_SEED == expected_seed
     for player in payload["players"]:
         escaped_name = player["name"].replace("'", "''").lower()
         row = (
@@ -141,3 +175,156 @@ def test_seed_migration_reproduces_the_canonical_market_without_overwriting() ->
         assert row in sql
 
     assert "on conflict (id) do nothing" in sql
+
+
+def test_database_connection_args_support_supabase_transaction_pooler() -> None:
+    transaction_url = (
+        "postgresql+psycopg://postgres.project:password@"
+        "aws-0-us-west-2.pooler.supabase.com:6543/postgres"
+    )
+    session_url = transaction_url.replace(":6543/", ":5432/")
+
+    assert database_connect_args(transaction_url) == {
+        "connect_timeout": 5,
+        "keepalives": 1,
+        "keepalives_idle": 5,
+        "keepalives_interval": 2,
+        "keepalives_count": 2,
+        "prepare_threshold": None,
+        "tcp_user_timeout": 5_000,
+    }
+    assert database_connect_args(session_url) == {
+        "connect_timeout": 5,
+        "keepalives": 1,
+        "keepalives_idle": 5,
+        "keepalives_interval": 2,
+        "keepalives_count": 2,
+        "tcp_user_timeout": 5_000,
+    }
+    assert database_connect_args("sqlite+pysqlite:///:memory:") == {
+        "check_same_thread": False
+    }
+
+
+def test_supabase_push_helper_stops_when_linking_fails(tmp_path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "npx-calls.txt"
+    fake_npx = fake_bin / "npx"
+    fake_npx.write_text(
+        "#!/bin/sh\n"
+        'printf "%s\\n" "$*" >> "$CALLS_LOG"\n'
+        'if [ "$2" = "link" ]; then exit 7; fi\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_npx.chmod(0o755)
+
+    project = tmp_path / "project"
+    (project / "supabase").mkdir(parents=True)
+    environment = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "CALLS_LOG": str(calls),
+        "NBA_STOCK_REPO_ROOT": str(project),
+        "SUPABASE_PROJECT_REF": "expected-project",
+        "SUPABASE_DB_PASSWORD": "test-password",
+    }
+
+    result = subprocess.run(
+        ["bash", str(PUSH_SCRIPT)],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert calls.read_text(encoding="utf-8").splitlines() == [
+        "supabase link --project-ref expected-project"
+    ]
+
+
+def test_supabase_push_helper_rejects_wrong_linked_project(tmp_path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "npx-calls.txt"
+    fake_npx = fake_bin / "npx"
+    fake_npx.write_text(
+        "#!/bin/sh\n"
+        'printf "%s\\n" "$*" >> "$CALLS_LOG"\n'
+        'if [ "$2" = "link" ]; then\n'
+        '  mkdir -p "$NBA_STOCK_REPO_ROOT/supabase/.temp"\n'
+        '  printf "%s\\n" "wrong-project" > '
+        '"$NBA_STOCK_REPO_ROOT/supabase/.temp/project-ref"\n'
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_npx.chmod(0o755)
+
+    project = tmp_path / "project"
+    (project / "supabase").mkdir(parents=True)
+    result = subprocess.run(
+        ["bash", str(PUSH_SCRIPT)],
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "CALLS_LOG": str(calls),
+            "NBA_STOCK_REPO_ROOT": str(project),
+            "SUPABASE_PROJECT_REF": "expected-project",
+            "SUPABASE_DB_PASSWORD": "test-password",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "linked project is 'wrong-project'" in result.stderr
+    assert calls.read_text(encoding="utf-8").splitlines() == [
+        "supabase link --project-ref expected-project"
+    ]
+
+
+def test_supabase_push_helper_stops_when_dry_run_fails(tmp_path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "npx-calls.txt"
+    fake_npx = fake_bin / "npx"
+    fake_npx.write_text(
+        "#!/bin/sh\n"
+        'printf "%s\\n" "$*" >> "$CALLS_LOG"\n'
+        'if [ "$2" = "link" ]; then\n'
+        '  mkdir -p "$NBA_STOCK_REPO_ROOT/supabase/.temp"\n'
+        '  printf "%s\\n" "$SUPABASE_PROJECT_REF" > '
+        '"$NBA_STOCK_REPO_ROOT/supabase/.temp/project-ref"\n'
+        "fi\n"
+        'if [ "$*" = "supabase db push --dry-run" ]; then exit 9; fi\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_npx.chmod(0o755)
+
+    project = tmp_path / "project"
+    (project / "supabase").mkdir(parents=True)
+    result = subprocess.run(
+        ["bash", str(PUSH_SCRIPT)],
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "CALLS_LOG": str(calls),
+            "NBA_STOCK_REPO_ROOT": str(project),
+            "SUPABASE_PROJECT_REF": "expected-project",
+            "SUPABASE_DB_PASSWORD": "test-password",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 9
+    assert calls.read_text(encoding="utf-8").splitlines() == [
+        "supabase link --project-ref expected-project",
+        "supabase db push --dry-run",
+    ]
