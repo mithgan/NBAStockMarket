@@ -15,25 +15,31 @@ function displayDate(value: string | null): string {
 }
 
 export function SeasonControl() {
-  const { advanceDay, isAdvancing, isGameplayReady, isHydrated, nextReplayDay, state } = usePortfolio();
-  const disabled = !isGameplayReady || isAdvancing || !nextReplayDay;
+  const {
+    isGameplayReady,
+    isRefreshing,
+    nextReplayDay,
+    pendingActions,
+    refreshData,
+    state,
+  } = usePortfolio();
+  if (!state) return null;
+  const disabled = !isGameplayReady || isRefreshing || pendingActions.size > 0;
   const progress = Math.min(state.settledDates.length, replayDays.length);
 
   return (
     <View style={styles.container}>
       <View style={styles.copy}>
-        <Text style={styles.label}>2025-26 REPLAY</Text>
-        <Text numberOfLines={1} style={styles.date}>
-          {isHydrated ? displayDate(nextReplayDay?.date ?? null) : 'Loading saved season...'}
-        </Text>
+        <Text style={styles.label}>2025-26 SERVER REPLAY</Text>
+        <Text numberOfLines={1} style={styles.date}>{displayDate(nextReplayDay?.date ?? null)}</Text>
         <Text style={styles.progress}>{progress} of {replayDays.length} game dates settled</Text>
       </View>
       <Pressable
-        accessibilityLabel={nextReplayDay ? `Settle ${displayDate(nextReplayDay.date)}` : 'Replay season complete'}
+        accessibilityLabel="Refresh server game state"
         accessibilityRole="button"
         accessibilityState={{ disabled }}
         disabled={disabled}
-        onPress={advanceDay}
+        onPress={() => void refreshData()}
         style={({ pressed }) => [
           styles.button,
           disabled && styles.buttonDisabled,
@@ -41,7 +47,7 @@ export function SeasonControl() {
         ]}
       >
         <Text style={[styles.buttonText, disabled && styles.buttonTextDisabled]}>
-          {isAdvancing ? 'SETTLING' : nextReplayDay ? 'NEXT DAY' : 'COMPLETE'}
+          {isRefreshing ? 'REFRESHING' : 'REFRESH'}
         </Text>
       </Pressable>
     </View>

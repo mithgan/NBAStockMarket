@@ -35,6 +35,7 @@ export interface GameHolding {
   player_id: string;
   shares: 1;
   average_price: number;
+  cost_basis?: number;
 }
 
 export type WeeklyShortStatus = 'active' | 'settled' | 'voided';
@@ -134,12 +135,14 @@ export interface GameSummary {
 }
 
 export interface GameLeaderboardRival {
+  id?: string;
   name: string;
   value: number;
   dailyChange?: number;
 }
 
 export interface GameLeaderboardEntry {
+  id: string;
   rank: number;
   name: string;
   value: number;
@@ -276,7 +279,10 @@ export function isGameState(value: unknown): value is GameState {
         priceIds.has(holding.player_id) &&
         holding.shares === 1 &&
         Number.isFinite(holding.average_price) &&
-        holding.average_price > 0,
+        holding.average_price > 0 &&
+        (holding.cost_basis === undefined || (
+          Number.isFinite(holding.cost_basis) && holding.cost_basis > 0
+        )),
     ) ||
     !hasUniqueStrings(state.holdings.map((holding) => holding.player_id))
   ) {
@@ -460,7 +466,7 @@ export function getGameSummary(
   const names = new Map(players.map((player) => [player.id, player.name]));
   const holdings = state.holdings.map((holding) => {
     const currentPrice = state.prices[holding.player_id] ?? 0;
-    const costBasis = holding.average_price * (1 + FEE_PCT);
+    const costBasis = holding.cost_basis ?? holding.average_price * (1 + FEE_PCT);
     return {
       ...holding,
       name: names.get(holding.player_id) ?? holding.player_id,
@@ -1052,9 +1058,10 @@ export function rankGameLeaderboard(
         Number.isFinite(rival.dailyChange ?? 0) &&
         Number.isFinite(rival.value + (rival.dailyChange ?? 0) * dayCount),
     )
-    .map((rival) => {
+    .map((rival, index) => {
       const value = rival.value + (rival.dailyChange ?? 0) * dayCount;
       return {
+        id: rival.id ?? `rival:${index}`,
         name: rival.name,
         value,
         returnPct: (value / STARTING_CASH - 1) * 100,
@@ -1064,6 +1071,7 @@ export function rankGameLeaderboard(
 
   if (Number.isFinite(totalValue)) {
     entries.push({
+      id: 'current-user',
       name: 'You',
       value: totalValue,
       returnPct: (totalValue / STARTING_CASH - 1) * 100,

@@ -1,24 +1,15 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { weekKey } from '../data/replay';
-import { players } from '../data/snapshot';
 import type { Player } from '../data/types';
 import { formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
-import {
-  BOOST_SLOTS,
-  DOLLARS_PER_NET_POINT,
-  WEEKLY_SHORT_SLOTS,
-  WEEKLY_TOTAL_CLAMP_NP,
-} from '../state/game';
+import { DOLLARS_PER_NET_POINT, WEEKLY_TOTAL_CLAMP_NP } from '../state/game';
 import { colors } from '../theme';
 
-const playerById = new Map(players.map((player) => [player.id, player]));
-
-interface BoostCandidate {
+interface PlayCandidate {
   player: Player;
   gameDate: string;
-  selected: boolean;
+  fee: number;
 }
 
 function SlotCard({ label, used, total }: { label: string; used: number; total: number }) {
@@ -35,12 +26,20 @@ export function PlaysScreen() {
   const {
     armPlayerBoost,
     armShort,
+    boostTargets,
+    boostSlots,
     currentWeek,
-    nextPlayerGame,
     nextReplayDay,
     owns,
+    pendingActions,
+    players,
+    shortSlots,
     state,
+    weeklyShortTargets,
   } = usePortfolio();
+  if (!state) return null;
+  const playerById = new Map(players.map((player) => [player.id, player]));
+  const accountMutationPending = pendingActions.size > 0;
 
   const activeShorts = state.weeklyShorts.filter(
     (position) => position.week === currentWeek && position.status === 'active',
@@ -48,35 +47,14 @@ export function PlaysScreen() {
   const usedBoosts = state.boosts.filter(
     (position) => position.week === currentWeek && position.status !== 'refunded',
   );
-  const activeShortIds = new Set(activeShorts.map((position) => position.playerId));
-  const boostedIds = new Set(usedBoosts.map((position) => position.playerId));
-  const settledPlayerWeeks = new Set(state.settledPlayerWeeks);
-
-  const shortCandidates = currentWeek ? players.filter((player) => {
-    const event = nextPlayerGame(player.id);
-    return (
-      event
-      && weekKey(event.date) === currentWeek
-      && !owns(player.id)
-      && !boostedIds.has(player.id)
-      && !settledPlayerWeeks.has(`${currentWeek}:${player.id}`)
-    );
-  }) : [];
-
-  const boostCandidates: BoostCandidate[] = currentWeek ? state.holdings.flatMap<BoostCandidate>((holding) => {
-    const player = playerById.get(holding.player_id);
-    const armedBoost = usedBoosts.find(
-      (boost) => boost.playerId === holding.player_id && boost.status === 'armed',
-    );
-    if (!player) return [];
-    if (armedBoost) {
-      return [{ player, gameDate: armedBoost.gameDate, selected: true }];
-    }
-    const event = player ? nextPlayerGame(player.id) : null;
-    if (!player || !event || weekKey(event.date) !== currentWeek) return [];
-    if (activeShortIds.has(player.id)) return [];
-    return [{ player, gameDate: event.date, selected: false }];
-  }) : [];
+  const shortCandidates = weeklyShortTargets.flatMap<PlayCandidate>((target) => {
+    const player = playerById.get(target.playerId);
+    return player ? [{ player, gameDate: target.gameDate, fee: target.fee }] : [];
+  });
+  const boostCandidates = boostTargets.flatMap<PlayCandidate>((target) => {
+    const player = playerById.get(target.playerId);
+    return player ? [{ player, gameDate: target.gameDate, fee: target.fee }] : [];
+  });
 
   return (
     <ScrollView keyboardShouldPersistTaps="handled" style={styles.scroll} contentContainerStyle={styles.content}>
@@ -87,8 +65,8 @@ export function PlaysScreen() {
       </Text>
 
       <View style={styles.slotRow}>
-        <SlotCard label="Weekly shorts" total={WEEKLY_SHORT_SLOTS} used={activeShorts.length} />
-        <SlotCard label="Boosts" total={BOOST_SLOTS} used={usedBoosts.length} />
+        <SlotCard label="Weekly shorts" total={shortSlots.total} used={shortSlots.used} />
+        <SlotCard label="Boosts" total={boostSlots.total} used={boostSlots.used} />
       </View>
       <View style={styles.ruleCard}>
         <Text style={styles.ruleTitle}>{currentWeek ?? 'Season complete'}</Text>
@@ -141,29 +119,28 @@ export function PlaysScreen() {
       {shortCandidates.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>{nextReplayDay ? 'No eligible players right now.' : 'Replay complete.'}</Text>
-          <Text style={styles.subtle}>Advance the replay or free a slot to see more options.</Text>
+          <Text style={styles.subtle}>Refresh after the next server settlement or free a slot to see more options.</Text>
         </View>
       ) : (
         <View style={styles.actionList}>
-          {shortCandidates.map((player) => {
-            const event = nextPlayerGame(player.id)!;
-            const selected = activeShortIds.has(player.id);
-            const disabled = selected || activeShorts.length >= WEEKLY_SHORT_SLOTS;
+          {shortCandidates.map(({ player, gameDate, fee }) => {
+            const pending = pendingActions.has(`short:${player.id}`);
+            const disabled = shortSlots.remaining === 0 || accountMutationPending;
             return (
               <View key={player.id} style={styles.actionRow}>
                 <View style={styles.actionCopy}>
                   <Text numberOfLines={1} style={styles.rowName}>{player.name}</Text>
-                  <Text style={styles.subtle}>Next game {event.date} · fee {formatMoney(Math.max(10_000, state.prices[player.id] * 0.0025))}</Text>
+                  <Text style={styles.subtle}>Next game {gameDate} · fee {formatMoney(fee)}</Text>
                 </View>
                 <Pressable
-                  accessibilityLabel={selected ? `${player.name} weekly short armed` : `Arm weekly short on ${player.name}`}
+                  accessibilityLabel={`Arm weekly short on ${player.name}`}
                   accessibilityRole="button"
                   accessibilityState={{ disabled }}
                   disabled={disabled}
-                  onPress={() => armShort(player)}
+                  onPress={() => void armShort(player)}
                   style={({ pressed }) => [styles.actionButton, disabled && styles.disabled, pressed && styles.pressed]}
                 >
-                  <Text style={styles.actionText}>{selected ? 'ARMED' : 'SHORT'}</Text>
+                  <Text style={styles.actionText}>{pending ? 'WAIT' : 'SHORT'}</Text>
                 </Pressable>
               </View>
             );
@@ -176,25 +153,26 @@ export function PlaysScreen() {
       {boostCandidates.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No held player is boostable this week.</Text>
-          <Text style={styles.subtle}>Buy an eligible player in Market or advance to the next week.</Text>
+          <Text style={styles.subtle}>Buy an eligible player in Market or refresh after the next week begins.</Text>
         </View>
       ) : (
         <View style={styles.actionList}>
-          {boostCandidates.map(({ player, gameDate, selected }) => {
-            const disabled = selected || usedBoosts.length >= BOOST_SLOTS;
-            const actionLabel = selected ? 'ARMED' : 'BOOST';
+          {boostCandidates.map(({ player, gameDate, fee }) => {
+            const pending = pendingActions.has(`boost:${player.id}`);
+            const disabled = boostSlots.remaining === 0 || accountMutationPending;
+            const actionLabel = pending ? 'WAIT' : 'BOOST';
             return (
               <View key={player.id} style={styles.actionRow}>
                 <View style={styles.actionCopy}>
                   <Text numberOfLines={1} style={styles.rowName}>{player.name}</Text>
-                  <Text style={styles.subtle}>{gameDate} · fee {formatMoney(state.prices[player.id] * 0.0025)}</Text>
+                  <Text style={styles.subtle}>{gameDate} · fee {formatMoney(fee)}</Text>
                 </View>
                 <Pressable
-                  accessibilityLabel={selected ? `${player.name} boost ${actionLabel.toLowerCase()}` : `Boost ${player.name} for ${gameDate}`}
+                  accessibilityLabel={`Boost ${player.name} for ${gameDate}`}
                   accessibilityRole="button"
                   accessibilityState={{ disabled }}
                   disabled={disabled}
-                  onPress={() => armPlayerBoost(player)}
+                  onPress={() => void armPlayerBoost(player, gameDate)}
                   style={({ pressed }) => [styles.boostButton, disabled && styles.disabled, pressed && styles.pressed]}
                 >
                   <Text style={styles.boostText}>{actionLabel}</Text>

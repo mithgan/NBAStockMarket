@@ -16,9 +16,17 @@ test('tab pills use their exact equal-width 44px Pressable bounds', () => {
 
 test('market actions expose concise player-specific button labels', () => {
   assert.match(marketSource, /accessibilityLabel=\{`View \$\{player\.name\} details`\}/);
-  assert.match(marketSource, /accessibilityLabel=\{held \? `Sell \$\{player\.name\}` : `Buy \$\{player\.name\} for \$\{formatMoney\(currentPrice\)\} plus fee`\}/);
+  assert.match(marketSource, /\? `Sell \$\{player\.name\}`/);
+  assert.match(marketSource, /\? `\$\{player\.name\} is sold out`/);
+  assert.match(marketSource, /: `Buy \$\{player\.name\} for \$\{formatMoney\(buyTotal\)\} including fee`/);
   assert.match(marketSource, /accessibilityLabel=\{`Close \$\{player\.name\} details`\}/);
   assert.match(marketSource, /option === 'Season' \? 'Full season' : `Last \$\{option\.slice\(1\)\} games`/);
+});
+
+test('leaderboard rows use stable account identities instead of display names', () => {
+  const leaderboardSource = readFileSync(resolve(testDirectory, '../screens/LeaderboardScreen.tsx'), 'utf8');
+  assert.match(leaderboardSource, /key=\{entry\.id\}/);
+  assert.doesNotMatch(leaderboardSource, /key=\{entry\.name\}/);
 });
 
 test('detail dividend chart follows the selected range and renders labeled extrema', () => {

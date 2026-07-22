@@ -17,6 +17,8 @@ const marketSource = source('../screens/MarketScreen.tsx');
 const playsSource = source('../screens/PlaysScreen.tsx');
 const seasonControlSource = source('../components/SeasonControl.tsx');
 const portfolioChartSource = source('../components/PortfolioHistoryChart.tsx');
+const serverStateSource = source('../state/serverState.ts');
+const authContextSource = source('../auth/AuthContext.tsx');
 
 test('the MVP exposes four stable primary workflows and an always-visible season control', () => {
   assert.match(appSource, /Portfolio/);
@@ -52,17 +54,32 @@ test('player details and trade actions are sibling controls instead of nested bu
   assert.match(marketSource, /styles\.playerDetails/);
 });
 
-test('market trades lock briefly so repeated taps cannot buy then immediately sell', () => {
-  assert.match(marketSource, /const \[tradeLocked, setTradeLocked\] = useState\(false\)/);
-  assert.match(marketSource, /if \(tradeLocked\) return/);
-  assert.match(marketSource, /setTimeout\(\(\) => \{/);
-  assert.match(marketSource, /tradeLocked \? \(/);
+test('market trades use the account mutation lock and expose pending feedback', () => {
+  assert.match(marketSource, /pendingActions\.has\('account-mutation'\)/);
+  assert.match(marketSource, /const disabled = shorted \|\| boosted \|\| soldOut \|\| unaffordable \|\| locked/);
+  assert.match(marketSource, /pending \? \(/);
+  assert.match(marketSource, />WAIT</);
+  assert.match(portfolioContextSource, /acquire\('account-mutation'\)/);
+  assert.match(portfolioContextSource, /acquire\(key\)/);
+});
+
+test('market honors authoritative sold-out listings before a buy attempt', () => {
+  assert.match(marketSource, /player\.available_shares === 0/);
+  assert.match(marketSource, /SOLD OUT/);
+  assert.match(marketSource, /No shares are currently available/);
+  assert.match(serverStateSource, /available_shares: listing\.available_shares/);
+});
+
+test('market affordability uses the authoritative account-specific buy fee', () => {
+  assert.match(serverStateSource, /buy_fee: dollars\(listing\.buy_fee_cents\)/);
+  assert.match(marketSource, /const buyTotal = currentPrice \+ \(player\.buy_fee \?\? 0\)/);
+  assert.doesNotMatch(marketSource, /FEE_PCT/);
 });
 
 test('market prevents buying an actively shorted player and preserves native search taps', () => {
   assert.match(marketSource, /position\.status === 'active'/);
   assert.match(marketSource, /shorted=\{activeShortPlayerIds\.has\(player\.id\)\}/);
-  assert.match(marketSource, /shorted \|\| boosted \|\| unaffordable \|\| tradeLocked/);
+  assert.match(marketSource, /shorted \|\| boosted \|\| soldOut \|\| unaffordable \|\| locked/);
   assert.match(marketSource, /SHORTED/);
   assert.match(marketSource, /keyboardShouldPersistTaps="handled"/);
 });
@@ -70,7 +87,7 @@ test('market prevents buying an actively shorted player and preserves native sea
 test('market prevents selling the holding required by an armed boost', () => {
   assert.match(marketSource, /boost\.status === 'armed'/);
   assert.match(marketSource, /boosted=\{activeBoostPlayerIds\.has\(player\.id\)\}/);
-  assert.match(marketSource, /shorted \|\| boosted \|\| unaffordable \|\| tradeLocked/);
+  assert.match(marketSource, /shorted \|\| boosted \|\| soldOut \|\| unaffordable \|\| locked/);
   assert.match(marketSource, /BOOSTED/);
 });
 
@@ -90,44 +107,46 @@ test('instrument UI explains finite weekly slots and never exposes price shorts'
   assert.doesNotMatch(playsSource, /price short/i);
 });
 
-test('armed weekly plays remain in place as disabled controls after selection', () => {
-  assert.match(playsSource, /selected \|\| activeShorts\.length >= WEEKLY_SHORT_SLOTS/);
-  assert.match(playsSource, /selected \? 'ARMED' : 'SHORT'/);
-  assert.match(playsSource, /boost\.status === 'armed'/);
-  assert.match(playsSource, /selected \|\| usedBoosts\.length >= BOOST_SLOTS/);
-  assert.match(playsSource, /selected \? 'ARMED' : 'BOOST'/);
+test('weekly play eligibility, dates, and fees come only from server targets', () => {
+  assert.match(playsSource, /weeklyShortTargets\.flatMap/);
+  assert.match(playsSource, /boostTargets\.flatMap/);
+  assert.match(playsSource, /fee \{formatMoney\(fee\)\}/);
+  assert.match(playsSource, /armPlayerBoost\(player, gameDate\)/);
+  assert.doesNotMatch(playsSource, /nextPlayerGame|nextEventForPlayer/);
 });
 
-test('portfolio provides visible activity, history, and confirmed reset', () => {
+test('portfolio provides server-backed activity, history, and exact cost basis', () => {
   assert.match(portfolioSource, /Portfolio history/);
   assert.match(portfolioSource, /Activity/);
   assert.match(portfolioSource, /holding\.costBasis/);
   assert.match(portfolioSource, /incl\. fee/);
   assert.match(portfolioSource, /holding\.unrealizedPnl/);
-  assert.match(portfolioSource, /Alert\.alert/);
-  assert.match(portfolioSource, /Reset progress/);
+  assert.match(portfolioSource, /No server settlement has reached this account yet/);
+  assert.doesNotMatch(portfolioSource, /Reset progress|Alert\.alert/);
 });
 
-test('global notices can dismiss both action messages and persistence warnings', () => {
+test('global server action notices are visible and dismissible', () => {
   assert.match(appSource, /dismissNotice/);
-  assert.match(appSource, /dismissNotice\('persistence'\)/);
-  assert.match(appSource, /dismissNotice\('message'\)/);
-  assert.match(appSource, /\{persistenceError \? \(/);
-  assert.match(appSource, /\{message \? \(/);
+  assert.match(appSource, /message \? <NoticeBanner/);
+  assert.match(appSource, /accessibilityLiveRegion="polite"/);
 });
 
-test('a persistence read failure locks gameplay until a durable reset succeeds', () => {
-  assert.match(appSource, /!isGameplayReady && tab\.key !== 'portfolio'/);
-  assert.match(seasonControlSource, /!isGameplayReady \|\| isAdvancing/);
-  assert.match(portfolioSource, /Reset progress/);
-  assert.match(portfolioSource, /disabled=\{isResetting\}/);
-  assert.match(portfolioSource, /Saving is paused/);
-  assert.match(portfolioSource, /RESET AND CONTINUE/);
-  assert.match(portfolioSource, /isPersistenceBlocked \? \(/);
-  assert.match(
-    portfolioSource,
-    /persistenceError \?\? 'Progress cannot be saved right now\. Reset progress to resume\.'/,
-  );
+test('ordinary sign out only revokes the current device session', () => {
+  assert.match(authContextSource, /signOut\(\{ scope: 'local' \}\)/);
+  assert.doesNotMatch(authContextSource, /auth\.signOut\(\)/);
+});
+
+test('server and transition failures lock every gameplay surface until recovery', () => {
+  assert.match(appSource, /if \(isLoading\) \{/);
+  assert.match(appSource, /if \(isRefreshing\) \{/);
+  assert.match(appSource, /if \(transitionRequired\)/);
+  assert.match(appSource, /if \(serverError \|\| !state\)/);
+  assert.match(appSource, /\{isGameplayReady \? <SeasonControl/);
+  assert.match(appSource, /\{isGameplayReady \? \(/);
+  assert.match(seasonControlSource, /!isGameplayReady \|\| isRefreshing \|\| pendingActions\.size > 0/);
+  assert.match(portfolioContextSource, /&& !isRefreshing/);
+  assert.match(portfolioContextSource, /acquire\('account-refresh'\)/);
+  assert.match(portfolioContextSource, /setServerError\(errorMessage\(error\)\)/);
   assert.match(portfolioContextSource, /setMessage\(null\)/);
 });
 

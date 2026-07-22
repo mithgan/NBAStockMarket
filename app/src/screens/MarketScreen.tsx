@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   Image,
   Pressable,
@@ -19,7 +19,6 @@ import Svg, {
   Text as SvgText,
 } from 'react-native-svg';
 
-import { players } from '../data/snapshot';
 import {
   cumulativeValues,
   selectHighLowPoints,
@@ -33,7 +32,6 @@ import { playerTrends, type TrendPoint } from '../data/trends';
 import type { Player } from '../data/types';
 import { formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
-import { FEE_PCT } from '../state/game';
 import { colors } from '../theme';
 
 function initials(name: string) {
@@ -292,29 +290,22 @@ interface MarketRowProps {
   shorted: boolean;
   boosted: boolean;
   isLast: boolean;
+  pending: boolean;
+  locked: boolean;
   onOpen: (player: Player) => void;
-  onTrade: (player: Player, side: 'buy' | 'sell') => void;
+  onTrade: (player: Player, side: 'buy' | 'sell') => Promise<boolean>;
 }
 
-function MarketRow({ compact, freeCash, currentPrice, player, held, trendPoints, shorted, boosted, isLast, onOpen, onTrade }: MarketRowProps) {
-  const [tradeLocked, setTradeLocked] = useState(false);
-  const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const shortfall = held ? 0 : Math.max(0, currentPrice * (1 + FEE_PCT) - freeCash);
+function MarketRow({ compact, freeCash, currentPrice, player, held, trendPoints, shorted, boosted, isLast, pending, locked, onOpen, onTrade }: MarketRowProps) {
+  const buyTotal = currentPrice + (player.buy_fee ?? 0);
+  const shortfall = held ? 0 : Math.max(0, buyTotal - freeCash);
   const unaffordable = !held && shortfall > 0;
-  const disabled = shorted || boosted || unaffordable || tradeLocked;
-
-  useEffect(() => () => {
-    if (cooldownRef.current) clearTimeout(cooldownRef.current);
-  }, []);
+  const soldOut = !held && player.available_shares === 0;
+  const disabled = shorted || boosted || soldOut || unaffordable || locked;
 
   const handleTrade = () => {
-    if (tradeLocked) return;
-    setTradeLocked(true);
-    onTrade(player, held ? 'sell' : 'buy');
-    cooldownRef.current = setTimeout(() => {
-      setTradeLocked(false);
-      cooldownRef.current = null;
-    }, 500);
+    if (pending) return;
+    void onTrade(player, held ? 'sell' : 'buy');
   };
 
   return (
@@ -349,12 +340,18 @@ function MarketRow({ compact, freeCash, currentPrice, player, held, trendPoints,
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={held ? `Sell ${player.name}` : `Buy ${player.name} for ${formatMoney(currentPrice)} plus fee`}
+        accessibilityLabel={held
+          ? `Sell ${player.name}`
+          : soldOut
+            ? `${player.name} is sold out`
+            : `Buy ${player.name} for ${formatMoney(buyTotal)} including fee`}
         accessibilityHint={
           boosted
             ? 'Settle the active boost before selling this player'
             : shorted
             ? 'Close the active weekly short before buying this player'
+            : soldOut
+              ? 'No shares are currently available'
             : unaffordable
               ? `Needs ${formatMoney(shortfall)} more`
               : undefined
@@ -366,8 +363,8 @@ function MarketRow({ compact, freeCash, currentPrice, player, held, trendPoints,
         style={({ pressed }) => [
           styles.tradeButton,
           held ? styles.sellButton : styles.buyButton,
-          (shorted || boosted || unaffordable) && styles.unaffordableButton,
-          tradeLocked && styles.tradeLockedButton,
+          (shorted || boosted || soldOut || unaffordable) && styles.unaffordableButton,
+          locked && styles.tradeLockedButton,
           pressed && styles.pressed,
         ]}
       >
@@ -375,8 +372,12 @@ function MarketRow({ compact, freeCash, currentPrice, player, held, trendPoints,
           <Text style={[styles.tradeText, styles.unaffordableText]}>BOOSTED</Text>
         ) : shorted ? (
           <Text style={[styles.tradeText, styles.unaffordableText]}>SHORTED</Text>
-        ) : tradeLocked ? (
-          <Text style={[styles.tradeText, styles.tradeLockedText]}>DONE</Text>
+        ) : pending ? (
+          <Text style={[styles.tradeText, styles.tradeLockedText]}>WAIT</Text>
+        ) : locked ? (
+          <Text style={[styles.tradeText, styles.tradeLockedText]}>BUSY</Text>
+        ) : soldOut ? (
+          <Text style={[styles.tradeText, styles.unaffordableText]}>SOLD OUT</Text>
         ) : unaffordable ? (
           <>
             <Text style={[styles.tradeText, styles.unaffordableText]}>NEEDS</Text>
@@ -393,10 +394,11 @@ function MarketRow({ compact, freeCash, currentPrice, player, held, trendPoints,
 }
 
 export function MarketScreen() {
-  const { latestSettledDate, owns, state, summary, trade } = usePortfolio();
+  const { latestSettledDate, owns, pendingActions, players, state, summary, trade } = usePortfolio();
   const { width } = useWindowDimensions();
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [query, setQuery] = useState('');
+  if (!state || !summary) return null;
   const compact = width < 360;
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const activeShortPlayerIds = new Set(
@@ -409,6 +411,7 @@ export function MarketScreen() {
       .filter((boost) => boost.status === 'armed')
       .map((boost) => boost.playerId),
   );
+  const accountMutationPending = pendingActions.has('account-mutation');
   const visiblePlayers = normalizedQuery
     ? players.filter((player) => player.name.toLocaleLowerCase().includes(normalizedQuery))
     : players;
@@ -441,7 +444,7 @@ export function MarketScreen() {
           <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} style={styles.cashValue}>{formatMoney(summary.freeCash)}</Text>
         </View>
       </View>
-      <Text style={styles.subtle}>Current replay prices include your trades. Purchases include the 0.25% fee.</Text>
+      <Text style={styles.subtle}>Current replay prices include your trades. Buy affordability uses your quoted account fee.</Text>
 
       <TextInput
         accessibilityLabel="Search players"
@@ -474,8 +477,10 @@ export function MarketScreen() {
             boosted={activeBoostPlayerIds.has(player.id)}
             isLast={index === visiblePlayers.length - 1}
             key={player.id}
+            locked={accountMutationPending}
             onOpen={setSelectedPlayer}
             onTrade={trade}
+            pending={pendingActions.has(`trade:${player.id}`)}
             player={player}
           />
         ))}

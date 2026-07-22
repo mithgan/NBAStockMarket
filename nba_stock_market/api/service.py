@@ -119,8 +119,9 @@ class MarketService:
 
     def market(self, principal: Principal) -> list[dict[str, object]]:
         with self.database.session() as session, session.begin():
-            self._ensure_account(session, principal)
-            cutoff = utcnow() - timedelta(days=30)
+            account = self._ensure_account(session, principal)
+            now = utcnow()
+            cutoff = now - timedelta(days=30)
             volumes = (
                 select(
                     TradeRow.player_id.label("player_id"),
@@ -138,8 +139,28 @@ class MarketService:
                 .outerjoin(volumes, volumes.c.player_id == PlayerListingRow.id)
                 .order_by(PlayerListingRow.name)
             ).all()
+            recent_trades_by_player: dict[str, list[TradeRow]] = {}
+            recent_trades = session.scalars(
+                select(TradeRow)
+                .where(
+                    TradeRow.account_id == account.id,
+                    TradeRow.created_at >= now - timedelta(days=7),
+                )
+                .order_by(TradeRow.created_at.desc(), TradeRow.id.desc())
+            ).all()
+            for trade in recent_trades:
+                recent_trades_by_player.setdefault(trade.player_id, []).append(trade)
             return [
-                self._listing_payload(player, volume_30d=int(volume_30d))
+                self._listing_payload(
+                    player,
+                    volume_30d=int(volume_30d),
+                    buy_fee_cents=self._trade_fee_quote(
+                        recent_trades_by_player.get(player.id, []),
+                        side="buy",
+                        execution_price_cents=player.current_price_cents,
+                        now=now,
+                    )[0],
+                )
                 for player, volume_30d in rows
             ]
 
@@ -1186,39 +1207,23 @@ class MarketService:
                         TradeRow.created_at >= now - timedelta(days=30),
                     )
                 ) or 0
-                last_trade = session.scalar(
+                recent_trades = session.scalars(
                     select(TradeRow)
                     .where(
                         TradeRow.account_id == account.id,
                         TradeRow.player_id == player_id,
+                        TradeRow.created_at >= now - timedelta(days=7),
                     )
                     .order_by(TradeRow.created_at.desc(), TradeRow.id.desc())
-                    .limit(1)
-                )
-                is_roundtrip = bool(
-                    last_trade
-                    and last_trade.side != side
-                    and now - last_trade.created_at <= timedelta(days=1)
-                )
-                roundtrips = 0
-                if is_roundtrip:
-                    roundtrips = session.scalar(
-                        select(func.count(TradeRow.id)).where(
-                            TradeRow.account_id == account.id,
-                            TradeRow.player_id == player_id,
-                            TradeRow.is_roundtrip.is_(True),
-                            TradeRow.created_at >= now - timedelta(days=7),
-                        )
-                    ) or 0
+                ).all()
 
                 execution_price = player.current_price_cents
-                fee_rate = FEE_PCT
-                if is_roundtrip:
-                    fee_rate += min(
-                        FLIP_SURCHARGE_PCT * (1 + roundtrips),
-                        FLIP_SURCHARGE_CAP_PCT,
-                    )
-                fee_cents = round(execution_price * fee_rate)
+                fee_cents, is_roundtrip = self._trade_fee_quote(
+                    recent_trades,
+                    side=side,
+                    execution_price_cents=execution_price,
+                    now=now,
+                )
 
                 if side == "buy":
                     if active_short:
@@ -1896,6 +1901,119 @@ class MarketService:
             for position in shorts
             if position.status == "active"
         )
+        weekly_short_targets: list[dict[str, object]] = []
+        boost_targets: list[dict[str, object]] = []
+        if state is not None and state.next_game_date is not None:
+            current_date = state.next_game_date
+            current_week = week_start_for(current_date)
+            week_end = current_week + timedelta(days=7)
+            listings = session.scalars(
+                select(PlayerListingRow).order_by(PlayerListingRow.name)
+            ).all()
+            held_ids = set(
+                session.scalars(
+                    select(HoldingRow.player_id).where(
+                        HoldingRow.account_id == account.id
+                    )
+                )
+            )
+            prior_game_ids = set(
+                session.scalars(
+                    select(ReplayEventRow.player_id)
+                    .where(
+                        ReplayEventRow.game_date >= current_week,
+                        ReplayEventRow.game_date < current_date,
+                    )
+                    .distinct()
+                )
+            )
+            next_projected_games = dict(
+                session.execute(
+                    select(
+                        ReplayEventRow.player_id,
+                        func.min(ReplayEventRow.game_date),
+                    )
+                    .where(
+                        ReplayEventRow.game_date >= current_date,
+                        ReplayEventRow.game_date < week_end,
+                        ReplayEventRow.projected_minutes_micros.is_not(None),
+                    )
+                    .group_by(ReplayEventRow.player_id)
+                ).all()
+            )
+            account_short_ids = {
+                position.player_id
+                for position in shorts
+                if position.week_start == current_week
+            }
+            active_short_ids = {
+                position.player_id
+                for position in shorts
+                if position.week_start == current_week
+                and position.status == "active"
+            }
+            current_boost_ids = {
+                position.player_id
+                for position in boosts
+                if position.week_start == current_week
+                and position.status != "refunded"
+            }
+            armed_boost_ids = {
+                position.player_id
+                for position in boosts
+                if position.status == "armed"
+            }
+            league_short_counts = dict(
+                session.execute(
+                    select(WeeklyShortRow.player_id, func.count(WeeklyShortRow.id))
+                    .where(
+                        WeeklyShortRow.week_start == current_week,
+                        WeeklyShortRow.status == "active",
+                    )
+                    .group_by(WeeklyShortRow.player_id)
+                ).all()
+            )
+            free_cash = account.cash_cents - reserved
+            for listing in listings:
+                next_game = next_projected_games.get(listing.id)
+                if next_game is None:
+                    continue
+                short_fee = max(
+                    SHORT_MIN_FEE_CENTS,
+                    round(listing.current_price_cents * SHORT_FEE_PCT),
+                )
+                if (
+                    current_shorts < WEEKLY_SHORT_SLOTS
+                    and listing.id not in held_ids
+                    and listing.id not in current_boost_ids
+                    and listing.id not in account_short_ids
+                    and listing.id not in prior_game_ids
+                    and int(league_short_counts.get(listing.id, 0))
+                    < MAX_WEEKLY_SHORTS_PER_PLAYER
+                    and free_cash >= short_fee + WEEKLY_SHORT_COLLATERAL_CENTS
+                ):
+                    weekly_short_targets.append(
+                        {
+                            "player_id": listing.id,
+                            "game_date": next_game.isoformat(),
+                            "fee_cents": short_fee,
+                        }
+                    )
+                boost_fee = round(listing.current_price_cents * BOOST_FEE_PCT)
+                if (
+                    current_boosts < BOOST_SLOTS
+                    and listing.id in held_ids
+                    and listing.id not in active_short_ids
+                    and listing.id not in armed_boost_ids
+                    and free_cash >= boost_fee
+                ):
+                    boost_targets.append(
+                        {
+                            "player_id": listing.id,
+                            "game_date": next_game.isoformat(),
+                            "fee_cents": boost_fee,
+                        }
+                    )
         return {
             "week_start": week_start.isoformat() if week_start is not None else None,
             "reserved_collateral_cents": reserved,
@@ -1914,6 +2032,8 @@ class MarketService:
                 self._weekly_short_payload(position) for position in shorts
             ],
             "boosts": [self._boost_payload(position) for position in boosts],
+            "weekly_short_targets": weekly_short_targets,
+            "boost_targets": boost_targets,
         }
 
     @staticmethod
@@ -1975,10 +2095,34 @@ class MarketService:
         }
 
     @staticmethod
+    def _trade_fee_quote(
+        recent_trades: list[TradeRow],
+        *,
+        side: Literal["buy", "sell"],
+        execution_price_cents: int,
+        now: datetime,
+    ) -> tuple[int, bool]:
+        last_trade = recent_trades[0] if recent_trades else None
+        is_roundtrip = bool(
+            last_trade
+            and last_trade.side != side
+            and now - last_trade.created_at <= timedelta(days=1)
+        )
+        fee_rate = FEE_PCT
+        if is_roundtrip:
+            roundtrips = sum(trade.is_roundtrip for trade in recent_trades)
+            fee_rate += min(
+                FLIP_SURCHARGE_PCT * (1 + roundtrips),
+                FLIP_SURCHARGE_CAP_PCT,
+            )
+        return round(execution_price_cents * fee_rate), is_roundtrip
+
+    @staticmethod
     def _listing_payload(
         player: PlayerListingRow,
         *,
         volume_30d: int,
+        buy_fee_cents: int,
     ) -> dict[str, object]:
         return {
             "id": player.id,
@@ -1989,6 +2133,7 @@ class MarketService:
             "actual_salary_cents": player.actual_salary_cents,
             "shares_outstanding": player.shares_outstanding,
             "available_shares": player.shares_outstanding - player.held_shares,
+            "buy_fee_cents": buy_fee_cents,
             "ownership_bps": round(
                 player.held_shares * 10_000 / player.shares_outstanding
             ),

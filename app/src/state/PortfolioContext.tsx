@@ -10,303 +10,319 @@ import {
   type ReactNode,
 } from 'react';
 
-import { nextEventForPlayer, replayDays, weekKey, type ReplayDay } from '../data/replay';
-import { players } from '../data/snapshot';
+import { MarketApiClient, MarketApiError } from '../api/client';
+import type { ServerBootstrap } from '../api/contracts';
+import type { ReplayDay } from '../data/replay';
 import type { Player } from '../data/types';
+import { ActionLock } from './actionLock';
+import { type GameLeaderboardEntry, type GameState, getGameSummary, type TradeSide } from './game';
 import {
-  advanceReplayDay,
-  armBoost,
-  armWeeklyShort,
-  createInitialGameState,
-  getGameSummary,
-  isGameStateForPlayers,
-  tradePlayer,
-  type GameState,
-  type TradeSide,
-  type TransitionResult,
-} from './game';
+  finalizeLocalTransition,
+  inspectLocalTransition,
+  shouldInspectLocalTransition,
+} from './localTransition';
 import {
-  enqueuePersistedReset,
-  loadPersistedGame,
-  persistenceErrorAfterSave,
-  savePersistedGame,
-} from './persistence';
+  isServerAccountPristine,
+  mapServerBootstrap,
+  type ServerPresentationState,
+} from './serverState';
 
 interface PortfolioContextValue {
-  state: GameState;
-  summary: ReturnType<typeof getGameSummary>;
+  state: GameState | null;
+  players: Player[];
+  leaderboard: GameLeaderboardEntry[];
+  summary: ReturnType<typeof getGameSummary> | null;
+  displayName: string | null;
   message: string | null;
-  persistenceError: string | null;
-  isPersistenceBlocked: boolean;
-  isHydrated: boolean;
+  serverError: string | null;
+  transitionError: string | null;
+  transitionRequired: boolean;
+  legacySavePresent: boolean;
+  isLoading: boolean;
+  isRefreshing: boolean;
+  isTransitioning: boolean;
   isGameplayReady: boolean;
-  isResetting: boolean;
-  isAdvancing: boolean;
+  pendingActions: ReadonlySet<string>;
+  shortSlots: { used: number; total: number; remaining: number };
+  boostSlots: { used: number; total: number; remaining: number };
+  weeklyShortTargets: ServerPresentationState['weeklyShortTargets'];
+  boostTargets: ServerPresentationState['boostTargets'];
   nextReplayDay: ReplayDay | null;
   latestSettledDate: string | null;
   currentWeek: string | null;
-  trade: (player: Player, side: TradeSide) => boolean;
+  trade: (player: Player, side: TradeSide) => Promise<boolean>;
   owns: (playerId: string) => boolean;
-  armShort: (player: Player) => boolean;
-  armPlayerBoost: (player: Player) => boolean;
-  nextPlayerGame: (playerId: string) => ReturnType<typeof nextEventForPlayer>;
-  advanceDay: () => boolean;
-  resetProgress: () => Promise<boolean>;
-  dismissNotice: (kind: 'message' | 'persistence') => void;
+  armShort: (player: Player) => Promise<boolean>;
+  armPlayerBoost: (player: Player, gameDate: string) => Promise<boolean>;
+  refreshData: () => Promise<boolean>;
+  confirmLocalTransition: () => Promise<boolean>;
+  dismissNotice: () => void;
 }
 
 const PortfolioContext = createContext<PortfolioContextValue | null>(null);
-const replayDates = replayDays.map((day) => day.date);
 
-function firstUnsettledDay(state: GameState): ReplayDay | null {
-  const settled = new Set(state.settledDates);
-  return replayDays.find((day) => !settled.has(day.date)) ?? null;
+function errorMessage(error: unknown): string {
+  if (error instanceof MarketApiError) return error.message;
+  return 'The server could not load your account. Try again.';
 }
 
-function followingReplayDay(day: ReplayDay): ReplayDay | null {
-  const index = replayDays.findIndex((candidate) => candidate.date === day.date);
-  return index >= 0 ? replayDays[index + 1] ?? null : null;
-}
-
-export function PortfolioProvider({ children }: { children: ReactNode }) {
-  const initialState = useMemo(() => createInitialGameState(players), []);
-  const [state, setState] = useState<GameState>(initialState);
-  const stateRef = useRef(state);
+export function PortfolioProvider({
+  apiClient,
+  userId,
+  children,
+}: {
+  apiClient: MarketApiClient;
+  userId: string;
+  children: ReactNode;
+}) {
+  const [presentation, setPresentation] = useState<ServerPresentationState | null>(null);
+  const bootstrapRef = useRef<ServerBootstrap | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [persistenceError, setPersistenceError] = useState<string | null>(null);
-  const [isHydrated, setIsHydrated] = useState(false);
-  const [isPersistenceBlocked, setIsPersistenceBlocked] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-  const [isAdvancing, setIsAdvancing] = useState(false);
-  const advanceLock = useRef(false);
-  const resetLock = useRef(false);
-  const saveQueue = useRef(Promise.resolve());
-  const autosaveEnabled = useRef(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [transitionError, setTransitionError] = useState<string | null>(null);
+  const [transitionRequired, setTransitionRequired] = useState(false);
+  const [localTransitionInspected, setLocalTransitionInspected] = useState(false);
+  const [legacySavePresent, setLegacySavePresent] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const actionLock = useRef(new ActionLock());
+  const [pendingActions, setPendingActions] = useState<ReadonlySet<string>>(new Set());
   const mounted = useRef(true);
+  const loadVersion = useRef(0);
 
   useEffect(() => () => {
     mounted.current = false;
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    void loadPersistedGame(
-      AsyncStorage,
-      (value): value is GameState => isGameStateForPlayers(value, players, replayDates),
-    ).then((result) => {
-      if (!active) return;
-      if (result.state) {
-        stateRef.current = result.state;
-        setState(result.state);
-      }
-      autosaveEnabled.current = result.canAutosave;
-      setIsPersistenceBlocked(!result.canAutosave);
-      setPersistenceError(result.error);
-      setIsHydrated(true);
-    });
-    return () => {
-      active = false;
-    };
+  const installBootstrap = useCallback((bootstrap: ServerBootstrap) => {
+    bootstrapRef.current = bootstrap;
+    setPresentation(mapServerBootstrap(bootstrap));
   }, []);
 
+  const loadSnapshot = useCallback(async ({
+    checkLocalTransition,
+    showInitialLoader,
+  }: {
+    checkLocalTransition: boolean;
+    showInitialLoader: boolean;
+  }): Promise<ServerBootstrap | null> => {
+    const version = ++loadVersion.current;
+    if (showInitialLoader) setIsLoading(true);
+    else setIsRefreshing(true);
+    setServerError(null);
+    try {
+      const bootstrap = await apiClient.bootstrap();
+      if (!mounted.current || version !== loadVersion.current) return null;
+      installBootstrap(bootstrap);
+      if (checkLocalTransition) {
+        const inspection = await inspectLocalTransition(AsyncStorage, userId);
+        if (!mounted.current || version !== loadVersion.current) return null;
+        setLocalTransitionInspected(true);
+        setTransitionError(inspection.error);
+        setLegacySavePresent(inspection.legacySavePresent);
+        setTransitionRequired(Boolean(inspection.error) || inspection.legacySavePresent);
+      }
+      return bootstrap;
+    } catch (error) {
+      if (mounted.current && version === loadVersion.current) {
+        setServerError(errorMessage(error));
+      }
+      return null;
+    } finally {
+      if (mounted.current && version === loadVersion.current) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    }
+  }, [apiClient, installBootstrap, userId]);
+
   useEffect(() => {
-    if (!isHydrated || !autosaveEnabled.current) return;
-    const snapshot = state;
-    saveQueue.current = saveQueue.current.then(async () => {
-      const result = await savePersistedGame(AsyncStorage, snapshot);
-      if (mounted.current) {
-        setPersistenceError((current) => persistenceErrorAfterSave(current, result));
-        if (result.error) {
-          autosaveEnabled.current = false;
-          setIsPersistenceBlocked(true);
-          setMessage(null);
+    void loadSnapshot({ checkLocalTransition: true, showInitialLoader: true });
+  }, [loadSnapshot]);
+
+  const updatePendingActions = useCallback(() => {
+    if (mounted.current) setPendingActions(actionLock.current.snapshot());
+  }, []);
+
+  const refreshData = useCallback(async () => {
+    if (actionLock.current.has('account-mutation')) return false;
+    if (!actionLock.current.acquire('account-refresh')) return false;
+    updatePendingActions();
+    try {
+      return (await loadSnapshot({
+        checkLocalTransition: shouldInspectLocalTransition(
+          localTransitionInspected,
+          transitionRequired,
+        ),
+        showInitialLoader: false,
+      })) !== null;
+    } finally {
+      actionLock.current.release('account-refresh');
+      updatePendingActions();
+    }
+  }, [loadSnapshot, localTransitionInspected, transitionRequired, updatePendingActions]);
+
+  const runAction = useCallback(async (
+    key: string,
+    action: () => Promise<unknown>,
+    successMessage: string,
+  ): Promise<boolean> => {
+    if (!actionLock.current.acquire('account-mutation')) return false;
+    if (!actionLock.current.acquire(key)) {
+      actionLock.current.release('account-mutation');
+      return false;
+    }
+    updatePendingActions();
+    setMessage(null);
+    try {
+      await action();
+      const refreshed = await loadSnapshot({
+        checkLocalTransition: false,
+        showInitialLoader: false,
+      });
+      if (!refreshed) return false;
+      if (mounted.current) setMessage(successMessage);
+      return true;
+    } catch (error) {
+      if (mounted.current) setMessage(errorMessage(error));
+      return false;
+    } finally {
+      actionLock.current.release(key);
+      actionLock.current.release('account-mutation');
+      updatePendingActions();
+    }
+  }, [loadSnapshot, updatePendingActions]);
+
+  const trade = useCallback((player: Player, side: TradeSide) => runAction(
+    `trade:${player.id}`,
+    () => apiClient.trade(player.id, side),
+    `${side === 'buy' ? 'Bought' : 'Sold'} one share of ${player.name}.`,
+  ), [apiClient, runAction]);
+
+  const armShort = useCallback((player: Player) => runAction(
+    `short:${player.id}`,
+    () => apiClient.armWeeklyShort(player.id),
+    `Weekly short armed on ${player.name}.`,
+  ), [apiClient, runAction]);
+
+  const armPlayerBoost = useCallback((player: Player, gameDate: string) => runAction(
+      `boost:${player.id}`,
+      () => apiClient.armBoost(player.id, gameDate),
+      `${player.name} boosted for ${gameDate}.`,
+  ), [apiClient, runAction]);
+
+  const confirmLocalTransition = useCallback(async () => {
+    if (isTransitioning || !bootstrapRef.current || !legacySavePresent) return false;
+    setIsTransitioning(true);
+    setTransitionError(null);
+    try {
+      let refreshed: ServerBootstrap;
+      if (isServerAccountPristine(bootstrapRef.current)) {
+        try {
+          await apiClient.resetAccount(bootstrapRef.current.portfolio.version);
+        } catch (error) {
+          if (!(error instanceof MarketApiError)
+            || !['account_version_conflict', 'reset_not_eligible'].includes(error.code)) {
+            throw error;
+          }
         }
       }
-    });
-  }, [isHydrated, state]);
-
-  const summary = useMemo(() => getGameSummary(state, players), [state]);
-  const nextReplayDay = useMemo(() => firstUnsettledDay(state), [state]);
-  const latestSettledDate = state.settledDates.at(-1) ?? null;
-  const currentWeek = nextReplayDay ? weekKey(nextReplayDay.date) : null;
-  const isGameplayReady = isHydrated && !isPersistenceBlocked && !isResetting;
-
-  const applyTransition = useCallback(
-    (result: TransitionResult, successMessage: string): boolean => {
-      if (resetLock.current) {
-        setMessage('Reset is already in progress.');
+      refreshed = await apiClient.bootstrap();
+      installBootstrap(refreshed);
+      const finalized = await finalizeLocalTransition(AsyncStorage, userId);
+      if (!finalized.complete) {
+        setTransitionError(finalized.error);
         return false;
       }
-      if (!autosaveEnabled.current) {
-        setMessage('Reset progress before continuing so new activity can be saved.');
-        return false;
-      }
-      if (result.error) {
-        setMessage(result.error);
-        return false;
-      }
-      stateRef.current = result.state;
-      setState(result.state);
-      setMessage(successMessage);
+      setTransitionRequired(false);
+      setLegacySavePresent(false);
+      setMessage('Server account ready. Prototype progress was removed from this device.');
       return true;
-    },
-    [],
+    } catch (error) {
+      setTransitionError(errorMessage(error));
+      return false;
+    } finally {
+      if (mounted.current) setIsTransitioning(false);
+    }
+  }, [apiClient, installBootstrap, isTransitioning, legacySavePresent, userId]);
+
+  const state = presentation?.state ?? null;
+  const players = presentation?.players ?? [];
+  const summary = useMemo(
+    () => (state ? getGameSummary(state, players) : null),
+    [players, state],
   );
-
-  const trade = useCallback((player: Player, side: TradeSide) => {
-    const result = tradePlayer(stateRef.current, player, side);
-    return applyTransition(
-      result,
-      `${side === 'buy' ? 'Bought' : 'Sold'} one share of ${player.name}.`,
-    );
-  }, [applyTransition]);
-
   const owns = useCallback(
-    (playerId: string) => state.holdings.some((holding) => holding.player_id === playerId),
-    [state.holdings],
+    (playerId: string) => Boolean(state?.holdings.some((holding) => holding.player_id === playerId)),
+    [state?.holdings],
   );
-
-  const nextPlayerGame = useCallback(
-    (playerId: string) => nextEventForPlayer(playerId, latestSettledDate),
-    [latestSettledDate],
+  const isGameplayReady = Boolean(
+    presentation
+    && !isLoading
+    && !isRefreshing
+    && !serverError
+    && !transitionRequired
+    && !isTransitioning,
   );
-
-  const armShort = useCallback((player: Player) => {
-    const day = firstUnsettledDay(stateRef.current);
-    if (!day) {
-      setMessage('The replay season is complete.');
-      return false;
-    }
-    return applyTransition(
-      armWeeklyShort(stateRef.current, player, weekKey(day.date)),
-      `Weekly short armed on ${player.name}.`,
-    );
-  }, [applyTransition]);
-
-  const armPlayerBoost = useCallback((player: Player) => {
-    const latestDate = stateRef.current.settledDates.at(-1) ?? null;
-    const event = nextEventForPlayer(player.id, latestDate);
-    if (!event) {
-      setMessage(`${player.name} has no remaining replay game.`);
-      return false;
-    }
-    return applyTransition(
-      armBoost(stateRef.current, player, event.date, weekKey(event.date)),
-      `${player.name} boosted for ${event.date}.`,
-    );
-  }, [applyTransition]);
-
-  const advanceDay = useCallback(() => {
-    if (resetLock.current) {
-      setMessage('Reset is already in progress.');
-      return false;
-    }
-    if (!autosaveEnabled.current) {
-      setMessage('Reset progress before continuing so new activity can be saved.');
-      return false;
-    }
-    if (advanceLock.current) return false;
-    const day = firstUnsettledDay(stateRef.current);
-    if (!day) {
-      setMessage('The replay season is complete.');
-      return false;
-    }
-    advanceLock.current = true;
-    setIsAdvancing(true);
-    const nextDay = followingReplayDay(day);
-    const result = advanceReplayDay(
-      stateRef.current,
-      day.date,
-      day.events,
-      nextDay?.date ?? null,
-      players,
-    );
-    const applied = applyTransition(
-      result,
-      `Settled ${day.date} with ${day.events.length} player results.`,
-    );
-    setTimeout(() => {
-      advanceLock.current = false;
-      if (mounted.current) setIsAdvancing(false);
-    }, 120);
-    return applied;
-  }, [applyTransition]);
-
-  const resetProgress = useCallback(async () => {
-    if (resetLock.current) return false;
-    resetLock.current = true;
-    setIsResetting(true);
-    const fresh = createInitialGameState(players);
-    const resetOperation = enqueuePersistedReset(saveQueue.current, AsyncStorage, fresh);
-    saveQueue.current = resetOperation.then(() => undefined);
-    const result = await resetOperation;
-    resetLock.current = false;
-    if (mounted.current) setIsResetting(false);
-    if (result.error) {
-      autosaveEnabled.current = false;
-      if (mounted.current) {
-        setIsPersistenceBlocked(true);
-        setPersistenceError(result.error);
-      }
-      return false;
-    }
-    if (!mounted.current) return false;
-    autosaveEnabled.current = true;
-    setIsPersistenceBlocked(false);
-    stateRef.current = fresh;
-    setState(fresh);
-    setMessage('Progress reset. Your $140M bankroll is ready.');
-    setPersistenceError(null);
-    return true;
-  }, []);
-
-  const dismissNotice = useCallback((kind: 'message' | 'persistence') => {
-    if (kind === 'message') setMessage(null);
-    if (kind === 'persistence') setPersistenceError(null);
-  }, []);
+  const dismissNotice = useCallback(() => setMessage(null), []);
 
   const value = useMemo<PortfolioContextValue>(() => ({
     state,
+    players,
+    leaderboard: presentation?.leaderboard ?? [],
     summary,
+    displayName: presentation?.displayName ?? null,
     message,
-    persistenceError,
-    isPersistenceBlocked,
-    isHydrated,
+    serverError,
+    transitionError,
+    transitionRequired,
+    legacySavePresent,
+    isLoading,
+    isRefreshing,
+    isTransitioning,
     isGameplayReady,
-    isResetting,
-    isAdvancing,
-    nextReplayDay,
-    latestSettledDate,
-    currentWeek,
+    pendingActions,
+    shortSlots: presentation?.shortSlots
+      ? { ...presentation.shortSlots, remaining: Math.max(0, presentation.shortSlots.total - presentation.shortSlots.used) }
+      : { used: 0, total: 0, remaining: 0 },
+    boostSlots: presentation?.boostSlots
+      ? { ...presentation.boostSlots, remaining: Math.max(0, presentation.boostSlots.total - presentation.boostSlots.used) }
+      : { used: 0, total: 0, remaining: 0 },
+    weeklyShortTargets: presentation?.weeklyShortTargets ?? [],
+    boostTargets: presentation?.boostTargets ?? [],
+    nextReplayDay: presentation?.nextReplayDay ?? null,
+    latestSettledDate: presentation?.latestSettledDate ?? null,
+    currentWeek: presentation?.currentWeek ?? null,
     trade,
     owns,
     armShort,
     armPlayerBoost,
-    nextPlayerGame,
-    advanceDay,
-    resetProgress,
+    refreshData,
+    confirmLocalTransition,
     dismissNotice,
   }), [
-    advanceDay,
     armPlayerBoost,
     armShort,
-    currentWeek,
+    confirmLocalTransition,
     dismissNotice,
-    isAdvancing,
-    isHydrated,
     isGameplayReady,
-    isPersistenceBlocked,
-    isResetting,
-    latestSettledDate,
+    isLoading,
+    isRefreshing,
+    isTransitioning,
+    legacySavePresent,
     message,
-    nextPlayerGame,
-    nextReplayDay,
     owns,
-    persistenceError,
-    resetProgress,
+    pendingActions,
+    players,
+    presentation,
+    refreshData,
+    serverError,
     state,
     summary,
     trade,
+    transitionError,
+    transitionRequired,
   ]);
 
   return <PortfolioContext.Provider value={value}>{children}</PortfolioContext.Provider>;

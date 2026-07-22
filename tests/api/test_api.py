@@ -132,6 +132,14 @@ def test_first_authenticated_read_creates_starting_portfolio(
             "boost_slots": {"limit": 2, "used": 0, "remaining": 2},
             "weekly_shorts": [],
             "boosts": [],
+            "weekly_short_targets": [
+                {
+                    "player_id": "sga",
+                    "game_date": "2025-10-21",
+                    "fee_cents": 12_500_000,
+                },
+            ],
+            "boost_targets": [],
         },
     }
     assert portfolio_data["reset_at"].endswith("Z")
@@ -167,6 +175,37 @@ def test_buy_and_sell_are_server_authoritative_and_charge_fees(
     assert sell_data["trade"]["side"] == "sell"
     assert sell_data["trade"]["fee_cents"] > sell_data["trade"]["execution_price_cents"] * 0.0025
     assert sell_data["portfolio"]["holdings"] == []
+
+
+def test_market_quotes_the_exact_account_specific_rebuy_fee(
+    client: TestClient,
+    alice_headers: dict[str, str],
+) -> None:
+    buy = client.post(
+        "/api/v1/trades",
+        headers=trade_headers(alice_headers, "quote-buy-sga-0001"),
+        json={"player_id": "sga", "side": "buy"},
+    )
+    assert buy.status_code == 201
+    sell = client.post(
+        "/api/v1/trades",
+        headers=trade_headers(alice_headers, "quote-sell-sga-0001"),
+        json={"player_id": "sga", "side": "sell"},
+    )
+    assert sell.status_code == 201
+
+    market = client.get("/api/v1/market", headers=alice_headers)
+    assert market.status_code == 200
+    sga = next(row for row in market.json()["data"] if row["id"] == "sga")
+    assert sga["buy_fee_cents"] > round(sga["current_price_cents"] * 0.0025)
+
+    rebuy = client.post(
+        "/api/v1/trades",
+        headers=trade_headers(alice_headers, "quote-rebuy-sga-0001"),
+        json={"player_id": "sga", "side": "buy"},
+    )
+    assert rebuy.status_code == 201
+    assert rebuy.json()["data"]["trade"]["fee_cents"] == sga["buy_fee_cents"]
 
 
 def test_trade_idempotency_replays_once_and_rejects_body_reuse(

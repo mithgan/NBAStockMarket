@@ -250,7 +250,65 @@ def test_instrument_summary_starts_with_server_week_and_full_capacity(
         "boost_slots": {"limit": 2, "used": 0, "remaining": 2},
         "weekly_shorts": [],
         "boosts": [],
+        "weekly_short_targets": [
+            {"player_id": "dnp", "game_date": "2025-10-20", "fee_cents": 1_250_000},
+            {"player_id": "jokic", "game_date": "2025-10-20", "fee_cents": 17_500_000},
+            {"player_id": "role-2", "game_date": "2025-10-20", "fee_cents": 1_250_000},
+            {"player_id": "role-3", "game_date": "2025-10-20", "fee_cents": 1_250_000},
+            {"player_id": "role-4", "game_date": "2025-10-20", "fee_cents": 1_250_000},
+            {"player_id": "sga", "game_date": "2025-10-20", "fee_cents": 12_500_000},
+        ],
+        "boost_targets": [],
     }
+
+
+def test_instrument_targets_follow_server_holdings_and_projection_dates(
+    instrument_client: TestClient,
+) -> None:
+    bought = buy(
+        instrument_client,
+        "sga",
+        token="alice-token",
+        key="alice-target-buy-sga",
+    )
+    assert bought.status_code == 201
+
+    summary = instrument_client.get("/api/v1/instruments", headers=auth()).json()["data"]
+
+    assert all(
+        target["player_id"] != "sga"
+        for target in summary["weekly_short_targets"]
+    )
+    assert summary["boost_targets"] == [
+        {
+            "player_id": "sga",
+            "game_date": "2025-10-20",
+            "fee_cents": round(
+                bought.json()["data"]["trade"]["new_price_cents"] * 0.0025
+            ),
+        }
+    ]
+
+
+def test_instrument_targets_hide_actions_the_account_cannot_afford(
+    instrument_client: TestClient,
+    instrument_database: Database,
+) -> None:
+    assert buy(
+        instrument_client,
+        "sga",
+        token="alice-token",
+        key="alice-target-buy-before-cash-drop",
+    ).status_code == 201
+    with instrument_database.session() as session, session.begin():
+        alice = session.get(AccountRow, "alice")
+        assert alice is not None
+        alice.cash_cents = 0
+
+    summary = instrument_client.get("/api/v1/instruments", headers=auth()).json()["data"]
+
+    assert summary["weekly_short_targets"] == []
+    assert summary["boost_targets"] == []
 
 
 def test_arm_short_is_server_owned_idempotent_and_reserves_collateral(

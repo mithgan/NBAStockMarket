@@ -1,15 +1,12 @@
 import { useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PortfolioHistoryChart } from '../components/PortfolioHistoryChart';
-import { players } from '../data/snapshot';
 import type { Player } from '../data/types';
 import { formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
 import { colors } from '../theme';
 import { PlayerDetail } from './MarketScreen';
-
-const playerById = new Map(players.map((player) => [player.id, player]));
 
 function StatCard({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
@@ -23,33 +20,16 @@ function StatCard({ label, value, detail }: { label: string; value: string; deta
 
 export function PortfolioScreen() {
   const {
-    isPersistenceBlocked,
-    isResetting,
     latestSettledDate,
-    persistenceError,
-    resetProgress,
+    players,
     state,
     summary,
   } = usePortfolio();
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  if (!state || !summary) return null;
+  const playerById = new Map(players.map((player) => [player.id, player]));
   const latestPoint = state.portfolioHistory.at(-1) ?? null;
   const recentActivity = [...state.activity].reverse().slice(0, 10);
-
-  const requestReset = () => {
-    const reset = () => void resetProgress();
-    if (Platform.OS === 'web') {
-      if (globalThis.confirm('Reset all portfolio, replay, and weekly-play progress?')) reset();
-      return;
-    }
-    Alert.alert(
-      'Reset progress?',
-      'This clears your portfolio, replay history, shorts, and boosts on this device.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Reset', style: 'destructive', onPress: reset },
-      ],
-    );
-  };
 
   if (selectedPlayer) {
     return (
@@ -66,28 +46,6 @@ export function PortfolioScreen() {
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <Text accessibilityRole="header" style={styles.eyebrow}>PORTFOLIO VALUE</Text>
-      {isPersistenceBlocked ? (
-        <View accessibilityRole="alert" style={styles.recoveryCard}>
-          <Text style={styles.recoveryTitle}>Saving is paused</Text>
-          <Text style={styles.subtle}>
-            {persistenceError ?? 'Progress cannot be saved right now. Reset progress to resume.'}
-          </Text>
-          <Pressable
-            accessibilityLabel="Reset progress and resume saving"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: isResetting }}
-            disabled={isResetting}
-            onPress={requestReset}
-            style={({ pressed }) => [
-              styles.recoveryButton,
-              isResetting && styles.resetButtonDisabled,
-              pressed && !isResetting && styles.rowPressed,
-            ]}
-          >
-            <Text style={styles.recoveryButtonText}>{isResetting ? 'RESETTING...' : 'RESET AND CONTINUE'}</Text>
-          </Pressable>
-        </View>
-      ) : null}
       <Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={styles.total}>{formatMoney(summary.totalValue)}</Text>
       <Text style={[styles.dailyChange, { color: summary.latestDailyChange >= 0 ? colors.green : colors.red }]}>
         {formatSignedMoney(summary.latestDailyChange)} on the latest replay date
@@ -96,7 +54,7 @@ export function PortfolioScreen() {
       <View style={styles.statGrid}>
         <StatCard label="FREE CASH" value={formatMoney(summary.freeCash)} detail="Available to spend" />
         <StatCard label="RESERVED" value={formatMoney(summary.reservedCollateral)} detail="Short collateral" />
-        <StatCard label="HOLDINGS" value={formatMoney(summary.marketValue)} detail={`${summary.holdings.length} of 30 players`} />
+        <StatCard label="HOLDINGS" value={formatMoney(summary.marketValue)} detail={`${summary.holdings.length} of ${players.length} listed players`} />
         <StatCard label="CASH BALANCE" value={formatMoney(summary.cash)} detail="Includes reserved cash" />
       </View>
 
@@ -154,7 +112,7 @@ export function PortfolioScreen() {
             <Text style={styles.subtle}>Cash dividends, boosts, short settlements, and refunds for that date.</Text>
           </>
         ) : (
-          <Text style={styles.subtle}>Settle the first replay date to calculate your result.</Text>
+          <Text style={styles.subtle}>No server settlement has reached this account yet.</Text>
         )}
       </View>
 
@@ -179,20 +137,6 @@ export function PortfolioScreen() {
         </View>
       )}
 
-      <Pressable
-        accessibilityLabel="Reset progress"
-        accessibilityRole="button"
-        accessibilityState={{ disabled: isResetting }}
-        disabled={isResetting}
-        onPress={requestReset}
-        style={({ pressed }) => [
-          styles.resetButton,
-          isResetting && styles.resetButtonDisabled,
-          pressed && !isResetting && styles.rowPressed,
-        ]}
-      >
-        <Text style={styles.resetText}>{isResetting ? 'Resetting...' : 'Reset progress'}</Text>
-      </Pressable>
     </ScrollView>
   );
 }
@@ -204,10 +148,6 @@ const styles = StyleSheet.create({
   total: { color: colors.text, fontSize: 37, fontWeight: '900', fontVariant: ['tabular-nums'] },
   dailyChange: { fontSize: 12, fontWeight: '800' },
   subtle: { color: colors.muted, fontSize: 11, lineHeight: 17 },
-  recoveryCard: { backgroundColor: colors.goldSoft, borderColor: colors.gold, borderWidth: 1, borderRadius: 8, padding: 14, gap: 8 },
-  recoveryTitle: { color: colors.text, fontSize: 15, fontWeight: '900' },
-  recoveryButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', backgroundColor: colors.gold, borderRadius: 6, paddingHorizontal: 14, paddingVertical: 10 },
-  recoveryButtonText: { color: colors.background, fontSize: 10, fontWeight: '900' },
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   statCard: { width: '48%', flexGrow: 1, minWidth: 140, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 13 },
   statLabel: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
@@ -231,7 +171,4 @@ const styles = StyleSheet.create({
   resultValue: { fontSize: 24, fontWeight: '900', marginBottom: 4 },
   activityRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 13, borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth },
   activityValue: { fontSize: 11, fontWeight: '900' },
-  resetButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 8, borderColor: colors.red, borderWidth: 1, marginTop: 14 },
-  resetButtonDisabled: { opacity: 0.45 },
-  resetText: { color: colors.red, fontSize: 12, fontWeight: '900' },
 });

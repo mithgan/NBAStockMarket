@@ -608,6 +608,7 @@ test('leaderboard ranking advances deterministic rival values and rejects non-fi
   );
 
   assert.deepEqual(ranked.map((entry) => entry.name), ['You', 'Steady', 'Flat']);
+  assert.deepEqual(ranked.map((entry) => entry.id), ['current-user', 'rival:0', 'rival:1']);
   assert.deepEqual(ranked.map((entry) => entry.rank), [1, 2, 3]);
   assert.equal(ranked[1].value, 141_000_000);
   assert.equal(ranked[0].returnPct, (142_000_000 / STARTING_CASH - 1) * 100);
