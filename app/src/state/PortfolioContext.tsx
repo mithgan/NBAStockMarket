@@ -24,6 +24,7 @@ import {
 import {
   isServerAccountPristine,
   mapServerBootstrap,
+  serverRefreshNotice,
   type ServerPresentationState,
 } from './serverState';
 
@@ -151,14 +152,17 @@ export function PortfolioProvider({
     if (actionLock.current.has('account-mutation')) return false;
     if (!actionLock.current.acquire('account-refresh')) return false;
     updatePendingActions();
+    if (mounted.current) setMessage(null);
     try {
-      return (await loadSnapshot({
+      const refreshed = await loadSnapshot({
         checkLocalTransition: shouldInspectLocalTransition(
           localTransitionInspected,
           transitionRequired,
         ),
         showInitialLoader: false,
-      })) !== null;
+      });
+      if (refreshed && mounted.current) setMessage(serverRefreshNotice(refreshed));
+      return refreshed !== null;
     } finally {
       actionLock.current.release('account-refresh');
       updatePendingActions();

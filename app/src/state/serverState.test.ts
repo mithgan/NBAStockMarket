@@ -3,7 +3,11 @@ import test from 'node:test';
 
 import type { ServerBootstrap } from '../api/contracts';
 import { STARTING_CASH } from './game';
-import { isServerAccountPristine, mapServerBootstrap } from './serverState';
+import {
+  isServerAccountPristine,
+  mapServerBootstrap,
+  serverRefreshNotice,
+} from './serverState';
 
 function bootstrapFixture(): ServerBootstrap {
   return {
@@ -185,6 +189,22 @@ test('an unknown server replay date remains visible without exposing fabricated 
   const mapped = mapServerBootstrap(fixture);
 
   assert.equal(mapped.nextGameDate, '2026-10-20');
+});
+
+test('refresh feedback explains that syncing does not advance the shared replay', () => {
+  const fixture = bootstrapFixture();
+
+  assert.equal(
+    serverRefreshNotice(fixture),
+    'You are up to date. Next replay date: Oct 22, 2025. Replay dates advance for everyone only after the server settles them.',
+  );
+
+  fixture.game.next_game_date = null;
+  fixture.game.is_complete = true;
+  assert.equal(
+    serverRefreshNotice(fixture),
+    'Server data is up to date. The historical replay is complete.',
+  );
 });
 
 test('mapping refuses results after the authoritative settled date', () => {

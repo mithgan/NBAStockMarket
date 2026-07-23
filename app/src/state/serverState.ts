@@ -135,6 +135,19 @@ export function isServerAccountPristine(bootstrap: ServerBootstrap): boolean {
   );
 }
 
+export function serverRefreshNotice(bootstrap: ServerBootstrap): string {
+  if (bootstrap.game.next_game_date === null) {
+    return 'Server data is up to date. The historical replay is complete.';
+  }
+  const nextDate = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${bootstrap.game.next_game_date}T00:00:00Z`));
+  return `You are up to date. Next replay date: ${nextDate}. Replay dates advance for everyone only after the server settles them.`;
+}
+
 export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentationState {
   const players: Player[] = bootstrap.market.map((listing) => ({
     id: listing.id,

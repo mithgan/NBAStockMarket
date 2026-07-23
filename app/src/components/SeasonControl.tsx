@@ -34,7 +34,7 @@ export function SeasonControl() {
         <Text style={styles.progress}>{settledGameDateCount} game dates settled</Text>
       </View>
       <Pressable
-        accessibilityLabel="Refresh server game state"
+        accessibilityLabel="Check server for updates"
         accessibilityRole="button"
         accessibilityState={{ disabled }}
         disabled={disabled}
@@ -46,7 +46,7 @@ export function SeasonControl() {
         ]}
       >
         <Text style={[styles.buttonText, disabled && styles.buttonTextDisabled]}>
-          {isRefreshing ? 'REFRESHING' : 'REFRESH'}
+          {isRefreshing ? 'CHECKING' : 'CHECK NOW'}
         </Text>
       </Pressable>
     </View>
