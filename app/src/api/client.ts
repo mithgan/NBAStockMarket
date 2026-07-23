@@ -48,6 +48,7 @@ interface ClientOptions {
   getAccessToken: AccessTokenProvider;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  retryTimeoutMs?: number;
   idempotencyKeyFactory?: () => string;
 }
 
@@ -79,6 +80,7 @@ export class MarketApiClient {
   private readonly getAccessToken: AccessTokenProvider;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
+  private readonly retryTimeoutMs: number;
   private readonly idempotencyKeyFactory: () => string;
 
   constructor(options: ClientOptions) {
@@ -87,6 +89,7 @@ export class MarketApiClient {
     this.getAccessToken = options.getAccessToken;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
     this.timeoutMs = options.timeoutMs ?? 10_000;
+    this.retryTimeoutMs = Math.max(options.retryTimeoutMs ?? 75_000, this.timeoutMs);
     this.idempotencyKeyFactory = options.idempotencyKeyFactory ?? randomIdempotencyKey;
   }
 
@@ -223,7 +226,10 @@ export class MarketApiClient {
       const token = credentials.accessToken;
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+      const requestTimeoutMs = transportRetryUsed
+        ? this.retryTimeoutMs
+        : this.timeoutMs;
+      const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
       let response: Response;
       let rawText: string;
       try {

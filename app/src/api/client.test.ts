@@ -99,6 +99,51 @@ test('authenticated reads refresh once after a 401', async () => {
   assert.equal((requests[1].headers as Record<string, string>).Authorization, 'Bearer fresh-token');
 });
 
+test('a cold-start retry gets a longer timeout without changing the request', async () => {
+  const seenUrls: string[] = [];
+  const seenMethods: Array<string | undefined> = [];
+  let calls = 0;
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    timeoutMs: 5,
+    retryTimeoutMs: 50,
+    fetchImpl: async (url, init) => {
+      calls += 1;
+      seenUrls.push(String(url));
+      seenMethods.push(init?.method);
+      if (calls === 1) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            const error = new Error('aborted');
+            error.name = 'AbortError';
+            reject(error);
+          });
+        });
+      }
+      return new Promise<Response>((resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
+        });
+        setTimeout(() => {
+          resolve(new Response(JSON.stringify({ data: portfolio }), { status: 200 }));
+        }, 20);
+      });
+    },
+  });
+
+  assert.equal((await client.portfolio()).account_id, 'alice');
+  assert.equal(calls, 2);
+  assert.deepEqual(seenUrls, [
+    'https://api.example.com/api/v1/portfolio',
+    'https://api.example.com/api/v1/portfolio',
+  ]);
+  assert.deepEqual(seenMethods, ['GET', 'GET']);
+});
+
 test('a retried mutation reuses exactly one idempotency key', async () => {
   const seenKeys: string[] = [];
   let calls = 0;
