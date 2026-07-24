@@ -216,6 +216,18 @@ export function PortfolioProvider({
     return version;
   }, []);
 
+  const currentGameDate = useCallback(() => {
+    const gameDate = bootstrapRef.current?.game.next_game_date;
+    if (!gameDate) {
+      throw new MarketApiError(
+        'The replay day is unavailable. Refresh before using a weekly play.',
+        'clock_unavailable',
+        null,
+      );
+    }
+    return gameDate;
+  }, []);
+
   const trade = useCallback((player: Player, side: TradeSide) => runAction(
     `trade:${player.id}`,
     () => apiClient.trade(player.id, side, currentQuoteVersion(player.id)),
@@ -224,9 +236,13 @@ export function PortfolioProvider({
 
   const armShort = useCallback((player: Player) => runAction(
     `short:${player.id}`,
-    () => apiClient.armWeeklyShort(player.id, currentQuoteVersion(player.id)),
+    () => apiClient.armWeeklyShort(
+      player.id,
+      currentGameDate(),
+      currentQuoteVersion(player.id),
+    ),
     `Weekly short armed on ${player.name}.`,
-  ), [apiClient, currentQuoteVersion, runAction]);
+  ), [apiClient, currentGameDate, currentQuoteVersion, runAction]);
 
   const armPlayerBoost = useCallback((player: Player, gameDate: string) => runAction(
       `boost:${player.id}`,

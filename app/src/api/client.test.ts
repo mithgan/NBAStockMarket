@@ -209,6 +209,48 @@ test('trades use the Flask route and include the listing version', async () => {
   });
 });
 
+test('weekly shorts bind the mutation to the displayed replay date', async () => {
+  let requestedBody = '';
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com/api/nba-stock-market',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    idempotencyKeyFactory: () => 'short-contract-key',
+    fetchImpl: async (_url, init) => {
+      requestedBody = String(init?.body);
+      return new Response(JSON.stringify({
+        data: {
+          replayed: false,
+          portfolio,
+          position: {
+            id: 'short-one',
+            player_id: '3112335',
+            week_start: '2025-10-20',
+            week_end: '2025-10-27',
+            status: 'active',
+            opening_price_cents: 5_000_000_000,
+            fee_cents: 12_500_000,
+            collateral_cents: 200_000_000,
+            accrued_net_points_micros: 0,
+            payout_cents: null,
+            qualifying_games: 0,
+            settled_game_date: null,
+            created_at: '2026-07-21T00:00:00Z',
+          },
+        },
+      }), { status: 200 });
+    },
+  });
+
+  await client.armWeeklyShort('3112335', '2025-10-21', 4);
+
+  assert.deepEqual(JSON.parse(requestedBody), {
+    player_id: '3112335',
+    expected_game_date: '2025-10-21',
+    expected_player_version: 4,
+  });
+});
+
 test('historical day advancement uses the Flask admin settlement contract', async () => {
   let requestedUrl = '';
   let requestedBody = '';

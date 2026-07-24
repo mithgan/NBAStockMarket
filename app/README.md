@@ -50,9 +50,14 @@ Configure these public Preview environment variables in Vercel:
 
 ```text
 EXPO_PUBLIC_NBA_STOCK_API_URL=https://api.databallr.com/api/nba-stock-market
-EXPO_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
-EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<public publishable key>
+EXPO_PUBLIC_SUPABASE_URL=https://<databallr-auth-project>.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<databallr-auth-project-public-key>
 ```
+
+Use the existing Databallr Supabase Auth project here so users keep their
+Databallr account identities and Flask verifies the same token issuer. The
+dedicated NBA Stock Market Supabase project is database-only and its URL or
+publishable key must not be used by the client.
 
 Then deploy from this directory:
 

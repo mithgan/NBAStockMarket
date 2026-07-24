@@ -186,12 +186,14 @@ export class MarketApiClient {
 
   async armWeeklyShort(
     playerId: string,
+    expectedGameDate: string,
     expectedPlayerVersion: number,
   ): Promise<ServerWeeklyShortMutationResult> {
     return this.mutation(
       '/instruments/weekly-shorts',
       {
         player_id: playerId,
+        expected_game_date: expectedGameDate,
         expected_player_version: expectedPlayerVersion,
       },
       parseWeeklyShortMutationResult,
