@@ -30,10 +30,21 @@ const portfolio = {
 
 const market = [{
   id: 'sga', name: 'Shai Gilgeous-Alexander', tier: 'star',
+  version: 4,
   current_price_cents: 5_000_000_000, opening_price_cents: 5_000_000_000,
   actual_salary_cents: 4_000_000_000, shares_outstanding: 100,
   available_shares: 100, buy_fee_cents: 12_500_000, ownership_bps: 0, volume_30d: 0,
 }];
+
+const trade = {
+  id: 'trade-1',
+  player_id: '3112335',
+  side: 'buy',
+  execution_price_cents: 5_000_000_000,
+  fee_cents: 12_500_000,
+  new_price_cents: 5_010_000_000,
+  created_at: '2026-07-21T00:00:00Z',
+};
 
 const bootstrapPayload = {
   market,
@@ -47,6 +58,7 @@ const bootstrapPayload = {
   settlements: [],
   leaderboard: [],
   settled_results: [],
+  capabilities: { can_advance_day: true },
 };
 
 const aliceToken = async () => ({ accessToken: 'token', userId: 'alice' });
@@ -138,8 +150,8 @@ test('a cold-start retry gets a longer timeout without changing the request', as
   assert.equal((await client.portfolio()).account_id, 'alice');
   assert.equal(calls, 2);
   assert.deepEqual(seenUrls, [
-    'https://api.example.com/api/v1/portfolio',
-    'https://api.example.com/api/v1/portfolio',
+    'https://api.example.com/portfolio',
+    'https://api.example.com/portfolio',
   ]);
   assert.deepEqual(seenMethods, ['GET', 'GET']);
 });
@@ -156,13 +168,87 @@ test('a retried mutation reuses exactly one idempotency key', async () => {
       calls += 1;
       seenKeys.push((init?.headers as Record<string, string>)['Idempotency-Key']);
       if (calls === 1) throw new TypeError('connection reset');
-      return new Response(JSON.stringify({ data: { replayed: true, portfolio } }), { status: 200 });
+      return new Response(JSON.stringify({
+        data: { replayed: true, portfolio, trade },
+      }), { status: 200 });
     },
   });
 
-  const result = await client.trade('3112335', 'buy');
+  const result = await client.trade('3112335', 'buy', 4);
   assert.equal(result.replayed, true);
   assert.deepEqual(seenKeys, ['fixed-request-key', 'fixed-request-key']);
+});
+
+test('trades use the Flask route and include the listing version', async () => {
+  let requestedUrl = '';
+  let requestedBody = '';
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com/api/nba-stock-market/',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    idempotencyKeyFactory: () => 'trade-contract-key',
+    fetchImpl: async (url, init) => {
+      requestedUrl = String(url);
+      requestedBody = String(init?.body);
+      return new Response(JSON.stringify({
+        data: { replayed: false, portfolio, trade },
+      }), { status: 200 });
+    },
+  });
+
+  await client.trade('3112335', 'buy', 4);
+
+  assert.equal(
+    requestedUrl,
+    'https://api.example.com/api/nba-stock-market/trades',
+  );
+  assert.deepEqual(JSON.parse(requestedBody), {
+    player_id: '3112335',
+    side: 'buy',
+    expected_player_version: 4,
+  });
+});
+
+test('historical day advancement uses the Flask admin settlement contract', async () => {
+  let requestedUrl = '';
+  let requestedBody = '';
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com/api/nba-stock-market',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    idempotencyKeyFactory: () => 'advance-contract-key',
+    fetchImpl: async (url, init) => {
+      requestedUrl = String(url);
+      requestedBody = String(init?.body);
+      return new Response(JSON.stringify({
+        data: {
+          replayed: false,
+          game_date: '2025-10-20',
+          next_game_date: '2025-10-21',
+          is_complete: false,
+          event_count: 12,
+          payout_count: 4,
+          net_cash_cents: 150_000,
+          cash_breakdown_cents: {
+            dividends: 200_000,
+            weekly_shorts: -50_000,
+            boosts: 0,
+          },
+        },
+      }), { status: 200 });
+    },
+  });
+
+  const result = await client.advanceDay('2025-10-20');
+
+  assert.equal(
+    requestedUrl,
+    'https://api.example.com/api/nba-stock-market/admin/settlements/next',
+  );
+  assert.deepEqual(JSON.parse(requestedBody), {
+    expected_game_date: '2025-10-20',
+  });
+  assert.equal(result.next_game_date, '2025-10-21');
 });
 
 test('a mutation retries a failed response body with the same idempotency key', async () => {
@@ -183,11 +269,13 @@ test('a mutation retries a failed response body with the same idempotency key', 
           text: async () => { throw new TypeError('response body disconnected'); },
         } as unknown as Response;
       }
-      return new Response(JSON.stringify({ data: { replayed: true, portfolio } }), { status: 200 });
+      return new Response(JSON.stringify({
+        data: { replayed: true, portfolio, trade },
+      }), { status: 200 });
     },
   });
 
-  const result = await client.trade('3112335', 'buy');
+  const result = await client.trade('3112335', 'buy', 4);
 
   assert.equal(result.replayed, true);
   assert.deepEqual(seenKeys, ['body-retry-key', 'body-retry-key']);
@@ -213,7 +301,7 @@ test('a mutation retry cannot cross into a newly signed-in account', async () =>
   });
 
   await assert.rejects(
-    client.trade('3112335', 'buy'),
+    client.trade('3112335', 'buy', 4),
     (error: unknown) => error instanceof MarketApiError && error.code === 'account_changed',
   );
   assert.equal(fetchCalls, 1);
@@ -294,7 +382,7 @@ test('malformed server timestamps fail closed before becoming account state', as
   );
 });
 
-test('public FastAPI problem codes survive for user-safe conflict handling', async () => {
+test('public Flask problem codes survive for user-safe conflict handling', async () => {
   const client = new MarketApiClient({
     baseUrl: 'https://api.example.com',
     expectedUserId: 'alice',
@@ -305,7 +393,7 @@ test('public FastAPI problem codes survive for user-safe conflict handling', asy
   });
 
   await assert.rejects(
-    client.trade('3112335', 'buy'),
+    client.trade('3112335', 'buy', 4),
     (error: unknown) => error instanceof MarketApiError
       && error.code === 'holding_cap'
       && error.message === 'You already own this player.',
@@ -328,7 +416,7 @@ test('bootstrap loads one server-owned snapshot instead of stitching client read
   const result = await client.bootstrap();
 
   assert.equal(result.portfolio.account_id, 'alice');
-  assert.deepEqual(requestedPaths, ['/api/v1/bootstrap']);
+  assert.deepEqual(requestedPaths, ['/bootstrap']);
 });
 
 test('bootstrap rejects future-result contract corruption before it becomes app state', async () => {

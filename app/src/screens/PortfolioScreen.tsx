@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   statCard: { width: '48%', flexGrow: 1, minWidth: 140, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 13 },
   statLabel: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
-  statValue: { color: colors.text, fontSize: 16, fontWeight: '800', marginTop: 7, fontVariant: ['tabular-nums'] },
+  statValue: { color: colors.text, fontSize: 14, fontWeight: '800', marginTop: 7, fontVariant: ['tabular-nums'] },
   statDetail: { color: colors.muted, fontSize: 9, marginTop: 3 },
   sectionHeading: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 },
   sectionTitle: { color: colors.text, fontSize: 17, fontWeight: '900', marginTop: 14 },

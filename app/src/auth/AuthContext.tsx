@@ -22,6 +22,7 @@ interface AuthContextValue {
   isSubmitting: boolean;
   error: string | null;
   notice: string | null;
+  signInWithGoogle: () => Promise<boolean>;
   signIn: (email: string, password: string) => Promise<boolean>;
   signUp: (email: string, password: string) => Promise<boolean>;
   signOut: () => Promise<void>;
@@ -103,6 +104,32 @@ export function AuthProvider({ config, children }: { config: PublicAppConfig; ch
     }
   }, [supabase]);
 
+  const signInWithGoogle = useCallback(async () => {
+    if (typeof window === 'undefined') {
+      setError('Google sign-in is available in the web test build.');
+      return false;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin },
+      });
+      if (oauthError) {
+        setError(authErrorMessage(oauthError.message, 'Google sign-in failed.'));
+        return false;
+      }
+      return true;
+    } catch {
+      setError('Google sign-in could not reach the authentication service. Try again.');
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [supabase]);
+
   const signUp = useCallback(async (email: string, password: string) => {
     const parsed = normalizedCredentials(email, password);
     if (!parsed.credentials) {
@@ -176,6 +203,7 @@ export function AuthProvider({ config, children }: { config: PublicAppConfig; ch
     isSubmitting,
     error,
     notice,
+    signInWithGoogle,
     signIn,
     signUp,
     signOut,
@@ -190,6 +218,7 @@ export function AuthProvider({ config, children }: { config: PublicAppConfig; ch
     notice,
     session,
     signIn,
+    signInWithGoogle,
     signOut,
     signUp,
   ]);

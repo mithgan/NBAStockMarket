@@ -43,6 +43,7 @@ interface PortfolioContextValue {
   isRefreshing: boolean;
   isTransitioning: boolean;
   isGameplayReady: boolean;
+  canAdvanceDay: boolean;
   pendingActions: ReadonlySet<string>;
   shortSlots: { used: number; total: number; remaining: number };
   boostSlots: { used: number; total: number; remaining: number };
@@ -57,6 +58,7 @@ interface PortfolioContextValue {
   owns: (playerId: string) => boolean;
   armShort: (player: Player) => Promise<boolean>;
   armPlayerBoost: (player: Player, gameDate: string) => Promise<boolean>;
+  advanceDay: () => Promise<boolean>;
   refreshData: () => Promise<boolean>;
   confirmLocalTransition: () => Promise<boolean>;
   dismissNotice: () => void;
@@ -200,23 +202,54 @@ export function PortfolioProvider({
     }
   }, [loadSnapshot, updatePendingActions]);
 
+  const currentQuoteVersion = useCallback((playerId: string) => {
+    const version = bootstrapRef.current?.market.find(
+      (listing) => listing.id === playerId,
+    )?.version;
+    if (version === undefined) {
+      throw new MarketApiError(
+        'The displayed quote is unavailable. Refresh before making a move.',
+        'quote_unavailable',
+        null,
+      );
+    }
+    return version;
+  }, []);
+
   const trade = useCallback((player: Player, side: TradeSide) => runAction(
     `trade:${player.id}`,
-    () => apiClient.trade(player.id, side),
+    () => apiClient.trade(player.id, side, currentQuoteVersion(player.id)),
     `${side === 'buy' ? 'Bought' : 'Sold'} one share of ${player.name}.`,
-  ), [apiClient, runAction]);
+  ), [apiClient, currentQuoteVersion, runAction]);
 
   const armShort = useCallback((player: Player) => runAction(
     `short:${player.id}`,
-    () => apiClient.armWeeklyShort(player.id),
+    () => apiClient.armWeeklyShort(player.id, currentQuoteVersion(player.id)),
     `Weekly short armed on ${player.name}.`,
-  ), [apiClient, runAction]);
+  ), [apiClient, currentQuoteVersion, runAction]);
 
   const armPlayerBoost = useCallback((player: Player, gameDate: string) => runAction(
       `boost:${player.id}`,
-      () => apiClient.armBoost(player.id, gameDate),
+      () => apiClient.armBoost(
+        player.id,
+        gameDate,
+        currentQuoteVersion(player.id),
+      ),
       `${player.name} boosted for ${gameDate}.`,
-  ), [apiClient, runAction]);
+  ), [apiClient, currentQuoteVersion, runAction]);
+
+  const advanceDay = useCallback(async () => {
+    const nextGameDate = bootstrapRef.current?.game.next_game_date;
+    if (!nextGameDate) {
+      if (mounted.current) setMessage('The historical replay is complete.');
+      return false;
+    }
+    return runAction(
+      'advance',
+      () => apiClient.advanceDay(nextGameDate),
+      `${nextGameDate} settled. Prices and portfolios are updated.`,
+    );
+  }, [apiClient, runAction]);
 
   const confirmLocalTransition = useCallback(async () => {
     if (isTransitioning || !bootstrapRef.current || !legacySavePresent) return false;
@@ -288,6 +321,7 @@ export function PortfolioProvider({
     isRefreshing,
     isTransitioning,
     isGameplayReady,
+    canAdvanceDay: presentation?.canAdvanceDay ?? false,
     pendingActions,
     shortSlots: presentation?.shortSlots
       ? { ...presentation.shortSlots, remaining: Math.max(0, presentation.shortSlots.total - presentation.shortSlots.used) }
@@ -306,12 +340,14 @@ export function PortfolioProvider({
     owns,
     armShort,
     armPlayerBoost,
+    advanceDay,
     refreshData,
     confirmLocalTransition,
     dismissNotice,
   }), [
     armPlayerBoost,
     armShort,
+    advanceDay,
     confirmLocalTransition,
     dismissNotice,
     isGameplayReady,

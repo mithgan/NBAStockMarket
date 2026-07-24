@@ -34,6 +34,7 @@ export interface ServerPresentationState {
   boostSlots: { used: number; total: number };
   weeklyShortTargets: InstrumentTargetView[];
   boostTargets: InstrumentTargetView[];
+  canAdvanceDay: boolean;
 }
 
 export interface InstrumentTargetView {
@@ -113,7 +114,9 @@ function mapActivity(
 
 function mapLeaderboard(rows: ServerLeaderboardRow[]): GameLeaderboardEntry[] {
   return rows.map((row) => ({
-    id: row.account_id,
+    id: row.is_current_user
+      ? 'current-user'
+      : `leaderboard:${row.rank}:${row.display_name}`,
     rank: row.rank,
     name: row.display_name,
     value: dollars(row.total_value_cents),
@@ -273,6 +276,7 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
       gameDate: target.game_date,
       fee: dollars(target.fee_cents),
     })),
+    canAdvanceDay: bootstrap.capabilities.can_advance_day,
   };
 }
 

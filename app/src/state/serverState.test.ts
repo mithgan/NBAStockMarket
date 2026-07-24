@@ -14,12 +14,14 @@ function bootstrapFixture(): ServerBootstrap {
     market: [
       {
         id: 'sga', name: 'Shai Gilgeous-Alexander', tier: 'star',
+        version: 4,
         current_price_cents: 5_100_000_000, opening_price_cents: 5_000_000_000,
         actual_salary_cents: 4_000_000_000, shares_outstanding: 100,
         available_shares: 99, buy_fee_cents: 63_750_000, ownership_bps: 100, volume_30d: 1,
       },
       {
         id: 'jokic', name: 'Nikola Jokic', tier: 'star',
+        version: 2,
         current_price_cents: 6_000_000_000, opening_price_cents: 5_900_000_000,
         actual_salary_cents: 5_900_000_000, shares_outstanding: 100,
         available_shares: 100, buy_fee_cents: 15_000_000, ownership_bps: 0, volume_30d: 0,
@@ -104,7 +106,7 @@ function bootstrapFixture(): ServerBootstrap {
     },
     settlements: [],
     leaderboard: [{
-      rank: 2, account_id: 'alice', display_name: 'Alice',
+      rank: 2, display_name: 'Alice',
       total_value_cents: 13_987_250_000, return_bps: -9,
       is_current_user: true,
     }],
@@ -114,6 +116,7 @@ function bootstrapFixture(): ServerBootstrap {
       expected_net_points_micros: 25_000_000,
       dividend_cents: 40_000_000,
     }],
+    capabilities: { can_advance_day: true },
   };
 }
 
@@ -146,7 +149,8 @@ test('mapServerBootstrap converts exact server cents and state into screen data'
     date: '2025-10-21', np: 35, expected_np: 25, dividend_per_holder: 400_000,
   }]);
   assert.equal(mapped.leaderboard[0].returnPct, -0.09);
-  assert.equal(mapped.leaderboard[0].id, 'alice');
+  assert.equal(mapped.leaderboard[0].id, 'current-user');
+  assert.equal(mapped.canAdvanceDay, true);
 });
 
 test('activity and history are ordered for the existing UI without inventing unknown events', () => {

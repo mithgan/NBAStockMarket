@@ -31,6 +31,18 @@ test('the MVP exposes four stable primary workflows and an always-visible season
   assert.match(seasonControlSource, /minHeight: 44/);
 });
 
+test('manual replay advancement is admin-gated and requires explicit confirmation', () => {
+  assert.match(seasonControlSource, /const \[isConfirmingAdvance, setIsConfirmingAdvance\]/);
+  assert.match(seasonControlSource, /canAdvanceDay && nextGameDate !== null/);
+  assert.match(seasonControlSource, /accessibilityLabel="Refresh market data"/);
+  assert.match(seasonControlSource, /onPress=\{\(\) => void refreshData\(\)\}/);
+  assert.match(seasonControlSource, /Advance the shared replay\?/);
+  assert.match(seasonControlSource, /This settles .* for every play-tester/);
+  assert.match(seasonControlSource, /accessibilityLabel="Cancel replay advancement"/);
+  assert.match(seasonControlSource, /accessibilityLabel="Confirm replay advancement"/);
+  assert.match(seasonControlSource, /await advanceDay\(\)/);
+});
+
 test('market discovery supports search and a clear empty result', () => {
   assert.match(marketSource, /TextInput/);
   assert.match(marketSource, /accessibilityLabel="Search players"/);
