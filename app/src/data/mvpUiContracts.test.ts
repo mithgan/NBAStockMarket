@@ -136,6 +136,11 @@ test('portfolio provides server-backed activity, history, and exact cost basis',
   assert.match(portfolioSource, /incl\. fee/);
   assert.match(portfolioSource, /holding\.unrealizedPnl/);
   assert.match(portfolioSource, /No server settlement has reached this account yet/);
+  assert.match(
+    portfolioSource,
+    /Total portfolio-value change for that date, including cash payouts and player-price movement\./,
+  );
+  assert.doesNotMatch(portfolioSource, /Cash dividends, boosts, short settlements, and refunds/);
   assert.doesNotMatch(portfolioSource, /Reset progress|Alert\.alert/);
 });
 

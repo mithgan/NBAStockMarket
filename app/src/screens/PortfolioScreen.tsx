@@ -111,7 +111,7 @@ export function PortfolioScreen() {
             <Text style={[styles.resultValue, { color: latestPoint.dailyChange >= 0 ? colors.green : colors.red }]}>
               {formatSignedMoney(latestPoint.dailyChange)}
             </Text>
-            <Text style={styles.subtle}>Cash dividends, boosts, short settlements, and refunds for that date.</Text>
+            <Text style={styles.subtle}>Total portfolio-value change for that date, including cash payouts and player-price movement.</Text>
           </>
         ) : (
           <Text style={styles.subtle}>No server settlement has reached this account yet.</Text>

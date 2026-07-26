@@ -13,7 +13,7 @@ import {
 import type { AccessTokenProvider } from '../api/client';
 import type { PublicAppConfig } from '../api/config';
 import { authErrorMessage } from './authMessages';
-import { getSupabaseClient } from './supabase';
+import { getSupabaseClient, takeOAuthCallbackError } from './supabase';
 
 interface AuthContextValue {
   session: Session | null;
@@ -45,6 +45,7 @@ function normalizedCredentials(email: string, password: string) {
 
 export function AuthProvider({ config, children }: { config: PublicAppConfig; children: ReactNode }) {
   const supabase = useMemo(() => getSupabaseClient(config), [config]);
+  const oauthCallbackError = useRef<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,6 +55,10 @@ export function AuthProvider({ config, children }: { config: PublicAppConfig; ch
 
   useEffect(() => {
     let active = true;
+    if (oauthCallbackError.current === null) {
+      oauthCallbackError.current = takeOAuthCallbackError();
+    }
+    if (oauthCallbackError.current) setError(oauthCallbackError.current);
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       authEventVersion.current += 1;
       if (!active) return;
@@ -65,7 +70,11 @@ export function AuthProvider({ config, children }: { config: PublicAppConfig; ch
       .then(({ data, error: sessionError }) => {
         if (!active || authEventVersion.current !== versionAtStart) return;
         setSession(data.session);
-        setError(sessionError ? 'Your saved session could not be restored. Sign in again.' : null);
+        setError(
+          sessionError
+            ? 'Your saved session could not be restored. Sign in again.'
+            : oauthCallbackError.current,
+        );
         setIsLoading(false);
       })
       .catch(() => {
