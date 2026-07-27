@@ -228,7 +228,7 @@ export class MarketApiClient {
   async advanceDay(expectedGameDate: string): Promise<ServerAdvanceResult> {
     return this.mutation(
       '/admin/settlements/next',
-      { expected_game_date: expectedGameDate },
+      { confirmation: 'SETTLE', expected_game_date: expectedGameDate },
       parseAdvanceResult,
     );
   }

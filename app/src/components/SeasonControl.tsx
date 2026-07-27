@@ -21,6 +21,7 @@ export function SeasonControl() {
     canAdvanceDay,
     isGameplayReady,
     isRefreshing,
+    latestSettledDate,
     nextGameDate,
     pendingActions,
     refreshData,
@@ -42,7 +43,12 @@ export function SeasonControl() {
       <View style={styles.container}>
         <View style={styles.copy}>
           <Text style={styles.label}>2025-26 SERVER REPLAY</Text>
-          <Text numberOfLines={1} style={styles.date}>{displayDate(nextGameDate)}</Text>
+          <Text numberOfLines={1} style={styles.date}>
+            LAST SETTLED · {latestSettledDate ? displayDate(latestSettledDate) : 'Not started'}
+          </Text>
+          <Text numberOfLines={1} style={styles.nextDate}>
+            NEXT · {displayDate(nextGameDate)}
+          </Text>
           <Text style={styles.progress}>{settledGameDateCount} game dates settled</Text>
         </View>
         <View style={styles.actions}>
@@ -83,45 +89,47 @@ export function SeasonControl() {
         </View>
       </View>
 
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setIsConfirmingAdvance(false)}
-        transparent
-        visible={isConfirmingAdvance && canSettleNextDay}
-      >
-        <View accessibilityViewIsModal style={styles.modalBackdrop}>
-          <View style={styles.modal}>
-            <Text accessibilityRole="header" style={styles.modalTitle}>
-              Advance the shared replay?
-            </Text>
-            <Text style={styles.modalBody}>
-              This settles {displayDate(nextGameDate)} for every play-tester. It cannot be undone.
-            </Text>
-            <View style={styles.modalActions}>
-              <Pressable
-                accessibilityLabel="Cancel replay advancement"
-                accessibilityRole="button"
-                onPress={() => setIsConfirmingAdvance(false)}
-                style={({ pressed }) => [styles.modalButton, pressed && styles.buttonPressed]}
-              >
-                <Text style={styles.modalCancelText}>CANCEL</Text>
-              </Pressable>
-              <Pressable
-                accessibilityLabel="Confirm replay advancement"
-                accessibilityRole="button"
-                onPress={() => void confirmAdvance()}
-                style={({ pressed }) => [
-                  styles.modalButton,
-                  styles.modalConfirmButton,
-                  pressed && styles.buttonPressed,
-                ]}
-              >
-                <Text style={styles.modalConfirmText}>SETTLE NEXT DAY</Text>
-              </Pressable>
+      {isConfirmingAdvance && canSettleNextDay ? (
+        <Modal
+          animationType="fade"
+          onRequestClose={() => setIsConfirmingAdvance(false)}
+          transparent
+          visible
+        >
+          <View accessibilityViewIsModal style={styles.modalBackdrop}>
+            <View style={styles.modal}>
+              <Text accessibilityRole="header" style={styles.modalTitle}>
+                Advance the shared replay?
+              </Text>
+              <Text style={styles.modalBody}>
+                This settles {displayDate(nextGameDate)} for every play-tester. It cannot be undone.
+              </Text>
+              <View style={styles.modalActions}>
+                <Pressable
+                  accessibilityLabel="Cancel replay advancement"
+                  accessibilityRole="button"
+                  onPress={() => setIsConfirmingAdvance(false)}
+                  style={({ pressed }) => [styles.modalButton, pressed && styles.buttonPressed]}
+                >
+                  <Text style={styles.modalCancelText}>CANCEL</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Confirm replay advancement"
+                  accessibilityRole="button"
+                  onPress={() => void confirmAdvance()}
+                  style={({ pressed }) => [
+                    styles.modalButton,
+                    styles.modalConfirmButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                >
+                  <Text style={styles.modalConfirmText}>SETTLE NEXT DAY</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      ) : null}
     </>
   );
 }
@@ -140,7 +148,8 @@ const styles = StyleSheet.create({
   },
   copy: { flex: 1, minWidth: 0 },
   label: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
-  date: { color: colors.text, fontSize: 15, fontWeight: '800', marginTop: 3 },
+  date: { color: colors.text, fontSize: 12, fontWeight: '800', marginTop: 4 },
+  nextDate: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
   progress: { color: colors.muted, fontSize: 10, marginTop: 2 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   refreshButton: {

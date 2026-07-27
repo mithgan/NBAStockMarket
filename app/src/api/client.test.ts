@@ -288,6 +288,7 @@ test('historical day advancement uses the Flask admin settlement contract', asyn
     'https://api.example.com/api/nba-stock-market/admin/settlements/next',
   );
   assert.deepEqual(JSON.parse(requestedBody), {
+    confirmation: 'SETTLE',
     expected_game_date: '2025-10-20',
   });
   assert.equal(result.next_game_date, '2025-10-21');

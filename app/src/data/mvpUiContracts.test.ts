@@ -34,12 +34,16 @@ test('the MVP exposes four stable primary workflows and an always-visible season
 test('manual replay advancement is admin-gated and requires explicit confirmation', () => {
   assert.match(seasonControlSource, /const \[isConfirmingAdvance, setIsConfirmingAdvance\]/);
   assert.match(seasonControlSource, /canAdvanceDay && nextGameDate !== null/);
+  assert.match(seasonControlSource, /LAST SETTLED/);
+  assert.match(seasonControlSource, /NEXT ·/);
+  assert.match(seasonControlSource, /latestSettledDate/);
   assert.match(seasonControlSource, /accessibilityLabel="Refresh market data"/);
   assert.match(seasonControlSource, /onPress=\{\(\) => void refreshData\(\)\}/);
   assert.match(seasonControlSource, /Advance the shared replay\?/);
   assert.match(seasonControlSource, /This settles .* for every play-tester/);
   assert.match(seasonControlSource, /accessibilityLabel="Cancel replay advancement"/);
   assert.match(seasonControlSource, /accessibilityLabel="Confirm replay advancement"/);
+  assert.match(seasonControlSource, /isConfirmingAdvance && canSettleNextDay \?/);
   assert.match(seasonControlSource, /await advanceDay\(\)/);
 });
 
