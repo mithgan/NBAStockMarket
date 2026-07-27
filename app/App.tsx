@@ -86,9 +86,7 @@ function AppContent() {
   const {
     confirmLocalTransition,
     dismissNotice,
-    isGameplayReady,
     isLoading,
-    isRefreshing,
     isTransitioning,
     legacySavePresent,
     message,
@@ -98,13 +96,17 @@ function AppContent() {
     transitionError,
     transitionRequired,
   } = usePortfolio();
+  const hasVisibleSnapshot = Boolean(
+    state
+    && !isLoading
+    && !serverError
+    && !transitionRequired
+    && !isTransitioning,
+  );
 
   const body = (() => {
     if (isLoading) {
       return <CenteredState busy copy="Loading market, portfolio, and game state from the server." title="Loading your account" />;
-    }
-    if (isRefreshing) {
-      return <CenteredState busy copy="Waiting for a fresh authoritative account snapshot." title="Refreshing your account" />;
     }
     if (transitionRequired) {
       const storageCheckFailed = Boolean(transitionError) && !legacySavePresent;
@@ -159,7 +161,7 @@ function AppContent() {
         </Pressable>
       </View>
 
-      {isGameplayReady ? <SeasonControl /> : null}
+      {hasVisibleSnapshot ? <SeasonControl /> : null}
       {authError ? (
         <NoticeBanner message={authError} onDismiss={clearAuthMessage} />
       ) : message ? (
@@ -168,7 +170,7 @@ function AppContent() {
 
       <View style={styles.screen}>{body}</View>
 
-      {isGameplayReady ? (
+      {hasVisibleSnapshot ? (
         <View accessibilityRole="tablist" style={[styles.tabBar, { paddingBottom: insets.bottom + 9 }]}>
           {tabs.map((tab) => {
             const active = tab.key === activeTab;

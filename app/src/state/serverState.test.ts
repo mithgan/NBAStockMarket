@@ -2,20 +2,28 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { ServerBootstrap } from '../api/contracts';
-import { STARTING_CASH } from './game';
-import { isServerAccountPristine, mapServerBootstrap } from './serverState';
+import { getGameSummary, STARTING_CASH } from './game';
+import {
+  applyPortfolioValuationToSummary,
+  applyServerPortfolioToPresentation,
+  isServerAccountPristine,
+  mapServerBootstrap,
+  serverRefreshNotice,
+} from './serverState';
 
 function bootstrapFixture(): ServerBootstrap {
   return {
     market: [
       {
         id: 'sga', name: 'Shai Gilgeous-Alexander', tier: 'star',
+        version: 4,
         current_price_cents: 5_100_000_000, opening_price_cents: 5_000_000_000,
         actual_salary_cents: 4_000_000_000, shares_outstanding: 100,
         available_shares: 99, buy_fee_cents: 63_750_000, ownership_bps: 100, volume_30d: 1,
       },
       {
         id: 'jokic', name: 'Nikola Jokic', tier: 'star',
+        version: 2,
         current_price_cents: 6_000_000_000, opening_price_cents: 5_900_000_000,
         actual_salary_cents: 5_900_000_000, shares_outstanding: 100,
         available_shares: 100, buy_fee_cents: 15_000_000, ownership_bps: 0, volume_30d: 0,
@@ -100,7 +108,7 @@ function bootstrapFixture(): ServerBootstrap {
     },
     settlements: [],
     leaderboard: [{
-      rank: 2, account_id: 'alice', display_name: 'Alice',
+      rank: 2, display_name: 'Alice',
       total_value_cents: 13_987_250_000, return_bps: -9,
       is_current_user: true,
     }],
@@ -110,6 +118,7 @@ function bootstrapFixture(): ServerBootstrap {
       expected_net_points_micros: 25_000_000,
       dividend_cents: 40_000_000,
     }],
+    capabilities: { can_advance_day: true },
   };
 }
 
@@ -123,6 +132,8 @@ test('mapServerBootstrap converts exact server cents and state into screen data'
   assert.equal(mapped.players[0].buy_fee, 637_500);
   assert.equal(mapped.state.holdings[0].average_price, 50_125_000);
   assert.equal(mapped.state.holdings[0].cost_basis, 50_125_000);
+  assert.equal(mapped.portfolioValuation.marketValue, 51_000_000);
+  assert.equal(mapped.portfolioValuation.totalValue, 139_872_500);
   assert.equal(mapped.state.weeklyShorts[0].accruedNetPoints, 1.5);
   assert.equal(mapped.state.weeklyShorts[0].week, '2025-W43');
   assert.equal(mapped.state.boosts[0].gameDate, '2025-10-23');
@@ -142,7 +153,82 @@ test('mapServerBootstrap converts exact server cents and state into screen data'
     date: '2025-10-21', np: 35, expected_np: 25, dividend_per_holder: 400_000,
   }]);
   assert.equal(mapped.leaderboard[0].returnPct, -0.09);
-  assert.equal(mapped.leaderboard[0].id, 'alice');
+  assert.equal(mapped.leaderboard[0].id, 'current-user');
+  assert.equal(mapped.canAdvanceDay, true);
+});
+
+test('a mutation portfolio updates only authoritative account-owned presentation state', () => {
+  const fixture = bootstrapFixture();
+  const current = mapServerBootstrap(fixture);
+  const portfolio = structuredClone(fixture.portfolio);
+  portfolio.version = 4;
+  portfolio.cash_cents = 8_000_000_000;
+  portfolio.free_cash_cents = 8_000_000_000;
+  portfolio.reserved_collateral_cents = 0;
+  portfolio.market_value_cents = 5_200_000_000;
+  portfolio.total_value_cents = 13_200_000_000;
+  portfolio.holdings[0].current_price_cents = 5_200_000_000;
+  portfolio.holdings[0].market_value_cents = 5_200_000_000;
+  portfolio.holdings[0].unrealized_pnl_cents = 187_500_000;
+  portfolio.instruments.weekly_short_slots = { limit: 3, used: 0, remaining: 3 };
+  portfolio.instruments.boost_slots = { limit: 2, used: 0, remaining: 2 };
+  portfolio.instruments.weekly_shorts = [];
+  portfolio.instruments.boosts = [];
+  portfolio.instruments.weekly_short_targets = [];
+  portfolio.instruments.boost_targets = [];
+
+  const staged = applyServerPortfolioToPresentation(current, portfolio, {
+    playerId: 'sga',
+    currentPriceCents: 5_250_000_000,
+  });
+
+  assert.equal(staged.state.cash, 80_000_000);
+  assert.equal(staged.state.prices.sga, 52_500_000);
+  assert.equal(staged.state.prices.jokic, current.state.prices.jokic);
+  assert.equal(staged.state.transitionCount, 4);
+  assert.deepEqual(staged.state.weeklyShorts, []);
+  assert.deepEqual(staged.state.boosts, []);
+  assert.deepEqual(staged.shortSlots, { used: 0, total: 3 });
+  assert.deepEqual(staged.boostSlots, { used: 0, total: 2 });
+
+  const summary = applyPortfolioValuationToSummary(
+    getGameSummary(staged.state, staged.players),
+    staged.portfolioValuation,
+  );
+  assert.equal(summary.marketValue, 52_000_000);
+  assert.equal(summary.totalValue, 132_000_000);
+  assert.equal(summary.holdings[0].currentPrice, 52_000_000);
+  assert.equal(summary.holdings[0].unrealizedPnl, 1_875_000);
+
+  assert.strictEqual(staged.players, current.players);
+  assert.strictEqual(staged.leaderboard, current.leaderboard);
+  assert.strictEqual(staged.playerTrends, current.playerTrends);
+  assert.deepEqual(staged.weeklyShortTargets, []);
+  assert.deepEqual(staged.boostTargets, []);
+  assert.strictEqual(staged.state.activity, current.state.activity);
+  assert.strictEqual(staged.state.portfolioHistory, current.state.portfolioHistory);
+  assert.equal(staged.players[0].available_shares, 99);
+  assert.equal(staged.players[0].buy_fee, 637_500);
+});
+
+test('a non-trade mutation does not stage prices from unrelated portfolio holdings', () => {
+  const fixture = bootstrapFixture();
+  const current = mapServerBootstrap(fixture);
+  const portfolio = structuredClone(fixture.portfolio);
+  portfolio.holdings[0].current_price_cents = 5_900_000_000;
+  portfolio.holdings[0].market_value_cents = 5_900_000_000;
+  portfolio.market_value_cents = 5_900_000_000;
+  portfolio.total_value_cents = 14_787_250_000;
+
+  const staged = applyServerPortfolioToPresentation(current, portfolio);
+  const summary = applyPortfolioValuationToSummary(
+    getGameSummary(staged.state, staged.players),
+    staged.portfolioValuation,
+  );
+
+  assert.equal(staged.state.prices.sga, current.state.prices.sga);
+  assert.equal(summary.marketValue, 59_000_000);
+  assert.equal(summary.totalValue, 147_872_500);
 });
 
 test('activity and history are ordered for the existing UI without inventing unknown events', () => {
@@ -185,6 +271,22 @@ test('an unknown server replay date remains visible without exposing fabricated 
   const mapped = mapServerBootstrap(fixture);
 
   assert.equal(mapped.nextGameDate, '2026-10-20');
+});
+
+test('refresh feedback explains that syncing does not advance the shared replay', () => {
+  const fixture = bootstrapFixture();
+
+  assert.equal(
+    serverRefreshNotice(fixture),
+    'You are up to date. Next replay date: Oct 22, 2025. Replay dates advance for everyone only after the server settles them.',
+  );
+
+  fixture.game.next_game_date = null;
+  fixture.game.is_complete = true;
+  assert.equal(
+    serverRefreshNotice(fixture),
+    'Server data is up to date. The historical replay is complete.',
+  );
 });
 
 test('mapping refuses results after the authoritative settled date', () => {

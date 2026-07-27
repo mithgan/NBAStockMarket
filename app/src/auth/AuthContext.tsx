@@ -13,7 +13,7 @@ import {
 import type { AccessTokenProvider } from '../api/client';
 import type { PublicAppConfig } from '../api/config';
 import { authErrorMessage } from './authMessages';
-import { getSupabaseClient } from './supabase';
+import { getSupabaseClient, takeOAuthCallbackError } from './supabase';
 
 interface AuthContextValue {
   session: Session | null;
@@ -22,6 +22,7 @@ interface AuthContextValue {
   isSubmitting: boolean;
   error: string | null;
   notice: string | null;
+  signInWithGoogle: () => Promise<boolean>;
   signIn: (email: string, password: string) => Promise<boolean>;
   signUp: (email: string, password: string) => Promise<boolean>;
   signOut: () => Promise<void>;
@@ -44,6 +45,7 @@ function normalizedCredentials(email: string, password: string) {
 
 export function AuthProvider({ config, children }: { config: PublicAppConfig; children: ReactNode }) {
   const supabase = useMemo(() => getSupabaseClient(config), [config]);
+  const oauthCallbackError = useRef<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,6 +55,10 @@ export function AuthProvider({ config, children }: { config: PublicAppConfig; ch
 
   useEffect(() => {
     let active = true;
+    if (oauthCallbackError.current === null) {
+      oauthCallbackError.current = takeOAuthCallbackError();
+    }
+    if (oauthCallbackError.current) setError(oauthCallbackError.current);
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       authEventVersion.current += 1;
       if (!active) return;
@@ -64,7 +70,11 @@ export function AuthProvider({ config, children }: { config: PublicAppConfig; ch
       .then(({ data, error: sessionError }) => {
         if (!active || authEventVersion.current !== versionAtStart) return;
         setSession(data.session);
-        setError(sessionError ? 'Your saved session could not be restored. Sign in again.' : null);
+        setError(
+          sessionError
+            ? 'Your saved session could not be restored. Sign in again.'
+            : oauthCallbackError.current,
+        );
         setIsLoading(false);
       })
       .catch(() => {
@@ -97,6 +107,32 @@ export function AuthProvider({ config, children }: { config: PublicAppConfig; ch
       return true;
     } catch {
       setError('Sign in could not reach the authentication service. Try again.');
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [supabase]);
+
+  const signInWithGoogle = useCallback(async () => {
+    if (typeof window === 'undefined') {
+      setError('Google sign-in is available in the web test build.');
+      return false;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin },
+      });
+      if (oauthError) {
+        setError(authErrorMessage(oauthError.message, 'Google sign-in failed.'));
+        return false;
+      }
+      return true;
+    } catch {
+      setError('Google sign-in could not reach the authentication service. Try again.');
       return false;
     } finally {
       setIsSubmitting(false);
@@ -176,6 +212,7 @@ export function AuthProvider({ config, children }: { config: PublicAppConfig; ch
     isSubmitting,
     error,
     notice,
+    signInWithGoogle,
     signIn,
     signUp,
     signOut,
@@ -190,6 +227,7 @@ export function AuthProvider({ config, children }: { config: PublicAppConfig; ch
     notice,
     session,
     signIn,
+    signInWithGoogle,
     signOut,
     signUp,
   ]);

@@ -1,4 +1,4 @@
-export type PlayerTier = 'star' | 'mid' | 'bench';
+export type PlayerTier = string;
 
 export interface Player {
   id: string;
