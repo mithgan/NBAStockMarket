@@ -42,6 +42,7 @@ export class MarketApiError extends Error {
     message: string,
     public readonly code: string,
     public readonly status: number | null,
+    public readonly requestMayHaveCommitted = false,
   ) {
     super(message);
     this.name = 'MarketApiError';
@@ -251,18 +252,25 @@ export class MarketApiClient {
     let forceRefresh = false;
     let authRefreshUsed = false;
     let transportRetryUsed = false;
+    let priorMutationAttemptMayHaveCommitted = false;
 
     while (true) {
       const credentials = await this.getAccessToken(forceRefresh);
       forceRefresh = false;
       if (!credentials) {
-        throw new MarketApiError('Sign in again to continue.', 'unauthorized', 401);
+        throw new MarketApiError(
+          'Sign in again to continue.',
+          'unauthorized',
+          401,
+          priorMutationAttemptMayHaveCommitted,
+        );
       }
       if (credentials.userId !== this.expectedUserId) {
         throw new MarketApiError(
           'The signed-in account changed. Try the action again.',
           'account_changed',
           401,
+          priorMutationAttemptMayHaveCommitted,
         );
       }
       const token = credentials.accessToken;
@@ -288,6 +296,7 @@ export class MarketApiClient {
         });
         rawText = await response.text();
       } catch (error) {
+        if (method === 'POST') priorMutationAttemptMayHaveCommitted = true;
         if (!transportRetryUsed) {
           transportRetryUsed = true;
           continue;
@@ -297,6 +306,7 @@ export class MarketApiClient {
           timedOut ? 'The server took too long to respond. Try again.' : 'The server could not be reached. Check your connection and try again.',
           timedOut ? 'timeout' : 'network_error',
           null,
+          method === 'POST',
         );
       } finally {
         clearTimeout(timeout);
@@ -308,6 +318,7 @@ export class MarketApiClient {
         continue;
       }
       if (response.status >= 500 && !transportRetryUsed) {
+        if (method === 'POST') priorMutationAttemptMayHaveCommitted = true;
         transportRetryUsed = true;
         continue;
       }
@@ -317,7 +328,12 @@ export class MarketApiClient {
         try {
           payload = JSON.parse(rawText);
         } catch {
-          throw new MarketApiError('The server returned an unreadable response.', 'invalid_response', response.status);
+          throw new MarketApiError(
+            'The server returned an unreadable response.',
+            'invalid_response',
+            response.status,
+            priorMutationAttemptMayHaveCommitted || (method === 'POST' && response.ok),
+          );
         }
       }
 
@@ -327,6 +343,7 @@ export class MarketApiClient {
           problem?.message ?? 'The request could not be completed.',
           problem?.code ?? 'request_failed',
           response.status,
+          priorMutationAttemptMayHaveCommitted,
         );
       }
 
@@ -334,7 +351,12 @@ export class MarketApiClient {
         return options.parse(payload);
       } catch (error) {
         if (error instanceof ContractError) {
-          throw new MarketApiError('The server returned data this app cannot safely use.', 'invalid_response', response.status);
+          throw new MarketApiError(
+            'The server returned data this app cannot safely use.',
+            'invalid_response',
+            response.status,
+            priorMutationAttemptMayHaveCommitted || method === 'POST',
+          );
         }
         throw error;
       }

@@ -160,15 +160,28 @@ test('ordinary sign out only revokes the current device session', () => {
 
 test('server and transition failures lock every gameplay surface until recovery', () => {
   assert.match(appSource, /if \(isLoading\) \{/);
-  assert.match(appSource, /if \(isRefreshing\) \{/);
+  assert.doesNotMatch(appSource, /if \(isRefreshing\) \{/);
   assert.match(appSource, /if \(transitionRequired\)/);
   assert.match(appSource, /if \(serverError \|\| !state\)/);
-  assert.match(appSource, /\{isGameplayReady \? <SeasonControl/);
-  assert.match(appSource, /\{isGameplayReady \? \(/);
+  assert.match(appSource, /const hasVisibleSnapshot = Boolean\(/);
+  assert.match(appSource, /\{hasVisibleSnapshot \? <SeasonControl/);
+  assert.match(appSource, /\{hasVisibleSnapshot \? \(/);
+  assert.doesNotMatch(
+    appSource.match(/const hasVisibleSnapshot = Boolean\([\s\S]*?\);/)?.[0] ?? '',
+    /isRefreshing/,
+  );
   assert.match(seasonControlSource, /!isGameplayReady \|\| isRefreshing \|\| pendingActions\.size > 0/);
   assert.match(portfolioContextSource, /&& !isRefreshing/);
   assert.match(portfolioContextSource, /acquire\('account-refresh'\)/);
   assert.match(portfolioContextSource, /setServerError\(errorMessage\(error\)\)/);
+  assert.match(
+    portfolioContextSource,
+    /reconciliationReason === 'confirmed-global'\s*\?\s*'blocking'/,
+  );
+  assert.match(
+    portfolioContextSource,
+    /bootstrapRef\.current\s*\?\s*'nonblocking'\s*:\s*'blocking'/,
+  );
   assert.match(portfolioContextSource, /setMessage\(null\)/);
 });
 

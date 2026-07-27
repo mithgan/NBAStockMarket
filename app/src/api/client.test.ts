@@ -344,9 +344,41 @@ test('a mutation retry cannot cross into a newly signed-in account', async () =>
 
   await assert.rejects(
     client.trade('3112335', 'buy', 4),
-    (error: unknown) => error instanceof MarketApiError && error.code === 'account_changed',
+    (error: unknown) => (
+      error instanceof MarketApiError
+      && error.code === 'account_changed'
+      && error.requestMayHaveCommitted
+    ),
   );
   assert.equal(fetchCalls, 1);
+});
+
+test('a terminal auth response preserves ambiguity from an earlier mutation attempt', async () => {
+  let fetchCalls = 0;
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    idempotencyKeyFactory: () => 'ambiguous-auth-key',
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      if (fetchCalls === 1) throw new TypeError('connection reset');
+      return new Response(
+        JSON.stringify({ error: { code: 'unauthorized', message: 'No.' } }),
+        { status: 401 },
+      );
+    },
+  });
+
+  await assert.rejects(
+    client.trade('3112335', 'buy', 4),
+    (error: unknown) => (
+      error instanceof MarketApiError
+      && error.code === 'unauthorized'
+      && error.requestMayHaveCommitted
+    ),
+  );
+  assert.equal(fetchCalls, 3);
 });
 
 test('armed boosts accept the API null payout until settlement', async () => {
