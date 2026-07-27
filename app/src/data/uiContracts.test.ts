@@ -15,7 +15,9 @@ test('tab pills use their exact equal-width 44px Pressable bounds', () => {
 });
 
 test('market actions expose concise player-specific button labels', () => {
-  assert.match(marketSource, /accessibilityLabel=\{`View \$\{player\.name\} details`\}/);
+  assert.match(marketSource, /const rowAccessibilityLabel = \[/);
+  assert.match(marketSource, /`View \$\{player\.name\} details`/);
+  assert.match(marketSource, /accessibilityLabel=\{rowAccessibilityLabel\}/);
   assert.match(marketSource, /\? `Sell \$\{player\.name\}`/);
   assert.match(marketSource, /\? `\$\{player\.name\} is sold out`/);
   assert.match(marketSource, /: `Buy \$\{player\.name\} for \$\{formatMoney\(buyTotal\)\} including fee`/);

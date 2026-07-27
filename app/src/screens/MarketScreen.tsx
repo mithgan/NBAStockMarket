@@ -24,13 +24,27 @@ import {
   selectHighLowPoints,
   selectSettledTrendPoints,
   selectTrendRange,
-  sparklineHeights,
-  trendDirection,
   type TrendPoint,
   type TrendRange,
 } from '../data/trendPresentation';
+import {
+  formatOwnership,
+  formatSignedMetric,
+  formatSignedPercent,
+  formatTradeVolume,
+  lineChartCoordinates,
+  metricDirection,
+  priceChangePercent,
+  recentForm,
+  smoothLinePath,
+} from '../data/marketPresentation';
 import type { Player } from '../data/types';
-import { formatMoney, formatSignedMoney } from '../format';
+import {
+  formatCompactMoney,
+  formatCompactSignedMoney,
+  formatMoney,
+  formatSignedMoney,
+} from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
 import { colors } from '../theme';
 
@@ -69,23 +83,6 @@ function average(points: TrendPoint[], key: 'np' | 'expected_np') {
   return points.reduce((sum, point) => sum + point[key], 0) / points.length;
 }
 
-function compactSignedMoney(value: number) {
-  const absolute = Math.abs(value);
-  const sign = value >= 0 ? '+' : '−';
-  if (absolute >= 1_000_000) return `${sign}$${(absolute / 1_000_000).toFixed(2).replace(/\.00$/, '')}M`;
-  if (absolute >= 1_000) return `${sign}$${Math.round(absolute / 1_000)}K`;
-  return `${sign}$${Math.round(absolute)}`;
-}
-
-function smoothPath(coordinates: { x: number; y: number }[]) {
-  if (coordinates.length === 0) return '';
-  return coordinates.slice(1).reduce((path, point, index) => {
-    const previous = coordinates[index];
-    const middleX = (previous.x + point.x) / 2;
-    return `${path} C ${middleX} ${previous.y}, ${middleX} ${point.y}, ${point.x} ${point.y}`;
-  }, `M ${coordinates[0].x} ${coordinates[0].y}`);
-}
-
 function DetailChart({ points }: { points: TrendPoint[] }) {
   const [width, setWidth] = useState(0);
   const values = cumulativeValues(points.map((point) => point.dividend_per_holder));
@@ -101,7 +98,7 @@ function DetailChart({ points }: { points: TrendPoint[] }) {
     x: horizontalInset + (index / Math.max(values.length - 1, 1)) * Math.max(width - horizontalInset * 2, 0),
     y: topInset + ((maximum - value) / span) * (chartHeight - topInset - bottomInset),
   }));
-  const linePath = smoothPath(coordinates);
+  const linePath = smoothLinePath(coordinates);
   const color = values.at(-1)! >= 0 ? colors.green : colors.red;
   const areaPath = coordinates.length > 0
     ? `${linePath} L ${coordinates.at(-1)!.x} ${chartHeight - bottomInset} L ${coordinates[0].x} ${chartHeight - bottomInset} Z`
@@ -110,7 +107,7 @@ function DetailChart({ points }: { points: TrendPoint[] }) {
   return (
     <View
       accessible
-      accessibilityLabel={`${points.length} game cumulative dividend chart, high ${compactSignedMoney(extrema.high?.value ?? 0)}, low ${compactSignedMoney(extrema.low?.value ?? 0)}`}
+      accessibilityLabel={`${points.length} game cumulative dividend chart, high ${formatCompactSignedMoney(extrema.high?.value ?? 0)}, low ${formatCompactSignedMoney(extrema.low?.value ?? 0)}`}
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
       style={styles.chart}
     >
@@ -139,7 +136,7 @@ function DetailChart({ points }: { points: TrendPoint[] }) {
                   x={coordinate.x}
                   y={Math.max(11, Math.min(chartHeight - 3, coordinate.y + (isHigh ? -10 : 18)))}
                 >
-                  {label} {compactSignedMoney(point.value)}
+                  {label} {formatCompactSignedMoney(point.value)}
                 </SvgText>
               </G>
             );
@@ -181,6 +178,7 @@ export function PlayerDetail({
   const bestPayout = points.length > 0
     ? Math.max(...points.map((point) => point.dividend_per_holder))
     : 0;
+  const l5Form = recentForm(points);
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.detailContent}>
@@ -203,7 +201,9 @@ export function PlayerDetail({
           </Text>
         </View>
       </View>
-      <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.detailPrice}>{formatMoney(currentPrice)}</Text>
+      <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.detailPrice}>
+        {formatMoney(currentPrice)}
+      </Text>
       {points.length > 0 ? (
         <Text style={[styles.seasonChange, rangeTotal >= 0 ? styles.positive : styles.negative]}>
           {formatSignedMoney(rangeTotal)} {range === 'Season' ? 'Settled season' : `Last ${visiblePoints.length} games`}
@@ -254,6 +254,16 @@ export function PlayerDetail({
         <Stat label="Settled games" value={String(points.length)} />
         <Stat label="Avg NP / expected" value={`${average(points, 'np').toFixed(1)} / ${average(points, 'expected_np').toFixed(1)}`} />
         <Stat label="Best settled payout" value={formatSignedMoney(bestPayout)} />
+        <Stat label="Market ownership" value={formatOwnership(player.ownership_bps)} />
+        <Stat
+          label="Shares available"
+          value={Number.isFinite(player.available_shares) ? String(player.available_shares) : 'Unavailable'}
+        />
+        <Stat label="30-day activity" value={formatTradeVolume(player.volume_30d)} />
+        <Stat
+          label="Recent form vs expected"
+          value={l5Form ? `L${l5Form.games} ${formatSignedMetric(l5Form.averageSurprise)} NP` : 'No settled games'}
+        />
       </View>
     </ScrollView>
   );
@@ -261,23 +271,39 @@ export function PlayerDetail({
 
 function Sparkline({ points }: { points: TrendPoint[] }) {
   const dividends = points.map((point) => point.dividend_per_holder);
-  const direction = trendDirection(dividends);
-  const color = direction === 'up' ? colors.green : colors.red;
-  const heights = sparklineHeights(dividends);
+  const values = [0, ...cumulativeValues(dividends)];
+  const cumulativeDividend = values.at(-1) ?? 0;
+  const color = cumulativeDividend >= 0 ? colors.green : colors.red;
+  const width = 58;
+  const height = 32;
+  const coordinates = lineChartCoordinates(values, width, height);
+  const linePath = smoothLinePath(coordinates);
+  const zeroY = coordinates[0]?.y ?? height / 2;
 
   return (
     <View
       accessible
-      accessibilityLabel={`Last ${points.length} game dividend trend, trending ${direction}`}
+      accessibilityLabel={`Last ${points.length} settled games, cumulative dividends ${formatCompactSignedMoney(cumulativeDividend)}`}
       style={styles.sparkline}
     >
-      {heights.map((height, index) => (
-        <View
-          // Dates are unique within each player's series.
-          key={points[index].date}
-          style={[styles.sparkBar, { backgroundColor: color, height }]}
+      <Svg height={height} width={width}>
+        <Path
+          d={`M 3 ${zeroY} L ${width - 3} ${zeroY}`}
+          fill="none"
+          stroke={colors.border}
+          strokeDasharray="2 3"
+          strokeWidth={1}
         />
-      ))}
+        <Path d={linePath} fill="none" stroke={color} strokeLinecap="round" strokeWidth={2.25} />
+        {coordinates.length > 0 ? (
+          <Circle
+            cx={coordinates.at(-1)!.x}
+            cy={coordinates.at(-1)!.y}
+            fill={color}
+            r={2.5}
+          />
+        ) : null}
+      </Svg>
     </View>
   );
 }
@@ -304,6 +330,28 @@ function MarketRow({ compact, freeCash, currentPrice, player, held, trendPoints,
   const unaffordable = !held && shortfall > 0;
   const soldOut = !held && player.available_shares === 0;
   const disabled = shorted || boosted || soldOut || unaffordable || locked;
+  const change = priceChangePercent(currentPrice, player.listing_price);
+  const form = recentForm(trendPoints);
+  const changeDirection = change === null ? 0 : metricDirection(change);
+  const formDirection = form ? metricDirection(form.averageSurprise) : 0;
+  const chartPoints = selectTrendRange(trendPoints, 'L15');
+  const cumulativeDividend = chartPoints.reduce(
+    (sum, point) => sum + point.dividend_per_holder,
+    0,
+  );
+  const rowAccessibilityLabel = [
+    `View ${player.name} details`,
+    `Current price ${formatMoney(currentPrice)}`,
+    change === null ? null : `${formatSignedPercent(change)} since listing`,
+    formatOwnership(player.ownership_bps),
+    formatTradeVolume(player.volume_30d),
+    form
+      ? `Recent form, last ${form.games} games ${formatSignedMetric(form.averageSurprise)} net points versus expected`
+      : null,
+    chartPoints.length > 0
+      ? `Last ${chartPoints.length} settled games cumulative dividends ${formatCompactSignedMoney(cumulativeDividend)}`
+      : null,
+  ].filter((label): label is string => label !== null).join('. ');
 
   const handleTrade = () => {
     if (pending) return;
@@ -319,7 +367,7 @@ function MarketRow({ compact, freeCash, currentPrice, player, held, trendPoints,
       ]}
     >
       <Pressable
-        accessibilityLabel={`View ${player.name} details`}
+        accessibilityLabel={rowAccessibilityLabel}
         accessibilityRole="button"
         onPress={() => onOpen(player)}
         style={({ pressed }) => [
@@ -332,13 +380,72 @@ function MarketRow({ compact, freeCash, currentPrice, player, held, trendPoints,
         <View style={styles.playerCopy}>
           <Text style={styles.playerName} numberOfLines={1}>{player.name}</Text>
           <View style={styles.quoteRow}>
-            <Text style={[styles.tier, player.tier === 'star' ? styles.star : styles.mid]}>
-              {player.tier.toUpperCase()}
+            <Text
+              accessibilityLabel={`Current price ${formatMoney(currentPrice)}`}
+              style={styles.price}
+            >
+              {formatCompactMoney(currentPrice)}
             </Text>
-            <Text style={styles.price}>{formatMoney(currentPrice)}</Text>
+            {change === null ? null : (
+              <Text
+                accessibilityLabel={`${formatSignedPercent(change)} since listing`}
+                style={[
+                  styles.priceChange,
+                  changeDirection > 0
+                    ? styles.positive
+                    : changeDirection < 0
+                      ? styles.negative
+                      : styles.neutral,
+                ]}
+              >
+                {formatSignedPercent(change)} since listing
+              </Text>
+            )}
           </View>
+          <Text numberOfLines={1} style={styles.marketMeta}>
+            {formatOwnership(player.ownership_bps)} · {formatTradeVolume(player.volume_30d)}
+          </Text>
+          {compact && form ? (
+            <Text
+              accessibilityLabel={`Last ${form.games} games ${formatSignedMetric(form.averageSurprise)} net points versus expected`}
+              numberOfLines={1}
+              style={[
+                styles.compactTrendLabel,
+                formDirection > 0
+                  ? styles.positive
+                  : formDirection < 0
+                    ? styles.negative
+                    : styles.neutral,
+              ]}
+            >
+              L{form.games} {formatSignedMetric(form.averageSurprise)} NP · VS EXPECTED
+            </Text>
+          ) : null}
         </View>
-        {compact || trendPoints.length === 0 ? null : <Sparkline points={selectTrendRange(trendPoints, 'L15')} />}
+        {compact || trendPoints.length === 0 ? null : (
+          <View style={styles.trendSummary}>
+            {form ? (
+              <>
+                <Text
+                  accessibilityLabel={`Last ${form.games} games ${formatSignedMetric(form.averageSurprise)} net points versus expected`}
+                  numberOfLines={1}
+                  style={[
+                    styles.trendLabel,
+                    formDirection > 0
+                      ? styles.positive
+                      : formDirection < 0
+                        ? styles.negative
+                        : styles.neutral,
+                  ]}
+                >
+                  L{form.games} {formatSignedMetric(form.averageSurprise)} NP
+                </Text>
+                <Text style={styles.trendContext}>VS EXPECTED</Text>
+              </>
+            ) : null}
+            <Sparkline points={chartPoints} />
+          </View>
+        )}
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -407,10 +514,10 @@ export function MarketScreen() {
     trade,
   } = usePortfolio();
   const { width } = useWindowDimensions();
-  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   if (!state || !summary) return null;
-  const compact = width < 360;
+  const compact = width < 420;
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const activeShortPlayerIds = new Set(
     state.weeklyShorts
@@ -423,6 +530,9 @@ export function MarketScreen() {
       .map((boost) => boost.playerId),
   );
   const accountMutationPending = pendingActions.has('account-mutation');
+  const selectedPlayer = selectedPlayerId
+    ? players.find((player) => player.id === selectedPlayerId) ?? null
+    : null;
   const visiblePlayers = normalizedQuery
     ? players.filter((player) => player.name.toLocaleLowerCase().includes(normalizedQuery))
     : players;
@@ -432,7 +542,7 @@ export function MarketScreen() {
       <PlayerDetail
         currentPrice={state.prices[selectedPlayer.id] ?? selectedPlayer.listing_price}
         latestSettledDate={latestSettledDate}
-        onClose={() => setSelectedPlayer(null)}
+        onClose={() => setSelectedPlayerId(null)}
         player={selectedPlayer}
         trendPoints={playerTrends[selectedPlayer.id] ?? []}
       />
@@ -490,7 +600,7 @@ export function MarketScreen() {
             isLast={index === visiblePlayers.length - 1}
             key={player.id}
             locked={accountMutationPending}
-            onOpen={setSelectedPlayer}
+            onOpen={(player) => setSelectedPlayerId(player.id)}
             onTrade={trade}
             pending={pendingActions.has(`trade:${player.id}`)}
             player={player}
@@ -518,7 +628,7 @@ const styles = StyleSheet.create({
   emptyCard: { minHeight: 120, justifyContent: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 18 },
   emptyTitle: { color: colors.text, fontSize: 15, fontWeight: '800', marginBottom: 4 },
   marketList: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
-  playerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 72, paddingHorizontal: 11, paddingVertical: 10 },
+  playerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 82, paddingHorizontal: 11, paddingVertical: 10 },
   compactPlayerRow: { gap: 8, paddingHorizontal: 9 },
   playerRowBorder: { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth },
   playerDetails: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -528,13 +638,18 @@ const styles = StyleSheet.create({
   avatarInitials: { color: colors.text, fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
   playerCopy: { flex: 1, minWidth: 0 },
   playerName: { color: colors.text, fontSize: 14, fontWeight: '700', flexShrink: 1 },
-  quoteRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 },
+  quoteRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 3 },
   tier: { borderRadius: 999, overflow: 'hidden', paddingHorizontal: 6, paddingVertical: 3, fontSize: 8, fontWeight: '900', letterSpacing: 0.7 },
   star: { color: colors.gold, backgroundColor: colors.goldSoft },
   mid: { color: '#9fbccc', backgroundColor: colors.surfaceRaised },
-  price: { color: colors.muted, fontSize: 11, fontVariant: ['tabular-nums'] },
-  sparkline: { width: 52, height: 32, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
-  sparkBar: { width: 2, borderRadius: 2, opacity: 0.9 },
+  price: { color: colors.text, fontSize: 13, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  priceChange: { fontSize: 8, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  marketMeta: { color: colors.muted, fontSize: 8, fontWeight: '700', marginTop: 3, textTransform: 'uppercase' },
+  compactTrendLabel: { fontSize: 8, fontWeight: '900', marginTop: 2, fontVariant: ['tabular-nums'] },
+  trendSummary: { width: 64, alignItems: 'flex-end', justifyContent: 'center' },
+  trendLabel: { fontSize: 8, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  trendContext: { color: colors.muted, fontSize: 6, fontWeight: '800', marginBottom: 2 },
+  sparkline: { width: 58, height: 32 },
   tradeButton: { minWidth: 60, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1 },
   buyButton: { borderColor: colors.green, backgroundColor: '#123b2b' },
   unaffordableButton: { borderColor: colors.muted, backgroundColor: colors.surfaceRaised, opacity: 0.48 },
@@ -557,6 +672,7 @@ const styles = StyleSheet.create({
   seasonChange: { color: colors.muted, fontSize: 16, fontWeight: '800', marginTop: 3, fontVariant: ['tabular-nums'] },
   positive: { color: colors.green },
   negative: { color: colors.red },
+  neutral: { color: colors.muted },
   chartCard: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 18, padding: 16, marginTop: 26 },
   chartHeading: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
   sectionEyebrow: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.3 },

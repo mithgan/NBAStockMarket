@@ -299,6 +299,9 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
     actual_salary: dollars(listing.actual_salary_cents),
     available_shares: listing.available_shares,
     buy_fee: dollars(listing.buy_fee_cents),
+    ownership_bps: listing.ownership_bps,
+    shares_outstanding: listing.shares_outstanding,
+    volume_30d: listing.volume_30d,
   }));
   const names = new Map(players.map((player) => [player.id, player.name]));
   const latestSettledDate = bootstrap.game.last_settled_date;

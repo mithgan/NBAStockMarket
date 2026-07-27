@@ -128,6 +128,9 @@ test('mapServerBootstrap converts exact server cents and state into screen data'
   assert.equal(mapped.state.cash, 88_872_500);
   assert.equal(mapped.state.prices.sga, 51_000_000);
   assert.equal(mapped.players[0].listing_price, 50_000_000);
+  assert.equal(mapped.players[0].ownership_bps, 100);
+  assert.equal(mapped.players[0].shares_outstanding, 100);
+  assert.equal(mapped.players[0].volume_30d, 1);
   assert.equal(mapped.players[0].available_shares, 99);
   assert.equal(mapped.players[0].buy_fee, 637_500);
   assert.equal(mapped.state.holdings[0].average_price, 50_125_000);

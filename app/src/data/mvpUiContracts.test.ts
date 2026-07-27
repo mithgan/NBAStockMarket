@@ -55,8 +55,12 @@ test('market discovery supports search and a clear empty result', () => {
 
 test('the market removes nonessential sparklines from narrow phone rows', () => {
   assert.match(marketSource, /useWindowDimensions/);
-  assert.match(marketSource, /const compact = width < 360/);
-  assert.match(marketSource, /compact \|\| trendPoints\.length === 0 \? null : <Sparkline/);
+  assert.match(marketSource, /const compact = width < 420/);
+  assert.match(marketSource, /compact \|\| trendPoints\.length === 0 \? null : \(\s*<View/);
+  assert.match(marketSource, /compact && form \? \(/);
+  assert.match(marketSource, /L\{form\.games\} \{formatSignedMetric\(form\.averageSurprise\)\} NP · VS EXPECTED/);
+  assert.match(marketSource, /const chartPoints = selectTrendRange\(trendPoints, 'L15'\)/);
+  assert.match(marketSource, /<Sparkline points=\{chartPoints\}/);
 });
 
 test('market charts only receive results through the latest settled replay date', () => {
@@ -65,6 +69,19 @@ test('market charts only receive results through the latest settled replay date'
   assert.doesNotMatch(marketSource, /data\/trends/);
   assert.doesNotMatch(serverStateSource, /data\/replay/);
   assert.match(marketSource, /No settled games yet/);
+});
+
+test('player details resolve current server data and price changes name their timeframe', () => {
+  assert.match(marketSource, /const \[selectedPlayerId, setSelectedPlayerId\]/);
+  assert.match(marketSource, /players\.find\(\(player\) => player\.id === selectedPlayerId\)/);
+  assert.match(portfolioSource, /const \[selectedPlayerId, setSelectedPlayerId\]/);
+  assert.match(portfolioSource, /playerById\.get\(selectedPlayerId\)/);
+  assert.match(marketSource, /\{formatSignedPercent\(change\)\} since listing/);
+  assert.match(marketSource, /style=\{styles\.detailPrice\}>\s*\{formatMoney\(currentPrice\)\}/);
+  assert.match(marketSource, />VS EXPECTED</);
+  assert.match(marketSource, /const rowAccessibilityLabel = \[/);
+  assert.match(marketSource, /`Current price \$\{formatMoney\(currentPrice\)\}`/);
+  assert.match(marketSource, /accessibilityLabel=\{rowAccessibilityLabel\}/);
 });
 
 test('player details and trade actions are sibling controls instead of nested buttons', () => {

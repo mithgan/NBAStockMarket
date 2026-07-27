@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PortfolioHistoryChart } from '../components/PortfolioHistoryChart';
-import type { Player } from '../data/types';
 import { formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
 import { colors } from '../theme';
@@ -26,9 +25,10 @@ export function PortfolioScreen() {
     state,
     summary,
   } = usePortfolio();
-  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   if (!state || !summary) return null;
   const playerById = new Map(players.map((player) => [player.id, player]));
+  const selectedPlayer = selectedPlayerId ? playerById.get(selectedPlayerId) ?? null : null;
   const latestPoint = state.portfolioHistory.at(-1) ?? null;
   const recentActivity = [...state.activity].reverse().slice(0, 10);
 
@@ -38,7 +38,7 @@ export function PortfolioScreen() {
         backLabel="Portfolio"
         currentPrice={state.prices[selectedPlayer.id] ?? selectedPlayer.listing_price}
         latestSettledDate={latestSettledDate}
-        onClose={() => setSelectedPlayer(null)}
+        onClose={() => setSelectedPlayerId(null)}
         player={selectedPlayer}
         trendPoints={playerTrends[selectedPlayer.id] ?? []}
       />
@@ -84,7 +84,7 @@ export function PortfolioScreen() {
                 accessibilityLabel={`View ${player.name} details`}
                 accessibilityRole="button"
                 key={holding.player_id}
-                onPress={() => setSelectedPlayer(player)}
+                onPress={() => setSelectedPlayerId(player.id)}
                 style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               >
                 <View style={styles.rowCopy}>
