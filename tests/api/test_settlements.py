@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import UTC, date, datetime
 from threading import Event
 
 from fastapi.testclient import TestClient
@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from nba_stock_market.api.app import create_app
 from nba_stock_market.api.auth import Principal
 from nba_stock_market.api.database import (
+    AccountActivityRow,
     AccountRow,
     Database,
     DividendRow,
@@ -20,6 +21,7 @@ from nba_stock_market.api.database import (
     SeedReplayEvent,
     SettlementRow,
 )
+from nba_stock_market.api.service import MarketService
 from nba_stock_market.api.settings import ApiSettings
 from tests.api.conftest import FixtureTokenVerifier
 
@@ -181,6 +183,42 @@ def test_local_replay_seed_is_idempotent_but_rejects_conflicting_events(
                 )
             ],
         )
+
+
+def test_bulk_activity_insert_chunks_and_remains_idempotent_on_sqlite(
+    settlement_database: Database,
+) -> None:
+    service = MarketService(settlement_database)
+    principal = Principal(id="alice", display_name="Alice")
+    service.bootstrap(principal)
+    occurred_at = datetime(2025, 10, 21, 12, tzinfo=UTC)
+    rows = [
+        {
+            "account_id": principal.id,
+            "kind": "dividend",
+            "player_id": None,
+            "game_date": date(2025, 10, 21),
+            "amount_cents": index,
+            "source_key": f"chunk-test:{index}",
+            "details": {"index": index},
+            "occurred_at": occurred_at,
+        }
+        for index in range(250)
+    ]
+
+    with settlement_database.market_write_transaction(
+        settlement_exclusive=False
+    ) as session:
+        service._record_activities(session, rows)
+        service._record_activities(session, rows)
+
+    with settlement_database.session() as session:
+        count = session.scalar(
+            select(func.count())
+            .select_from(AccountActivityRow)
+            .where(AccountActivityRow.account_id == principal.id)
+        )
+    assert count == 250
 
 
 def test_settlement_route_is_scheduler_only_and_fails_closed_when_unconfigured(

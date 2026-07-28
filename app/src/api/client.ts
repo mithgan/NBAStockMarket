@@ -13,6 +13,7 @@ import {
   parsePortfolioPoint,
   parseResetResult,
   parseSettlement,
+  parseTradeResult,
   type InstrumentSummary,
   type MarketListing,
   type ServerBootstrap,
@@ -20,6 +21,7 @@ import {
   type ServerMutationResult,
   type ServerPortfolio,
   type ServerResetResult,
+  type ServerTradeResult,
 } from './contracts';
 
 export interface AuthenticatedAccessToken {
@@ -36,10 +38,23 @@ export class MarketApiError extends Error {
     message: string,
     public readonly code: string,
     public readonly status: number | null,
+    public readonly mutationMayHaveCommitted = false,
   ) {
     super(message);
     this.name = 'MarketApiError';
   }
+}
+
+export function mutationFailureMayHaveCommitted(error: unknown): boolean {
+  if (!(error instanceof MarketApiError)) return true;
+  if (error.mutationMayHaveCommitted) return true;
+  if (error.status !== null && error.status >= 400 && error.status < 500) {
+    return false;
+  }
+  return error.code === 'invalid_response'
+    || error.status === null
+    || error.status < 400
+    || error.status >= 500;
 }
 
 interface ClientOptions {
@@ -156,14 +171,29 @@ export class MarketApiClient {
     });
   }
 
-  async bootstrap(): Promise<ServerBootstrap> {
-    return this.request('/api/v1/bootstrap', {
+  async bootstrap(settledResultsAfter?: string): Promise<ServerBootstrap> {
+    const query = settledResultsAfter
+      ? `?settled_results_after=${encodeURIComponent(settledResultsAfter)}`
+      : '';
+    return this.request(`/api/v1/bootstrap${query}`, {
       parse: (value) => parseDataEnvelope(value, parseBootstrap),
     });
   }
 
-  async trade(playerId: string, side: 'buy' | 'sell'): Promise<ServerMutationResult> {
-    return this.mutation('/api/v1/trades', { player_id: playerId, side }, parseMutationResult);
+  async trade(
+    playerId: string,
+    side: 'buy' | 'sell',
+    settledResultsAfter?: string,
+  ): Promise<ServerTradeResult> {
+    return this.mutation(
+      '/api/v1/trades',
+      {
+        player_id: playerId,
+        side,
+        ...(settledResultsAfter ? { settled_results_after: settledResultsAfter } : {}),
+      },
+      parseTradeResult,
+    );
   }
 
   async armWeeklyShort(playerId: string): Promise<ServerMutationResult> {
@@ -209,18 +239,25 @@ export class MarketApiClient {
     let forceRefresh = false;
     let authRefreshUsed = false;
     let transportRetryUsed = false;
+    let mutationMayHaveCommitted = false;
 
     while (true) {
       const credentials = await this.getAccessToken(forceRefresh);
       forceRefresh = false;
       if (!credentials) {
-        throw new MarketApiError('Sign in again to continue.', 'unauthorized', 401);
+        throw new MarketApiError(
+          'Sign in again to continue.',
+          'unauthorized',
+          401,
+          mutationMayHaveCommitted,
+        );
       }
       if (credentials.userId !== this.expectedUserId) {
         throw new MarketApiError(
           'The signed-in account changed. Try the action again.',
           'account_changed',
           401,
+          mutationMayHaveCommitted,
         );
       }
       const token = credentials.accessToken;
@@ -246,6 +283,7 @@ export class MarketApiClient {
         });
         rawText = await response.text();
       } catch (error) {
+        if (method === 'POST') mutationMayHaveCommitted = true;
         if (!transportRetryUsed) {
           transportRetryUsed = true;
           continue;
@@ -255,6 +293,7 @@ export class MarketApiClient {
           timedOut ? 'The server took too long to respond. Try again.' : 'The server could not be reached. Check your connection and try again.',
           timedOut ? 'timeout' : 'network_error',
           null,
+          mutationMayHaveCommitted,
         );
       } finally {
         clearTimeout(timeout);
@@ -266,6 +305,7 @@ export class MarketApiClient {
         continue;
       }
       if (response.status >= 500 && !transportRetryUsed) {
+        if (method === 'POST') mutationMayHaveCommitted = true;
         transportRetryUsed = true;
         continue;
       }
@@ -275,7 +315,12 @@ export class MarketApiClient {
         try {
           payload = JSON.parse(rawText);
         } catch {
-          throw new MarketApiError('The server returned an unreadable response.', 'invalid_response', response.status);
+          throw new MarketApiError(
+            'The server returned an unreadable response.',
+            'invalid_response',
+            response.status,
+            mutationMayHaveCommitted,
+          );
         }
       }
 
@@ -285,6 +330,7 @@ export class MarketApiClient {
           problem?.message ?? 'The request could not be completed.',
           problem?.code ?? 'request_failed',
           response.status,
+          mutationMayHaveCommitted,
         );
       }
 
@@ -292,7 +338,12 @@ export class MarketApiClient {
         return options.parse(payload);
       } catch (error) {
         if (error instanceof ContractError) {
-          throw new MarketApiError('The server returned data this app cannot safely use.', 'invalid_response', response.status);
+          throw new MarketApiError(
+            'The server returned data this app cannot safely use.',
+            'invalid_response',
+            response.status,
+            mutationMayHaveCommitted || method === 'POST',
+          );
         }
         throw error;
       }

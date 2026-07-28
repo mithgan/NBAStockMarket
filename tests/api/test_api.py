@@ -6,7 +6,14 @@ from datetime import date, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from nba_stock_market.api.database import Database, ReplayEventRow, TradeRow, utcnow
+from nba_stock_market.api.auth import Principal
+from nba_stock_market.api.database import (
+    Database,
+    HoldingRow,
+    ReplayEventRow,
+    TradeRow,
+    utcnow,
+)
 from nba_stock_market.api.service import KeyedLockRegistry
 
 
@@ -99,6 +106,66 @@ def test_bootstrap_is_atomic_and_never_exposes_unsettled_results(
     assert payload["game"]["next_game_date"] == "2025-10-22"
     assert payload["market"][0]["current_price_cents"] > 0
     assert payload["leaderboard"][0]["account_id"] == "alice"
+
+    unchanged = client.get(
+        "/api/v1/bootstrap?settled_results_after=2025-10-21",
+        headers=alice_headers,
+    )
+    assert unchanged.status_code == 200
+    assert unchanged.json()["data"]["settled_results"] == []
+
+    client.app.state.market_service.settle_next(
+        expected_game_date=date(2025, 10, 22),
+        idempotency_key="bootstrap-settlement-0002",
+    )
+    incremental = client.get(
+        "/api/v1/bootstrap?settled_results_after=2025-10-21",
+        headers=alice_headers,
+    )
+    assert incremental.status_code == 200
+    assert [
+        row["game_date"] for row in incremental.json()["data"]["settled_results"]
+    ] == ["2025-10-22"]
+
+    trade = client.post(
+        "/api/v1/trades",
+        headers=trade_headers(alice_headers, "bootstrap-trade-0001"),
+        json={
+            "player_id": "one-share",
+            "side": "buy",
+            "settled_results_after": "2025-10-22",
+        },
+    )
+    assert trade.status_code == 201
+    assert trade.json()["data"]["bootstrap"]["settled_results"] == []
+    assert trade.json()["data"]["bootstrap"]["portfolio"]["holdings"][0][
+        "player_id"
+    ] == "one-share"
+
+
+def test_trade_acknowledgement_survives_a_post_commit_snapshot_failure(
+    client: TestClient,
+    database: Database,
+    monkeypatch,
+) -> None:
+    service = client.app.state.market_service
+
+    def fail_snapshot(*_args, **_kwargs):
+        raise RuntimeError("snapshot unavailable")
+
+    monkeypatch.setattr(service, "_bootstrap_payload", fail_snapshot)
+
+    result = service.execute_trade(
+        Principal(id="alice", display_name="Alice"),
+        player_id="one-share",
+        side="buy",
+        idempotency_key="post-commit-snapshot-failure-0001",
+    )
+
+    with database.snapshot_session() as session:
+        assert session.scalar(select(TradeRow)) is not None
+        assert session.scalar(select(HoldingRow)) is not None
+    assert "bootstrap" not in result
 
 
 def test_non_json_trade_body_returns_serializable_validation_error(

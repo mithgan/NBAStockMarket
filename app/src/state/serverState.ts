@@ -148,6 +148,40 @@ export function serverRefreshNotice(bootstrap: ServerBootstrap): string {
   return `You are up to date. Next replay date: ${nextDate}. Replay dates advance for everyone only after the server settles them.`;
 }
 
+export type IncrementalBootstrapMerge =
+  | { kind: 'merged'; bootstrap: ServerBootstrap }
+  | { kind: 'reload'; bootstrap: ServerBootstrap };
+
+export function mergeIncrementalBootstrap(
+  previous: ServerBootstrap,
+  incoming: ServerBootstrap,
+  requestedAfter: string,
+): IncrementalBootstrapMerge {
+  const incomingDate = incoming.game.last_settled_date;
+  if (incomingDate === null || incomingDate < requestedAfter) {
+    return { kind: 'reload', bootstrap: incoming };
+  }
+  const results = new Map(
+    previous.settledResults.map((result) => [
+      `${result.game_date}:${result.player_id}`,
+      result,
+    ]),
+  );
+  for (const result of incoming.settledResults) {
+    results.set(`${result.game_date}:${result.player_id}`, result);
+  }
+  return {
+    kind: 'merged',
+    bootstrap: {
+      ...incoming,
+      settledResults: [...results.values()].sort((left, right) => (
+        left.game_date.localeCompare(right.game_date)
+        || left.player_id.localeCompare(right.player_id)
+      )),
+    },
+  };
+}
+
 export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentationState {
   const players: Player[] = bootstrap.market.map((listing) => ({
     id: listing.id,

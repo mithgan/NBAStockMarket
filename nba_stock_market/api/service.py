@@ -5,6 +5,7 @@ import binascii
 import copy
 import hashlib
 import json
+import logging
 import math
 import threading
 from contextlib import contextmanager
@@ -13,6 +14,8 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -65,6 +68,7 @@ WEEKLY_TOTAL_CLAMP_MICROS = round(WEEKLY_TOTAL_CLAMP_NP * 1_000_000)
 DOLLARS_PER_NET_POINT_MICRO_CENTS = round(
     DOLLARS_PER_NET_POINT * 100 / 1_000_000
 )
+LOGGER = logging.getLogger(__name__)
 
 
 def week_start_for(value: date) -> date:
@@ -170,11 +174,25 @@ class MarketService:
                 account = self._ensure_account(session, principal, for_update=True)
                 return self._portfolio_payload(session, account)
 
-    def bootstrap(self, principal: Principal) -> dict[str, object]:
+    def bootstrap(
+        self,
+        principal: Principal,
+        *,
+        settled_results_after: date | None = None,
+    ) -> dict[str, object]:
         """Return one authoritative, settled-only application snapshot."""
         with self.locks.acquire(f"account:{principal.id}"):
-            # Account creation is the only write in this read path. Commit it
-            # before opening the repeatable-read snapshot used for all payloads.
+            with self.database.snapshot_session() as session:
+                account = session.get(AccountRow, principal.id)
+                if account is not None:
+                    return self._bootstrap_payload(
+                        session,
+                        account,
+                        principal,
+                        settled_results_after=settled_results_after,
+                    )
+
+            # Only first-time users need a write before the authoritative read.
             with self.database.session() as session, session.begin():
                 self._ensure_account(session, principal, for_update=True)
 
@@ -186,26 +204,39 @@ class MarketService:
                         code="account_unavailable",
                         message="Your account could not be loaded.",
                     )
-                state = self._game_state(session)
-                return {
-                    "market": self._bootstrap_market(session, account),
-                    "portfolio": self._portfolio_payload(session, account),
-                    "game": self._game_state_payload(state),
-                    "activity": self._bootstrap_activity(session, account),
-                    "portfolio_history": self._bootstrap_portfolio_history(
-                        session,
-                        account,
-                    ),
-                    "settlements": self._bootstrap_settlements(session, account),
-                    "leaderboard": self._bootstrap_leaderboard(
-                        session,
-                        principal,
-                    ),
-                    "settled_results": self._bootstrap_settled_results(
-                        session,
-                        state,
-                    ),
-                }
+                return self._bootstrap_payload(
+                    session,
+                    account,
+                    principal,
+                    settled_results_after=settled_results_after,
+                )
+
+    def _bootstrap_payload(
+        self,
+        session: Session,
+        account: AccountRow,
+        principal: Principal,
+        *,
+        settled_results_after: date | None,
+    ) -> dict[str, object]:
+        state = self._game_state(session)
+        return {
+            "market": self._bootstrap_market(session, account),
+            "portfolio": self._portfolio_payload(session, account),
+            "game": self._game_state_payload(state),
+            "activity": self._bootstrap_activity(session, account),
+            "portfolio_history": self._bootstrap_portfolio_history(
+                session,
+                account,
+            ),
+            "settlements": self._bootstrap_settlements(session, account),
+            "leaderboard": self._bootstrap_leaderboard(session, principal),
+            "settled_results": self._bootstrap_settled_results(
+                session,
+                state,
+                after=settled_results_after,
+            ),
+        }
 
     def activity_history(
         self,
@@ -894,6 +925,7 @@ class MarketService:
             .order_by(HoldingRow.account_id, HoldingRow.player_id)
         ).all()
         account_totals: dict[str, int] = {}
+        activity_rows: list[dict[str, object]] = []
         dividend_total = 0
         for holding in holding_rows:
             event = event_by_player[holding.player_id]
@@ -910,19 +942,24 @@ class MarketService:
                 account_totals.get(holding.account_id, 0) + event.dividend_cents
             )
             dividend_total += event.dividend_cents
-            self._record_activity(
-                session,
-                account_id=holding.account_id,
-                kind="dividend",
-                player_id=event.player_id,
-                game_date=game_date,
-                amount_cents=event.dividend_cents,
-                source_key=f"dividend:{game_date.isoformat()}:{event.player_id}",
-                details={
-                    "actual_net_points_micros": event.actual_net_points_micros,
-                    "expected_net_points_micros": event.expected_net_points_micros,
-                },
-                occurred_at=now,
+            activity_rows.append(
+                {
+                    "account_id": holding.account_id,
+                    "kind": "dividend",
+                    "player_id": event.player_id,
+                    "game_date": game_date,
+                    "amount_cents": event.dividend_cents,
+                    "source_key": (
+                        f"dividend:{game_date.isoformat()}:{event.player_id}"
+                    ),
+                    "details": {
+                        "actual_net_points_micros": event.actual_net_points_micros,
+                        "expected_net_points_micros": (
+                            event.expected_net_points_micros
+                        ),
+                    },
+                    "occurred_at": now,
+                }
             )
 
         weekly_shorts = session.scalars(
@@ -980,24 +1017,25 @@ class MarketService:
             )
             boost_total += cash_delta_cents
             boost_settlement_count += 1
-            self._record_activity(
-                session,
-                account_id=boost.account_id,
-                kind=(
-                    "boost_consumed"
-                    if boost.status == "consumed"
-                    else "boost_refunded"
-                ),
-                player_id=boost.player_id,
-                game_date=game_date,
-                amount_cents=cash_delta_cents,
-                source_key=f"boost:{boost.id}:{boost.status}",
-                details={
-                    "fee_cents": boost.fee_cents,
-                    "payout_cents": payout_cents,
-                    "target_game_date": boost.target_game_date.isoformat(),
-                },
-                occurred_at=now,
+            activity_rows.append(
+                {
+                    "account_id": boost.account_id,
+                    "kind": (
+                        "boost_consumed"
+                        if boost.status == "consumed"
+                        else "boost_refunded"
+                    ),
+                    "player_id": boost.player_id,
+                    "game_date": game_date,
+                    "amount_cents": cash_delta_cents,
+                    "source_key": f"boost:{boost.id}:{boost.status}",
+                    "details": {
+                        "fee_cents": boost.fee_cents,
+                        "payout_cents": payout_cents,
+                        "target_game_date": boost.target_game_date.isoformat(),
+                    },
+                    "occurred_at": now,
+                }
             )
 
         short_total = 0
@@ -1015,20 +1053,21 @@ class MarketService:
                 )
                 boost_total += boost.fee_cents
                 boost_settlement_count += 1
-                self._record_activity(
-                    session,
-                    account_id=boost.account_id,
-                    kind="boost_refunded",
-                    player_id=boost.player_id,
-                    game_date=game_date,
-                    amount_cents=boost.fee_cents,
-                    source_key=f"boost:{boost.id}:refunded",
-                    details={
-                        "fee_cents": boost.fee_cents,
-                        "payout_cents": 0,
-                        "target_game_date": boost.target_game_date.isoformat(),
-                    },
-                    occurred_at=now,
+                activity_rows.append(
+                    {
+                        "account_id": boost.account_id,
+                        "kind": "boost_refunded",
+                        "player_id": boost.player_id,
+                        "game_date": game_date,
+                        "amount_cents": boost.fee_cents,
+                        "source_key": f"boost:{boost.id}:refunded",
+                        "details": {
+                            "fee_cents": boost.fee_cents,
+                            "payout_cents": 0,
+                            "target_game_date": boost.target_game_date.isoformat(),
+                        },
+                        "occurred_at": now,
+                    }
                 )
 
             for position in weekly_shorts:
@@ -1055,33 +1094,37 @@ class MarketService:
                 )
                 short_total += payout_cents
                 short_settlement_count += 1
-                self._record_activity(
-                    session,
-                    account_id=position.account_id,
-                    kind=(
-                        "weekly_short_settled"
-                        if position.status == "settled"
-                        else "weekly_short_voided"
-                    ),
-                    player_id=position.player_id,
-                    game_date=game_date,
-                    amount_cents=payout_cents,
-                    source_key=f"weekly_short:{position.id}:{position.status}",
-                    details={
-                        "fee_cents": position.fee_cents,
-                        "collateral_cents": position.collateral_cents,
-                        "qualifying_games": position.qualifying_games,
-                        "accrued_net_points_micros": (
-                            position.accrued_net_points_micros
+                activity_rows.append(
+                    {
+                        "account_id": position.account_id,
+                        "kind": (
+                            "weekly_short_settled"
+                            if position.status == "settled"
+                            else "weekly_short_voided"
                         ),
-                    },
-                    occurred_at=now,
+                        "player_id": position.player_id,
+                        "game_date": game_date,
+                        "amount_cents": payout_cents,
+                        "source_key": (
+                            f"weekly_short:{position.id}:{position.status}"
+                        ),
+                        "details": {
+                            "fee_cents": position.fee_cents,
+                            "collateral_cents": position.collateral_cents,
+                            "qualifying_games": position.qualifying_games,
+                            "accrued_net_points_micros": (
+                                position.accrued_net_points_micros
+                            ),
+                        },
+                        "occurred_at": now,
+                    }
                 )
 
         for account_id, amount_cents in account_totals.items():
             account = accounts[account_id]
             account.cash_cents += amount_cents
             account.version += 1
+        self._record_activities(session, activity_rows)
         self._record_portfolio_snapshots(
             session,
             game_date=game_date,
@@ -1157,6 +1200,32 @@ class MarketService:
             ]
 
     def execute_trade(
+        self,
+        principal: Principal,
+        *,
+        player_id: str,
+        side: Literal["buy", "sell"],
+        idempotency_key: str,
+        settled_results_after: date | None = None,
+    ) -> dict[str, object]:
+        payload = self._execute_trade_mutation(
+            principal,
+            player_id=player_id,
+            side=side,
+            idempotency_key=idempotency_key,
+        )
+        try:
+            payload["bootstrap"] = self.bootstrap(
+                principal,
+                settled_results_after=settled_results_after,
+            )
+        except Exception:
+            # The mutation is already committed. Return its acknowledgement so
+            # the client can reconcile with a retry instead of repeating it.
+            LOGGER.exception("Post-trade bootstrap failed after commit")
+        return payload
+
+    def _execute_trade_mutation(
         self,
         principal: Principal,
         *,
@@ -1724,15 +1793,19 @@ class MarketService:
     def _bootstrap_settled_results(
         session: Session,
         state: GameStateRow,
+        *,
+        after: date | None = None,
     ) -> list[dict[str, object]]:
         if state.last_settled_date is None:
             return []
+        query = select(ReplayEventRow).where(
+            ReplayEventRow.game_date <= state.last_settled_date,
+            ReplayEventRow.actual_minutes_micros > 0,
+        )
+        if after is not None:
+            query = query.where(ReplayEventRow.game_date > after)
         rows = session.scalars(
-            select(ReplayEventRow)
-            .where(
-                ReplayEventRow.game_date <= state.last_settled_date,
-                ReplayEventRow.actual_minutes_micros > 0,
-            )
+            query
             .order_by(ReplayEventRow.game_date, ReplayEventRow.player_id)
         ).all()
         return [
@@ -2057,6 +2130,58 @@ class MarketService:
                 occurred_at=occurred_at,
             )
         )
+
+    @staticmethod
+    def _record_activities(
+        session: Session,
+        rows: list[dict[str, object]],
+    ) -> None:
+        if not rows:
+            return
+        # Flush payout rows first so compatibility triggers on older production
+        # workers can populate activity. The bulk insert then fills only gaps.
+        session.flush()
+        values = [
+            {
+                "id": str(uuid4()),
+                "account_id": row["account_id"],
+                "kind": row["kind"],
+                "player_id": row["player_id"],
+                "game_date": row["game_date"],
+                "amount_cents": row["amount_cents"],
+                "source_key": row["source_key"],
+                "details": copy.deepcopy(row["details"]),
+                "occurred_at": row["occurred_at"],
+            }
+            for row in rows
+        ]
+        dialect = session.get_bind().dialect.name
+        if dialect == "postgresql":
+            for offset in range(0, len(values), 5_000):
+                statement = postgresql_insert(AccountActivityRow).values(
+                    values[offset : offset + 5_000]
+                )
+                session.execute(
+                    statement.on_conflict_do_nothing(
+                        constraint="uq_market_account_activity_source"
+                    )
+                )
+            return
+        if dialect == "sqlite":
+            # Keep nine parameters per activity below SQLite's historical
+            # 999-variable ceiling as well as modern builds' larger default.
+            for offset in range(0, len(values), 100):
+                statement = sqlite_insert(AccountActivityRow).values(
+                    values[offset : offset + 100]
+                )
+                session.execute(
+                    statement.on_conflict_do_nothing(
+                        index_elements=["account_id", "source_key"]
+                    )
+                )
+            return
+        for row in rows:
+            MarketService._record_activity(session, **row)
 
     def _record_portfolio_snapshots(
         self,

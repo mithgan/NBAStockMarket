@@ -6,6 +6,7 @@ import { STARTING_CASH } from './game';
 import {
   isServerAccountPristine,
   mapServerBootstrap,
+  mergeIncrementalBootstrap,
   serverRefreshNotice,
 } from './serverState';
 
@@ -220,4 +221,37 @@ test('mapping refuses results after the authoritative settled date', () => {
 
   assert.equal(mapped.playerTrends.sga.length, 1);
   assert.equal(mapped.playerTrends.sga[0].date, '2025-10-21');
+});
+
+test('incremental bootstrap merges new settled results without duplicating history', () => {
+  const previous = bootstrapFixture();
+  const incoming = bootstrapFixture();
+  incoming.game.last_settled_date = '2025-10-22';
+  incoming.game.next_game_date = '2025-10-23';
+  incoming.settledResults = [{
+    player_id: 'sga', game_date: '2025-10-22',
+    actual_net_points_micros: 42_000_000,
+    expected_net_points_micros: 25_000_000,
+    dividend_cents: 68_000_000,
+  }];
+
+  const merged = mergeIncrementalBootstrap(previous, incoming, '2025-10-21');
+
+  assert.equal(merged.kind, 'merged');
+  assert.deepEqual(merged.bootstrap.settledResults.map((row) => row.game_date), [
+    '2025-10-21',
+    '2025-10-22',
+  ]);
+});
+
+test('incremental bootstrap requests a full reload when the server clock moves backward', () => {
+  const previous = bootstrapFixture();
+  previous.game.last_settled_date = '2025-10-22';
+  const incoming = bootstrapFixture();
+  incoming.game.last_settled_date = '2025-10-20';
+  incoming.settledResults = [];
+
+  const merged = mergeIncrementalBootstrap(previous, incoming, '2025-10-22');
+
+  assert.equal(merged.kind, 'reload');
 });

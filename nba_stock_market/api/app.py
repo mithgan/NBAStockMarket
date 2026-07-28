@@ -30,6 +30,7 @@ class TradeRequest(BaseModel):
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
     )
     side: Literal["buy", "sell"]
+    settled_results_after: date | None = None
 
 
 class SettlementRequest(BaseModel):
@@ -163,9 +164,15 @@ def create_app(
 
     @app.get("/api/v1/bootstrap")
     def bootstrap(
+        settled_results_after: date | None = Query(default=None),
         principal: Principal = Depends(current_principal),
     ) -> dict[str, dict[str, object]]:
-        return {"data": service.bootstrap(principal)}
+        return {
+            "data": service.bootstrap(
+                principal,
+                settled_results_after=settled_results_after,
+            )
+        }
 
     @app.get("/api/v1/portfolio")
     def portfolio(
@@ -291,6 +298,7 @@ def create_app(
             player_id=body.player_id,
             side=body.side,
             idempotency_key=idempotency_key,
+            settled_results_after=body.settled_results_after,
         )
         if result["replayed"]:
             response.status_code = 200

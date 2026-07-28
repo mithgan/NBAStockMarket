@@ -1,7 +1,44 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { MarketApiClient, MarketApiError } from './client';
+import {
+  MarketApiClient,
+  MarketApiError,
+  mutationFailureMayHaveCommitted,
+} from './client';
+
+test('mutation failures distinguish definite rejections from indeterminate commits', () => {
+  assert.equal(
+    mutationFailureMayHaveCommitted(
+      new MarketApiError('Already owned.', 'holding_cap', 409),
+    ),
+    false,
+  );
+  assert.equal(
+    mutationFailureMayHaveCommitted(
+      new MarketApiError('Unreadable.', 'invalid_response', 201),
+    ),
+    true,
+  );
+  assert.equal(
+    mutationFailureMayHaveCommitted(
+      new MarketApiError('Unreadable rejection.', 'invalid_response', 409),
+    ),
+    false,
+  );
+  assert.equal(
+    mutationFailureMayHaveCommitted(
+      new MarketApiError('Retry rejected.', 'request_failed', 409, true),
+    ),
+    true,
+  );
+  assert.equal(
+    mutationFailureMayHaveCommitted(
+      new MarketApiError('Timed out.', 'timeout', null),
+    ),
+    true,
+  );
+});
 
 const portfolio = {
   account_id: 'alice',
@@ -193,6 +230,27 @@ test('a mutation retries a failed response body with the same idempotency key', 
   assert.deepEqual(seenKeys, ['body-retry-key', 'body-retry-key']);
 });
 
+test('a mutation preserves commit uncertainty when its retry gets a malformed 4xx', async () => {
+  let calls = 0;
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    idempotencyKeyFactory: () => 'uncertain-trade-key',
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError('connection reset');
+      return new Response('<html>conflict</html>', { status: 409 });
+    },
+  });
+
+  await assert.rejects(
+    client.trade('3112335', 'buy'),
+    (error: unknown) => mutationFailureMayHaveCommitted(error),
+  );
+  assert.equal(calls, 2);
+});
+
 test('a mutation retry cannot cross into a newly signed-in account', async () => {
   let tokenReads = 0;
   let fetchCalls = 0;
@@ -329,6 +387,71 @@ test('bootstrap loads one server-owned snapshot instead of stitching client read
 
   assert.equal(result.portfolio.account_id, 'alice');
   assert.deepEqual(requestedPaths, ['/api/v1/bootstrap']);
+});
+
+test('bootstrap can request only results after the last installed settlement', async () => {
+  const requestedUrls: string[] = [];
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    fetchImpl: async (input) => {
+      requestedUrls.push(String(input));
+      return new Response(JSON.stringify({ data: bootstrapPayload }), { status: 200 });
+    },
+  });
+
+  await client.bootstrap('2025-10-21');
+
+  assert.deepEqual(requestedUrls, [
+    'https://api.example.com/api/v1/bootstrap?settled_results_after=2025-10-21',
+  ]);
+});
+
+test('trade requests one authoritative incremental snapshot in its mutation response', async () => {
+  const requests: Array<{ url: string; body: unknown }> = [];
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    idempotencyKeyFactory: () => 'trade-bootstrap-key',
+    fetchImpl: async (input, init) => {
+      requests.push({
+        url: String(input),
+        body: JSON.parse(String(init?.body)),
+      });
+      return new Response(JSON.stringify({
+        data: { replayed: false, portfolio, bootstrap: bootstrapPayload },
+      }), { status: 201 });
+    },
+  });
+
+  const result = await client.trade('sga', 'buy', '2025-10-21');
+
+  assert.equal(result.bootstrap?.portfolio.account_id, 'alice');
+  assert.deepEqual(requests, [{
+    url: 'https://api.example.com/api/v1/trades',
+    body: {
+      player_id: 'sga',
+      side: 'buy',
+      settled_results_after: '2025-10-21',
+    },
+  }]);
+});
+
+test('trade remains compatible with an older backend that omits the snapshot', async () => {
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    fetchImpl: async () => new Response(JSON.stringify({
+      data: { replayed: false, portfolio },
+    }), { status: 201 }),
+  });
+
+  const result = await client.trade('sga', 'buy', '2025-10-21');
+
+  assert.equal(result.bootstrap, null);
 });
 
 test('bootstrap rejects future-result contract corruption before it becomes app state', async () => {

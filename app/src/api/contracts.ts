@@ -170,6 +170,10 @@ export interface ServerMutationResult {
   portfolio: ServerPortfolio;
 }
 
+export interface ServerTradeResult extends ServerMutationResult {
+  bootstrap: ServerBootstrap | null;
+}
+
 export interface ServerResetResult extends ServerMutationResult {
   reset_at: string;
 }
@@ -536,6 +540,16 @@ export function parseMutationResult(value: unknown, path = 'mutation'): ServerMu
   return {
     replayed: flag(row.replayed, `${path}.replayed`),
     portfolio: parsePortfolio(row.portfolio, `${path}.portfolio`),
+  };
+}
+
+export function parseTradeResult(value: unknown, path = 'trade'): ServerTradeResult {
+  const row = record(value, path);
+  return {
+    ...parseMutationResult(row, path),
+    bootstrap: row.bootstrap === undefined || row.bootstrap === null
+      ? null
+      : parseBootstrap(row.bootstrap, `${path}.bootstrap`),
   };
 }
 

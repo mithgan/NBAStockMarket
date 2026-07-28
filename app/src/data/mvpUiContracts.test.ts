@@ -151,7 +151,12 @@ test('server and transition failures lock every gameplay surface until recovery'
   assert.match(seasonControlSource, /!isGameplayReady \|\| isRefreshing \|\| pendingActions\.size > 0/);
   assert.match(portfolioContextSource, /&& !isRefreshing/);
   assert.match(portfolioContextSource, /acquire\('account-refresh'\)/);
+  assert.match(portfolioContextSource, /has\('account-refresh'\)/);
   assert.match(portfolioContextSource, /setServerError\(errorMessage\(error\)\)/);
+  assert.match(portfolioContextSource, /let tradeCommitted = false/);
+  assert.match(portfolioContextSource, /tradeCommitted \|\| mutationFailureMayHaveCommitted\(error\)/);
+  assert.match(portfolioContextSource, /Your trade completed/);
+  assert.match(portfolioContextSource, /Your trade may have completed/);
   assert.match(portfolioContextSource, /setMessage\(null\)/);
 });
 

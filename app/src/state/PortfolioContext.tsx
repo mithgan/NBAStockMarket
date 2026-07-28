@@ -10,7 +10,11 @@ import {
   type ReactNode,
 } from 'react';
 
-import { MarketApiClient, MarketApiError } from '../api/client';
+import {
+  MarketApiClient,
+  MarketApiError,
+  mutationFailureMayHaveCommitted,
+} from '../api/client';
 import type { ServerBootstrap } from '../api/contracts';
 import type { TrendPoint } from '../data/trendPresentation';
 import type { Player } from '../data/types';
@@ -24,6 +28,7 @@ import {
 import {
   isServerAccountPristine,
   mapServerBootstrap,
+  mergeIncrementalBootstrap,
   serverRefreshNotice,
   type ServerPresentationState,
 } from './serverState';
@@ -115,7 +120,20 @@ export function PortfolioProvider({
     else setIsRefreshing(true);
     setServerError(null);
     try {
-      const bootstrap = await apiClient.bootstrap();
+      const previous = bootstrapRef.current;
+      const settledResultsAfter = previous?.game.last_settled_date ?? undefined;
+      const incoming = await apiClient.bootstrap(settledResultsAfter);
+      let bootstrap = incoming;
+      if (previous && settledResultsAfter) {
+        const merge = mergeIncrementalBootstrap(
+          previous,
+          incoming,
+          settledResultsAfter,
+        );
+        bootstrap = merge.kind === 'reload'
+          ? await apiClient.bootstrap()
+          : merge.bootstrap;
+      }
       if (!mounted.current || version !== loadVersion.current) return null;
       installBootstrap(bootstrap);
       if (checkLocalTransition) {
@@ -200,11 +218,61 @@ export function PortfolioProvider({
     }
   }, [loadSnapshot, updatePendingActions]);
 
-  const trade = useCallback((player: Player, side: TradeSide) => runAction(
-    `trade:${player.id}`,
-    () => apiClient.trade(player.id, side),
-    `${side === 'buy' ? 'Bought' : 'Sold'} one share of ${player.name}.`,
-  ), [apiClient, runAction]);
+  const trade = useCallback(async (player: Player, side: TradeSide) => {
+    const key = `trade:${player.id}`;
+    if (actionLock.current.has('account-refresh')) return false;
+    if (!actionLock.current.acquire('account-mutation')) return false;
+    if (!actionLock.current.acquire(key)) {
+      actionLock.current.release('account-mutation');
+      return false;
+    }
+    updatePendingActions();
+    setMessage(null);
+    let tradeCommitted = false;
+    try {
+      const previous = bootstrapRef.current;
+      const settledResultsAfter = previous?.game.last_settled_date ?? undefined;
+      const result = await apiClient.trade(player.id, side, settledResultsAfter);
+      tradeCommitted = true;
+      let incoming = result.bootstrap;
+      if (!incoming) {
+        incoming = await apiClient.bootstrap(settledResultsAfter);
+      }
+      let bootstrap = incoming;
+      if (previous && settledResultsAfter) {
+        const merge = mergeIncrementalBootstrap(
+          previous,
+          incoming,
+          settledResultsAfter,
+        );
+        bootstrap = merge.kind === 'reload'
+          ? await apiClient.bootstrap()
+          : merge.bootstrap;
+      }
+      if (!mounted.current) return false;
+      installBootstrap(bootstrap);
+      setMessage(`${side === 'buy' ? 'Bought' : 'Sold'} one share of ${player.name}.`);
+      return true;
+    } catch (error) {
+      if (mounted.current) {
+        if (tradeCommitted || mutationFailureMayHaveCommitted(error)) {
+          setServerError(
+            tradeCommitted
+              ? 'Your trade completed, but the latest account state could not be loaded. Retry before continuing.'
+              : 'Your trade may have completed, but the latest account state could not be confirmed. Retry before continuing.',
+          );
+          setMessage(null);
+        } else {
+          setMessage(errorMessage(error));
+        }
+      }
+      return false;
+    } finally {
+      actionLock.current.release(key);
+      actionLock.current.release('account-mutation');
+      updatePendingActions();
+    }
+  }, [apiClient, installBootstrap, updatePendingActions]);
 
   const armShort = useCallback((player: Player) => runAction(
     `short:${player.id}`,
