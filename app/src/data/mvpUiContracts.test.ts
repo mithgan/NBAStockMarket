@@ -32,7 +32,7 @@ test('the MVP exposes four stable primary workflows and an always-visible season
 });
 
 test('manual replay advancement is admin-gated and requires explicit confirmation', () => {
-  assert.match(seasonControlSource, /const \[isConfirmingAdvance, setIsConfirmingAdvance\]/);
+  assert.match(seasonControlSource, /const \[confirmation, setConfirmation\]/);
   assert.match(seasonControlSource, /canAdvanceDay && nextGameDate !== null/);
   assert.match(seasonControlSource, /LAST SETTLED/);
   assert.match(seasonControlSource, /NEXT ·/);
@@ -41,10 +41,14 @@ test('manual replay advancement is admin-gated and requires explicit confirmatio
   assert.match(seasonControlSource, /onPress=\{\(\) => void refreshData\(\)\}/);
   assert.match(seasonControlSource, /Advance the shared replay\?/);
   assert.match(seasonControlSource, /This settles .* for every play-tester/);
-  assert.match(seasonControlSource, /accessibilityLabel="Cancel replay advancement"/);
-  assert.match(seasonControlSource, /accessibilityLabel="Confirm replay advancement"/);
-  assert.match(seasonControlSource, /isConfirmingAdvance && canSettleNextDay \?/);
+  assert.match(seasonControlSource, /accessibilityLabel="Cancel replay simulation"/);
+  assert.match(seasonControlSource, /'Confirm replay advancement'/);
+  assert.match(seasonControlSource, /confirmation && canSettleNextDay \?/);
   assert.match(seasonControlSource, /await advanceDay\(\)/);
+  assert.match(seasonControlSource, /SIMULATE SEASON/);
+  assert.match(seasonControlSource, /await advanceSeason\(\)/);
+  assert.match(portfolioContextSource, /settleRemainingSeason/);
+  assert.match(seasonControlSource, /Completed dates are saved/);
 });
 
 test('market discovery supports search and a clear empty result', () => {
@@ -77,7 +81,7 @@ test('player details resolve current server data and price changes name their ti
   assert.match(portfolioSource, /const \[selectedPlayerId, setSelectedPlayerId\]/);
   assert.match(portfolioSource, /playerById\.get\(selectedPlayerId\)/);
   assert.match(marketSource, /\{formatSignedPercent\(change\)\} since listing/);
-  assert.match(marketSource, /style=\{styles\.detailPrice\}>\s*\{formatMoney\(currentPrice\)\}/);
+  assert.match(marketSource, /style=\{styles\.detailPrice\}>\s*\{formatCompactMoney\(currentPrice\)\}/);
   assert.match(marketSource, />VS EXPECTED</);
   assert.match(marketSource, /const rowAccessibilityLabel = \[/);
   assert.match(marketSource, /`Current price \$\{formatMoney\(currentPrice\)\}`/);

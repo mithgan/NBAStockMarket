@@ -202,11 +202,11 @@ export function PlayerDetail({
         </View>
       </View>
       <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.detailPrice}>
-        {formatMoney(currentPrice)}
+        {formatCompactMoney(currentPrice)}
       </Text>
       {points.length > 0 ? (
         <Text style={[styles.seasonChange, rangeTotal >= 0 ? styles.positive : styles.negative]}>
-          {formatSignedMoney(rangeTotal)} {range === 'Season' ? 'Settled season' : `Last ${visiblePoints.length} games`}
+          {formatCompactSignedMoney(rangeTotal)} {range === 'Season' ? 'Settled season' : `Last ${visiblePoints.length} games`}
         </Text>
       ) : (
         <Text style={styles.seasonChange}>No settled games yet</Text>
@@ -247,13 +247,13 @@ export function PlayerDetail({
 
       <Text accessibilityRole="header" style={styles.statsTitle}>Season snapshot</Text>
       <View style={styles.statsGrid}>
-        <Stat label="Current price" value={formatMoney(currentPrice)} />
-        <Stat label="Opening price" value={formatMoney(player.listing_price)} />
-        <Stat label="Actual salary" value={formatMoney(player.actual_salary)} />
+        <Stat label="Current price" value={formatCompactMoney(currentPrice)} />
+        <Stat label="Opening price" value={formatCompactMoney(player.listing_price)} />
+        <Stat label="Actual salary" value={formatCompactMoney(player.actual_salary)} />
         <Stat label="Tier" value={player.tier.toUpperCase()} />
         <Stat label="Settled games" value={String(points.length)} />
         <Stat label="Avg NP / expected" value={`${average(points, 'np').toFixed(1)} / ${average(points, 'expected_np').toFixed(1)}`} />
-        <Stat label="Best settled payout" value={formatSignedMoney(bestPayout)} />
+        <Stat label="Best settled payout" value={formatCompactSignedMoney(bestPayout)} />
         <Stat label="Market ownership" value={formatOwnership(player.ownership_bps)} />
         <Stat
           label="Shares available"
@@ -563,7 +563,7 @@ export function MarketScreen() {
         </View>
         <View style={styles.cashPill}>
           <Text style={styles.cashLabel}>CASH</Text>
-          <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} style={styles.cashValue}>{formatMoney(summary.freeCash)}</Text>
+          <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} style={styles.cashValue}>{formatCompactMoney(summary.freeCash)}</Text>
         </View>
       </View>
       <Text style={styles.subtle}>Current replay prices include your trades. Buy affordability uses your quoted account fee.</Text>

@@ -36,6 +36,11 @@ import {
   type MutationPriceUpdate,
   type ServerPresentationState,
 } from './serverState';
+import {
+  SeasonReplayError,
+  settleRemainingSeason,
+  type SeasonReplayProgress,
+} from './seasonReplay';
 
 interface PortfolioContextValue {
   state: GameState | null;
@@ -53,6 +58,7 @@ interface PortfolioContextValue {
   isTransitioning: boolean;
   isGameplayReady: boolean;
   canAdvanceDay: boolean;
+  seasonReplayProgress: SeasonReplayProgress | null;
   pendingActions: ReadonlySet<string>;
   shortSlots: { used: number; total: number; remaining: number };
   boostSlots: { used: number; total: number; remaining: number };
@@ -68,6 +74,7 @@ interface PortfolioContextValue {
   armShort: (player: Player) => Promise<boolean>;
   armPlayerBoost: (player: Player, gameDate: string) => Promise<boolean>;
   advanceDay: () => Promise<boolean>;
+  advanceSeason: () => Promise<boolean>;
   refreshData: () => Promise<boolean>;
   confirmLocalTransition: () => Promise<boolean>;
   dismissNotice: () => void;
@@ -82,6 +89,7 @@ interface ReconciledActionResult {
 
 function errorMessage(error: unknown): string {
   if (error instanceof MarketApiError) return error.message;
+  if (error instanceof SeasonReplayError) return error.message;
   return 'The server could not load your account. Try again.';
 }
 
@@ -105,6 +113,7 @@ export function PortfolioProvider({
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [seasonReplayProgress, setSeasonReplayProgress] = useState<SeasonReplayProgress | null>(null);
   const actionLock = useRef(new ActionLock());
   const [pendingActions, setPendingActions] = useState<ReadonlySet<string>>(new Set());
   const mounted = useRef(true);
@@ -415,6 +424,30 @@ export function PortfolioProvider({
     );
   }, [apiClient, runFullRefreshAction]);
 
+  const advanceSeason = useCallback(async () => {
+    const nextGameDate = bootstrapRef.current?.game.next_game_date;
+    if (!nextGameDate) {
+      if (mounted.current) setMessage('The historical replay is complete.');
+      return false;
+    }
+    setSeasonReplayProgress(null);
+    try {
+      return await runFullRefreshAction(
+        'advance-season',
+        () => settleRemainingSeason(
+          nextGameDate,
+          (date) => apiClient.advanceDay(date),
+          (progress) => {
+            if (mounted.current) setSeasonReplayProgress(progress);
+          },
+        ),
+        'The historical season is fully settled. Prices and portfolios are updated.',
+      );
+    } finally {
+      if (mounted.current) setSeasonReplayProgress(null);
+    }
+  }, [apiClient, runFullRefreshAction]);
+
   const confirmLocalTransition = useCallback(async () => {
     if (isTransitioning || !bootstrapRef.current || !legacySavePresent) return false;
     setIsTransitioning(true);
@@ -499,6 +532,7 @@ export function PortfolioProvider({
     isTransitioning,
     isGameplayReady,
     canAdvanceDay: presentation?.canAdvanceDay ?? false,
+    seasonReplayProgress,
     pendingActions,
     shortSlots: presentation?.shortSlots
       ? { ...presentation.shortSlots, remaining: Math.max(0, presentation.shortSlots.total - presentation.shortSlots.used) }
@@ -518,6 +552,7 @@ export function PortfolioProvider({
     armShort,
     armPlayerBoost,
     advanceDay,
+    advanceSeason,
     refreshData,
     confirmLocalTransition,
     dismissNotice,
@@ -525,6 +560,7 @@ export function PortfolioProvider({
     armPlayerBoost,
     armShort,
     advanceDay,
+    advanceSeason,
     confirmLocalTransition,
     dismissNotice,
     isGameplayReady,
@@ -539,6 +575,7 @@ export function PortfolioProvider({
     presentation,
     refreshData,
     serverError,
+    seasonReplayProgress,
     state,
     summary,
     trade,

@@ -15,9 +15,10 @@ function displayDate(value: string | null): string {
 }
 
 export function SeasonControl() {
-  const [isConfirmingAdvance, setIsConfirmingAdvance] = useState(false);
+  const [confirmation, setConfirmation] = useState<'day' | 'season' | null>(null);
   const {
     advanceDay,
+    advanceSeason,
     canAdvanceDay,
     isGameplayReady,
     isRefreshing,
@@ -26,16 +27,23 @@ export function SeasonControl() {
     pendingActions,
     refreshData,
     settledGameDateCount,
+    seasonReplayProgress,
     state,
   } = usePortfolio();
   if (!state) return null;
   const disabled = !isGameplayReady || isRefreshing || pendingActions.size > 0;
   const canSettleNextDay = canAdvanceDay && nextGameDate !== null;
   const isSettling = pendingActions.has('advance');
+  const isSettlingSeason = pendingActions.has('advance-season');
 
   const confirmAdvance = async () => {
-    setIsConfirmingAdvance(false);
+    setConfirmation(null);
     await advanceDay();
+  };
+
+  const confirmSeason = async () => {
+    setConfirmation(null);
+    await advanceSeason();
   };
 
   return (
@@ -69,61 +77,88 @@ export function SeasonControl() {
             </Text>
           </Pressable>
           {canSettleNextDay ? (
-            <Pressable
-              accessibilityLabel="Settle the next historical game date"
-              accessibilityRole="button"
-              accessibilityState={{ disabled }}
-              disabled={disabled}
-              onPress={() => setIsConfirmingAdvance(true)}
-              style={({ pressed }) => [
-                styles.button,
-                disabled && styles.buttonDisabled,
-                pressed && !disabled && styles.buttonPressed,
-              ]}
-            >
-              <Text style={[styles.buttonText, disabled && styles.buttonTextDisabled]}>
-                {isSettling ? 'SETTLING' : 'NEXT DAY'}
-              </Text>
-            </Pressable>
+            <View style={styles.advanceActions}>
+              <Pressable
+                accessibilityLabel="Settle the next historical game date"
+                accessibilityRole="button"
+                accessibilityState={{ disabled }}
+                disabled={disabled}
+                onPress={() => setConfirmation('day')}
+                style={({ pressed }) => [
+                  styles.button,
+                  disabled && styles.buttonDisabled,
+                  pressed && !disabled && styles.buttonPressed,
+                ]}
+              >
+                <Text style={[styles.buttonText, disabled && styles.buttonTextDisabled]}>
+                  {isSettling ? 'SETTLING' : 'NEXT DAY'}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Settle every remaining historical game date"
+                accessibilityRole="button"
+                accessibilityState={{ disabled }}
+                disabled={disabled}
+                onPress={() => setConfirmation('season')}
+                style={({ pressed }) => [
+                  styles.seasonButton,
+                  disabled && styles.seasonButtonDisabled,
+                  pressed && !disabled && styles.buttonPressed,
+                ]}
+              >
+                <Text style={[styles.seasonButtonText, disabled && styles.buttonTextDisabled]}>
+                  {isSettlingSeason ? 'SIMULATING' : 'SIMULATE SEASON'}
+                </Text>
+              </Pressable>
+            </View>
           ) : null}
         </View>
+        {seasonReplayProgress ? (
+          <Text accessibilityLiveRegion="polite" style={styles.seasonProgress}>
+            Simulating · {seasonReplayProgress.completedDates} dates settled · last {displayDate(seasonReplayProgress.lastSettledDate)}
+          </Text>
+        ) : null}
       </View>
 
-      {isConfirmingAdvance && canSettleNextDay ? (
+      {confirmation && canSettleNextDay ? (
         <Modal
           animationType="fade"
-          onRequestClose={() => setIsConfirmingAdvance(false)}
+          onRequestClose={() => setConfirmation(null)}
           transparent
           visible
         >
           <View accessibilityViewIsModal style={styles.modalBackdrop}>
             <View style={styles.modal}>
               <Text accessibilityRole="header" style={styles.modalTitle}>
-                Advance the shared replay?
+                {confirmation === 'day' ? 'Advance the shared replay?' : 'Simulate the rest of the season?'}
               </Text>
               <Text style={styles.modalBody}>
-                This settles {displayDate(nextGameDate)} for every play-tester. It cannot be undone.
+                {confirmation === 'day'
+                  ? `This settles ${displayDate(nextGameDate)} for every play-tester. It cannot be undone.`
+                  : 'This settles every remaining 2025-26 game date for every play-tester. Completed dates are saved, so an interrupted run can be resumed. It cannot be undone.'}
               </Text>
               <View style={styles.modalActions}>
                 <Pressable
-                  accessibilityLabel="Cancel replay advancement"
+                  accessibilityLabel="Cancel replay simulation"
                   accessibilityRole="button"
-                  onPress={() => setIsConfirmingAdvance(false)}
+                  onPress={() => setConfirmation(null)}
                   style={({ pressed }) => [styles.modalButton, pressed && styles.buttonPressed]}
                 >
                   <Text style={styles.modalCancelText}>CANCEL</Text>
                 </Pressable>
                 <Pressable
-                  accessibilityLabel="Confirm replay advancement"
+                  accessibilityLabel={confirmation === 'day' ? 'Confirm replay advancement' : 'Confirm full season simulation'}
                   accessibilityRole="button"
-                  onPress={() => void confirmAdvance()}
+                  onPress={() => void (confirmation === 'day' ? confirmAdvance() : confirmSeason())}
                   style={({ pressed }) => [
                     styles.modalButton,
                     styles.modalConfirmButton,
                     pressed && styles.buttonPressed,
                   ]}
                 >
-                  <Text style={styles.modalConfirmText}>SETTLE NEXT DAY</Text>
+                  <Text style={styles.modalConfirmText}>
+                    {confirmation === 'day' ? 'SETTLE NEXT DAY' : 'SIMULATE SEASON'}
+                  </Text>
                 </Pressable>
               </View>
             </View>
@@ -139,6 +174,7 @@ const styles = StyleSheet.create({
     minHeight: 78,
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -152,6 +188,7 @@ const styles = StyleSheet.create({
   nextDate: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
   progress: { color: colors.muted, fontSize: 10, marginTop: 2 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  advanceActions: { gap: 6 },
   refreshButton: {
     width: 44,
     height: 44,
@@ -174,6 +211,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gold,
   },
   buttonDisabled: { backgroundColor: colors.surfaceRaised },
+  seasonButton: {
+    minHeight: 44,
+    minWidth: 106,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    backgroundColor: colors.surfaceRaised,
+  },
+  seasonButtonDisabled: { borderColor: colors.border, opacity: 0.55 },
+  seasonButtonText: { color: colors.gold, fontSize: 9, fontWeight: '900' },
+  seasonProgress: {
+    width: '100%',
+    color: colors.gold,
+    fontSize: 10,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
   buttonPressed: { opacity: 0.72 },
   buttonText: { color: colors.background, fontSize: 11, fontWeight: '900' },
   buttonTextDisabled: { color: colors.muted },
@@ -197,6 +254,7 @@ const styles = StyleSheet.create({
   modalBody: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 10 },
   modalActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
     gap: 8,
     marginTop: 20,
