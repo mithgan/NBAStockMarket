@@ -3,9 +3,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { chartCoordinates, portfolioPeriodChange } from '../data/chartGeometry';
-import { formatMoney, formatSignedMoney } from '../format';
+import { formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { STARTING_CASH, type PortfolioPoint } from '../state/game';
-import { colors } from '../theme';
+import { colors, radius, space, type } from '../theme';
 
 export function PortfolioHistoryChart({ points }: { points: PortfolioPoint[] }) {
   const [width, setWidth] = useState(0);
@@ -60,7 +60,7 @@ export function PortfolioHistoryChart({ points }: { points: PortfolioPoint[] }) 
       ) : null}
       <View style={styles.captionRow}>
         <Text style={styles.caption}>{visible[0].date}</Text>
-        <Text style={[styles.change, { color }]}>{formatSignedMoney(change)}</Text>
+        <Text style={[styles.change, { color }]}>{formatCompactSignedMoney(change)}</Text>
         <Text style={styles.caption}>{visible.at(-1)!.date}</Text>
       </View>
     </View>
@@ -68,11 +68,11 @@ export function PortfolioHistoryChart({ points }: { points: PortfolioPoint[] }) 
 }
 
 const styles = StyleSheet.create({
-  chart: { minHeight: 154 },
-  captionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  caption: { color: colors.muted, fontSize: 10 },
-  change: { fontSize: 11, fontWeight: '800' },
-  empty: { minHeight: 124, justifyContent: 'center', padding: 18, backgroundColor: colors.background, borderRadius: 6 },
-  emptyTitle: { color: colors.text, fontSize: 13, fontWeight: '800' },
-  emptyText: { color: colors.muted, fontSize: 11, lineHeight: 17, marginTop: 5 },
+  chart: { minHeight: 152 },
+  captionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm },
+  caption: { color: colors.muted, fontSize: type.micro },
+  change: { fontSize: type.label, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  empty: { minHeight: 124, justifyContent: 'center', padding: space.lg, backgroundColor: colors.background, borderRadius: radius.md },
+  emptyTitle: { color: colors.text, fontSize: type.body, fontWeight: '800' },
+  emptyText: { color: colors.muted, fontSize: type.micro, lineHeight: 17, marginTop: 5 },
 });

@@ -40,7 +40,36 @@ test('detail dividend chart follows the selected range and renders labeled extre
   assert.match(marketSource, /\['LOW', extrema\.low\]/);
 });
 
-test('market cash value is single-line, shrinkable, and its pill sizes to content', () => {
-  assert.match(marketSource, /adjustsFontSizeToFit minimumFontScale=\{0\.8\} numberOfLines=\{1\} style=\{styles\.cashValue\}/);
-  assert.match(marketSource, /cashPill: \{[^}]*flexShrink: 0/);
+test('market cash value stays on one line and its block never gets squeezed', () => {
+  assert.match(marketSource, /numberOfLines=\{1\}\s*style=\{styles\.cashValue\}/);
+  assert.match(marketSource, /cashBlock: \{[^}]*flexShrink: 0/);
+  assert.match(marketSource, /accessibilityLabel=\{`Free cash \$\{formatMoney\(freeCash\)\}`\}/);
+});
+
+test('interface radii stay flat and no type drops below 11px', () => {
+  const themeSource = readFileSync(resolve(testDirectory, '../theme.ts'), 'utf8');
+  assert.match(themeSource, /lg: 8/);
+  assert.match(themeSource, /micro: 11/);
+
+  const screens = [
+    ['App', appSource],
+    ['Market', marketSource],
+    ['Portfolio', readFileSync(resolve(testDirectory, '../screens/PortfolioScreen.tsx'), 'utf8')],
+    ['Plays', readFileSync(resolve(testDirectory, '../screens/PlaysScreen.tsx'), 'utf8')],
+    ['Leaders', readFileSync(resolve(testDirectory, '../screens/LeaderboardScreen.tsx'), 'utf8')],
+    ['Season control', readFileSync(resolve(testDirectory, '../components/SeasonControl.tsx'), 'utf8')],
+    // The signed-out screen is the first thing every user reads, so it is held
+    // to the same minimum as the authenticated surfaces.
+    ['Auth', readFileSync(resolve(testDirectory, '../auth/AuthScreen.tsx'), 'utf8')],
+    ['Portfolio chart', readFileSync(resolve(testDirectory, '../components/PortfolioHistoryChart.tsx'), 'utf8')],
+  ] as const;
+
+  for (const [name, contents] of screens) {
+    for (const match of contents.matchAll(/borderRadius: (\d+)/g)) {
+      assert.ok(Number(match[1]) <= 8, `${name} uses a ${match[1]}px radius`);
+    }
+    for (const match of contents.matchAll(/fontSize: (\d+)/g)) {
+      assert.ok(Number(match[1]) >= 11, `${name} uses a ${match[1]}px font size`);
+    }
+  }
 });

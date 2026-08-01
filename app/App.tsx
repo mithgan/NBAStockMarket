@@ -8,12 +8,16 @@ import { resolvePublicAppConfig, type PublicAppConfig } from './src/api/config';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import { AuthScreen } from './src/auth/AuthScreen';
 import { SeasonControl } from './src/components/SeasonControl';
+import { useReducedMotion } from './src/hooks/useReducedMotion';
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { MarketScreen } from './src/screens/MarketScreen';
 import { PlaysScreen } from './src/screens/PlaysScreen';
 import { PortfolioScreen } from './src/screens/PortfolioScreen';
 import { PortfolioProvider, usePortfolio } from './src/state/PortfolioContext';
-import { colors } from './src/theme';
+import { colors, radius, space, type } from './src/theme';
+import { installGlobalWebStyles } from './src/web/globalStyles';
+
+installGlobalWebStyles();
 
 type Tab = 'portfolio' | 'market' | 'plays' | 'leaderboard';
 
@@ -39,9 +43,16 @@ function CenteredState({
   onAction?: () => void;
   busy?: boolean;
 }) {
+  // A spinner is the only moving element in the app, so it is the one thing the
+  // reduced-motion setting has to silence.
+  const reducedMotion = useReducedMotion();
   return (
     <View accessibilityRole="alert" style={styles.centeredState}>
-      {busy ? <ActivityIndicator color={colors.gold} size="large" /> : null}
+      {busy ? (
+        reducedMotion
+          ? <Text style={styles.stateBusy}>WORKING…</Text>
+          : <ActivityIndicator color={colors.gold} size="large" />
+      ) : null}
       <Text accessibilityRole="header" style={styles.stateTitle}>{title}</Text>
       <Text style={styles.stateCopy}>{copy}</Text>
       {actionLabel && onAction ? (
@@ -147,7 +158,6 @@ function AppContent() {
         <View style={styles.mark}><Text style={styles.markText}>DB</Text></View>
         <View style={styles.brandCopy}>
           <Text numberOfLines={1} style={styles.brand}>NBA STOCK MARKET</Text>
-          <Text style={styles.season}>SERVER-BACKED HISTORICAL MVP</Text>
         </View>
         <Pressable
           accessibilityLabel="Sign out"
@@ -245,7 +255,9 @@ const styles = StyleSheet.create({
     minHeight: 0,
     alignSelf: 'center',
     width: '100%',
-    maxWidth: 840,
+    // Wider than a phone frame so the ~300-row market table can breathe on a
+    // desktop instead of leaving half the viewport empty.
+    maxWidth: 1040,
     backgroundColor: colors.background,
     borderLeftColor: colors.border,
     borderRightColor: colors.border,
@@ -253,55 +265,55 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
   },
   header: {
-    minHeight: 64,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 11,
-    paddingHorizontal: 16,
-    paddingBottom: 10,
+    gap: space.md,
+    paddingHorizontal: space.md,
+    paddingBottom: space.sm,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },
-  mark: { width: 36, height: 36, borderRadius: 6, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
-  markText: { color: colors.background, fontSize: 12, fontWeight: '900' },
+  mark: { width: 32, height: 32, borderRadius: radius.md, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  markText: { color: colors.background, fontSize: type.label, fontWeight: '900' },
   brandCopy: { flex: 1, minWidth: 0 },
-  brand: { color: colors.text, fontSize: 13, fontWeight: '900', letterSpacing: 1.1 },
-  season: { color: colors.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.9, marginTop: 2 },
-  signOut: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
-  signOutText: { color: colors.muted, fontSize: 9, fontWeight: '900' },
+  brand: { color: colors.text, fontSize: type.body, fontWeight: '900', letterSpacing: 1.1 },
+  signOut: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.sm },
+  signOutText: { color: colors.muted, fontSize: type.micro, fontWeight: '900' },
   notice: {
     minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
     backgroundColor: colors.goldSoft,
     borderBottomColor: colors.gold,
     borderBottomWidth: 1,
   },
-  noticeText: { flex: 1, color: colors.text, fontSize: 11, lineHeight: 16, fontWeight: '700' },
-  noticeClose: { color: colors.gold, fontSize: 9, fontWeight: '900' },
+  noticeText: { flex: 1, color: colors.text, fontSize: type.label, lineHeight: 17, fontWeight: '700' },
+  noticeClose: { color: colors.gold, fontSize: type.micro, fontWeight: '900' },
   screen: { flex: 1, minHeight: 0 },
-  centeredState: { flex: 1, minHeight: 260, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', width: '100%', maxWidth: 500, padding: 28, backgroundColor: colors.background },
-  stateTitle: { color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'center', marginTop: 14 },
-  stateCopy: { color: colors.muted, fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 8 },
-  stateButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold, borderRadius: 7, paddingHorizontal: 18, marginTop: 20 },
-  stateButtonText: { color: colors.background, fontSize: 11, fontWeight: '900' },
+  centeredState: { flex: 1, minHeight: 260, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', width: '100%', maxWidth: 500, padding: space.xl, backgroundColor: colors.background },
+  stateBusy: { color: colors.gold, fontSize: type.label, fontWeight: '900', letterSpacing: 1 },
+  stateTitle: { color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'center', marginTop: space.md },
+  stateCopy: { color: colors.muted, fontSize: type.body, lineHeight: 20, textAlign: 'center', marginTop: space.sm },
+  stateButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold, borderRadius: radius.md, paddingHorizontal: space.lg, marginTop: space.lg },
+  stateButtonText: { color: colors.background, fontSize: type.label, fontWeight: '900' },
   disabled: { opacity: 0.45 },
   tabBar: {
     flexDirection: 'row',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingTop: 8,
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingTop: space.sm,
     backgroundColor: colors.surface,
     borderTopColor: colors.border,
     borderTopWidth: 1,
   },
-  tab: { flex: 1, minWidth: 0, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 6, paddingHorizontal: 3, paddingVertical: 10 },
+  tab: { flex: 1, minWidth: 0, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, paddingHorizontal: 3, paddingVertical: space.sm },
   activeTab: { backgroundColor: colors.surfaceRaised },
-  tabText: { color: colors.muted, fontSize: 11, fontWeight: '800' },
+  tabText: { color: colors.muted, fontSize: type.label, fontWeight: '800' },
   activeTabText: { color: colors.gold },
   pressed: { opacity: 0.65 },
 });

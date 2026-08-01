@@ -1,21 +1,22 @@
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePortfolio } from '../state/PortfolioContext';
-import { colors } from '../theme';
+import { colors, radius, space, type } from '../theme';
 
 function displayDate(value: string | null): string {
   if (!value) return 'Season complete';
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
-    year: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(`${value}T00:00:00Z`));
 }
 
 export function SeasonControl() {
   const [confirmation, setConfirmation] = useState<'day' | 'season' | null>(null);
+  const reducedMotion = useReducedMotion();
   const {
     advanceDay,
     advanceSeason,
@@ -50,14 +51,20 @@ export function SeasonControl() {
     <>
       <View style={styles.container}>
         <View style={styles.copy}>
-          <Text style={styles.label}>2025-26 SERVER REPLAY</Text>
+          <Text numberOfLines={1} style={styles.label}>LAST SETTLED</Text>
           <Text numberOfLines={1} style={styles.date}>
-            LAST SETTLED · {latestSettledDate ? displayDate(latestSettledDate) : 'Not started'}
+            {latestSettledDate ? displayDate(latestSettledDate) : 'Not started'}
           </Text>
-          <Text numberOfLines={1} style={styles.nextDate}>
+          <Text numberOfLines={1} style={styles.progress}>
             NEXT · {displayDate(nextGameDate)}
           </Text>
-          <Text style={styles.progress}>{settledGameDateCount} game dates settled</Text>
+          {seasonReplayProgress ? (
+            <Text accessibilityLiveRegion="polite" numberOfLines={2} style={styles.seasonProgress}>
+              Simulating · {seasonReplayProgress.completedDates} dates settled · last {displayDate(seasonReplayProgress.lastSettledDate)}
+            </Text>
+          ) : (
+            <Text numberOfLines={1} style={styles.progress}>{settledGameDateCount} game dates settled</Text>
+          )}
         </View>
         <View style={styles.actions}>
           <Pressable
@@ -90,7 +97,7 @@ export function SeasonControl() {
                   pressed && !disabled && styles.buttonPressed,
                 ]}
               >
-                <Text style={[styles.buttonText, disabled && styles.buttonTextDisabled]}>
+                <Text numberOfLines={1} style={[styles.buttonText, disabled && styles.buttonTextDisabled]}>
                   {isSettling ? 'SETTLING' : 'NEXT DAY'}
                 </Text>
               </Pressable>
@@ -106,23 +113,18 @@ export function SeasonControl() {
                   pressed && !disabled && styles.buttonPressed,
                 ]}
               >
-                <Text style={[styles.seasonButtonText, disabled && styles.buttonTextDisabled]}>
+                <Text numberOfLines={1} style={[styles.seasonButtonText, disabled && styles.buttonTextDisabled]}>
                   {isSettlingSeason ? 'SIMULATING' : 'SIMULATE SEASON'}
                 </Text>
               </Pressable>
             </View>
           ) : null}
         </View>
-        {seasonReplayProgress ? (
-          <Text accessibilityLiveRegion="polite" style={styles.seasonProgress}>
-            Simulating · {seasonReplayProgress.completedDates} dates settled · last {displayDate(seasonReplayProgress.lastSettledDate)}
-          </Text>
-        ) : null}
       </View>
 
       {confirmation && canSettleNextDay ? (
         <Modal
-          animationType="fade"
+          animationType={reducedMotion ? 'none' : 'fade'}
           onRequestClose={() => setConfirmation(null)}
           transparent
           visible
@@ -171,24 +173,25 @@ export function SeasonControl() {
 
 const styles = StyleSheet.create({
   container: {
-    minHeight: 78,
     flexDirection: 'row',
     alignItems: 'center',
+    // Wraps so enlarged "SIMULATE SEASON" buttons push the status text onto its
+    // own line instead of crushing it or overflowing a narrow screen.
     flexWrap: 'wrap',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    gap: space.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
     backgroundColor: colors.surface,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },
-  copy: { flex: 1, minWidth: 0 },
-  label: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
-  date: { color: colors.text, fontSize: 12, fontWeight: '800', marginTop: 4 },
-  nextDate: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 2 },
-  progress: { color: colors.muted, fontSize: 10, marginTop: 2 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  advanceActions: { gap: 6 },
+  copy: { flex: 1, minWidth: 150, gap: 2 },
+  label: { color: colors.gold, fontSize: type.micro, fontWeight: '900', letterSpacing: 0.6 },
+  date: { color: colors.text, fontSize: type.label, fontWeight: '800' },
+  progress: { color: colors.muted, fontSize: type.micro },
+  seasonProgress: { color: colors.gold, fontSize: type.micro, fontWeight: '800' },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 0 },
+  advanceActions: { gap: space.xs },
   refreshButton: {
     width: 44,
     height: 44,
@@ -196,49 +199,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: radius.md,
     backgroundColor: colors.surfaceRaised,
   },
   refreshButtonDisabled: { opacity: 0.55 },
-  refreshButtonText: { color: colors.text, fontSize: 20, fontWeight: '800' },
+  refreshButtonText: { color: colors.text, fontSize: 18, fontWeight: '800' },
   button: {
     minHeight: 44,
-    minWidth: 106,
+    minWidth: 118,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
-    paddingHorizontal: 14,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
     backgroundColor: colors.gold,
   },
   buttonDisabled: { backgroundColor: colors.surfaceRaised },
   seasonButton: {
     minHeight: 44,
-    minWidth: 106,
+    minWidth: 118,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.gold,
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    borderRadius: radius.md,
+    paddingHorizontal: space.sm,
     backgroundColor: colors.surfaceRaised,
   },
   seasonButtonDisabled: { borderColor: colors.border, opacity: 0.55 },
-  seasonButtonText: { color: colors.gold, fontSize: 9, fontWeight: '900' },
-  seasonProgress: {
-    width: '100%',
-    color: colors.gold,
-    fontSize: 10,
-    fontWeight: '800',
-    textAlign: 'right',
-  },
+  seasonButtonText: { color: colors.gold, fontSize: type.micro, fontWeight: '900' },
   buttonPressed: { opacity: 0.72 },
-  buttonText: { color: colors.background, fontSize: 11, fontWeight: '900' },
+  buttonText: { color: colors.background, fontSize: type.label, fontWeight: '900' },
   buttonTextDisabled: { color: colors.muted },
   modalBackdrop: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: space.lg,
     backgroundColor: 'rgba(5, 10, 18, 0.76)',
   },
   modal: {
@@ -246,18 +242,18 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    padding: 20,
+    borderRadius: radius.lg,
+    padding: space.lg,
     backgroundColor: colors.surface,
   },
-  modalTitle: { color: colors.text, fontSize: 20, fontWeight: '900' },
-  modalBody: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 10 },
+  modalTitle: { color: colors.text, fontSize: type.heading, fontWeight: '900' },
+  modalBody: { color: colors.muted, fontSize: type.body, lineHeight: 20, marginTop: space.sm },
   modalActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 20,
+    gap: space.sm,
+    marginTop: space.lg,
   },
   modalButton: {
     minHeight: 44,
@@ -265,13 +261,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 14,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
   },
   modalConfirmButton: {
     borderColor: colors.gold,
     backgroundColor: colors.gold,
   },
-  modalCancelText: { color: colors.text, fontSize: 11, fontWeight: '900' },
-  modalConfirmText: { color: colors.background, fontSize: 11, fontWeight: '900' },
+  modalCancelText: { color: colors.text, fontSize: type.label, fontWeight: '900' },
+  modalConfirmText: { color: colors.background, fontSize: type.label, fontWeight: '900' },
 });

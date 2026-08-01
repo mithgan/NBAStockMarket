@@ -60,11 +60,127 @@ test('market discovery supports search and a clear empty result', () => {
 test('the market removes nonessential sparklines from narrow phone rows', () => {
   assert.match(marketSource, /useWindowDimensions/);
   assert.match(marketSource, /const compact = width < 420/);
-  assert.match(marketSource, /compact \|\| trendPoints\.length === 0 \? null : \(\s*<View/);
-  assert.match(marketSource, /compact && form \? \(/);
-  assert.match(marketSource, /L\{form\.games\} \{formatSignedMetric\(form\.averageSurprise\)\} NP · VS EXPECTED/);
+  // Also dropped when text is enlarged, so the name and price keep their room.
+  assert.match(marketSource, /showSparkline=\{!compact && !largeText\}/);
+  assert.match(marketSource, /const largeText = fontScale > 1\.3/);
+  assert.match(marketSource, /maxFontSizeMultiplier=\{MAX_ROW_FONT_SCALE\}/);
+  assert.match(marketSource, /showSparkline && chartPoints\.length > 0 \? <Sparkline points=\{chartPoints\}/);
   assert.match(marketSource, /const chartPoints = selectTrendRange\(trendPoints, 'L15'\)/);
-  assert.match(marketSource, /<Sparkline points=\{chartPoints\}/);
+  // Recent form still reaches narrow rows as text even without the sparkline.
+  assert.match(marketSource, /L\{form\.games\} \{formatSignedMetric\(form\.averageSurprise\)\} NP/);
+});
+
+test('the market only widens into extra columns when the table has room', () => {
+  assert.match(marketSource, /const roomy = width >= 900/);
+  assert.match(marketSource, /showOwnership=\{roomy\}/);
+  assert.match(marketSource, /showOwnership \? \(/);
+  assert.match(marketSource, /formatOwnership\(player\.ownership_bps\)/);
+  // An explicit accessibilityLabel replaces descendant text, so a visible
+  // ownership column must also be named in the row label.
+  assert.match(marketSource, /showOwnership \? formatOwnership\(player\.ownership_bps\) : null/);
+  // Tier is visible on every row, so it belongs in the explicit label too.
+  assert.match(marketSource, /player\.tier\.toUpperCase\(\),/);
+});
+
+test('every compact figure in a play row keeps an exact spoken value', () => {
+  assert.match(playsSource, /accessibilityLabel=\{`Marked at \$\{formatSignedMoney\(markedPayout\)\}`\}/);
+  assert.match(playsSource, /`Settled at \$\{formatSignedMoney\(boost\.payout\)\}`/);
+  // The candidate row shows a compact price, so the exact one must be spoken.
+  assert.match(playsSource, /Price \$\{formatMoney\(priceOf\(player\.id\)\)\}/);
+  assert.match(playsSource, /Fee \$\{formatMoney\(fee\)\}/);
+});
+
+test('the populated market list carries its own heading, not just its empty state', () => {
+  // Screen readers navigate by heading, and the header renders in every state,
+  // so the heading must live in the always-present list header.
+  const start = marketSource.indexOf('const listHeader = (');
+  const end = marketSource.indexOf('const emptyState = (');
+  assert.ok(start >= 0 && end > start, 'could not locate the market list header');
+  const listHeaderBlock = marketSource.slice(start, end);
+  assert.match(listHeaderBlock, /accessibilityRole="header"/);
+  assert.match(listHeaderBlock, /styles\.title\}>Market</);
+  // Search must stay reachable in the empty state so the query can be cleared.
+  assert.match(listHeaderBlock, /accessibilityLabel="Search players"/);
+});
+
+test('the buyable filter excludes players an active instrument blocks', () => {
+  assert.match(marketSource, /isBlocked: \(playerId\) =>/);
+  assert.match(marketSource, /activeShortPlayerIds\.has\(playerId\) \|\| activeBoostPlayerIds\.has\(playerId\)/);
+  const orderingSource = source('./marketOrdering.ts');
+  assert.match(orderingSource, /const blocked = isBlocked \? isBlocked\(player\.id\) : false/);
+  assert.match(orderingSource, /!held && !soldOut && !blocked && buyTotal <= freeCash/);
+});
+
+test('the market virtualizes its ~300 listings instead of mounting every row', () => {
+  assert.match(marketSource, /<FlatList/);
+  assert.match(marketSource, /keyExtractor=\{\(item\) => item\.player\.id\}/);
+  assert.match(marketSource, /windowSize=/);
+  assert.doesNotMatch(marketSource, /visiblePlayers\.map\(/);
+  // A variable-height ListHeaderComponent makes fixed getItemLayout offsets wrong.
+  assert.doesNotMatch(marketSource, /getItemLayout=/);
+});
+
+test('the market scrolls as one surface so short viewports can reach the rows', () => {
+  // Pinned controls left a 844x390 landscape phone with zero reachable rows.
+  assert.match(marketSource, /ListHeaderComponent=\{listHeader\}/);
+  assert.match(marketSource, /ListEmptyComponent=\{emptyState\}/);
+  assert.doesNotMatch(marketSource, /rows\.length === 0 \? \(/);
+});
+
+test('each empty market filter offers recovery that actually works', () => {
+  assert.match(marketSource, /filter === 'held'/);
+  assert.match(marketSource, /clear the Owned filter/);
+  assert.match(marketSource, /Sell a player or clear the filter/);
+  // A filtered-out but real match must not be reported as an unknown name.
+  assert.match(marketSource, /const marketHasQueryMatch = trimmedQuery !== ''/);
+  assert.match(marketSource, /No “\$\{trimmedQuery\}” result in this filter\./);
+  // An unmatchable query is the blocker, so its advice outranks filter advice.
+  assert.match(marketSource, /const searchIsTheBlocker = trimmedQuery !== '' && !marketHasQueryMatch/);
+  assert.match(marketSource, /\{searchIsTheBlocker\s*\?\s*'Try a first name/);
+});
+
+test('the trade action column scales with text size instead of truncating', () => {
+  // Bounded by the viewport so it cannot squeeze out the player name.
+  assert.match(marketSource, /marketActionWidth\(fontScale, width\)/);
+  assert.match(marketSource, /\{ width: actionWidth \}/);
+  assert.doesNotMatch(marketSource, /tradeButton: \{\s*width: 76/);
+});
+
+test('fixed horizontal layouts give way to enlarged text everywhere they appear', () => {
+  const leaderboardSource = source('../screens/LeaderboardScreen.tsx');
+  // Leaderboard numeric columns size to content once type is enlarged.
+  assert.match(leaderboardSource, /const largeText = fontScale > 1\.3/);
+  assert.match(leaderboardSource, /largeText \? styles\.flexColumn : styles\.valueColumn/);
+  assert.match(leaderboardSource, /largeText \? styles\.flexColumn : styles\.returnColumn/);
+  // The replay controls wrap instead of crushing the status text.
+  assert.match(seasonControlSource, /flexWrap: 'wrap'/);
+  // The rank summary card wraps rather than pushing the rank off screen.
+  assert.match(leaderboardSource, /yourRow: \{[^}]*flexWrap: 'wrap'/);
+  // Long trade statuses wrap into the taller large-text row instead of clipping.
+  assert.match(marketSource, /numberOfLines=\{2\}\s*style=\{\[\s*styles\.tradeText/);
+});
+
+test('reduced motion reaches every animated affordance, native included', () => {
+  const authSource = source('../auth/AuthScreen.tsx');
+  const webStyles = source('../web/globalStyles.ts');
+  // Web: one stylesheet kills transitions/animations globally.
+  assert.match(webStyles, /prefers-reduced-motion: reduce/);
+  // Native: the media query never runs, so each animated element opts out.
+  assert.match(appSource, /reducedMotion\s*\?\s*<Text style=\{styles\.stateBusy\}/);
+  assert.match(authSource, /reducedMotion/);
+  assert.match(seasonControlSource, /animationType=\{reducedMotion \? 'none' : 'fade'\}/);
+});
+
+test('the market exposes explicit sort and filter controls with tab semantics', () => {
+  const orderingSource = source('./marketOrdering.ts');
+  assert.match(marketSource, /MARKET_SORTS/);
+  assert.match(marketSource, /MARKET_FILTERS/);
+  assert.match(marketSource, /aria-label=\{label\}/);
+  assert.match(marketSource, /accessibilityRole="tab"/);
+  assert.match(orderingSource, /export function buildMarketRows/);
+  // Rows missing a metric must sort last rather than masquerading as zero.
+  assert.match(orderingSource, /if \(left === null\) return 1/);
+  assert.match(orderingSource, /if \(right === null\) return -1/);
 });
 
 test('market charts only receive results through the latest settled replay date', () => {
@@ -80,12 +196,61 @@ test('player details resolve current server data and price changes name their ti
   assert.match(marketSource, /players\.find\(\(player\) => player\.id === selectedPlayerId\)/);
   assert.match(portfolioSource, /const \[selectedPlayerId, setSelectedPlayerId\]/);
   assert.match(portfolioSource, /playerById\.get\(selectedPlayerId\)/);
-  assert.match(marketSource, /\{formatSignedPercent\(change\)\} since listing/);
-  assert.match(marketSource, /style=\{styles\.detailPrice\}>\s*\{formatCompactMoney\(currentPrice\)\}/);
-  assert.match(marketSource, />VS EXPECTED</);
+  assert.match(marketSource, /formatSignedPercent\(change\)\} since listing/);
+  assert.match(marketSource, /styles\.detailPrice\}\s*>\s*\{formatCompactMoney\(currentPrice\)\}/);
+  assert.match(marketSource, /Recent form vs expected/);
   assert.match(marketSource, /const rowAccessibilityLabel = \[/);
   assert.match(marketSource, /`Current price \$\{formatMoney\(currentPrice\)\}`/);
   assert.match(marketSource, /accessibilityLabel=\{rowAccessibilityLabel\}/);
+});
+
+test('compact display money never hides the exact figure from assistive tech', () => {
+  // Screens show $34.6M-style values but still announce the full number.
+  for (const [name, contents] of [
+    ['Portfolio', portfolioSource],
+    ['Market', marketSource],
+    ['Leaders', source('../screens/LeaderboardScreen.tsx')],
+  ] as const) {
+    assert.match(contents, /formatCompactMoney|formatCompactSignedMoney/, `${name} does not use compact money`);
+    assert.match(contents, /accessibilityLabel=\{`?[^`]*\$\{formatMoney|accessibilityLabel=\{formatSignedMoney/, `${name} drops the exact figure`);
+  }
+  assert.doesNotMatch(portfolioSource, /style=\{styles\.total\}>\s*\{formatMoney\(/);
+});
+
+test('every compacted money Stat on the player detail carries its exact value', () => {
+  // A screen-level "has at least one exact label" check passes while individual
+  // figures stay abbreviated, so each money Stat is asserted on its own.
+  const moneyStats = [
+    ['Current price', 'formatMoney\\(currentPrice\\)'],
+    ['Opening price', 'formatMoney\\(player\\.listing_price\\)'],
+    ['Actual salary', 'formatMoney\\(player\\.actual_salary\\)'],
+    ['Best settled payout', 'formatSignedMoney\\(bestPayout\\)'],
+  ] as const;
+
+  for (const [label, exact] of moneyStats) {
+    assert.match(
+      marketSource,
+      new RegExp(`<Stat exact=\\{${exact}\\} label="${label}"`),
+      `${label} is announced only in compact form`,
+    );
+  }
+  assert.match(marketSource, /exact \? `\$\{label\}, \$\{exact\}` : undefined/);
+  // The selected-range dividend headline is compacted too.
+  assert.match(marketSource, /accessibilityLabel=\{`\$\{formatSignedMoney\(rangeTotal\)\}/);
+});
+
+test('the reduced-motion listener survives browsers with only the legacy API', () => {
+  const hookSource = source('../hooks/useReducedMotion.ts');
+  assert.match(hookSource, /typeof query\.addEventListener === 'function'/);
+  assert.match(hookSource, /typeof query\.addListener === 'function'/);
+  assert.match(hookSource, /query\.removeListener\(onChange\)/);
+});
+
+test('shared submit state never claims a specific action is running', () => {
+  const authSource = source('../auth/AuthScreen.tsx');
+  // isSubmitting is shared by sign-in, Google and CREATE ACCOUNT.
+  assert.doesNotMatch(authSource, /SIGNING IN/);
+  assert.match(authSource, /WORKING…/);
 });
 
 test('player details and trade actions are sibling controls instead of nested buttons', () => {
@@ -96,8 +261,9 @@ test('player details and trade actions are sibling controls instead of nested bu
 test('market trades use the account mutation lock and expose pending feedback', () => {
   assert.match(marketSource, /pendingActions\.has\('account-mutation'\)/);
   assert.match(marketSource, /const disabled = shorted \|\| boosted \|\| soldOut \|\| unaffordable \|\| locked/);
-  assert.match(marketSource, /pending \? \(/);
-  assert.match(marketSource, />WAIT</);
+  assert.match(marketSource, /if \(pending\) return;/);
+  assert.match(marketSource, /pending\s*\?\s*'WAIT'/);
+  assert.match(marketSource, /locked\s*\?\s*'BUSY'/);
   assert.match(portfolioContextSource, /acquire\('account-mutation'\)/);
   assert.match(portfolioContextSource, /acquire\(key\)/);
 });
@@ -117,7 +283,7 @@ test('market affordability uses the authoritative account-specific buy fee', () 
 
 test('market prevents buying an actively shorted player and preserves native search taps', () => {
   assert.match(marketSource, /position\.status === 'active'/);
-  assert.match(marketSource, /shorted=\{activeShortPlayerIds\.has\(player\.id\)\}/);
+  assert.match(marketSource, /shorted=\{activeShortPlayerIds\.has\(item\.player\.id\)\}/);
   assert.match(marketSource, /shorted \|\| boosted \|\| soldOut \|\| unaffordable \|\| locked/);
   assert.match(marketSource, /SHORTED/);
   assert.match(marketSource, /keyboardShouldPersistTaps="handled"/);
@@ -125,7 +291,7 @@ test('market prevents buying an actively shorted player and preserves native sea
 
 test('market prevents selling the holding required by an armed boost', () => {
   assert.match(marketSource, /boost\.status === 'armed'/);
-  assert.match(marketSource, /boosted=\{activeBoostPlayerIds\.has\(player\.id\)\}/);
+  assert.match(marketSource, /boosted=\{activeBoostPlayerIds\.has\(item\.player\.id\)\}/);
   assert.match(marketSource, /shorted \|\| boosted \|\| soldOut \|\| unaffordable \|\| locked/);
   assert.match(marketSource, /BOOSTED/);
 });
@@ -149,7 +315,9 @@ test('instrument UI explains finite weekly slots and never exposes price shorts'
 test('weekly play eligibility, dates, and fees come only from server targets', () => {
   assert.match(playsSource, /weeklyShortTargets\.flatMap/);
   assert.match(playsSource, /boostTargets\.flatMap/);
-  assert.match(playsSource, /fee \{formatMoney\(fee\)\}/);
+  assert.match(playsSource, /fee \{formatCompactMoney\(fee\)\}/);
+  // The exact fee still has to reach screen readers even though the row is compact.
+  assert.match(playsSource, /fee \$\{formatMoney\(fee\)\}/);
   assert.match(playsSource, /armPlayerBoost\(player, gameDate\)/);
   assert.doesNotMatch(playsSource, /nextPlayerGame|nextEventForPlayer/);
 });

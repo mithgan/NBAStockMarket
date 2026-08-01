@@ -11,10 +11,12 @@ import {
   View,
 } from 'react-native';
 
-import { colors } from '../theme';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+import { colors, type } from '../theme';
 import { useAuth } from './AuthContext';
 
 export function AuthScreen() {
+  const reducedMotion = useReducedMotion();
   const {
     clearMessage,
     error,
@@ -117,7 +119,13 @@ export function AuthScreen() {
             onPress={submitSignIn}
             style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
           >
-            {isSubmitting ? <ActivityIndicator color={colors.background} /> : <Text style={styles.primaryText}>SIGN IN</Text>}
+            {isSubmitting
+              // isSubmitting is shared with Google and CREATE ACCOUNT, so the
+              // copy stays neutral rather than claiming a sign-in is running.
+              ? (reducedMotion
+                ? <Text style={styles.primaryText}>WORKING…</Text>
+                : <ActivityIndicator color={colors.background} />)
+              : <Text style={styles.primaryText}>SIGN IN</Text>}
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -160,8 +168,8 @@ const styles = StyleSheet.create({
   googleText: { color: colors.background, fontSize: 12, fontWeight: '900' },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 5 },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  dividerText: { color: colors.muted, fontSize: 9, fontWeight: '800' },
-  label: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginTop: 4 },
+  dividerText: { color: colors.muted, fontSize: type.micro, fontWeight: '800' },
+  label: { color: colors.muted, fontSize: type.micro, fontWeight: '900', letterSpacing: 1.1, marginTop: 4 },
   input: { minHeight: 50, color: colors.text, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 7, paddingHorizontal: 14, fontSize: 15 },
   primaryButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold, borderRadius: 7, marginTop: 8 },
   primaryText: { color: colors.background, fontSize: 12, fontWeight: '900' },
