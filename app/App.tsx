@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SimBar } from './src/components/SimBar';
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { MarketScreen } from './src/screens/MarketScreen';
 import { PortfolioScreen } from './src/screens/PortfolioScreen';
@@ -32,6 +33,8 @@ function AppContent() {
             <Text style={styles.season}>DATABALLR · 2026–27</Text>
           </View>
         </View>
+
+        <SimBar />
 
         <View style={styles.screen}>
           {activeTab === 'portfolio' && <PortfolioScreen />}

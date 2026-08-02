@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { dividendEvents, players } from '../data/snapshot';
+import { players } from '../data/snapshot';
 import type { Player } from '../data/types';
 import { formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
+import { SIM_START } from '../state/sim';
 import { colors } from '../theme';
 import { PlayerDetail } from './MarketScreen';
 
@@ -19,7 +20,7 @@ function feedName(playerId: string) {
 }
 
 export function PortfolioScreen() {
-  const { state, summary } = usePortfolio();
+  const { dividendsCollected, recentEvents, simDate, state, summary } = usePortfolio();
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   if (selectedPlayer) {
@@ -36,7 +37,7 @@ export function PortfolioScreen() {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <Text style={styles.eyebrow}>PORTFOLIO VALUE</Text>
       <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.total}>{formatMoney(summary.total_value)}</Text>
-      <Text style={styles.subtle}>Live mock prices · one share max per player</Text>
+      <Text style={styles.subtle}>2025-26 replay · real games pay real dividends · one share max per player</Text>
 
       <View style={styles.statRow}>
         <View style={styles.statCard}>
@@ -46,6 +47,17 @@ export function PortfolioScreen() {
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>HOLDINGS</Text>
           <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.statValue}>{formatMoney(summary.market_value)}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>DIVIDENDS</Text>
+          <Text
+            adjustsFontSizeToFit
+            minimumFontScale={0.72}
+            numberOfLines={1}
+            style={[styles.statValue, { color: dividendsCollected >= 0 ? colors.green : colors.red }]}
+          >
+            {formatSignedMoney(dividendsCollected)}
+          </Text>
         </View>
       </View>
 
@@ -78,35 +90,52 @@ export function PortfolioScreen() {
       )}
 
       <View style={styles.sectionHeading}>
-        <Text style={styles.sectionTitle}>Last night</Text>
-        <Text style={styles.realBadge}>REAL BACKTEST</Text>
+        <Text style={styles.sectionTitle}>Latest settlements</Text>
+        <Text style={styles.realBadge}>REAL 2025-26 GAMES</Text>
       </View>
-      <View style={styles.feedCard}>
-        {dividendEvents.map((event, index) => (
-          <View
-            key={`${event.player_id}-${event.game_date}-${index}`}
-            style={[styles.feedRow, index < dividendEvents.length - 1 && styles.feedBorder]}
-          >
-            <View>
-              <Text style={styles.rowName}>{feedName(event.player_id)}</Text>
-              <Text style={styles.subtle}>
-                {event.game_date} · {event.actual_net_points.toFixed(1)} vs {event.expected_net_points.toFixed(1)} NP
+      {recentEvents.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>
+            {simDate === SIM_START
+              ? 'The season has not tipped off.'
+              : state.holdings.length === 0
+                ? 'You hold no players.'
+                : 'No games for your roster in the last advance.'}
+          </Text>
+          <Text style={styles.subtle}>
+            {simDate === SIM_START
+              ? 'Draft your roster, then advance the season to collect dividends from real games.'
+              : 'Buy players in the Market tab, then advance the season.'}
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.feedCard}>
+          {recentEvents.slice(0, 12).map((event, index) => (
+            <View
+              key={`${event.player_id}-${event.date}-${index}`}
+              style={[styles.feedRow, index < Math.min(recentEvents.length, 12) - 1 && styles.feedBorder]}
+            >
+              <View>
+                <Text style={styles.rowName}>{feedName(event.player_id)}</Text>
+                <Text style={styles.subtle}>
+                  {event.date} · {event.np.toFixed(1)} vs {event.expected_np.toFixed(1)} NP
+                </Text>
+              </View>
+              <Text
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+                numberOfLines={1}
+                style={[
+                  styles.pnl,
+                  { color: event.amount >= 0 ? colors.green : colors.red },
+                ]}
+              >
+                {formatSignedMoney(event.amount)}
               </Text>
             </View>
-            <Text
-              adjustsFontSizeToFit
-              minimumFontScale={0.75}
-              numberOfLines={1}
-              style={[
-                styles.pnl,
-                { color: event.dividend_per_holder >= 0 ? colors.green : colors.red },
-              ]}
-            >
-              {formatSignedMoney(event.dividend_per_holder)}
-            </Text>
-          </View>
-        ))}
-      </View>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 }

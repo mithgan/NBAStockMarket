@@ -32,6 +32,7 @@ import type { Player } from '../data/types';
 import { formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
 import { getPurchaseShortfall } from '../state/portfolio';
+import { clipTrends } from '../state/sim';
 import { colors } from '../theme';
 
 function initials(name: string) {
@@ -169,7 +170,8 @@ export function PlayerDetail({
   backLabel?: string;
 }) {
   const [range, setRange] = useState<TrendRange>('L15');
-  const points = playerTrends[player.id] ?? [];
+  const { simDate } = usePortfolio();
+  const points = clipTrends(playerTrends[player.id] ?? [], simDate);
   const visiblePoints = selectTrendRange(points, range);
   const rangeTotal = visiblePoints.reduce((sum, point) => sum + point.dividend_per_holder, 0);
   const bestPayout = points.length > 0
@@ -231,7 +233,7 @@ export function PlayerDetail({
             })}
           </View>
         </View>
-        {visiblePoints.length > 0 ? <DetailChart points={visiblePoints} /> : <Text style={styles.emptyChart}>No game data</Text>}
+        {visiblePoints.length > 0 ? <DetailChart points={visiblePoints} /> : <Text style={styles.emptyChart}>No games played yet — advance the season</Text>}
       </View>
 
       <Text style={styles.statsTitle}>Season snapshot</Text>
@@ -275,11 +277,12 @@ interface MarketRowProps {
   player: Player;
   held: boolean;
   isLast: boolean;
+  simDate: string;
   onOpen: (player: Player) => void;
   onTrade: (player: Player, side: 'buy' | 'sell') => void;
 }
 
-function MarketRow({ cash, player, held, isLast, onOpen, onTrade }: MarketRowProps) {
+function MarketRow({ cash, player, held, isLast, simDate, onOpen, onTrade }: MarketRowProps) {
   const shortfall = held ? 0 : getPurchaseShortfall(cash, player.listing_price);
   const unaffordable = !held && shortfall > 0;
   const handleTrade = (event: GestureResponderEvent) => {
@@ -308,7 +311,7 @@ function MarketRow({ cash, player, held, isLast, onOpen, onTrade }: MarketRowPro
           <Text style={styles.price}>{formatMoney(player.listing_price)}</Text>
         </View>
       </View>
-      <Sparkline points={selectTrendRange(playerTrends[player.id] ?? [], 'L15')} />
+      <Sparkline points={selectTrendRange(clipTrends(playerTrends[player.id] ?? [], simDate), 'L15')} />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={held ? `Sell ${player.name}` : `Buy ${player.name} for ${formatMoney(player.listing_price)}`}
@@ -340,7 +343,7 @@ function MarketRow({ cash, player, held, isLast, onOpen, onTrade }: MarketRowPro
 }
 
 export function MarketScreen() {
-  const { message, owns, summary, trade } = usePortfolio();
+  const { message, owns, simDate, summary, trade } = usePortfolio();
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   if (selectedPlayer) {
@@ -373,6 +376,7 @@ export function MarketScreen() {
             onOpen={setSelectedPlayer}
             onTrade={trade}
             player={player}
+            simDate={simDate}
           />
         ))}
       </View>
