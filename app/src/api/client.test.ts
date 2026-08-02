@@ -4,41 +4,7 @@ import test from 'node:test';
 import {
   MarketApiClient,
   MarketApiError,
-  mutationFailureMayHaveCommitted,
 } from './client';
-
-test('mutation failures distinguish definite rejections from indeterminate commits', () => {
-  assert.equal(
-    mutationFailureMayHaveCommitted(
-      new MarketApiError('Already owned.', 'holding_cap', 409),
-    ),
-    false,
-  );
-  assert.equal(
-    mutationFailureMayHaveCommitted(
-      new MarketApiError('Unreadable.', 'invalid_response', 201),
-    ),
-    true,
-  );
-  assert.equal(
-    mutationFailureMayHaveCommitted(
-      new MarketApiError('Unreadable rejection.', 'invalid_response', 409),
-    ),
-    false,
-  );
-  assert.equal(
-    mutationFailureMayHaveCommitted(
-      new MarketApiError('Retry rejected.', 'request_failed', 409, true),
-    ),
-    true,
-  );
-  assert.equal(
-    mutationFailureMayHaveCommitted(
-      new MarketApiError('Timed out.', 'timeout', null),
-    ),
-    true,
-  );
-});
 
 const portfolio = {
   account_id: 'alice',
@@ -67,10 +33,21 @@ const portfolio = {
 
 const market = [{
   id: 'sga', name: 'Shai Gilgeous-Alexander', tier: 'star',
+  version: 4,
   current_price_cents: 5_000_000_000, opening_price_cents: 5_000_000_000,
   actual_salary_cents: 4_000_000_000, shares_outstanding: 100,
   available_shares: 100, buy_fee_cents: 12_500_000, ownership_bps: 0, volume_30d: 0,
 }];
+
+const trade = {
+  id: 'trade-1',
+  player_id: '3112335',
+  side: 'buy',
+  execution_price_cents: 5_000_000_000,
+  fee_cents: 12_500_000,
+  new_price_cents: 5_010_000_000,
+  created_at: '2026-07-21T00:00:00Z',
+};
 
 const bootstrapPayload = {
   market,
@@ -84,6 +61,7 @@ const bootstrapPayload = {
   settlements: [],
   leaderboard: [],
   settled_results: [],
+  capabilities: { can_advance_day: true },
 };
 
 const aliceToken = async () => ({ accessToken: 'token', userId: 'alice' });
@@ -193,13 +171,152 @@ test('a retried mutation reuses exactly one idempotency key', async () => {
       calls += 1;
       seenKeys.push((init?.headers as Record<string, string>)['Idempotency-Key']);
       if (calls === 1) throw new TypeError('connection reset');
-      return new Response(JSON.stringify({ data: { replayed: true, portfolio } }), { status: 200 });
+      return new Response(JSON.stringify({
+        data: { replayed: true, portfolio, trade },
+      }), { status: 200 });
     },
   });
 
-  const result = await client.trade('3112335', 'buy');
+  const result = await client.trade('3112335', 'buy', 4);
   assert.equal(result.replayed, true);
   assert.deepEqual(seenKeys, ['fixed-request-key', 'fixed-request-key']);
+});
+
+test('trades use the Flask route and include the listing version', async () => {
+  let requestedUrl = '';
+  let requestedBody = '';
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com/api/nba-stock-market/',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    idempotencyKeyFactory: () => 'trade-contract-key',
+    fetchImpl: async (url, init) => {
+      requestedUrl = String(url);
+      requestedBody = String(init?.body);
+      return new Response(JSON.stringify({
+        data: { replayed: false, portfolio, trade },
+      }), { status: 200 });
+    },
+  });
+
+  await client.trade('3112335', 'buy', 4);
+
+  assert.equal(
+    requestedUrl,
+    'https://api.example.com/api/nba-stock-market/api/v1/trades',
+  );
+  assert.deepEqual(JSON.parse(requestedBody), {
+    player_id: '3112335',
+    side: 'buy',
+    expected_player_version: 4,
+  });
+});
+
+test('weekly shorts bind the mutation to the displayed replay date', async () => {
+  let requestedBody = '';
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com/api/nba-stock-market',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    idempotencyKeyFactory: () => 'short-contract-key',
+    fetchImpl: async (_url, init) => {
+      requestedBody = String(init?.body);
+      return new Response(JSON.stringify({
+        data: {
+          replayed: false,
+          portfolio,
+          position: {
+            id: 'short-one',
+            player_id: '3112335',
+            week_start: '2025-10-20',
+            week_end: '2025-10-27',
+            status: 'active',
+            opening_price_cents: 5_000_000_000,
+            fee_cents: 12_500_000,
+            collateral_cents: 200_000_000,
+            accrued_net_points_micros: 0,
+            payout_cents: null,
+            qualifying_games: 0,
+            settled_game_date: null,
+            created_at: '2026-07-21T00:00:00Z',
+          },
+        },
+      }), { status: 200 });
+    },
+  });
+
+  await client.armWeeklyShort('3112335', '2025-10-21', 4);
+
+  assert.deepEqual(JSON.parse(requestedBody), {
+    player_id: '3112335',
+    expected_game_date: '2025-10-21',
+    expected_player_version: 4,
+  });
+});
+
+test('historical day advancement requires and sends the settlement key', async () => {
+  let requestedUrl = '';
+  let requestedBody = '';
+  let settlementHeader = '';
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com/api/nba-stock-market',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    settlementKey: 'sandbox-settlement-key-0123456789ab',
+    idempotencyKeyFactory: () => 'advance-contract-key',
+    fetchImpl: async (url, init) => {
+      requestedUrl = String(url);
+      requestedBody = String(init?.body);
+      settlementHeader = (init?.headers as Record<string, string>)['X-Settlement-Key'];
+      return new Response(JSON.stringify({
+        data: {
+          replayed: false,
+          game_date: '2025-10-20',
+          next_game_date: '2025-10-21',
+          is_complete: false,
+          event_count: 12,
+          payout_count: 4,
+          net_cash_cents: 150_000,
+          cash_breakdown_cents: {
+            dividends: 200_000,
+            weekly_shorts: -50_000,
+            boosts: 0,
+          },
+        },
+      }), { status: 200 });
+    },
+  });
+
+  const result = await client.advanceDay('2025-10-20');
+
+  assert.equal(
+    requestedUrl,
+    'https://api.example.com/api/nba-stock-market/api/v1/admin/settlements/next',
+  );
+  assert.deepEqual(JSON.parse(requestedBody), {
+    expected_game_date: '2025-10-20',
+  });
+  assert.equal(settlementHeader, 'sandbox-settlement-key-0123456789ab');
+  assert.equal(result.next_game_date, '2025-10-21');
+});
+
+test('day advancement without a settlement key fails closed before any request', async () => {
+  let fetchCalls = 0;
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      return new Response('{}', { status: 200 });
+    },
+  });
+
+  await assert.rejects(
+    client.advanceDay('2025-10-20'),
+    (error: unknown) => error instanceof MarketApiError && error.code === 'advance_unavailable',
+  );
+  assert.equal(fetchCalls, 0);
 });
 
 test('a mutation retries a failed response body with the same idempotency key', async () => {
@@ -220,11 +337,13 @@ test('a mutation retries a failed response body with the same idempotency key', 
           text: async () => { throw new TypeError('response body disconnected'); },
         } as unknown as Response;
       }
-      return new Response(JSON.stringify({ data: { replayed: true, portfolio } }), { status: 200 });
+      return new Response(JSON.stringify({
+        data: { replayed: true, portfolio, trade },
+      }), { status: 200 });
     },
   });
 
-  const result = await client.trade('3112335', 'buy');
+  const result = await client.trade('3112335', 'buy', 4);
 
   assert.equal(result.replayed, true);
   assert.deepEqual(seenKeys, ['body-retry-key', 'body-retry-key']);
@@ -245,8 +364,8 @@ test('a mutation preserves commit uncertainty when its retry gets a malformed 4x
   });
 
   await assert.rejects(
-    client.trade('3112335', 'buy'),
-    (error: unknown) => mutationFailureMayHaveCommitted(error),
+    client.trade('3112335', 'buy', 4),
+    (error: unknown) => error instanceof MarketApiError && error.requestMayHaveCommitted,
   );
   assert.equal(calls, 2);
 });
@@ -271,10 +390,42 @@ test('a mutation retry cannot cross into a newly signed-in account', async () =>
   });
 
   await assert.rejects(
-    client.trade('3112335', 'buy'),
-    (error: unknown) => error instanceof MarketApiError && error.code === 'account_changed',
+    client.trade('3112335', 'buy', 4),
+    (error: unknown) => (
+      error instanceof MarketApiError
+      && error.code === 'account_changed'
+      && error.requestMayHaveCommitted
+    ),
   );
   assert.equal(fetchCalls, 1);
+});
+
+test('a terminal auth response preserves ambiguity from an earlier mutation attempt', async () => {
+  let fetchCalls = 0;
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    idempotencyKeyFactory: () => 'ambiguous-auth-key',
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      if (fetchCalls === 1) throw new TypeError('connection reset');
+      return new Response(
+        JSON.stringify({ error: { code: 'unauthorized', message: 'No.' } }),
+        { status: 401 },
+      );
+    },
+  });
+
+  await assert.rejects(
+    client.trade('3112335', 'buy', 4),
+    (error: unknown) => (
+      error instanceof MarketApiError
+      && error.code === 'unauthorized'
+      && error.requestMayHaveCommitted
+    ),
+  );
+  assert.equal(fetchCalls, 3);
 });
 
 test('armed boosts accept the API null payout until settlement', async () => {
@@ -352,7 +503,7 @@ test('malformed server timestamps fail closed before becoming account state', as
   );
 });
 
-test('public FastAPI problem codes survive for user-safe conflict handling', async () => {
+test('public Flask problem codes survive for user-safe conflict handling', async () => {
   const client = new MarketApiClient({
     baseUrl: 'https://api.example.com',
     expectedUserId: 'alice',
@@ -363,7 +514,7 @@ test('public FastAPI problem codes survive for user-safe conflict handling', asy
   });
 
   await assert.rejects(
-    client.trade('3112335', 'buy'),
+    client.trade('3112335', 'buy', 4),
     (error: unknown) => error instanceof MarketApiError
       && error.code === 'holding_cap'
       && error.message === 'You already own this player.',
@@ -406,52 +557,6 @@ test('bootstrap can request only results after the last installed settlement', a
   assert.deepEqual(requestedUrls, [
     'https://api.example.com/api/v1/bootstrap?settled_results_after=2025-10-21',
   ]);
-});
-
-test('trade requests one authoritative incremental snapshot in its mutation response', async () => {
-  const requests: Array<{ url: string; body: unknown }> = [];
-  const client = new MarketApiClient({
-    baseUrl: 'https://api.example.com',
-    expectedUserId: 'alice',
-    getAccessToken: aliceToken,
-    idempotencyKeyFactory: () => 'trade-bootstrap-key',
-    fetchImpl: async (input, init) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)),
-      });
-      return new Response(JSON.stringify({
-        data: { replayed: false, portfolio, bootstrap: bootstrapPayload },
-      }), { status: 201 });
-    },
-  });
-
-  const result = await client.trade('sga', 'buy', '2025-10-21');
-
-  assert.equal(result.bootstrap?.portfolio.account_id, 'alice');
-  assert.deepEqual(requests, [{
-    url: 'https://api.example.com/api/v1/trades',
-    body: {
-      player_id: 'sga',
-      side: 'buy',
-      settled_results_after: '2025-10-21',
-    },
-  }]);
-});
-
-test('trade remains compatible with an older backend that omits the snapshot', async () => {
-  const client = new MarketApiClient({
-    baseUrl: 'https://api.example.com',
-    expectedUserId: 'alice',
-    getAccessToken: aliceToken,
-    fetchImpl: async () => new Response(JSON.stringify({
-      data: { replayed: false, portfolio },
-    }), { status: 201 }),
-  });
-
-  const result = await client.trade('sga', 'buy', '2025-10-21');
-
-  assert.equal(result.bootstrap, null);
 });
 
 test('bootstrap rejects future-result contract corruption before it becomes app state', async () => {

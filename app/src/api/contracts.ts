@@ -8,7 +8,8 @@ export class ContractError extends Error {
 export interface MarketListing {
   id: string;
   name: string;
-  tier: 'star' | 'mid' | 'bench';
+  tier: string;
+  version: number;
   current_price_cents: number;
   opening_price_cents: number;
   actual_salary_cents: number;
@@ -153,11 +154,14 @@ export interface ServerSettledResult {
 
 export interface ServerLeaderboardRow {
   rank: number;
-  account_id: string;
   display_name: string;
   total_value_cents: number;
   return_bps: number;
   is_current_user: boolean;
+}
+
+export interface MarketCapabilities {
+  can_advance_day: boolean;
 }
 
 export interface CursorPage<T> {
@@ -170,12 +174,35 @@ export interface ServerMutationResult {
   portfolio: ServerPortfolio;
 }
 
-export interface ServerTradeResult extends ServerMutationResult {
-  bootstrap: ServerBootstrap | null;
+export interface ServerTradeMutationResult extends ServerMutationResult {
+  trade: ServerTrade;
+}
+
+export interface ServerWeeklyShortMutationResult extends ServerMutationResult {
+  position: ServerWeeklyShort;
+}
+
+export interface ServerBoostMutationResult extends ServerMutationResult {
+  position: ServerBoost;
 }
 
 export interface ServerResetResult extends ServerMutationResult {
   reset_at: string;
+}
+
+export interface ServerAdvanceResult {
+  replayed: boolean;
+  game_date: string;
+  next_game_date: string | null;
+  is_complete: boolean;
+  event_count: number;
+  payout_count: number;
+  net_cash_cents: number;
+  cash_breakdown_cents: {
+    dividends: number;
+    boosts: number;
+    weekly_shorts: number;
+  };
 }
 
 export interface ServerBootstrap {
@@ -187,6 +214,7 @@ export interface ServerBootstrap {
   settlements: ServerSettlement[];
   leaderboard: ServerLeaderboardRow[];
   settledResults: ServerSettledResult[];
+  capabilities: MarketCapabilities;
 }
 
 type Parser<T> = (value: unknown, path?: string) => T;
@@ -270,6 +298,18 @@ function flag(value: unknown, path: string): boolean {
   return value;
 }
 
+function parseCashBreakdown(
+  value: unknown,
+  path: string,
+): ServerAdvanceResult['cash_breakdown_cents'] {
+  const row = record(value, path);
+  return {
+    dividends: integer(row.dividends, `${path}.dividends`),
+    boosts: integer(row.boosts, `${path}.boosts`),
+    weekly_shorts: integer(row.weekly_shorts, `${path}.weekly_shorts`),
+  };
+}
+
 function list<T>(value: unknown, path: string, parser: Parser<T>): T[] {
   if (!Array.isArray(value)) throw new ContractError(`${path} must be an array.`);
   return value.map((item, index) => parser(item, `${path}[${index}]`));
@@ -296,7 +336,8 @@ export function parseMarketListing(value: unknown, path = 'listing'): MarketList
   return {
     id: text(row.id, `${path}.id`),
     name: text(row.name, `${path}.name`),
-    tier: oneOf(row.tier, `${path}.tier`, ['star', 'mid', 'bench'] as const),
+    tier: text(row.tier, `${path}.tier`),
+    version: nonNegativeInteger(row.version, `${path}.version`),
     current_price_cents: nonNegativeInteger(row.current_price_cents, `${path}.current_price_cents`),
     opening_price_cents: nonNegativeInteger(row.opening_price_cents, `${path}.opening_price_cents`),
     actual_salary_cents: nonNegativeInteger(row.actual_salary_cents, `${path}.actual_salary_cents`),
@@ -321,7 +362,7 @@ function parseHolding(value: unknown, path = 'holding'): ServerHolding {
   };
 }
 
-function parseTrade(value: unknown, path = 'trade'): ServerTrade {
+export function parseTrade(value: unknown, path = 'trade'): ServerTrade {
   const row = record(value, path);
   return {
     id: text(row.id, `${path}.id`),
@@ -338,7 +379,7 @@ function nullableInteger(value: unknown, path: string): number | null {
   return value === null ? null : integer(value, path);
 }
 
-function parseWeeklyShort(value: unknown, path = 'weekly_short'): ServerWeeklyShort {
+export function parseWeeklyShort(value: unknown, path = 'weekly_short'): ServerWeeklyShort {
   const row = record(value, path);
   return {
     id: text(row.id, `${path}.id`),
@@ -356,7 +397,7 @@ function parseWeeklyShort(value: unknown, path = 'weekly_short'): ServerWeeklySh
   };
 }
 
-function parseBoost(value: unknown, path = 'boost'): ServerBoost {
+export function parseBoost(value: unknown, path = 'boost'): ServerBoost {
   const row = record(value, path);
   return {
     id: text(row.id, `${path}.id`),
@@ -497,11 +538,25 @@ export function parseLeaderboardRow(value: unknown, path = 'leaderboard'): Serve
   const row = record(value, path);
   return {
     rank: nonNegativeInteger(row.rank, `${path}.rank`),
-    account_id: text(row.account_id, `${path}.account_id`),
     display_name: text(row.display_name, `${path}.display_name`),
     total_value_cents: integer(row.total_value_cents, `${path}.total_value_cents`),
     return_bps: integer(row.return_bps, `${path}.return_bps`),
     is_current_user: flag(row.is_current_user, `${path}.is_current_user`),
+  };
+}
+
+export function parseCapabilities(
+  value: unknown,
+  path = 'capabilities',
+): MarketCapabilities {
+  // The FastAPI backend does not serve capabilities; only the standalone
+  // preview server ever did. Absence means "no server-granted advance".
+  if (value === undefined || value === null) {
+    return { can_advance_day: false };
+  }
+  const row = record(value, path);
+  return {
+    can_advance_day: flag(row.can_advance_day, `${path}.can_advance_day`),
   };
 }
 
@@ -524,6 +579,7 @@ export function parseBootstrap(value: unknown, path = 'bootstrap'): ServerBootst
       `${path}.settled_results`,
       parseSettledResult,
     ),
+    capabilities: parseCapabilities(row.capabilities, `${path}.capabilities`),
   };
 }
 
@@ -543,13 +599,36 @@ export function parseMutationResult(value: unknown, path = 'mutation'): ServerMu
   };
 }
 
-export function parseTradeResult(value: unknown, path = 'trade'): ServerTradeResult {
+export function parseTradeMutationResult(
+  value: unknown,
+  path = 'trade_mutation',
+): ServerTradeMutationResult {
   const row = record(value, path);
   return {
     ...parseMutationResult(row, path),
-    bootstrap: row.bootstrap === undefined || row.bootstrap === null
-      ? null
-      : parseBootstrap(row.bootstrap, `${path}.bootstrap`),
+    trade: parseTrade(row.trade, `${path}.trade`),
+  };
+}
+
+export function parseWeeklyShortMutationResult(
+  value: unknown,
+  path = 'weekly_short_mutation',
+): ServerWeeklyShortMutationResult {
+  const row = record(value, path);
+  return {
+    ...parseMutationResult(row, path),
+    position: parseWeeklyShort(row.position, `${path}.position`),
+  };
+}
+
+export function parseBoostMutationResult(
+  value: unknown,
+  path = 'boost_mutation',
+): ServerBoostMutationResult {
+  const row = record(value, path);
+  return {
+    ...parseMutationResult(row, path),
+    position: parseBoost(row.position, `${path}.position`),
   };
 }
 
@@ -558,5 +637,25 @@ export function parseResetResult(value: unknown, path = 'reset'): ServerResetRes
   return {
     ...parseMutationResult(row, path),
     reset_at: isoTimestamp(row.reset_at, `${path}.reset_at`),
+  };
+}
+
+export function parseAdvanceResult(
+  value: unknown,
+  path = 'advance',
+): ServerAdvanceResult {
+  const row = record(value, path);
+  return {
+    replayed: flag(row.replayed, `${path}.replayed`),
+    game_date: isoDate(row.game_date, `${path}.game_date`),
+    next_game_date: nullableIsoDate(row.next_game_date, `${path}.next_game_date`),
+    is_complete: flag(row.is_complete, `${path}.is_complete`),
+    event_count: nonNegativeInteger(row.event_count, `${path}.event_count`),
+    payout_count: nonNegativeInteger(row.payout_count, `${path}.payout_count`),
+    net_cash_cents: integer(row.net_cash_cents, `${path}.net_cash_cents`),
+    cash_breakdown_cents: parseCashBreakdown(
+      row.cash_breakdown_cents,
+      `${path}.cash_breakdown_cents`,
+    ),
   };
 }

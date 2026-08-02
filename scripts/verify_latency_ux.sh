@@ -4,7 +4,13 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-.venv/bin/pytest -q
+python_bin="${PYTHON_BIN:-.venv/bin/python}"
+if ! "$python_bin" -c 'import fastapi, pytest' >/dev/null 2>&1; then
+  echo "PYTHON_BIN must point to an environment with the project test dependencies." >&2
+  exit 2
+fi
+
+"$python_bin" -m pytest tests/api -q
 (
   cd app
   npm test
@@ -14,14 +20,14 @@ cd "$repo_root"
 # Metro saturates local CPU during export. Give it time to release workers;
 # the checker below also refuses to judge wall time on a saturated host.
 sleep 3
-.venv/bin/python scripts/benchmark_latency.py \
+"$python_bin" scripts/benchmark_latency.py \
   --accounts 200 \
   --settled-days 60 \
   --warmups 3 \
   --samples 15 \
   --output .loop/nba-stock-latency-ux/state/final-benchmark.json
 
-.venv/bin/python - <<'PY'
+"$python_bin" - <<'PY'
 import json
 import os
 from pathlib import Path

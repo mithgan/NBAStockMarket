@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import statistics
+import sys
 import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -13,6 +14,10 @@ from datetime import date
 from pathlib import Path
 from time import perf_counter
 from typing import Callable, Iterator
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from sqlalchemy import event, select
 
@@ -27,7 +32,6 @@ from nba_stock_market.api.service import MarketService
 from nba_stock_market.engine import STARTING_CASH
 
 
-ROOT = Path(__file__).resolve().parents[1]
 MARKET_SEED = ROOT / "data/generated/market-seed.json"
 REPLAY_SEED = ROOT / "data/generated/replay-seed.json"
 

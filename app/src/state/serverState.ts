@@ -13,6 +13,7 @@ import {
   type ActivityEvent,
   type ActivityKind,
   type GameLeaderboardEntry,
+  type GameSummary,
   type GameState,
 } from './game';
 
@@ -21,6 +22,7 @@ const MICROS_PER_POINT = 1_000_000;
 
 export interface ServerPresentationState {
   state: GameState;
+  portfolioValuation: PortfolioValuation;
   players: Player[];
   leaderboard: GameLeaderboardEntry[];
   playerTrends: Record<string, TrendPoint[]>;
@@ -34,12 +36,26 @@ export interface ServerPresentationState {
   boostSlots: { used: number; total: number };
   weeklyShortTargets: InstrumentTargetView[];
   boostTargets: InstrumentTargetView[];
+  canAdvanceDay: boolean;
 }
 
 export interface InstrumentTargetView {
   playerId: string;
   gameDate: string;
   fee: number;
+}
+
+export interface PortfolioValuation {
+  cash: number;
+  freeCash: number;
+  reservedCollateral: number;
+  marketValue: number;
+  totalValue: number;
+  holdings: Record<string, {
+    currentPrice: number;
+    marketValue: number;
+    unrealizedPnl: number;
+  }>;
 }
 
 function dollars(cents: number): number {
@@ -113,13 +129,139 @@ function mapActivity(
 
 function mapLeaderboard(rows: ServerLeaderboardRow[]): GameLeaderboardEntry[] {
   return rows.map((row) => ({
-    id: row.account_id,
+    id: row.is_current_user
+      ? 'current-user'
+      : `leaderboard:${row.rank}:${row.display_name}`,
     rank: row.rank,
     name: row.display_name,
     value: dollars(row.total_value_cents),
     returnPct: row.return_bps / 100,
     isUser: row.is_current_user,
   }));
+}
+
+function mapPortfolioHoldings(portfolio: ServerPortfolio): GameState['holdings'] {
+  return portfolio.holdings.map((holding) => ({
+    player_id: holding.player_id,
+    shares: 1,
+    average_price: dollars(holding.average_cost_cents),
+    cost_basis: dollars(holding.average_cost_cents),
+  }));
+}
+
+function mapPortfolioValuation(portfolio: ServerPortfolio): PortfolioValuation {
+  return {
+    cash: dollars(portfolio.cash_cents),
+    freeCash: dollars(portfolio.free_cash_cents),
+    reservedCollateral: dollars(portfolio.reserved_collateral_cents),
+    marketValue: dollars(portfolio.market_value_cents),
+    totalValue: dollars(portfolio.total_value_cents),
+    holdings: Object.fromEntries(portfolio.holdings.map((holding) => [
+      holding.player_id,
+      {
+        currentPrice: dollars(holding.current_price_cents),
+        marketValue: dollars(holding.market_value_cents),
+        unrealizedPnl: dollars(holding.unrealized_pnl_cents),
+      },
+    ])),
+  };
+}
+
+export function applyPortfolioValuationToSummary(
+  summary: GameSummary,
+  valuation: PortfolioValuation,
+): GameSummary {
+  return {
+    ...summary,
+    cash: valuation.cash,
+    freeCash: valuation.freeCash,
+    reservedCollateral: valuation.reservedCollateral,
+    marketValue: valuation.marketValue,
+    totalValue: valuation.totalValue,
+    holdings: summary.holdings.map((holding) => {
+      const authoritative = valuation.holdings[holding.player_id];
+      return authoritative ? { ...holding, ...authoritative } : holding;
+    }),
+  };
+}
+
+function mapWeeklyShorts(portfolio: ServerPortfolio): GameState['weeklyShorts'] {
+  return portfolio.instruments.weekly_shorts.map((position) => ({
+    id: position.id,
+    playerId: position.player_id,
+    week: weekKey(position.week_start),
+    feePaid: dollars(position.fee_cents),
+    collateral: dollars(position.collateral_cents),
+    accruedNetPoints: position.accrued_net_points_micros / MICROS_PER_POINT,
+    qualifyingGames: position.qualifying_games,
+    status: position.status,
+    payout: position.payout_cents === null ? null : dollars(position.payout_cents),
+  }));
+}
+
+function mapBoosts(portfolio: ServerPortfolio): GameState['boosts'] {
+  return portfolio.instruments.boosts.map((position) => ({
+    id: position.id,
+    playerId: position.player_id,
+    week: weekKey(position.week_start),
+    gameDate: position.game_date,
+    feePaid: dollars(position.fee_cents),
+    status: position.status,
+    payout: position.payout_cents === null ? 0 : dollars(position.payout_cents),
+  }));
+}
+
+function mapInstrumentTargets(
+  targets: ServerPortfolio['instruments']['weekly_short_targets'],
+): InstrumentTargetView[] {
+  return targets.map((target) => ({
+    playerId: target.player_id,
+    gameDate: target.game_date,
+    fee: dollars(target.fee_cents),
+  }));
+}
+
+export interface MutationPriceUpdate {
+  playerId: string;
+  currentPriceCents: number;
+}
+
+export function applyServerPortfolioToPresentation(
+  current: ServerPresentationState,
+  portfolio: ServerPortfolio,
+  priceUpdate?: MutationPriceUpdate,
+): ServerPresentationState {
+  const prices = { ...current.state.prices };
+  if (priceUpdate) {
+    prices[priceUpdate.playerId] = dollars(priceUpdate.currentPriceCents);
+  }
+
+  return {
+    ...current,
+    portfolioValuation: mapPortfolioValuation(portfolio),
+    state: {
+      ...current.state,
+      cash: dollars(portfolio.cash_cents),
+      prices,
+      holdings: mapPortfolioHoldings(portfolio),
+      weeklyShorts: mapWeeklyShorts(portfolio),
+      boosts: mapBoosts(portfolio),
+      transitionCount: portfolio.version,
+    },
+    displayName: portfolio.display_name,
+    shortSlots: {
+      used: portfolio.instruments.weekly_short_slots.used,
+      total: portfolio.instruments.weekly_short_slots.limit,
+    },
+    boostSlots: {
+      used: portfolio.instruments.boost_slots.used,
+      total: portfolio.instruments.boost_slots.limit,
+    },
+    weeklyShortTargets: mapInstrumentTargets(
+      portfolio.instruments.weekly_short_targets,
+    ),
+    boostTargets: mapInstrumentTargets(portfolio.instruments.boost_targets),
+  };
 }
 
 export function isServerAccountPristine(bootstrap: ServerBootstrap): boolean {
@@ -191,6 +333,9 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
     actual_salary: dollars(listing.actual_salary_cents),
     available_shares: listing.available_shares,
     buy_fee: dollars(listing.buy_fee_cents),
+    ownership_bps: listing.ownership_bps,
+    shares_outstanding: listing.shares_outstanding,
+    volume_30d: listing.volume_30d,
   }));
   const names = new Map(players.map((player) => [player.id, player.name]));
   const latestSettledDate = bootstrap.game.last_settled_date;
@@ -245,34 +390,11 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
     version: GAME_STATE_VERSION,
     cash: dollars(bootstrap.portfolio.cash_cents),
     prices,
-    holdings: bootstrap.portfolio.holdings.map((holding) => ({
-      player_id: holding.player_id,
-      shares: 1,
-      average_price: dollars(holding.average_cost_cents),
-      cost_basis: dollars(holding.average_cost_cents),
-    })),
+    holdings: mapPortfolioHoldings(bootstrap.portfolio),
     settledDates,
     settledPlayerWeeks,
-    weeklyShorts: instruments.weekly_shorts.map((position) => ({
-      id: position.id,
-      playerId: position.player_id,
-      week: weekKey(position.week_start),
-      feePaid: dollars(position.fee_cents),
-      collateral: dollars(position.collateral_cents),
-      accruedNetPoints: position.accrued_net_points_micros / MICROS_PER_POINT,
-      qualifyingGames: position.qualifying_games,
-      status: position.status,
-      payout: position.payout_cents === null ? null : dollars(position.payout_cents),
-    })),
-    boosts: instruments.boosts.map((position) => ({
-      id: position.id,
-      playerId: position.player_id,
-      week: weekKey(position.week_start),
-      gameDate: position.game_date,
-      feePaid: dollars(position.fee_cents),
-      status: position.status,
-      payout: position.payout_cents === null ? 0 : dollars(position.payout_cents),
-    })),
+    weeklyShorts: mapWeeklyShorts(bootstrap.portfolio),
+    boosts: mapBoosts(bootstrap.portfolio),
     activity: activities,
     portfolioHistory,
     transitionCount: bootstrap.portfolio.version,
@@ -280,6 +402,7 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
 
   return {
     state,
+    portfolioValuation: mapPortfolioValuation(bootstrap.portfolio),
     players,
     leaderboard: mapLeaderboard(bootstrap.leaderboard),
     playerTrends,
@@ -297,16 +420,9 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
       used: instruments.boost_slots.used,
       total: instruments.boost_slots.limit,
     },
-    weeklyShortTargets: instruments.weekly_short_targets.map((target) => ({
-      playerId: target.player_id,
-      gameDate: target.game_date,
-      fee: dollars(target.fee_cents),
-    })),
-    boostTargets: instruments.boost_targets.map((target) => ({
-      playerId: target.player_id,
-      gameDate: target.game_date,
-      fee: dollars(target.fee_cents),
-    })),
+    weeklyShortTargets: mapInstrumentTargets(instruments.weekly_short_targets),
+    boostTargets: mapInstrumentTargets(instruments.boost_targets),
+    canAdvanceDay: bootstrap.capabilities.can_advance_day,
   };
 }
 

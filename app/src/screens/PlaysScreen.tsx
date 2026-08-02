@@ -1,10 +1,11 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { Player } from '../data/types';
-import { formatMoney, formatSignedMoney } from '../format';
+import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
 import { DOLLARS_PER_NET_POINT, WEEKLY_TOTAL_CLAMP_NP } from '../state/game';
-import { colors } from '../theme';
+import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
+import { Button, SectionHeader, Tag } from '../ui/primitives';
 
 interface PlayCandidate {
   player: Player;
@@ -14,10 +15,17 @@ interface PlayCandidate {
 
 function SlotCard({ label, used, total }: { label: string; used: number; total: number }) {
   return (
-    <View style={styles.slotCard}>
-      <Text style={styles.slotLabel}>{label}</Text>
-      <Text style={styles.slotValue}>{used} / {total}</Text>
-      <Text style={styles.slotHelp}>{total - used} available</Text>
+    <View
+      accessible
+      accessibilityLabel={`${label}, ${used} of ${total} used, ${total - used} available`}
+      style={styles.slotCard}
+    >
+      <Text style={styles.slotLabel}>{label.toUpperCase()}</Text>
+      <View style={styles.slotValueRow}>
+        <Text style={styles.slotValue}>{used}</Text>
+        <Text style={styles.slotTotal}>/ {total}</Text>
+        <Tag label={`${total - used} LEFT`} tone={total - used > 0 ? 'gold' : 'neutral'} />
+      </View>
     </View>
   );
 }
@@ -30,7 +38,6 @@ export function PlaysScreen() {
     boostSlots,
     currentWeek,
     nextGameDate,
-    owns,
     pendingActions,
     players,
     shortSlots,
@@ -40,6 +47,8 @@ export function PlaysScreen() {
   if (!state) return null;
   const playerById = new Map(players.map((player) => [player.id, player]));
   const accountMutationPending = pendingActions.size > 0;
+  const priceOf = (playerId: string) =>
+    state.prices[playerId] ?? playerById.get(playerId)?.listing_price ?? 0;
 
   const activeShorts = state.weeklyShorts.filter(
     (position) => position.week === currentWeek && position.status === 'active',
@@ -56,130 +65,151 @@ export function PlaysScreen() {
     return player ? [{ player, gameDate: target.gameDate, fee: target.fee }] : [];
   });
 
+  const renderCandidate = (
+    { player, gameDate, fee }: PlayCandidate,
+    kind: 'short' | 'boost',
+    isLast: boolean,
+  ) => {
+    const pending = pendingActions.has(`${kind}:${player.id}`);
+    const slots = kind === 'short' ? shortSlots : boostSlots;
+    const disabled = slots.remaining === 0 || accountMutationPending;
+    return (
+      <View key={player.id} style={[styles.actionRow, isLast && styles.lastRow]}>
+        <View
+          accessible
+          accessibilityLabel={`${player.name}. Price ${formatMoney(priceOf(player.id))}. Next game ${gameDate}. Fee ${formatMoney(fee)}`}
+          style={styles.actionCopy}
+        >
+          <Text numberOfLines={1} style={styles.rowName}>{player.name}</Text>
+          <Text numberOfLines={1} style={styles.rowMeta}>
+            {formatCompactMoney(priceOf(player.id))} · {gameDate} · fee {formatCompactMoney(fee)}
+          </Text>
+        </View>
+        <Button
+          accessibilityHint={
+            slots.remaining === 0
+              ? `No ${kind === 'short' ? 'short' : 'boost'} slots remain this week`
+              : undefined
+          }
+          accessibilityLabel={kind === 'short'
+            ? `Arm weekly short on ${player.name}, fee ${formatMoney(fee)}`
+            : `Boost ${player.name} for ${gameDate}, fee ${formatMoney(fee)}`}
+          compact
+          disabled={disabled}
+          fixedWidth={78}
+          label={pending ? 'WAIT' : kind === 'short' ? 'SHORT' : 'BOOST'}
+          onPress={() => void (kind === 'short'
+            ? armShort(player)
+            : armPlayerBoost(player, gameDate))}
+          tone={kind === 'short' ? 'danger' : 'positive'}
+        />
+      </View>
+    );
+  };
+
   return (
     <ScrollView keyboardShouldPersistTaps="handled" style={styles.scroll} contentContainerStyle={styles.content}>
-      <Text style={styles.eyebrow}>WEEKLY PLAYS</Text>
-      <Text accessibilityRole="header" style={styles.title}>Make your calls</Text>
-      <Text style={styles.subtle}>
-        Fade players against projection or double one held player&apos;s next signed dividend. Slots reset each Monday.
-      </Text>
+      <View style={styles.headingRow}>
+        <View>
+          <Text accessibilityRole="header" style={styles.title}>PLAYS</Text>
+          <Text style={styles.titleMeta}>WEEKLY INSTRUMENTS</Text>
+        </View>
+        <Tag label={currentWeek ?? 'SEASON COMPLETE'} tone="gold" />
+      </View>
 
       <View style={styles.slotRow}>
         <SlotCard label="Weekly shorts" total={shortSlots.total} used={shortSlots.used} />
         <SlotCard label="Boosts" total={boostSlots.total} used={boostSlots.used} />
       </View>
-      <View style={styles.ruleCard}>
-        <Text style={styles.ruleTitle}>{currentWeek ?? 'Season complete'}</Text>
-        <Text style={styles.ruleText}>Shorts reserve $2M collateral and settle at up to +/-{formatMoney(WEEKLY_TOTAL_CLAMP_NP * DOLLARS_PER_NET_POINT)}.</Text>
-        <Text style={styles.ruleText}>Boosts cost 0.25% and add one extra signed dividend, including losses.</Text>
-      </View>
+      <Text style={styles.rulesCopy}>
+        Shorts reserve {formatCompactMoney(2_000_000)} collateral and settle at up to
+        {' '}+/-{formatCompactMoney(WEEKLY_TOTAL_CLAMP_NP * DOLLARS_PER_NET_POINT)}. Boosts cost 0.25% and
+        add one extra signed dividend, including losses. Slots reset each Monday.
+      </Text>
 
-      <Text accessibilityRole="header" style={styles.sectionTitle}>Open positions</Text>
+      <SectionHeader label="OPEN POSITIONS" />
       {activeShorts.length === 0 && usedBoosts.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No active plays this week.</Text>
           <Text style={styles.subtle}>Use one only when you have a real conviction.</Text>
         </View>
       ) : (
-        <View style={styles.positionList}>
-          {activeShorts.map((position) => {
+        <View style={styles.listCard}>
+          {activeShorts.map((position, index) => {
             const player = playerById.get(position.playerId);
             const markedPayout = Math.max(
               -WEEKLY_TOTAL_CLAMP_NP,
               Math.min(WEEKLY_TOTAL_CLAMP_NP, position.accruedNetPoints),
             ) * DOLLARS_PER_NET_POINT;
+            const isLast = index === activeShorts.length - 1 && usedBoosts.length === 0;
             return (
-              <View key={position.id} style={styles.positionRow}>
+              <View key={position.id} style={[styles.positionRow, isLast && styles.lastRow]}>
                 <View style={styles.positionCopy}>
-                  <Text style={styles.rowName}>{player?.name ?? position.playerId}</Text>
-                  <Text style={styles.subtle}>WEEKLY SHORT · {position.qualifyingGames} games</Text>
+                  <Text numberOfLines={1} style={styles.rowName}>{player?.name ?? position.playerId}</Text>
+                  <Text numberOfLines={1} style={styles.rowMeta}>
+                    WEEKLY SHORT · {position.qualifyingGames} games
+                  </Text>
                 </View>
-                <Text style={[styles.positionValue, { color: markedPayout >= 0 ? colors.green : colors.red }]}>
-                  {formatSignedMoney(markedPayout)}
+                <Text
+                  accessibilityLabel={`Marked at ${formatSignedMoney(markedPayout)}`}
+                  numberOfLines={1}
+                  style={[styles.positionValue, markedPayout >= 0 ? styles.positive : styles.negative]}
+                >
+                  {formatCompactSignedMoney(markedPayout)}
                 </Text>
               </View>
             );
           })}
-          {usedBoosts.map((boost) => (
-            <View key={boost.id} style={styles.positionRow}>
+          {usedBoosts.map((boost, index) => (
+            <View
+              key={boost.id}
+              style={[styles.positionRow, index === usedBoosts.length - 1 && styles.lastRow]}
+            >
               <View style={styles.positionCopy}>
-                <Text style={styles.rowName}>{playerById.get(boost.playerId)?.name ?? boost.playerId}</Text>
-                <Text style={styles.subtle}>BOOST · {boost.gameDate} · {boost.status.toUpperCase()}</Text>
+                <Text numberOfLines={1} style={styles.rowName}>
+                  {playerById.get(boost.playerId)?.name ?? boost.playerId}
+                </Text>
+                <Text numberOfLines={1} style={styles.rowMeta}>
+                  BOOST · {boost.gameDate} · {boost.status.toUpperCase()}
+                </Text>
               </View>
-              <Text style={[styles.positionValue, { color: boost.payout >= 0 ? colors.green : colors.red }]}>
-                {boost.status === 'armed' ? 'ARMED' : formatSignedMoney(boost.payout)}
+              <Text
+                accessibilityLabel={boost.status === 'armed'
+                  ? 'Armed, not settled yet'
+                  : `Settled at ${formatSignedMoney(boost.payout)}`}
+                numberOfLines={1}
+                style={[styles.positionValue, boost.payout >= 0 ? styles.positive : styles.negative]}
+              >
+                {boost.status === 'armed' ? 'ARMED' : formatCompactSignedMoney(boost.payout)}
               </Text>
             </View>
           ))}
         </View>
       )}
 
-      <Text accessibilityRole="header" style={styles.sectionTitle}>Weekly shorts</Text>
-      <Text style={styles.subtle}>Pick an unowned player before his first game of the week.</Text>
+      <SectionHeader label="WEEKLY SHORTS" meta="UNOWNED ONLY" />
       {shortCandidates.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>{nextGameDate ? 'No eligible players right now.' : 'Replay complete.'}</Text>
           <Text style={styles.subtle}>Refresh after the next server settlement or free a slot to see more options.</Text>
         </View>
       ) : (
-        <View style={styles.actionList}>
-          {shortCandidates.map(({ player, gameDate, fee }) => {
-            const pending = pendingActions.has(`short:${player.id}`);
-            const disabled = shortSlots.remaining === 0 || accountMutationPending;
-            return (
-              <View key={player.id} style={styles.actionRow}>
-                <View style={styles.actionCopy}>
-                  <Text numberOfLines={1} style={styles.rowName}>{player.name}</Text>
-                  <Text style={styles.subtle}>Next game {gameDate} · fee {formatMoney(fee)}</Text>
-                </View>
-                <Pressable
-                  accessibilityLabel={`Arm weekly short on ${player.name}`}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled }}
-                  disabled={disabled}
-                  onPress={() => void armShort(player)}
-                  style={({ pressed }) => [styles.actionButton, disabled && styles.disabled, pressed && styles.pressed]}
-                >
-                  <Text style={styles.actionText}>{pending ? 'WAIT' : 'SHORT'}</Text>
-                </Pressable>
-              </View>
-            );
-          })}
+        <View style={styles.listCard}>
+          {shortCandidates.map((candidate, index) =>
+            renderCandidate(candidate, 'short', index === shortCandidates.length - 1))}
         </View>
       )}
 
-      <Text accessibilityRole="header" style={styles.sectionTitle}>Boosts</Text>
-      <Text style={styles.subtle}>Hold a player first, then boost his next game this week.</Text>
+      <SectionHeader label="BOOSTS" meta="PLAYERS YOU HOLD" />
       {boostCandidates.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No held player is boostable this week.</Text>
           <Text style={styles.subtle}>Buy an eligible player in Market or refresh after the next week begins.</Text>
         </View>
       ) : (
-        <View style={styles.actionList}>
-          {boostCandidates.map(({ player, gameDate, fee }) => {
-            const pending = pendingActions.has(`boost:${player.id}`);
-            const disabled = boostSlots.remaining === 0 || accountMutationPending;
-            const actionLabel = pending ? 'WAIT' : 'BOOST';
-            return (
-              <View key={player.id} style={styles.actionRow}>
-                <View style={styles.actionCopy}>
-                  <Text numberOfLines={1} style={styles.rowName}>{player.name}</Text>
-                  <Text style={styles.subtle}>{gameDate} · fee {formatMoney(fee)}</Text>
-                </View>
-                <Pressable
-                  accessibilityLabel={`Boost ${player.name} for ${gameDate}`}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled }}
-                  disabled={disabled}
-                  onPress={() => void armPlayerBoost(player, gameDate)}
-                  style={({ pressed }) => [styles.boostButton, disabled && styles.disabled, pressed && styles.pressed]}
-                >
-                  <Text style={styles.boostText}>{actionLabel}</Text>
-                </Pressable>
-              </View>
-            );
-          })}
+        <View style={styles.listCard}>
+          {boostCandidates.map((candidate, index) =>
+            renderCandidate(candidate, 'boost', index === boostCandidates.length - 1))}
         </View>
       )}
     </ScrollView>
@@ -188,33 +218,98 @@ export function PlaysScreen() {
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
-  content: { flexGrow: 1, padding: 16, paddingBottom: 36, gap: 10 },
-  eyebrow: { color: colors.gold, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
-  title: { color: colors.text, fontSize: 29, fontWeight: '900' },
-  subtle: { color: colors.muted, fontSize: 11, lineHeight: 17 },
-  slotRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
-  slotCard: { flex: 1, minWidth: 0, padding: 14, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8 },
-  slotLabel: { color: colors.muted, fontSize: 10, fontWeight: '800' },
-  slotValue: { color: colors.text, fontSize: 22, fontWeight: '900', marginTop: 6 },
-  slotHelp: { color: colors.gold, fontSize: 10, fontWeight: '700', marginTop: 2 },
-  ruleCard: { padding: 14, backgroundColor: colors.goldSoft, borderColor: colors.gold, borderWidth: 1, borderRadius: 8, gap: 4 },
-  ruleTitle: { color: colors.gold, fontSize: 11, fontWeight: '900' },
-  ruleText: { color: colors.text, fontSize: 10, lineHeight: 15 },
-  sectionTitle: { color: colors.text, fontSize: 17, fontWeight: '900', marginTop: 13 },
-  emptyCard: { padding: 16, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8, gap: 4 },
-  emptyTitle: { color: colors.text, fontSize: 13, fontWeight: '800' },
-  positionList: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
-  positionRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 13, borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth },
+  content: { flexGrow: 1, paddingBottom: space.xxl },
+  headingRow: {
+    paddingHorizontal: space.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.sm,
+    paddingTop: space.lg,
+    paddingBottom: space.md,
+  },
+  title: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: 22,
+    fontWeight: weight.black,
+    },
+  titleMeta: { ...labelStyle, marginTop: 2 },
+  subtle: { color: colors.muted, fontFamily: fonts.body, fontSize: type.label, lineHeight: 17 },
+  rulesCopy: {
+    color: colors.faint,
+    fontFamily: fonts.body,
+    fontSize: type.label,
+    lineHeight: 17,
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+  },
+
+  slotRow: {
+    paddingHorizontal: space.md,
+    flexDirection: 'row',
+    borderTopColor: colors.border,
+    borderBottomColor: colors.border,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+  },
+  slotCard: { flex: 1, minWidth: 0, paddingVertical: space.md, paddingRight: space.md },
+  slotLabel: { ...labelStyle },
+  slotValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.xs, marginTop: space.xs, flexWrap: 'wrap' },
+  slotValue: { ...numeric, color: colors.text, fontSize: 26, fontWeight: weight.black },
+  slotTotal: { ...numeric, color: colors.faint, fontSize: type.value, fontWeight: weight.heavy, marginRight: space.xs },
+
+  list: { borderTopColor: colors.border, borderTopWidth: 1 },
+  listCard: { borderTopColor: colors.border, borderTopWidth: 1 },
+  emptyCard: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.lg,
+    gap: space.xs,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.heavy,
+  },
+
+  positionRow: {
+    paddingHorizontal: space.md,
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.sm,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  lastRow: { borderBottomWidth: 0 },
   positionCopy: { flex: 1, minWidth: 0 },
-  positionValue: { fontSize: 12, fontWeight: '900' },
-  actionList: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
-  actionRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth },
+  positionValue: { ...numeric, fontSize: type.body, fontWeight: weight.black, flexShrink: 0 },
+
+  actionRow: {
+    paddingHorizontal: space.md,
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.sm,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
   actionCopy: { flex: 1, minWidth: 0 },
-  rowName: { color: colors.text, fontSize: 13, fontWeight: '800' },
-  actionButton: { minWidth: 72, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 6, borderColor: colors.red, borderWidth: 1, backgroundColor: '#3b1d24' },
-  actionText: { color: colors.red, fontSize: 10, fontWeight: '900' },
-  boostButton: { minWidth: 72, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 6, borderColor: colors.green, borderWidth: 1, backgroundColor: '#103426' },
-  boostText: { color: colors.green, fontSize: 10, fontWeight: '900' },
-  disabled: { opacity: 0.38 },
-  pressed: { opacity: 0.65 },
+  rowName: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.heavy,
+  },
+  rowMeta: { ...numeric, color: colors.faint, fontSize: type.label, marginTop: 2, letterSpacing: 0.3 },
+
+  positive: { color: colors.green },
+  negative: { color: colors.red },
+  disabled: { opacity: 0.4 },
+  pressed: { opacity: 0.62 },
 });

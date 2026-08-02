@@ -11,11 +11,21 @@ import {
   View,
 } from 'react-native';
 
-import { colors } from '../theme';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+import { colors, type } from '../theme';
 import { useAuth } from './AuthContext';
 
 export function AuthScreen() {
-  const { clearMessage, error, isSubmitting, notice, signIn, signUp } = useAuth();
+  const reducedMotion = useReducedMotion();
+  const {
+    clearMessage,
+    error,
+    isSubmitting,
+    notice,
+    signIn,
+    signInWithGoogle,
+    signUp,
+  } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -49,6 +59,26 @@ export function AuthScreen() {
         ) : null}
 
         <View style={styles.form}>
+          {Platform.OS === 'web' ? (
+            <>
+              <Pressable
+                accessibilityLabel="Continue with Google"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isSubmitting }}
+                disabled={isSubmitting}
+                onPress={() => void signInWithGoogle()}
+                style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.googleMark}>G</Text>
+                <Text style={styles.googleText}>CONTINUE WITH GOOGLE</Text>
+              </Pressable>
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR USE EMAIL</Text>
+                <View style={styles.dividerLine} />
+              </View>
+            </>
+          ) : null}
           <Text style={styles.label}>EMAIL</Text>
           <TextInput
             accessibilityLabel="Email address"
@@ -89,7 +119,13 @@ export function AuthScreen() {
             onPress={submitSignIn}
             style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
           >
-            {isSubmitting ? <ActivityIndicator color={colors.background} /> : <Text style={styles.primaryText}>SIGN IN</Text>}
+            {isSubmitting
+              // isSubmitting is shared with Google and CREATE ACCOUNT, so the
+              // copy stays neutral rather than claiming a sign-in is running.
+              ? (reducedMotion
+                ? <Text style={styles.primaryText}>WORKING…</Text>
+                : <ActivityIndicator color={colors.background} />)
+              : <Text style={styles.primaryText}>SIGN IN</Text>}
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -119,7 +155,21 @@ const styles = StyleSheet.create({
   noticeMessage: { borderColor: colors.gold, backgroundColor: colors.goldSoft },
   messageText: { color: colors.text, fontSize: 12, lineHeight: 18, fontWeight: '700' },
   form: { marginTop: 24, gap: 10 },
-  label: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginTop: 4 },
+  googleButton: {
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: colors.text,
+    borderRadius: 7,
+  },
+  googleMark: { color: '#4285F4', fontSize: 17, fontWeight: '900' },
+  googleText: { color: colors.background, fontSize: 12, fontWeight: '900' },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 5 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { color: colors.muted, fontSize: type.label, fontWeight: '800' },
+  label: { color: colors.muted, fontSize: type.label, fontWeight: '900', letterSpacing: 1.1, marginTop: 4 },
   input: { minHeight: 50, color: colors.text, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 7, paddingHorizontal: 14, fontSize: 15 },
   primaryButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold, borderRadius: 7, marginTop: 8 },
   primaryText: { color: colors.background, fontSize: 12, fontWeight: '900' },

@@ -1,79 +1,188 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { formatMoney, formatSignedMoney } from '../format';
+import {
+  formatCompactMoney,
+  formatCompactSignedMoney,
+  formatMoney,
+  formatSignedMoney,
+} from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
-import { colors } from '../theme';
+import { DisplayValue, SectionHeader, Tag } from '../ui/primitives';
+import { colors, fonts, labelStyle, numeric, space, type, weight } from '../theme';
+
+function formatReturn(returnPct: number): string {
+  return `${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(2)}%`;
+}
 
 export function LeaderboardScreen() {
   const { leaderboard, summary } = usePortfolio();
+  const { fontScale } = useWindowDimensions();
+  // Fixed numeric columns align beautifully at normal text size but truncate
+  // once type is enlarged, so above this point the cells size to content and
+  // the name yields the space instead.
+  const largeText = fontScale > 1.3;
   if (!summary) return null;
-  const winner = leaderboard[0];
+  const you = leaderboard.find((entry) => entry.isUser) ?? null;
+  const dayPositive = summary.latestDailyChange >= 0;
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-      <Text style={styles.eyebrow}>LIVE LEAGUE</Text>
-      <Text accessibilityRole="header" style={styles.title}>Portfolio leaderboard</Text>
-      <Text style={styles.subtle}>Server-ranked portfolios update as player prices and account balances change.</Text>
-
-      {winner ? <View style={styles.podium}>
-        <Text style={styles.rankLabel}>RANK 01</Text>
-        <Text style={styles.winner}>{winner.name}</Text>
-        <Text adjustsFontSizeToFit minimumFontScale={0.75} numberOfLines={1} style={styles.winnerValue}>{formatMoney(winner.value)}</Text>
-        <Text style={[styles.winnerReturn, { color: winner.returnPct >= 0 ? colors.green : colors.red }]}>
-          {winner.returnPct >= 0 ? '+' : ''}{winner.returnPct.toFixed(2)}% from $140M
-        </Text>
-      </View> : (
-        <View style={styles.emptyCard}>
+      {/* Your standing is the reason to open this screen, so it leads. */}
+      <View style={styles.hero}>
+        <Text accessibilityRole="header" style={styles.heroLabel}>YOUR RANK</Text>
+        {you ? (
+          <>
+            <DisplayValue
+              accessibilityLabel={`Your rank, ${you.rank}. Portfolio ${formatMoney(you.value)}, ${formatReturn(you.returnPct)} from 140 million. ${formatSignedMoney(summary.latestDailyChange)} on the latest replay date.`}
+              label={`OF TOP ${leaderboard.length}`}
+              tone="gold"
+              value={`#${you.rank}`}
+            />
+            <View style={styles.heroMeta}>
+              <Text style={styles.heroValue}>{formatCompactMoney(you.value)}</Text>
+              <Tag label={`${formatReturn(you.returnPct)} FROM $140M`} tone={you.returnPct >= 0 ? 'up' : 'down'} />
+              <Tag label={`${formatCompactSignedMoney(summary.latestDailyChange)} LAST DAY`} tone={dayPositive ? 'up' : 'down'} />
+            </View>
+          </>
+        ) : leaderboard.length > 0 ? (
+          // Ranked below the returned page: say so instead of showing nothing.
+          <>
+            <DisplayValue
+              accessibilityLabel={`You are outside the top ${leaderboard.length}. Your portfolio is ${formatMoney(summary.totalValue)}, ${formatSignedMoney(summary.latestDailyChange)} on the latest replay date.`}
+              label={`OUTSIDE TOP ${leaderboard.length}`}
+              size={26}
+              value="UNRANKED"
+            />
+            <View style={styles.heroMeta}>
+              <Text style={styles.heroValue}>{formatCompactMoney(summary.totalValue)}</Text>
+              <Tag label={`${formatCompactSignedMoney(summary.latestDailyChange)} LAST DAY`} tone={dayPositive ? 'up' : 'down'} />
+            </View>
+          </>
+        ) : (
           <Text style={styles.subtle}>No ranked portfolios are available yet.</Text>
-        </View>
-      )}
-
-      <View style={styles.table}>
-        {leaderboard.slice(1).map((entry) => (
-          <View key={entry.id} style={[styles.row, entry.isUser && styles.youRow]}>
-            <Text style={styles.rank}>{String(entry.rank).padStart(2, '0')}</Text>
-            <View style={styles.nameCell}>
-              <Text style={[styles.name, entry.isUser && styles.you]}>{entry.name}</Text>
-              <Text style={styles.value}>{formatMoney(entry.value)}</Text>
-            </View>
-            <View style={styles.returnCell}>
-              <Text style={[styles.returnValue, { color: entry.returnPct >= 0 ? colors.green : colors.red }]}>
-                {entry.returnPct >= 0 ? '+' : ''}{entry.returnPct.toFixed(2)}%
-              </Text>
-              {entry.isUser ? (
-                <Text style={[styles.dayMove, { color: summary.latestDailyChange >= 0 ? colors.green : colors.red }]}>
-                  {formatSignedMoney(summary.latestDailyChange)} last day
-                </Text>
-              ) : null}
-            </View>
-          </View>
-        ))}
+        )}
       </View>
+
+      {leaderboard.length === 0 ? null : (
+        <>
+          <SectionHeader label="STANDINGS" meta={`TOP ${leaderboard.length}`} />
+          <View style={styles.table}>
+            <View style={styles.columnHeader}>
+              <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.rankColumn]}>#</Text>
+              <Text style={[styles.columnHeaderText, styles.nameColumn]}>PORTFOLIO</Text>
+              <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.valueColumn]}>VALUE</Text>
+              <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.returnColumn]}>RETURN</Text>
+            </View>
+            {leaderboard.map((entry, index) => (
+              <View
+                accessible
+                accessibilityLabel={`Rank ${entry.rank}, ${entry.isUser ? 'you' : entry.name}, ${formatMoney(entry.value)}, ${formatReturn(entry.returnPct)}`}
+                key={entry.id}
+                style={[
+                  styles.row,
+                  largeText && styles.rowWrapped,
+                  index === leaderboard.length - 1 && styles.lastRow,
+                  entry.isUser && styles.youRow,
+                ]}
+              >
+                {entry.isUser ? <View style={styles.youAccent} /> : null}
+                <Text
+                  maxFontSizeMultiplier={1.6}
+                  style={[styles.rank, largeText ? styles.flexColumn : styles.rankColumn, entry.isUser && styles.you]}
+                >
+                  {String(entry.rank).padStart(2, '0')}
+                </Text>
+                <Text numberOfLines={1} style={[styles.name, styles.nameColumn, entry.isUser && styles.you]}>
+                  {entry.name}
+                </Text>
+                <Text
+                  maxFontSizeMultiplier={1.6}
+                  numberOfLines={1}
+                  style={[styles.value, largeText ? styles.flexColumn : styles.valueColumn]}
+                >
+                  {formatCompactMoney(entry.value)}
+                </Text>
+                <Text
+                  maxFontSizeMultiplier={1.6}
+                  numberOfLines={1}
+                  style={[
+                    styles.returnValue,
+                    largeText ? styles.flexColumn : styles.returnColumn,
+                    entry.returnPct >= 0 ? styles.positive : styles.negative,
+                  ]}
+                >
+                  {formatReturn(entry.returnPct)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
-  content: { flexGrow: 1, padding: 16, paddingBottom: 36, gap: 10 },
-  eyebrow: { color: colors.gold, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
-  title: { color: colors.text, fontSize: 29, fontWeight: '900' },
-  subtle: { color: colors.muted, fontSize: 11, lineHeight: 17 },
-  podium: { alignItems: 'center', backgroundColor: colors.goldSoft, borderColor: colors.gold, borderWidth: 1, borderRadius: 8, padding: 20, marginVertical: 8 },
-  rankLabel: { color: colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
-  winner: { color: colors.text, fontSize: 19, fontWeight: '900', marginTop: 7 },
-  winnerValue: { color: colors.text, fontSize: 25, fontWeight: '900', marginTop: 4 },
-  winnerReturn: { fontSize: 11, fontWeight: '800', marginTop: 5 },
-  table: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
-  emptyCard: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 18 },
-  row: { minHeight: 68, flexDirection: 'row', alignItems: 'center', padding: 13, gap: 12, borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth },
+  content: { flexGrow: 1, paddingBottom: space.xxl },
+
+  hero: {
+    paddingHorizontal: space.md,
+    paddingTop: space.lg,
+    paddingBottom: space.md,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  heroLabel: { ...labelStyle, color: colors.gold, marginBottom: space.xs },
+  heroMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm, marginTop: space.sm },
+  heroValue: { ...numeric, color: colors.text, fontSize: type.title, fontWeight: weight.black },
+  subtle: { color: colors.muted, fontFamily: fonts.body, fontSize: type.label, lineHeight: 17 },
+
+  table: { borderTopColor: colors.border, borderTopWidth: 1 },
+  columnHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    backgroundColor: colors.surface,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  columnHeaderText: { ...labelStyle, letterSpacing: 0.7 },
+
+  row: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  rowWrapped: { flexWrap: 'wrap' },
+  lastRow: { borderBottomWidth: 0 },
   youRow: { backgroundColor: colors.goldSoft },
-  rank: { color: colors.gold, fontSize: 12, fontWeight: '900' },
-  nameCell: { flex: 1, minWidth: 0 },
-  name: { color: colors.text, fontSize: 13, fontWeight: '800' },
+  youAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, backgroundColor: colors.gold },
+
+  rankColumn: { width: 24, flexShrink: 0 },
+  nameColumn: { flex: 1, minWidth: 0 },
+  valueColumn: { width: 72, textAlign: 'right', flexShrink: 0 },
+  // Wide enough for a three-digit swing like +227.05% without truncating.
+  returnColumn: { width: 76, textAlign: 'right', flexShrink: 0 },
+  flexColumn: { flexShrink: 0, textAlign: 'right' },
+
+  rank: { ...numeric, color: colors.faint, fontSize: type.label, fontWeight: weight.black },
+  name: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.heavy,
+  },
   you: { color: colors.gold },
-  value: { color: colors.muted, fontSize: 10, marginTop: 3 },
-  returnCell: { alignItems: 'flex-end' },
-  returnValue: { fontSize: 12, fontWeight: '900' },
-  dayMove: { fontSize: 8, fontWeight: '700', marginTop: 3 },
+  value: { ...numeric, color: colors.muted, fontSize: type.body, fontWeight: weight.bold },
+  returnValue: { ...numeric, fontSize: type.body, fontWeight: weight.black },
+  positive: { color: colors.green },
+  negative: { color: colors.red },
 });
