@@ -37,17 +37,18 @@ territory (this killed every real-money predecessor: Football Index, Mojo, Fante
   Threes pregame projections** plus a league bias correction, making dividends
   ~zero-expectation for a correctly-projected player.
 
-## Current status (as of 2026-07-17)
+## Current status (as of 2026-08-02)
 
 | Piece | Status |
 |---|---|
-| Engine v2 (trading, fees, dividends) | Built, 159+ tests green (`nba_stock_market/engine.py`) |
+| Engine v2 (trading, fees, dividends) | Built, tests green (`nba_stock_market/engine.py`) |
 | 2025-26 full-season backtest | Reproduces committed report to the dollar |
 | Fair-value listing model v2 | Validated, generates `output/opening-prices-2026-27.csv` |
-| Shorting/boost instruments | Spec signed (v1.0) + implemented (`instruments.py`), acceptance sims run |
-| Mobile app MVP | 3-tab Expo app on real data; season-replay backsim added on `mith/experiments` |
-| Deployment | https://nba-stock-backsim.vercel.app (static Expo web export) |
-| Rolling-bias correction in production engine | **NOT DONE — the known launch blocker** (see 01) |
+| Shorting/boost instruments | Spec v1.0 implemented server-side AND in the app (Plays tab) |
+| Backend | FastAPI + Supabase auth/Postgres; server-owned settlements; Render config (`render.yaml`) |
+| Mobile app | Server-authoritative 4-tab Expo app with auth, persistence, SeasonControl season replay |
+| Rolling-bias correction | **LANDED**: shared `nba_stock_market/bias.py` (30d window, seeded cold start), feeds the replay/settlement pipeline |
+| UI rebuild (Databallr design system) | In flight on `codex/standalone-web-flask` (sort/filters, compact money, density) |
 
 ## The team
 
@@ -60,23 +61,29 @@ territory (this killed every real-money predecessor: Football Index, Mojo, Fante
 ## Branches
 
 - `main` — early docs only, stale.
-- `codex/nba-stock-sim-prototype` — **the MVP branch**: engine, research, app, all docs.
-- `mith/experiments` — Mith's working branch off the MVP (backsim feature lives here).
+- `codex/nba-stock-sim-prototype` — **the MVP branch**: engine, research, backend, app.
+- `codex/standalone-web-flask` — Ryan's UI rebuild (Databallr design system) + Flask web
+  preview; expected to fold back into the MVP.
+- `mith/experiments` — tracks the MVP exactly, plus these passover docs. (Its earlier
+  client-only backsim was retired 2026-08-02 when the MVP shipped its own SeasonControl.)
 
 ## Repo map (one line each)
 
 ```
 nba_stock_market/engine.py            Market core: trades, fees, dividends (Engine v2)
 nba_stock_market/expectations.py      Expectation sources; D&T cached projections (canonical)
+nba_stock_market/bias.py              Shared rolling-30 bias correction (seeded cold start)
 nba_stock_market/opening_prices.py    Fair-value listing model v2 (ProjectedWarModel)
 nba_stock_market/instruments.py       Weekly shorts, price short, boosts (spec v1.0)
+nba_stock_market/api/                 FastAPI backend: auth, DB models, authoritative service
 nba_stock_market/backtest.py          Deterministic 2025-26 season replay + report
 nba_stock_market/instruments_simulation.py  Trader sim = acceptance harness for instruments
 nba_stock_market/simulation.py        Ryan's trader sweep (impact_k calibration)
 nba_stock_market/fv_validation.py     FV backtest verifier (Spearman, season pairs)
 nba_stock_market/epm_data.py          D&T EPM season-snapshot fetcher
-scripts/                              Data fetchers + app snapshot/trend generators
-app/                                  Expo app (see passover 05)
+scripts/                              Data fetchers, app snapshot/trend generators, schema push
+app/                                  Expo app: auth + server-backed game (see passover 05)
+render.yaml                           Render deployment for the API
 docs/                                 Specs, proposals, research log (see each passover doc)
 output/                               Committed evidence reports (whitelisted in .gitignore)
 data/raw/                             Git-ignored caches (see passover 04 to regenerate)

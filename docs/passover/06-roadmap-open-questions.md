@@ -1,27 +1,30 @@
 # Passover 06 — Roadmap, Open Questions, and Ownership
 
 The single prioritized list of what's undone, undecided, and who owns it.
+(Updated 2026-08-02: the former P0 — rolling bias in production — LANDED in `bias.py`;
+instruments landed server-side + in the app's Plays tab.)
 
-## P0 — the launch blocker
+## P0 — current top priorities
 
-**Port the rolling-30 bias correction into the production engine** (`expectations.py`).
-Decided, specced (`docs/shorting-spec.md` §5), validated in the instruments sim — but the
-production engine still applies the flat +0.436 constant. Until this lands: October pays
-every holder free calendar money (~$120K/week/player, 3-for-3 seasons), early boosts are
-+EV, early shorts are donations. Spec: rolling 30-day mean over the LISTED universe, cold
-start seeded with last season's October mean. Owner: Ryan (engine), evidence from Mith.
-Acceptance: re-run `instruments_simulation.py`; October holder surplus < $20K/week.
+1. **Merge the UI rebuild** (`codex/standalone-web-flask`: Databallr design system,
+   sort/filters, compact money, density/landscape fixes) back into the MVP branch before
+   the branches drift further. Owner: Ryan (+ Mith's ongoing UI pass).
+2. **Production deployment hardening**: Render API + Supabase schema are configured
+   (`render.yaml`, `scripts/push_supabase_schema.sh`); needs a deployed environment
+   smoke-tested end-to-end with real auth and a settled replay date. The three
+   Supabase-CLI tests require the CLI + bash locally.
+3. **Fee tripwire process** (from shorting-spec §9): after ~8 live weeks, re-measure fade
+   EV pooled; if > 0 beyond SE, raise fee to 0.30% AND trim the idle sink together.
 
-## P1 — before instruments go live
+## P1 — quality follow-ups
 
-1. **Wire `InstrumentsBook` into the daily driver** (record_game / expire_boosts /
-   settle_week / daily_pass / check_stop_outs) and route app-layer spend checks through
-   `book.free_cash()` (engine trades don't see collateral reservations yet). Owner: Ryan.
-2. **Borrow-fee ledger test** (`borrow_paid` is tracked but untested). Owner: whoever
-   touches instruments next.
-3. **Fee tripwire process**: after ~8 live weeks, re-measure fade EV pooled; if > 0 beyond
-   SE, raise fee to 0.30% AND trim the idle sink together (deflation-band interaction is
-   measured — see shorting-spec §9 table).
+1. **Decouple the snapshot→trends regex** in `generate_app_trends.py` (emit/read JSON) —
+   the most fragile joint in the data pipeline.
+2. **Borrow-fee ledger test** (`borrow_paid` in `InstrumentsBook` is tracked but untested).
+3. **Exact-money surfacing** at trade confirmation (compact $34.6M display vs exact
+   affordability math can look contradictory at the boundary).
+4. **"Move" sort baseline**: currently price-vs-listing; relabel or switch to day-over-day
+   once meaningful price history accumulates.
 
 ## P2 — group decisions still open (each has a written recommendation)
 

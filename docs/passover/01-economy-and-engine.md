@@ -53,17 +53,22 @@ replays (~79,000 projected player-games; details in `docs/fv-research-log.md` §
    Mid-season mildly reverses (2 of 3 seasons). Uncorrected, October pays every holder
    ~$120K/week per held player of free calendar money and makes early shorts suicidal.
 
-**The decided fix (not yet in the production engine — the launch blocker):**
+**The decided fix — now LANDED in production (2026-08 backend push):**
 
 ```
-bias(d) = mean(actual − projected) over ALL projected player-games in [d−30, d−1]
-cold start (first ~2 weeks): seed with LAST season's October mean (≈ +1.0)
-fit on the LISTED universe, not the whole league
+bias(d) = mean(actual − projected) over projected player-games in [d−30, d−1]
+cold start (until ≥300 games of history): seed_bias (last season's October mean, ≈ +1.0)
 ```
 
-Measured effect: cuts the October bias 50-65%, near-zeroes mid-season, self-corrects if the
-projection vendor changes. Implemented and validated in the instruments sim
-(`instruments_simulation.py`); needs porting into `expectations.py` for production.
+Lives in the shared module `nba_stock_market/bias.py` (`rolling_bias_for_date`, unit-tested
+in `tests/test_bias.py`), consumed by the app-data/replay pipeline
+(`scripts/generate_app_trends.py`) and the instruments acceptance sim. The server settles
+accounts from pre-computed replay events built with this correction, so the calendar
+exploit is closed for the historical-replay product. Measured effect: cuts the October bias
+50-65%, near-zeroes mid-season, self-corrects if the projection vendor changes. Note the
+engine's flat `EXPECTATION_BIAS_NET_POINTS` constant still exists as the default for direct
+`pay_daily_performance_dividend` calls — any NEW settlement pipeline should route through
+`bias.py` rather than the flat constant.
 
 ## Economy health (measured, not assumed)
 

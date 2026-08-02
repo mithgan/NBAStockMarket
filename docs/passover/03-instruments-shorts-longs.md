@@ -63,13 +63,19 @@ bias + seeded cold start (+1.00 from real 2024-25 October):
 - Cohort inflation in band: **PASS** (mean −0.72%, worst −1.54% borderline)
 - 159+ unit tests green, incl. gap-cap, insolvency, exclusivity, caps at exact boundaries
 
-## Integration notes for the app/engine (not yet done)
+## Integration status (updated 2026-08-02)
 
-- Engine trades don't check the book's collateral reservations — the app layer must route
-  spend checks through `book.free_cash(user_id)` until unified.
-- Driver contract: `record_game(...)` after each dividend, `expire_boosts(date)` nightly,
-  `settle_week(week)` Sundays, `daily_pass()` in the daily cron, `check_stop_outs()` after
-  trades.
-- The rolling-30 bias must land in production `expectations.py` BEFORE instruments go live
-  (see Passover 01 — the launch blocker).
-- Instruments are not in the mobile app at all yet.
+Much of the earlier "not yet done" list has landed in the backend push:
+
+- **Instruments are live in the product**: weekly shorts and boosts are persisted
+  server-side (`nba_stock_market/api/` — instruments rows, settlements) and playable in
+  the app's **Plays** tab; the client mirrors the spec constants in
+  `app/src/state/game.ts` (collateral, clamps, fees, free-cash semantics with reserved
+  collateral shown on the Portfolio screen).
+- **The rolling-30 bias landed** (`nba_stock_market/bias.py`; see Passover 01) — the
+  prerequisite is satisfied for the historical-replay product.
+- The Python `InstrumentsBook` remains the reference implementation and acceptance-sim
+  engine; the server's service layer is the production settlement path. If the two ever
+  disagree, the spec (`docs/shorting-spec.md`) is the arbiter.
+- **Price short remains built-but-disabled** pending real price dispersion (unchanged).
+- Still open: the live-data fee tripwire process (re-measure fade EV after ~8 real weeks).

@@ -1,86 +1,90 @@
-# Passover 05 — The App and Deployment
+# Passover 05 — The App, Backend, and Deployment
 
-The user-facing MVP: an Expo/React Native app (web + mobile from one codebase) in `app/`.
-Live deployment (with the backsim): **https://nba-stock-backsim.vercel.app**.
+Updated 2026-08-02 after the server-authoritative rebuild. The app is no longer a
+static demo: it is an authenticated client against a FastAPI backend with a Supabase
+Postgres database. Historical replay ("season progression") is a first-class server
+feature via `SeasonControl`.
 
-## Architecture in one paragraph
-
-There is **no backend**. The app ships its market inside the bundle as two GENERATED
-TypeScript files, produced by Python scripts from the canonical research artifacts. Screens
-are thin; game logic is pure functions under `src/state/`; React state is one context.
+## Architecture
 
 ```
-output/opening-prices-2026-27.csv ─┐
-output/backtest-2026.json ─────────┼─ scripts/generate_app_snapshot.py ─→ app/src/data/snapshot.ts
-data/raw/2025-26 game logs ────────┘                                        (top 30 players + demo rivals)
-data/raw/2025-26 + data/raw/dnt ──── scripts/generate_app_trends.py ──→ app/src/data/trends.ts
-                                                                          (per-player full-season game
-                                                                           logs w/ real dividends, 12.8K lines)
+Supabase (auth + Postgres)          Render (render.yaml)
+        │                                  │
+        └──────► FastAPI backend  ◄────────┘
+                 nba_stock_market/api/
+                 app.py / main.py     routes & wiring
+                 auth.py              JWT verification (Supabase principals)
+                 database.py          SQLAlchemy models (accounts, holdings,
+                                      instruments, replay events, settlements)
+                 service.py           the authoritative game service: trades,
+                                      SERVER-OWNED daily settlements from
+                                      pre-computed ReplayEventRows, instruments,
+                                      account history, keyed locks
+                 settings.py          pydantic-settings config
+                        ▲
+                        │ authenticated JSON (src/api/client.ts)
+                Expo app (app/)
 ```
 
-## File tour
+Replay data path: `scripts/generate_app_trends.py` computes per-game dividends using the
+**shared rolling-bias module** (`nba_stock_market/bias.py` — 30-day window, seeded cold
+start, min-300-games guard, unit-tested) → replay events land in the database → the server
+settles each date exactly once per account, idempotently, when the user advances.
 
-- `App.tsx` — shell: header, **SimBar**, 3 tabs (Portfolio / Market / Leaders).
-- `src/state/portfolio.ts` — pure trading logic: $140M start, buy/sell one share at listing
-  price, one-share-per-player, summary math, leaderboard ranking. Tested.
-- `src/state/sim.ts` — **the backsim clock** (added on `mith/experiments`): UTC-safe date
-  math, season bounds (eve-of-opener 2025-10-20 → 2026-04-12, 174 days), windowed dividend
-  collection `(from, to]` from the trends data, chart clipping. Tested.
-- `src/state/PortfolioContext.tsx` — React context: portfolio + sim date + advance/reset;
-  advancing credits held players' REAL game dividends to cash and records the settlement
-  feed.
-- `src/components/SimBar.tsx` — replay readout, gold progress track, +1 DAY / +1 WEEK /
-  RESET; disables at season end.
-- `src/screens/MarketScreen.tsx` — market list (ESPN headshots, tier pills, 15-game
-  dividend sparklines, Buy/Sell with "NEEDS $X" affordability state) + `PlayerDetail`
-  (Robinhood-style cumulative dividend chart, L5/L15/Season toggle, HIGH/LOW annotations,
-  season stat grid). All charts clip to the sim date — no future-peeking.
-- `src/screens/PortfolioScreen.tsx` — value hero, cash/holdings/dividends cards, roster,
-  "Latest settlements" feed (real games settled in the last advance).
-- `src/screens/LeaderboardScreen.tsx` — podium + table vs 4 hardcoded demo rivals.
+## The app (`app/src/`)
 
-## The backsim loop (what makes it a game)
+- **Auth**: `auth/` — Supabase sign-in (AuthScreen/AuthContext), token refresh, sign-out;
+  `api/client.ts` attaches JWTs and verifies the expected user id.
+- **State**: `state/game.ts` — a 1,000+ line pure client state machine mirroring the
+  engine/spec constants exactly (0.25% fees, weekly shorts 3×/±25/±50/$2M collateral,
+  min $10K fee, boosts 2×, $40K/NP); `serverState.ts` reconciles authoritative snapshots;
+  `persistence.ts` (device save + legacy-save migration flow), `actionLock.ts` (double-tap
+  guards), `localTransition.ts` (prototype→server account handoff).
+- **Screens**: Portfolio (value hero, free-cash/reserved/holdings/cash cards, portfolio
+  history chart, roster with cost basis + unrealized P&L, latest daily result, activity
+  feed) · Market (search + sort/filter chips, live prices, form sparklines, buy/sell with
+  fees at checkout) · **Plays** (the instruments UI: weekly shorts and boosts) ·
+  Leaderboard. `SeasonControl` sits above the tabs — the season progression bar (advance
+  the replay; the server settles and returns the authoritative result).
+- **Design**: `theme.ts` + (on the `codex/standalone-web-flask` branch) a Databallr
+  design-system rebuild with `ui/primitives.tsx` — compact money everywhere ($34.6M),
+  landscape fixes, denser market scanning. That branch had not merged into the MVP at
+  the time of writing; expect it to supersede some screen code here.
 
-Draft a roster at listing prices on opening eve → advance day/week → your players' actual
-2025-26 games pay their actual surprise dividends ($40K/NP, D&T-projection expectations,
-same formula as the engine) → watch cash, the DIVIDENDS stat, and the settlement feed →
-out-dividend the market by April.
+## Testing
+
+- App: `cd app && npm test` — **111 tests** (game state machine, server reconciliation,
+  persistence, replay, ordering/presentation, UI contracts). `npx tsc --noEmit` clean.
+- Python: `python -m pytest tests -q` — **284 passed** as of the last full run. Three
+  `tests/api/test_supabase_migration.py` cases shell out to the Supabase CLI via bash and
+  fail with exit 127 on machines without it — environment, not code. `python -m unittest
+  discover -s tests` covers the non-pytest suites (160).
+- Backend deps: `pip install -e .` (fastapi, sqlalchemy, psycopg, PyJWT, uvicorn,
+  pydantic-settings, httpx; see `pyproject.toml`; `uv.lock` is committed).
+
+## Deployments
+
+- **API**: `render.yaml` provisions the FastAPI service on Render;
+  `scripts/push_supabase_schema.sh` pushes the database schema (guarded: refuses wrong
+  project/failed link/failed dry-run).
+- **Web app**: the flask/UI branch carries `app/vercel.json` for Vercel; export with
+  `npx expo export --platform web` from `app/`.
+- **Stale**: https://nba-stock-backsim.vercel.app still serves the OLD client-only
+  backsim build (pre-server, superseded SimBar). Treat it as a historical demo; do not
+  iterate on it. The client-only backsim code was removed from `mith/experiments` on
+  2026-08-02 in favor of the MVP's SeasonControl.
 
 ## Traps before you edit
 
-1. **Never hand-edit `snapshot.ts` / `trends.ts`** — regenerate. Worse:
-   `generate_app_trends.py` parses `snapshot.ts` WITH A REGEX; even reformatting snapshot's
-   player lines breaks trend regeneration. Most fragile coupling in the app.
-2. **`uiContracts.test.ts` pins exact source patterns** in `App.tsx` and `MarketScreen.tsx`
-   (style lines, accessibility labels, the `['L5','L15','Season']` literal, no `hitSlop=` in
-   App.tsx...). Run `npm test` after any edit to those files; put new UI in new files (the
-   SimBar approach).
-3. **No persistence** — refresh resets to $140M/day 0. No fees/price movement in-app; the
-   full economy lives in the Python engine only. Instruments are not in the app.
-4. Only **30 players** are listed in-app (generator limit) out of the 300-player CSV.
-5. `app/AGENTS.md` says "read Expo v57 docs" but `package.json` pins Expo ~54 — one is
-   stale; confirm with Ryan before Expo-API work.
-
-## Build, test, deploy
-
-```
-cd app
-npm install
-npm test                      # 16 tests: portfolio, sim, trend presentation, UI contracts
-npx tsc --noEmit              # typecheck
-npx expo export --platform web    # → app/dist  (static site)
-cd dist && npx vercel deploy --prod --yes    # project: nba-stock-backsim
-```
-
-Vercel: account `mithranganesan81-9274`; project `nba-stock-backsim`; `dist/vercel.json`
-adds an SPA rewrite. The hash deployment URLs sit behind Vercel auth (302) — share the
-public alias `nba-stock-backsim.vercel.app` (200). As of 2026-07-17 there is NO other NBA
-project on this Vercel account; if an earlier MVP deploy exists it's on someone else's
-account.
-
-## Natural next app steps
-
-Autoplay (×7 animation through the season) · per-holding dividend totals on roster rows ·
-replayed synthetic rivals racing the same season on the leaderboard · persistence
-(AsyncStorage) · widen listing beyond 30 players · instruments UI (after the engine-side
-launch blocker clears).
+1. `generate_app_trends.py` STILL regex-parses `snapshot.ts` (line ~54) — the most fragile
+   coupling in the pipeline; a formatting change to snapshot's player lines silently breaks
+   trend regeneration. (Suggested fix on file: emit snapshot.json alongside.)
+2. UI-contract tests (`uiContracts.test.ts`, `mvpUiContracts.test.ts`) pin exact source
+   patterns in App.tsx/MarketScreen.tsx — run `npm test` after touching those files; put
+   new UI in new files.
+3. Money display is compact ($34.6M) but affordability math is exact — keep exact figures
+   at trade confirmation; two "equal-looking" compact numbers can differ by $100K.
+4. Game dates are ET calendar labels; treat as opaque strings, construct dates only with
+   `T00:00:00Z`. Server settles by replay date, not wall-clock.
+5. `app.json` still locks `"orientation": "portrait"` — iPad multitasking ignores it;
+   landscape work on the flask branch is web-oriented.
