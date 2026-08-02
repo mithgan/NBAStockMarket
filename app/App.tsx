@@ -14,10 +14,13 @@ import { MarketScreen } from './src/screens/MarketScreen';
 import { PlaysScreen } from './src/screens/PlaysScreen';
 import { PortfolioScreen } from './src/screens/PortfolioScreen';
 import { PortfolioProvider, usePortfolio } from './src/state/PortfolioContext';
-import { colors, radius, space, type } from './src/theme';
+import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
 import { installGlobalWebStyles } from './src/web/globalStyles';
 
 installGlobalWebStyles();
+
+/** Circular databallr mark; radius is derived so it is never a card corner. */
+const BRAND_MARK_SIZE = 24;
 
 type Tab = 'portfolio' | 'market' | 'plays' | 'leaderboard';
 
@@ -154,10 +157,15 @@ function AppContent() {
   return (
     <View style={styles.app}>
       <StatusBar style="light" />
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <View style={styles.mark}><Text style={styles.markText}>DB</Text></View>
+      {/* Databallr brand bar: gold wordmark, a rule, then the product name. */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.mark}><Text maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text></View>
+        {/* Branding is decorative: it shrinks and truncates before the sign-out
+            action is allowed to leave the viewport. */}
+        <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.brand}>databallr</Text>
+        <View style={styles.brandDivider} />
         <View style={styles.brandCopy}>
-          <Text numberOfLines={1} style={styles.brand}>NBA STOCK MARKET</Text>
+          <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.product}>STOCK MARKET</Text>
         </View>
         <Pressable
           accessibilityLabel="Sign out"
@@ -192,9 +200,18 @@ function AppContent() {
                 accessibilityState={{ selected: active }}
                 aria-selected={active}
                 onPress={() => setActiveTab(tab.key)}
-                style={({ pressed }) => [styles.tab, active && styles.activeTab, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
               >
-                <Text numberOfLines={1} style={[styles.tabText, active && styles.activeTabText]}>{tab.label}</Text>
+                {/* Gold top rule marks the active tab, matching the underline
+                    treatment on the databallr.com nav. */}
+                <View style={[styles.tabMarker, active && styles.tabMarkerActive]} />
+                <Text
+                  maxFontSizeMultiplier={1.5}
+                  numberOfLines={1}
+                  style={[styles.tabText, active && styles.activeTabText]}
+                >
+                  {tab.label}
+                </Text>
               </Pressable>
             );
           })}
@@ -265,21 +282,45 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
   },
   header: {
-    minHeight: 56,
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
+    gap: space.sm,
     paddingHorizontal: space.md,
     paddingBottom: space.sm,
+    backgroundColor: colors.surface,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },
-  mark: { width: 32, height: 32, borderRadius: radius.md, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
-  markText: { color: colors.background, fontSize: type.label, fontWeight: '900' },
-  brandCopy: { flex: 1, minWidth: 0 },
-  brand: { color: colors.text, fontSize: type.body, fontWeight: '900', letterSpacing: 1.1 },
-  signOut: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.sm },
-  signOutText: { color: colors.muted, fontSize: type.micro, fontWeight: '900' },
+  mark: {
+    width: BRAND_MARK_SIZE,
+    height: BRAND_MARK_SIZE,
+    borderRadius: BRAND_MARK_SIZE / 2,
+    backgroundColor: colors.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markText: {
+    color: colors.background,
+    fontFamily: fonts.display,
+    fontSize: 15,
+    fontWeight: '900',
+    marginTop: -1,
+  },
+  brand: {
+    flexShrink: 1,
+    minWidth: 0,
+    color: colors.gold,
+    fontFamily: fonts.display,
+    fontSize: 17,
+    fontWeight: '800',
+    },
+  brandDivider: { width: 1, height: 18, backgroundColor: colors.borderStrong, marginHorizontal: space.xs },
+  brandCopy: { flex: 1, flexShrink: 1, minWidth: 0 },
+  product: { ...labelStyle, color: colors.muted },
+  signOut: { minHeight: 44, flexShrink: 0, justifyContent: 'center', paddingHorizontal: space.sm },
+  signOutText: { ...labelStyle },
+  // brandDivider is decorative and collapses with the wordmark.
   notice: {
     minHeight: 44,
     flexDirection: 'row',
@@ -293,7 +334,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   noticeText: { flex: 1, color: colors.text, fontSize: type.label, lineHeight: 17, fontWeight: '700' },
-  noticeClose: { color: colors.gold, fontSize: type.micro, fontWeight: '900' },
+  noticeClose: { color: colors.gold, fontSize: type.label, fontWeight: '900' },
   screen: { flex: 1, minHeight: 0 },
   centeredState: { flex: 1, minHeight: 260, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', width: '100%', maxWidth: 500, padding: space.xl, backgroundColor: colors.background },
   stateBusy: { color: colors.gold, fontSize: type.label, fontWeight: '900', letterSpacing: 1 },
@@ -304,16 +345,35 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.45 },
   tabBar: {
     flexDirection: 'row',
-    gap: space.xs,
-    paddingHorizontal: space.sm,
-    paddingTop: space.sm,
+    paddingHorizontal: 0,
     backgroundColor: colors.surface,
     borderTopColor: colors.border,
     borderTopWidth: 1,
   },
-  tab: { flex: 1, minWidth: 0, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, paddingHorizontal: 3, paddingVertical: space.sm },
-  activeTab: { backgroundColor: colors.surfaceRaised },
-  tabText: { color: colors.muted, fontSize: type.label, fontWeight: '800' },
+  tab: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    paddingTop: space.sm,
+    paddingBottom: space.sm,
+  },
+  tabMarker: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: 'transparent',
+  },
+  tabMarkerActive: { backgroundColor: colors.gold },
+  tabText: {
+    ...labelStyle,
+    color: colors.faint,
+    letterSpacing: 0.9,
+  },
   activeTabText: { color: colors.gold },
   pressed: { opacity: 0.65 },
 });

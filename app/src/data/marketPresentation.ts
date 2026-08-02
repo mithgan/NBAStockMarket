@@ -9,6 +9,13 @@ export function formatOwnership(ownershipBps: number | undefined): string {
   return `${formatted}% owned`;
 }
 
+/** Bare percentage for a column that is already headed OWNED. */
+export function formatOwnershipShort(ownershipBps: number | undefined): string {
+  if (!Number.isFinite(ownershipBps)) return '—';
+  const percentage = Math.max(0, Math.min(10_000, ownershipBps!)) / 100;
+  return `${Number.isInteger(percentage) ? percentage.toFixed(0) : percentage.toFixed(1)}%`;
+}
+
 export function formatTradeVolume(volume30d: number | undefined): string {
   if (!Number.isFinite(volume30d)) return 'Activity unavailable';
   const volume = Math.max(0, Math.round(volume30d!));

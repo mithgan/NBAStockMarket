@@ -28,7 +28,7 @@ test('the MVP exposes four stable primary workflows and an always-visible season
   assert.match(appSource, /<SeasonControl/);
   assert.match(seasonControlSource, /accessibilityLabel=/);
   assert.match(seasonControlSource, /accessibilityState=\{\{ disabled \}\}/);
-  assert.match(seasonControlSource, /minHeight: 44/);
+  assert.match(source('../ui/primitives.tsx'), /minHeight: 44/);
 });
 
 test('manual replay advancement is admin-gated and requires explicit confirmation', () => {
@@ -98,7 +98,9 @@ test('the populated market list carries its own heading, not just its empty stat
   assert.ok(start >= 0 && end > start, 'could not locate the market list header');
   const listHeaderBlock = marketSource.slice(start, end);
   assert.match(listHeaderBlock, /accessibilityRole="header"/);
-  assert.match(listHeaderBlock, /styles\.title\}>Market</);
+  // Heading survives the short-viewport treatment, which only swaps its style.
+  assert.match(listHeaderBlock, /shortViewport \? styles\.titleShort : styles\.title/);
+  assert.match(listHeaderBlock, />\s*MARKET\s*</);
   // Search must stay reachable in the empty state so the query can be cleared.
   assert.match(listHeaderBlock, /accessibilityLabel="Search players"/);
 });
@@ -154,8 +156,8 @@ test('fixed horizontal layouts give way to enlarged text everywhere they appear'
   assert.match(leaderboardSource, /largeText \? styles\.flexColumn : styles\.returnColumn/);
   // The replay controls wrap instead of crushing the status text.
   assert.match(seasonControlSource, /flexWrap: 'wrap'/);
-  // The rank summary card wraps rather than pushing the rank off screen.
-  assert.match(leaderboardSource, /yourRow: \{[^}]*flexWrap: 'wrap'/);
+  // The rank summary wraps its tags rather than pushing the rank off screen.
+  assert.match(leaderboardSource, /heroMeta: \{[^}]*flexWrap: 'wrap'/);
   // Long trade statuses wrap into the taller large-text row instead of clipping.
   assert.match(marketSource, /numberOfLines=\{2\}\s*style=\{\[\s*styles\.tradeText/);
 });
@@ -175,7 +177,7 @@ test('the market exposes explicit sort and filter controls with tab semantics', 
   const orderingSource = source('./marketOrdering.ts');
   assert.match(marketSource, /MARKET_SORTS/);
   assert.match(marketSource, /MARKET_FILTERS/);
-  assert.match(marketSource, /aria-label=\{label\}/);
+  assert.match(source('../ui/primitives.tsx'), /aria-label=\{groupLabel\}/);
   assert.match(marketSource, /accessibilityRole="tab"/);
   assert.match(orderingSource, /export function buildMarketRows/);
   // Rows missing a metric must sort last rather than masquerading as zero.
@@ -308,7 +310,7 @@ test('instrument UI explains finite weekly slots and never exposes price shorts'
   assert.match(playsSource, /3/);
   assert.match(playsSource, /Boosts/);
   assert.match(playsSource, /2/);
-  assert.match(playsSource, /accessibilityRole="button"/);
+  assert.match(source('../ui/primitives.tsx'), /accessibilityRole="button"/);
   assert.doesNotMatch(playsSource, /price short/i);
 });
 
@@ -323,8 +325,8 @@ test('weekly play eligibility, dates, and fees come only from server targets', (
 });
 
 test('portfolio provides server-backed activity, history, and exact cost basis', () => {
-  assert.match(portfolioSource, /Portfolio history/);
-  assert.match(portfolioSource, /Activity/);
+  assert.match(portfolioSource, /label="HISTORY"/);
+  assert.match(portfolioSource, /label="ACTIVITY"/);
   assert.match(portfolioSource, /holding\.costBasis/);
   assert.match(portfolioSource, /incl\. fee/);
   assert.match(portfolioSource, /holding\.unrealizedPnl/);
@@ -379,13 +381,20 @@ test('server and transition failures lock every gameplay surface until recovery'
 });
 
 test('major screens and sections expose heading navigation to assistive technology', () => {
+  // SectionHeader carries accessibilityRole="header", so a screen satisfies this
+  // either directly or by composing it.
+  assert.match(source('../ui/primitives.tsx'), /accessibilityRole="header"/);
   for (const [name, contents] of [
     ['Portfolio', portfolioSource],
     ['Market', marketSource],
     ['Plays', playsSource],
     ['Leaders', source('../screens/LeaderboardScreen.tsx')],
   ] as const) {
-    assert.match(contents, /accessibilityRole="header"/, `${name} has no accessible heading`);
+    assert.match(
+      contents,
+      /accessibilityRole="header"|<SectionHeader/,
+      `${name} has no accessible heading`,
+    );
   }
 });
 

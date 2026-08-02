@@ -3,7 +3,8 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePortfolio } from '../state/PortfolioContext';
-import { colors, radius, space, type } from '../theme';
+import { Button } from '../ui/primitives';
+import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
 
 function displayDate(value: string | null): string {
   if (!value) return 'Season complete';
@@ -14,6 +15,10 @@ function displayDate(value: string | null): string {
   }).format(new Date(`${value}T00:00:00Z`));
 }
 
+/**
+ * Admin strip. It sits above every screen, so it reads as a status bar — small
+ * labelled values on a rule — rather than a panel competing with the content.
+ */
 export function SeasonControl() {
   const [confirmation, setConfirmation] = useState<'day' | 'season' | null>(null);
   const reducedMotion = useReducedMotion();
@@ -50,22 +55,24 @@ export function SeasonControl() {
   return (
     <>
       <View style={styles.container}>
-        <View style={styles.copy}>
-          <Text numberOfLines={1} style={styles.label}>LAST SETTLED</Text>
-          <Text numberOfLines={1} style={styles.date}>
-            {latestSettledDate ? displayDate(latestSettledDate) : 'Not started'}
-          </Text>
-          <Text numberOfLines={1} style={styles.progress}>
-            NEXT · {displayDate(nextGameDate)}
-          </Text>
-          {seasonReplayProgress ? (
-            <Text accessibilityLiveRegion="polite" numberOfLines={2} style={styles.seasonProgress}>
-              Simulating · {seasonReplayProgress.completedDates} dates settled · last {displayDate(seasonReplayProgress.lastSettledDate)}
+        <View
+          accessible
+          accessibilityLabel={`Replay status. Last settled ${latestSettledDate ? displayDate(latestSettledDate) : 'not started'}. Next ${displayDate(nextGameDate)}. ${settledGameDateCount} game dates settled.`}
+          style={styles.copy}
+        >
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>LAST SETTLED</Text>
+            <Text numberOfLines={1} style={styles.fieldValue}>
+              {latestSettledDate ? displayDate(latestSettledDate) : 'Not started'}
             </Text>
-          ) : (
-            <Text numberOfLines={1} style={styles.progress}>{settledGameDateCount} game dates settled</Text>
-          )}
+          </View>
+          <View style={styles.fieldDivider} />
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>NEXT ·</Text>
+            <Text numberOfLines={1} style={styles.fieldValueMuted}>{displayDate(nextGameDate)}</Text>
+          </View>
         </View>
+
         <View style={styles.actions}>
           <Pressable
             accessibilityLabel="Refresh market data"
@@ -85,41 +92,31 @@ export function SeasonControl() {
           </Pressable>
           {canSettleNextDay ? (
             <View style={styles.advanceActions}>
-              <Pressable
+              <Button
                 accessibilityLabel="Settle the next historical game date"
-                accessibilityRole="button"
-                accessibilityState={{ disabled }}
+                compact
                 disabled={disabled}
+                label={isSettling ? 'SETTLING' : 'NEXT DAY'}
                 onPress={() => setConfirmation('day')}
-                style={({ pressed }) => [
-                  styles.button,
-                  disabled && styles.buttonDisabled,
-                  pressed && !disabled && styles.buttonPressed,
-                ]}
-              >
-                <Text numberOfLines={1} style={[styles.buttonText, disabled && styles.buttonTextDisabled]}>
-                  {isSettling ? 'SETTLING' : 'NEXT DAY'}
-                </Text>
-              </Pressable>
-              <Pressable
+                tone="primary"
+              />
+              <Button
                 accessibilityLabel="Settle every remaining historical game date"
-                accessibilityRole="button"
-                accessibilityState={{ disabled }}
+                compact
                 disabled={disabled}
+                label={isSettlingSeason ? 'SIMULATING' : 'SIMULATE SEASON'}
                 onPress={() => setConfirmation('season')}
-                style={({ pressed }) => [
-                  styles.seasonButton,
-                  disabled && styles.seasonButtonDisabled,
-                  pressed && !disabled && styles.buttonPressed,
-                ]}
-              >
-                <Text numberOfLines={1} style={[styles.seasonButtonText, disabled && styles.buttonTextDisabled]}>
-                  {isSettlingSeason ? 'SIMULATING' : 'SIMULATE SEASON'}
-                </Text>
-              </Pressable>
+                tone="secondary"
+              />
             </View>
           ) : null}
         </View>
+
+        {seasonReplayProgress ? (
+          <Text accessibilityLiveRegion="polite" numberOfLines={2} style={styles.seasonProgress}>
+            Simulating · {seasonReplayProgress.completedDates} dates settled · last {displayDate(seasonReplayProgress.lastSettledDate)}
+          </Text>
+        ) : null}
       </View>
 
       {confirmation && canSettleNextDay ? (
@@ -131,6 +128,7 @@ export function SeasonControl() {
         >
           <View accessibilityViewIsModal style={styles.modalBackdrop}>
             <View style={styles.modal}>
+              <Text style={styles.modalEyebrow}>SHARED REPLAY</Text>
               <Text accessibilityRole="header" style={styles.modalTitle}>
                 {confirmation === 'day' ? 'Advance the shared replay?' : 'Simulate the rest of the season?'}
               </Text>
@@ -140,28 +138,18 @@ export function SeasonControl() {
                   : 'This settles every remaining 2025-26 game date for every play-tester. Completed dates are saved, so an interrupted run can be resumed. It cannot be undone.'}
               </Text>
               <View style={styles.modalActions}>
-                <Pressable
+                <Button
                   accessibilityLabel="Cancel replay simulation"
-                  accessibilityRole="button"
+                  label="CANCEL"
                   onPress={() => setConfirmation(null)}
-                  style={({ pressed }) => [styles.modalButton, pressed && styles.buttonPressed]}
-                >
-                  <Text style={styles.modalCancelText}>CANCEL</Text>
-                </Pressable>
-                <Pressable
+                  tone="ghost"
+                />
+                <Button
                   accessibilityLabel={confirmation === 'day' ? 'Confirm replay advancement' : 'Confirm full season simulation'}
-                  accessibilityRole="button"
+                  label={confirmation === 'day' ? 'SETTLE NEXT DAY' : 'SIMULATE SEASON'}
                   onPress={() => void (confirmation === 'day' ? confirmAdvance() : confirmSeason())}
-                  style={({ pressed }) => [
-                    styles.modalButton,
-                    styles.modalConfirmButton,
-                    pressed && styles.buttonPressed,
-                  ]}
-                >
-                  <Text style={styles.modalConfirmText}>
-                    {confirmation === 'day' ? 'SETTLE NEXT DAY' : 'SIMULATE SEASON'}
-                  </Text>
-                </Pressable>
+                  tone="primary"
+                />
               </View>
             </View>
           </View>
@@ -175,23 +163,35 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    // Wraps so enlarged "SIMULATE SEASON" buttons push the status text onto its
-    // own line instead of crushing it or overflowing a narrow screen.
     flexWrap: 'wrap',
     gap: space.md,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },
-  copy: { flex: 1, minWidth: 150, gap: 2 },
-  label: { color: colors.gold, fontSize: type.micro, fontWeight: '900', letterSpacing: 0.6 },
-  date: { color: colors.text, fontSize: type.label, fontWeight: '800' },
-  progress: { color: colors.muted, fontSize: type.micro },
-  seasonProgress: { color: colors.gold, fontSize: type.micro, fontWeight: '800' },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 0 },
-  advanceActions: { gap: space.xs },
+  copy: { flex: 1, minWidth: 150, flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  field: { minWidth: 0, flexShrink: 1 },
+  fieldDivider: { width: 1, height: 22, backgroundColor: colors.border },
+  fieldLabel: { ...labelStyle, letterSpacing: 0.8 },
+  fieldValue: {
+    ...numeric,
+    color: colors.text,
+    fontSize: type.body,
+    fontWeight: weight.heavy,
+    marginTop: 1,
+  },
+  fieldValueMuted: {
+    ...numeric,
+    color: colors.muted,
+    fontSize: type.body,
+    fontWeight: weight.bold,
+    marginTop: 1,
+  },
+  actions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm, flexShrink: 1 },
+  // Wraps so enlarged button text stacks instead of clipping.
+  advanceActions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, flexShrink: 1 },
   refreshButton: {
     width: 44,
     height: 44,
@@ -200,54 +200,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
-    backgroundColor: colors.surfaceRaised,
+    backgroundColor: colors.surface,
   },
-  refreshButtonDisabled: { opacity: 0.55 },
-  refreshButtonText: { color: colors.text, fontSize: 18, fontWeight: '800' },
-  button: {
-    minHeight: 44,
-    minWidth: 118,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
-    backgroundColor: colors.gold,
-  },
-  buttonDisabled: { backgroundColor: colors.surfaceRaised },
-  seasonButton: {
-    minHeight: 44,
-    minWidth: 118,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.gold,
-    borderRadius: radius.md,
-    paddingHorizontal: space.sm,
-    backgroundColor: colors.surfaceRaised,
-  },
-  seasonButtonDisabled: { borderColor: colors.border, opacity: 0.55 },
-  seasonButtonText: { color: colors.gold, fontSize: type.micro, fontWeight: '900' },
-  buttonPressed: { opacity: 0.72 },
-  buttonText: { color: colors.background, fontSize: type.label, fontWeight: '900' },
-  buttonTextDisabled: { color: colors.muted },
+  refreshButtonDisabled: { opacity: 0.5 },
+  refreshButtonText: { color: colors.muted, fontSize: 16, fontWeight: '800' },
+  buttonPressed: { opacity: 0.7 },
+  buttonTextDisabled: { color: colors.faint },
+  seasonProgress: { ...labelStyle, color: colors.gold, width: '100%' },
+
   modalBackdrop: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: space.lg,
-    backgroundColor: 'rgba(5, 10, 18, 0.76)',
+    backgroundColor: 'rgba(9, 12, 18, 0.82)',
   },
   modal: {
     width: '100%',
     maxWidth: 420,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderStrong,
     borderRadius: radius.lg,
     padding: space.lg,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceHigh,
   },
-  modalTitle: { color: colors.text, fontSize: type.heading, fontWeight: '900' },
-  modalBody: { color: colors.muted, fontSize: type.body, lineHeight: 20, marginTop: space.sm },
+  modalEyebrow: { ...labelStyle, color: colors.cyan, marginBottom: space.xs },
+  modalTitle: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: 19,
+    fontWeight: weight.black,
+    },
+  modalBody: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.body,
+    lineHeight: 20,
+    marginTop: space.sm,
+  },
   modalActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -255,19 +245,4 @@ const styles = StyleSheet.create({
     gap: space.sm,
     marginTop: space.lg,
   },
-  modalButton: {
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
-  },
-  modalConfirmButton: {
-    borderColor: colors.gold,
-    backgroundColor: colors.gold,
-  },
-  modalCancelText: { color: colors.text, fontSize: type.label, fontWeight: '900' },
-  modalConfirmText: { color: colors.background, fontSize: type.label, fontWeight: '900' },
 });

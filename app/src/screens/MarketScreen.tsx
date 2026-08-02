@@ -38,6 +38,7 @@ import {
 } from '../data/marketOrdering';
 import {
   formatOwnership,
+  formatOwnershipShort,
   formatSignedMetric,
   formatSignedPercent,
   formatTradeVolume,
@@ -55,7 +56,8 @@ import {
   formatSignedMoney,
 } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
-import { colors, radius, space, type } from '../theme';
+import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
+import { SectionHeader, Segmented } from '../ui/primitives';
 import { MAX_ROW_FONT_SCALE, marketActionWidth, marketRowHeight } from './marketRowHeight';
 
 
@@ -68,12 +70,16 @@ function initials(name: string) {
     .join('');
 }
 
-function PlayerAvatar({ player, size = 34 }: { player: Player; size?: number }) {
+/**
+ * Rectangular tinted headshot tile rather than a circular avatar — this is the
+ * player-card shape used across databallr.com's draft boards, and the flat crop
+ * keeps a column of 300 faces aligned.
+ */
+function PlayerAvatar({ player, size = 38 }: { player: Player; size?: number }) {
   const [failed, setFailed] = useState(false);
-  const dimensions = { width: size, height: size, borderRadius: size / 2 };
 
   return (
-    <View style={[styles.avatar, dimensions]}>
+    <View style={[styles.avatar, { width: size, height: size }]}>
       {failed ? (
         <Text style={styles.avatarInitials}>{initials(player.name)}</Text>
       ) : (
@@ -81,12 +87,20 @@ function PlayerAvatar({ player, size = 34 }: { player: Player; size?: number }) 
           accessibilityIgnoresInvertColors
           accessibilityLabel={`${player.name} headshot`}
           onError={() => setFailed(true)}
+          resizeMode="cover"
           source={{ uri: `https://a.espncdn.com/i/headshots/nba/players/full/${player.id}.png` }}
-          style={{ width: size, height: size }}
+          style={{ width: size, height: size * 1.16, marginTop: size * 0.1 }}
         />
       )}
     </View>
   );
+}
+
+/** Broadcast convention: quiet given name, loud surname. */
+function splitName(name: string): { first: string; last: string } {
+  const parts = name.trim().split(' ');
+  if (parts.length === 1) return { first: '', last: parts[0] };
+  return { first: parts[0], last: parts.slice(1).join(' ') };
 }
 
 function average(points: TrendPoint[], key: 'np' | 'expected_np') {
@@ -238,7 +252,7 @@ export function PlayerDetail({
       </View>
 
       <View style={styles.chartHeading}>
-        <Text accessibilityRole="header" style={styles.sectionTitle}>Cumulative dividends</Text>
+        <Text accessibilityRole="header" style={styles.sectionTitle}>CUMULATIVE DIVIDENDS</Text>
         <View accessibilityRole="tablist" style={styles.rangeToggle}>
           {(['L5', 'L15', 'Season'] as const).map((option) => {
             const selected = range === option;
@@ -264,7 +278,7 @@ export function PlayerDetail({
       </View>
       {visiblePoints.length > 0 ? <DetailChart points={visiblePoints} /> : <Text style={styles.emptyChart}>No game data</Text>}
 
-      <Text accessibilityRole="header" style={styles.sectionTitle}>Season snapshot</Text>
+      <SectionHeader label="SEASON SNAPSHOT" />
       <View style={styles.statsGrid}>
         <Stat exact={formatMoney(currentPrice)} label="Current price" value={formatCompactMoney(currentPrice)} />
         <Stat exact={formatMoney(player.listing_price)} label="Opening price" value={formatCompactMoney(player.listing_price)} />
@@ -350,6 +364,7 @@ function MarketRow({
   onTrade,
 }: MarketRowProps) {
   const { player, currentPrice, changePercent, held } = row;
+  const { first, last } = splitName(player.name);
   const buyTotal = currentPrice + (player.buy_fee ?? 0);
   const shortfall = held ? 0 : Math.max(0, buyTotal - freeCash);
   const soldOut = !held && player.available_shares === 0;
@@ -409,12 +424,15 @@ function MarketRow({
         onPress={() => onOpen(player)}
         style={({ pressed }) => [styles.playerDetails, pressed && styles.pressed]}
       >
-        <PlayerAvatar player={player} size={34} />
+        <PlayerAvatar player={player} size={36} />
         <View style={styles.playerCopy}>
-          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.playerName}>{player.name}</Text>
+          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.playerName}>
+            {first ? <Text style={styles.playerFirst}>{first} </Text> : null}
+            {last}
+          </Text>
           <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.playerMeta}>
             {player.tier.toUpperCase()}
-            {form ? ' · ' : ''}
+            {form ? '  ' : ''}
             {form ? (
               <Text
                 style={
@@ -432,7 +450,7 @@ function MarketRow({
         </View>
         {showOwnership ? (
           <Text numberOfLines={1} style={styles.ownership}>
-            {formatOwnership(player.ownership_bps)}
+            {formatOwnershipShort(player.ownership_bps)}
           </Text>
         ) : null}
         {showSparkline && chartPoints.length > 0 ? <Sparkline points={chartPoints} /> : null}
@@ -504,39 +522,6 @@ function MarketRow({
   );
 }
 
-function ChipRow<T extends string>({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: readonly { key: T; label: string; hint: string }[];
-  value: T;
-  onChange: (next: T) => void;
-}) {
-  return (
-    <View accessibilityRole="tablist" aria-label={label} style={styles.chipRow}>
-      {options.map((option) => {
-        const selected = option.key === value;
-        return (
-          <Pressable
-            accessibilityLabel={option.hint}
-            accessibilityRole="tab"
-            accessibilityState={{ selected }}
-            aria-selected={selected}
-            key={option.key}
-            onPress={() => onChange(option.key)}
-            style={({ pressed }) => [styles.chip, selected && styles.chipSelected, pressed && styles.pressed]}
-          >
-            <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 export function MarketScreen() {
   const {
     latestSettledDate,
@@ -548,7 +533,10 @@ export function MarketScreen() {
     summary,
     trade,
   } = usePortfolio();
-  const { fontScale, width } = useWindowDimensions();
+  const { fontScale, height, width } = useWindowDimensions();
+  // Landscape phones have almost no vertical room, so the header sheds the
+  // title (the active tab already says MARKET) and tightens its padding.
+  const shortViewport = height < 520;
   const rowHeight = marketRowHeight(fontScale);
   const actionWidth = marketActionWidth(fontScale, width);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -683,53 +671,66 @@ export function MarketScreen() {
    */
   const listHeader = (
     <View style={styles.controls}>
-        <View style={styles.controlsTop}>
-          <Text accessibilityRole="header" style={styles.title}>Market</Text>
-          <View style={styles.cashBlock}>
-            <Text style={styles.cashLabel}>CASH</Text>
-            <Text
-              accessibilityLabel={`Free cash ${formatMoney(freeCash)}`}
-              numberOfLines={1}
-              style={styles.cashValue}
-            >
-              {formatCompactMoney(freeCash)}
-            </Text>
-          </View>
-        </View>
-        <TextInput
-          accessibilityLabel="Search players"
-          autoCapitalize="none"
-          autoCorrect={false}
-          clearButtonMode="while-editing"
-          onChangeText={setQuery}
-          placeholder="Search players"
-          placeholderTextColor={colors.muted}
-          returnKeyType="search"
-          style={styles.search}
-          value={query}
-        />
-        <ScrollView
-          contentContainerStyle={styles.chipBar}
-          horizontal
-          keyboardShouldPersistTaps="handled"
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipScroll}
+      {/* Cash is the constraint on every buy, so it reads as the headline. */}
+      <View style={[styles.controlsTop, shortViewport && styles.controlsTopShort]}>
+        {/* The heading always renders — the active tab is not a substitute for
+            an in-content header — but shrinks to a label in short viewports. */}
+        <Text
+          accessibilityRole="header"
+          style={shortViewport ? styles.titleShort : styles.title}
         >
-          <ChipRow label="Sort players" onChange={setSort} options={MARKET_SORTS} value={sort} />
-          <View style={styles.chipDivider} />
-          <ChipRow label="Filter players" onChange={setFilter} options={MARKET_FILTERS} value={filter} />
-        </ScrollView>
-        <View style={styles.columnHeader}>
-          <Text accessibilityLiveRegion="polite" style={styles.columnHeaderText}>
-            {rows.length === players.length
-              ? `${players.length} players`
-              : `${rows.length} of ${players.length} players`}
-          </Text>
-          <Text style={styles.columnHeaderText}>
-            {roomy ? 'OWNED · ' : ''}PRICE · SINCE LISTING
+          MARKET
+        </Text>
+        <View style={[styles.cashBlock, shortViewport && styles.cashBlockShort]}>
+          <Text style={styles.cashLabel}>BUYING POWER</Text>
+          <Text
+            accessibilityLabel={`Free cash ${formatMoney(freeCash)}`}
+            maxFontSizeMultiplier={1.6}
+            numberOfLines={1}
+            style={styles.cashValue}
+          >
+            {formatCompactMoney(freeCash)}
           </Text>
         </View>
       </View>
+
+      <TextInput
+        accessibilityLabel="Search players"
+        autoCapitalize="none"
+        autoCorrect={false}
+        clearButtonMode="while-editing"
+        onChangeText={setQuery}
+        placeholder="Search players"
+        placeholderTextColor={colors.faint}
+        returnKeyType="search"
+        style={styles.search}
+        value={query}
+      />
+
+      <ScrollView
+        contentContainerStyle={styles.chipBar}
+        horizontal
+        keyboardShouldPersistTaps="handled"
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipScroll}
+      >
+        <Segmented groupLabel="Sort players" onChange={setSort} options={MARKET_SORTS} value={sort} />
+        <Segmented groupLabel="Filter players" onChange={setFilter} options={MARKET_FILTERS} value={filter} />
+      </ScrollView>
+
+      {/* Column strip doubles as the live result count. */}
+      <View style={styles.columnHeader}>
+        <Text accessibilityLiveRegion="polite" style={styles.columnHeaderText}>
+          {rows.length === players.length
+            ? `${players.length} PLAYERS`
+            : `${rows.length} OF ${players.length}`}
+        </Text>
+        <View style={styles.columnHeaderRule} />
+        <Text style={styles.columnHeaderText}>
+          {roomy ? 'OWNED · ' : ''}PRICE · MOVE
+        </Text>
+      </View>
+    </View>
   );
 
   // A search can come back empty because the name is unknown OR because the
@@ -788,19 +789,32 @@ export function MarketScreen() {
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
   marketScreen: { flex: 1, minHeight: 0 },
+
   controls: {
     paddingHorizontal: space.md,
     paddingTop: space.md,
     gap: space.sm,
     backgroundColor: colors.background,
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
   },
-  controlsTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
-  title: { color: colors.text, fontSize: type.heading, fontWeight: '900' },
+  controlsTopShort: { paddingTop: 0 },
+  titleShort: { ...labelStyle, color: colors.muted },
+  cashBlockShort: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
+  controlsTop: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: space.md },
+  title: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: 22,
+    fontWeight: weight.black,
+    },
+  titleMeta: { ...labelStyle, marginTop: 2 },
+  cashBlock: { alignItems: 'flex-end', flexShrink: 0, minWidth: 84 },
+  cashLabel: { ...labelStyle, color: colors.gold },
+  cashValue: { ...numeric, color: colors.text, fontSize: 20, fontWeight: weight.black, marginTop: 1 },
+
   search: {
     minHeight: 44,
     color: colors.text,
+    fontFamily: fonts.body,
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
@@ -808,58 +822,79 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     fontSize: 15,
   },
-  cashBlock: { alignItems: 'flex-end', flexShrink: 0, minWidth: 72 },
-  cashLabel: { color: colors.muted, fontSize: type.micro, fontWeight: '800', letterSpacing: 0.8 },
-  cashValue: { color: colors.gold, fontSize: type.value, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  chipScroll: { flexGrow: 0, flexShrink: 0 },
-  chipBar: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingRight: space.md },
-  chipRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  chipDivider: { width: 1, height: 20, backgroundColor: colors.border, marginHorizontal: space.xs },
-  chip: {
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: 'transparent',
+
+  chipScroll: { flexGrow: 0, flexShrink: 0, marginHorizontal: -space.md },
+  chipBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.md,
   },
-  chipSelected: { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
-  chipText: { color: colors.muted, fontSize: type.label, fontWeight: '800' },
-  chipTextSelected: { color: colors.gold },
+
   columnHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: space.sm,
     paddingBottom: space.sm,
   },
-  columnHeaderText: { color: colors.muted, fontSize: type.micro, fontWeight: '800', letterSpacing: 0.6 },
+  columnHeaderText: { ...labelStyle, flexShrink: 0 },
+  columnHeaderRule: { flex: 1, height: 1, backgroundColor: colors.border, minWidth: space.sm },
+
   list: { flex: 1 },
-  listContent: { paddingBottom: space.xl },
+  listContent: { paddingBottom: space.xxl },
+
   playerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
     paddingHorizontal: space.md,
     borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
     borderLeftColor: 'transparent',
     borderLeftWidth: 2,
   },
+  // Owned listings get the gold edge; it is the one place gold marks a row.
   playerRowHeld: { borderLeftColor: colors.gold, backgroundColor: colors.surface },
   playerDetails: { flex: 1, minWidth: 0, height: '100%', flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  avatar: { overflow: 'hidden', backgroundColor: colors.surfaceRaised, alignItems: 'center', justifyContent: 'center' },
-  avatarInitials: { color: colors.text, fontSize: type.label, fontWeight: '900' },
+
+  avatar: {
+    overflow: 'hidden',
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceRaised,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  avatarInitials: {
+    color: colors.faint,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.black,
+  },
+
   playerCopy: { flex: 1, minWidth: 0 },
-  playerName: { color: colors.text, fontSize: 14, fontWeight: '700' },
-  playerMeta: { color: colors.muted, fontSize: type.micro, fontWeight: '700', marginTop: 2 },
-  ownership: { width: 78, textAlign: 'right', color: colors.muted, fontSize: type.micro, fontWeight: '700', flexShrink: 0, fontVariant: ['tabular-nums'] },
+  playerName: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: 15,
+    fontWeight: weight.heavy,
+    },
+  playerFirst: { color: colors.muted, fontWeight: weight.medium },
+  playerMeta: { ...labelStyle, color: colors.faint, marginTop: 2, letterSpacing: 0.5 },
+
+  ownership: {
+    ...labelStyle,
+    width: 46,
+    textAlign: 'right',
+    flexShrink: 0,
+    letterSpacing: 0.3,
+  },
   sparkline: { width: 52, height: 26, flexShrink: 0 },
-  quote: { alignItems: 'flex-end', minWidth: 68, flexShrink: 0 },
-  price: { color: colors.text, fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  priceChange: { fontSize: type.micro, fontWeight: '800', marginTop: 2, fontVariant: ['tabular-nums'] },
-  // Fixed width so BUY, SELL, SOLD OUT and BOOSTED all share one right edge —
-  // a ragged action column is much harder to scan down 300 rows.
+
+  quote: { alignItems: 'flex-end', minWidth: 62, flexShrink: 0 },
+  price: { ...numeric, color: colors.text, fontSize: 15, fontWeight: weight.black },
+  priceChange: { ...numeric, fontSize: type.label, fontWeight: weight.heavy, marginTop: 2 },
+
   tradeButton: {
     minHeight: 44,
     flexShrink: 0,
@@ -869,71 +904,147 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xs,
     borderWidth: 1,
   },
-  buyButton: { borderColor: colors.green, backgroundColor: '#123b2b' },
-  sellButton: { borderColor: colors.red, backgroundColor: '#402027' },
-  unaffordableButton: { borderColor: colors.border, backgroundColor: colors.surfaceRaised },
+  buyButton: { borderColor: colors.green, backgroundColor: colors.greenSoft },
+  sellButton: { borderColor: colors.red, backgroundColor: colors.redSoft },
+  unaffordableButton: { borderColor: colors.border, backgroundColor: 'transparent' },
   tradeLockedButton: { borderColor: colors.border, backgroundColor: colors.surfaceRaised },
-  tradeText: { fontSize: type.micro, fontWeight: '900', letterSpacing: 0.4, textAlign: 'center' },
+  tradeText: {
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.black,
+    letterSpacing: 0.7,
+    textAlign: 'center',
+  },
   buyText: { color: colors.green },
   sellText: { color: colors.red },
-  unaffordableText: { color: colors.muted },
-  tradeLockedText: { color: colors.muted },
+  unaffordableText: { color: colors.faint },
+  tradeLockedText: { color: colors.faint },
+
   positive: { color: colors.green },
   negative: { color: colors.red },
-  neutral: { color: colors.muted },
-  pressed: { opacity: 0.65 },
-  emptyCard: {
-    margin: space.md,
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: space.lg,
-    gap: space.xs,
-  },
-  emptyTitle: { color: colors.text, fontSize: type.body, fontWeight: '800' },
-  subtle: { color: colors.muted, fontSize: type.label, lineHeight: 18 },
+  neutral: { color: colors.faint },
+  pressed: { opacity: 0.62 },
 
-  detailContent: { padding: space.lg, paddingBottom: space.xl, gap: space.md },
-  backButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingRight: space.lg },
-  backText: { color: colors.gold, fontSize: type.value, fontWeight: '800' },
-  detailHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  detailIdentity: { flex: 1, minWidth: 0, gap: 2 },
-  detailName: { color: colors.text, fontSize: 20, lineHeight: 24, fontWeight: '900' },
-  detailMeta: { color: colors.muted, fontSize: type.label, fontWeight: '700' },
-  // Price sits on its own row: sharing one line with the name clipped the
-  // "+x% since listing" caption on a 390px phone.
-  detailQuote: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', gap: space.sm },
-  detailPrice: { color: colors.text, fontSize: 26, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  detailDividend: { color: colors.muted, fontSize: type.label, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  emptyCard: {
+    marginTop: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.lg,
+    gap: space.xs,
+    backgroundColor: colors.surface,
+    borderTopColor: colors.border,
+    borderBottomColor: colors.border,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.heavy,
+  },
+  subtle: { color: colors.muted, fontFamily: fonts.body, fontSize: type.label, lineHeight: 18 },
+
+  /* ---------------- player detail ---------------- */
+  detailContent: { paddingBottom: space.xxl },
+  backButton: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: space.md,
+  },
+  backText: {
+    ...labelStyle,
+    color: colors.gold,
+    fontSize: type.body,
+    letterSpacing: 0.6,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingHorizontal: space.md,
+    paddingBottom: space.md,
+  },
+  detailIdentity: { flex: 1, minWidth: 0, gap: 3 },
+  detailName: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: weight.black,
+    },
+  detailMeta: { ...labelStyle, color: colors.faint, letterSpacing: 0.5 },
+  detailQuote: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingBottom: space.md,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  detailPrice: { ...numeric, color: colors.text, fontSize: 32, fontWeight: weight.black, letterSpacing: 0 },
+  detailDividend: { ...numeric, color: colors.muted, fontSize: type.body, fontWeight: weight.heavy },
+
   chartHeading: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: space.sm,
-    marginTop: space.sm,
+    paddingHorizontal: space.md,
+    paddingTop: space.lg,
+    paddingBottom: space.sm,
   },
-  sectionTitle: { color: colors.text, fontSize: type.heading, fontWeight: '800' },
-  rangeToggle: { flexDirection: 'row', alignSelf: 'flex-end', backgroundColor: colors.surface, borderRadius: radius.md, padding: 2 },
-  rangeButton: { minWidth: 48, minHeight: 44, paddingHorizontal: space.sm, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  sectionTitle: {
+    ...labelStyle,
+    color: colors.muted,
+  },
+  rangeToggle: {
+    flexDirection: 'row',
+    alignSelf: 'flex-end',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  rangeButton: { minWidth: 46, minHeight: 44, paddingHorizontal: space.sm, alignItems: 'center', justifyContent: 'center' },
   rangeButtonSelected: { backgroundColor: colors.surfaceRaised },
-  rangeText: { color: colors.muted, fontSize: type.label, fontWeight: '900' },
+  rangeText: { ...labelStyle, color: colors.faint },
   rangeTextSelected: { color: colors.gold },
-  chart: { height: 168, borderBottomColor: colors.border, borderBottomWidth: 1 },
-  emptyChart: { color: colors.muted, height: 168, textAlign: 'center', textAlignVertical: 'center' },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  chart: { height: 168, marginHorizontal: space.md },
+  emptyChart: {
+    color: colors.faint,
+    fontFamily: fonts.body,
+    height: 168,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+  },
+
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+  },
   stat: {
     flexGrow: 1,
     flexBasis: '47%',
-    minWidth: 140,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: space.md,
+    minWidth: 132,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+    borderBottomColor: colors.border,
+    borderRightColor: colors.border,
+    borderBottomWidth: 1,
+    borderRightWidth: 1,
   },
-  statLabel: { color: colors.muted, fontSize: type.micro, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase' },
-  statValue: { color: colors.text, fontSize: type.value, fontWeight: '800', marginTop: 6, fontVariant: ['tabular-nums'] },
+  statLabel: { ...labelStyle, letterSpacing: 0.5 },
+  statValue: {
+    ...numeric,
+    color: colors.text,
+    fontSize: type.value,
+    fontWeight: weight.heavy,
+    marginTop: 5,
+  },
 });

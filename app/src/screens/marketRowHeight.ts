@@ -1,5 +1,5 @@
-export const BASE_MARKET_ROW_HEIGHT = 68;
-export const BASE_MARKET_ACTION_WIDTH = 76;
+export const BASE_MARKET_ROW_HEIGHT = 64;
+export const BASE_MARKET_ACTION_WIDTH = 70;
 
 /**
  * Row geometry stops growing at 2x, so row text is capped at the same multiple.

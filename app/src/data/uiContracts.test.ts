@@ -10,8 +10,10 @@ const marketSource = readFileSync(resolve(testDirectory, '../screens/MarketScree
 
 test('tab pills use their exact equal-width 44px Pressable bounds', () => {
   assert.doesNotMatch(appSource, /hitSlop=/);
-  assert.match(appSource, /tab: \{ flex: 1, minWidth: 0, minHeight: 44,/);
-  assert.match(appSource, /style=\{\(\{ pressed \}\) => \[styles\.tab, active && styles\.activeTab/);
+  // Formatting-agnostic: equal-width tabs with a 44px minimum.
+  assert.match(appSource, /tab: \{\s*flex: 1,\s*minWidth: 0,\s*minHeight: 44,/);
+  assert.match(appSource, /style=\{\(\{ pressed \}\) => \[styles\.tab, pressed && styles\.pressed\]\}/);
+  assert.match(appSource, /\[styles\.tabMarker, active && styles\.tabMarkerActive\]/);
 });
 
 test('market actions expose concise player-specific button labels', () => {
@@ -49,9 +51,10 @@ test('market cash value stays on one line and its block never gets squeezed', ()
 test('interface radii stay flat and no type drops below 11px', () => {
   const themeSource = readFileSync(resolve(testDirectory, '../theme.ts'), 'utf8');
   assert.match(themeSource, /lg: 8/);
-  assert.match(themeSource, /micro: 11/);
+  assert.match(themeSource, /label: 11/);
 
   const screens = [
+    ['Primitives', readFileSync(resolve(testDirectory, '../ui/primitives.tsx'), 'utf8')],
     ['App', appSource],
     ['Market', marketSource],
     ['Portfolio', readFileSync(resolve(testDirectory, '../screens/PortfolioScreen.tsx'), 'utf8')],

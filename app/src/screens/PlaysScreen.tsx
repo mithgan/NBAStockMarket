@@ -4,7 +4,8 @@ import type { Player } from '../data/types';
 import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
 import { DOLLARS_PER_NET_POINT, WEEKLY_TOTAL_CLAMP_NP } from '../state/game';
-import { colors, radius, space, type } from '../theme';
+import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
+import { Button, SectionHeader, Tag } from '../ui/primitives';
 
 interface PlayCandidate {
   player: Player;
@@ -19,10 +20,11 @@ function SlotCard({ label, used, total }: { label: string; used: number; total: 
       accessibilityLabel={`${label}, ${used} of ${total} used, ${total - used} available`}
       style={styles.slotCard}
     >
-      <Text style={styles.slotLabel}>{label}</Text>
+      <Text style={styles.slotLabel}>{label.toUpperCase()}</Text>
       <View style={styles.slotValueRow}>
-        <Text style={styles.slotValue}>{used} / {total}</Text>
-        <Text style={styles.slotHelp}>{total - used} left</Text>
+        <Text style={styles.slotValue}>{used}</Text>
+        <Text style={styles.slotTotal}>/ {total}</Text>
+        <Tag label={`${total - used} LEFT`} tone={total - used > 0 ? 'gold' : 'neutral'} />
       </View>
     </View>
   );
@@ -83,7 +85,7 @@ export function PlaysScreen() {
             {formatCompactMoney(priceOf(player.id))} · {gameDate} · fee {formatCompactMoney(fee)}
           </Text>
         </View>
-        <Pressable
+        <Button
           accessibilityHint={
             slots.remaining === 0
               ? `No ${kind === 'short' ? 'short' : 'boost'} slots remain this week`
@@ -92,22 +94,15 @@ export function PlaysScreen() {
           accessibilityLabel={kind === 'short'
             ? `Arm weekly short on ${player.name}, fee ${formatMoney(fee)}`
             : `Boost ${player.name} for ${gameDate}, fee ${formatMoney(fee)}`}
-          accessibilityRole="button"
-          accessibilityState={{ disabled }}
+          compact
           disabled={disabled}
+          fixedWidth={78}
+          label={pending ? 'WAIT' : kind === 'short' ? 'SHORT' : 'BOOST'}
           onPress={() => void (kind === 'short'
             ? armShort(player)
             : armPlayerBoost(player, gameDate))}
-          style={({ pressed }) => [
-            kind === 'short' ? styles.actionButton : styles.boostButton,
-            disabled && styles.disabled,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={kind === 'short' ? styles.actionText : styles.boostText}>
-            {pending ? 'WAIT' : kind === 'short' ? 'SHORT' : 'BOOST'}
-          </Text>
-        </Pressable>
+          tone={kind === 'short' ? 'danger' : 'positive'}
+        />
       </View>
     );
   };
@@ -115,21 +110,24 @@ export function PlaysScreen() {
   return (
     <ScrollView keyboardShouldPersistTaps="handled" style={styles.scroll} contentContainerStyle={styles.content}>
       <View style={styles.headingRow}>
-        <Text accessibilityRole="header" style={styles.title}>Plays</Text>
-        <Text style={styles.badge}>{currentWeek ?? 'SEASON COMPLETE'}</Text>
+        <View>
+          <Text accessibilityRole="header" style={styles.title}>PLAYS</Text>
+          <Text style={styles.titleMeta}>WEEKLY INSTRUMENTS</Text>
+        </View>
+        <Tag label={currentWeek ?? 'SEASON COMPLETE'} tone="gold" />
       </View>
 
       <View style={styles.slotRow}>
         <SlotCard label="Weekly shorts" total={shortSlots.total} used={shortSlots.used} />
         <SlotCard label="Boosts" total={boostSlots.total} used={boostSlots.used} />
       </View>
-      <Text style={styles.subtle}>
+      <Text style={styles.rulesCopy}>
         Shorts reserve {formatCompactMoney(2_000_000)} collateral and settle at up to
         {' '}+/-{formatCompactMoney(WEEKLY_TOTAL_CLAMP_NP * DOLLARS_PER_NET_POINT)}. Boosts cost 0.25% and
         add one extra signed dividend, including losses. Slots reset each Monday.
       </Text>
 
-      <Text accessibilityRole="header" style={styles.sectionTitle}>Open positions</Text>
+      <SectionHeader label="OPEN POSITIONS" />
       {activeShorts.length === 0 && usedBoosts.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No active plays this week.</Text>
@@ -189,10 +187,7 @@ export function PlaysScreen() {
         </View>
       )}
 
-      <View style={styles.sectionHeading}>
-        <Text accessibilityRole="header" style={styles.sectionTitle}>Weekly shorts</Text>
-        <Text style={styles.subtle}>Unowned players only</Text>
-      </View>
+      <SectionHeader label="WEEKLY SHORTS" meta="UNOWNED ONLY" />
       {shortCandidates.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>{nextGameDate ? 'No eligible players right now.' : 'Replay complete.'}</Text>
@@ -205,10 +200,7 @@ export function PlaysScreen() {
         </View>
       )}
 
-      <View style={styles.sectionHeading}>
-        <Text accessibilityRole="header" style={styles.sectionTitle}>Boosts</Text>
-        <Text style={styles.subtle}>Players you already hold</Text>
-      </View>
+      <SectionHeader label="BOOSTS" meta="PLAYERS YOU HOLD" />
       {boostCandidates.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No held player is boostable this week.</Text>
@@ -226,95 +218,98 @@ export function PlaysScreen() {
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
-  content: { flexGrow: 1, padding: space.md, paddingBottom: space.xl, gap: space.sm },
-  headingRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: space.sm },
-  title: { color: colors.text, fontSize: type.heading, fontWeight: '900' },
-  badge: { color: colors.gold, fontSize: type.micro, fontWeight: '900', letterSpacing: 0.6 },
-  subtle: { color: colors.muted, fontSize: type.micro, lineHeight: 17 },
-  slotRow: { flexDirection: 'row', gap: space.sm },
-  slotCard: {
-    flex: 1,
-    minWidth: 0,
-    padding: space.md,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.lg,
+  content: { flexGrow: 1, paddingBottom: space.xxl },
+  headingRow: {
+    paddingHorizontal: space.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.sm,
+    paddingTop: space.lg,
+    paddingBottom: space.md,
   },
-  slotLabel: { color: colors.muted, fontSize: type.micro, fontWeight: '800' },
-  slotValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm, marginTop: 4 },
-  slotValue: { color: colors.text, fontSize: type.heading, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  slotHelp: { color: colors.gold, fontSize: type.micro, fontWeight: '800' },
-  sectionHeading: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: space.sm },
-  sectionTitle: { color: colors.text, fontSize: type.heading, fontWeight: '900', marginTop: space.md },
+  title: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: 22,
+    fontWeight: weight.black,
+    },
+  titleMeta: { ...labelStyle, marginTop: 2 },
+  subtle: { color: colors.muted, fontFamily: fonts.body, fontSize: type.label, lineHeight: 17 },
+  rulesCopy: {
+    color: colors.faint,
+    fontFamily: fonts.body,
+    fontSize: type.label,
+    lineHeight: 17,
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+  },
+
+  slotRow: {
+    paddingHorizontal: space.md,
+    flexDirection: 'row',
+    borderTopColor: colors.border,
+    borderBottomColor: colors.border,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+  },
+  slotCard: { flex: 1, minWidth: 0, paddingVertical: space.md, paddingRight: space.md },
+  slotLabel: { ...labelStyle },
+  slotValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.xs, marginTop: space.xs, flexWrap: 'wrap' },
+  slotValue: { ...numeric, color: colors.text, fontSize: 26, fontWeight: weight.black },
+  slotTotal: { ...numeric, color: colors.faint, fontSize: type.value, fontWeight: weight.heavy, marginRight: space.xs },
+
+  list: { borderTopColor: colors.border, borderTopWidth: 1 },
+  listCard: { borderTopColor: colors.border, borderTopWidth: 1 },
   emptyCard: {
-    padding: space.lg,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.lg,
     gap: space.xs,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
   },
-  emptyTitle: { color: colors.text, fontSize: type.body, fontWeight: '800' },
-  listCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
+  emptyTitle: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.heavy,
   },
+
   positionRow: {
+    paddingHorizontal: space.md,
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.sm,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  lastRow: { borderBottomWidth: 0 },
+  positionCopy: { flex: 1, minWidth: 0 },
+  positionValue: { ...numeric, fontSize: type.body, fontWeight: weight.black, flexShrink: 0 },
+
+  actionRow: {
+    paddingHorizontal: space.md,
     minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    paddingHorizontal: space.md,
     paddingVertical: space.sm,
     borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  lastRow: { borderBottomWidth: 0 },
-  positionCopy: { flex: 1, minWidth: 0 },
-  positionValue: { fontSize: type.label, fontWeight: '900', flexShrink: 0, fontVariant: ['tabular-nums'] },
-  actionRow: {
-    minHeight: 60,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
   },
   actionCopy: { flex: 1, minWidth: 0 },
-  rowName: { color: colors.text, fontSize: type.body, fontWeight: '800' },
-  rowMeta: { color: colors.muted, fontSize: type.micro, marginTop: 2, fontVariant: ['tabular-nums'] },
-  actionButton: {
-    minWidth: 72,
-    minHeight: 44,
-    flexShrink: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.sm,
-    borderColor: colors.red,
-    borderWidth: 1,
-    backgroundColor: '#3b1d24',
+  rowName: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.heavy,
   },
-  actionText: { color: colors.red, fontSize: type.micro, fontWeight: '900' },
-  boostButton: {
-    minWidth: 72,
-    minHeight: 44,
-    flexShrink: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.sm,
-    borderColor: colors.green,
-    borderWidth: 1,
-    backgroundColor: '#103426',
-  },
-  boostText: { color: colors.green, fontSize: type.micro, fontWeight: '900' },
+  rowMeta: { ...numeric, color: colors.faint, fontSize: type.label, marginTop: 2, letterSpacing: 0.3 },
+
   positive: { color: colors.green },
   negative: { color: colors.red },
-  disabled: { opacity: 0.38 },
-  pressed: { opacity: 0.65 },
+  disabled: { opacity: 0.4 },
+  pressed: { opacity: 0.62 },
 });

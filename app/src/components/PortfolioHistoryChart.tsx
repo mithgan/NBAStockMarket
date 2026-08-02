@@ -70,9 +70,9 @@ export function PortfolioHistoryChart({ points }: { points: PortfolioPoint[] }) 
 const styles = StyleSheet.create({
   chart: { minHeight: 152 },
   captionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm },
-  caption: { color: colors.muted, fontSize: type.micro },
+  caption: { color: colors.muted, fontSize: type.label },
   change: { fontSize: type.label, fontWeight: '800', fontVariant: ['tabular-nums'] },
   empty: { minHeight: 124, justifyContent: 'center', padding: space.lg, backgroundColor: colors.background, borderRadius: radius.md },
   emptyTitle: { color: colors.text, fontSize: type.body, fontWeight: '800' },
-  emptyText: { color: colors.muted, fontSize: type.micro, lineHeight: 17, marginTop: 5 },
+  emptyText: { color: colors.muted, fontSize: type.label, lineHeight: 17, marginTop: 5 },
 });
