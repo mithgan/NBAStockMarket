@@ -198,7 +198,8 @@ function AuthenticatedRuntime({ config }: { config: PublicAppConfig }) {
     baseUrl: config.apiUrl,
     expectedUserId: user?.id ?? '',
     getAccessToken,
-  }), [config.apiUrl, getAccessToken, user?.id]);
+    settlementKey: config.settlementKey,
+  }), [config.apiUrl, config.settlementKey, getAccessToken, user?.id]);
 
   if (isLoading) {
     return <CenteredState busy copy="Restoring your saved sign-in securely." title="Checking your session" />;

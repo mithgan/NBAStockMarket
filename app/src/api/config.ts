@@ -2,6 +2,10 @@ export interface PublicAppConfig {
   apiUrl: string;
   supabaseUrl: string;
   supabasePublishableKey: string;
+  // Sandbox-only: unlocks the season-advance controls. EXPO_PUBLIC_* values are
+  // readable by anyone with the bundle, so only ever set this against a private
+  // replay server whose settlement key you are willing to treat as public.
+  settlementKey: string | null;
 }
 
 export type PublicAppConfigResult =
@@ -12,6 +16,7 @@ interface PublicAppEnvironment {
   apiUrl?: string;
   supabaseUrl?: string;
   supabasePublishableKey?: string;
+  settlementKey?: string;
 }
 
 function normalizedHttpUrl(value: string | undefined, label: string): string {
@@ -63,6 +68,7 @@ export function resolvePublicAppConfig(
     apiUrl: process.env.EXPO_PUBLIC_NBA_STOCK_API_URL,
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabasePublishableKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    settlementKey: process.env.EXPO_PUBLIC_NBA_STOCK_SETTLEMENT_KEY,
   },
 ): PublicAppConfigResult {
   try {
@@ -72,6 +78,7 @@ export function resolvePublicAppConfig(
         apiUrl: normalizedHttpUrl(environment.apiUrl, 'API URL'),
         supabaseUrl: normalizedHttpUrl(environment.supabaseUrl, 'Supabase URL'),
         supabasePublishableKey,
+        settlementKey: environment.settlementKey?.trim() || null,
       },
       error: null,
     };

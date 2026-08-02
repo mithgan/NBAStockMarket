@@ -65,13 +65,43 @@ interface ClientOptions {
   timeoutMs?: number;
   retryTimeoutMs?: number;
   idempotencyKeyFactory?: () => string;
+  settlementKey?: string | null;
 }
 
 interface RequestOptions<T> {
   method?: 'GET' | 'POST';
   body?: unknown;
   idempotencyKey?: string;
+  headers?: Record<string, string>;
   parse: (value: unknown) => T;
+}
+
+export interface ServerAdvanceResult {
+  gameDate: string;
+  nextGameDate: string | null;
+  isComplete: boolean;
+  replayed: boolean;
+}
+
+function parseAdvanceResult(value: unknown, path = 'response.data'): ServerAdvanceResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ContractError(`${path} must be an object.`);
+  }
+  const record = value as Record<string, unknown>;
+  const gameDate = record.game_date;
+  const nextGameDate = record.next_game_date;
+  const isComplete = record.is_complete;
+  const replayed = record.replayed;
+  if (typeof gameDate !== 'string') {
+    throw new ContractError(`${path}.game_date must be a string.`);
+  }
+  if (nextGameDate !== null && typeof nextGameDate !== 'string') {
+    throw new ContractError(`${path}.next_game_date must be a string or null.`);
+  }
+  if (typeof isComplete !== 'boolean' || typeof replayed !== 'boolean') {
+    throw new ContractError(`${path} settlement flags must be booleans.`);
+  }
+  return { gameDate, nextGameDate, isComplete, replayed };
 }
 
 function randomIdempotencyKey(): string {
@@ -97,6 +127,7 @@ export class MarketApiClient {
   private readonly timeoutMs: number;
   private readonly retryTimeoutMs: number;
   private readonly idempotencyKeyFactory: () => string;
+  private readonly settlementKey: string | null;
 
   constructor(options: ClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
@@ -106,6 +137,11 @@ export class MarketApiClient {
     this.timeoutMs = options.timeoutMs ?? 10_000;
     this.retryTimeoutMs = Math.max(options.retryTimeoutMs ?? 75_000, this.timeoutMs);
     this.idempotencyKeyFactory = options.idempotencyKeyFactory ?? randomIdempotencyKey;
+    this.settlementKey = options.settlementKey ?? null;
+  }
+
+  get canAdvanceSeason(): boolean {
+    return this.settlementKey !== null;
   }
 
   async market(): Promise<MarketListing[]> {
@@ -212,6 +248,23 @@ export class MarketApiClient {
     );
   }
 
+  async advanceSettlement(expectedGameDate: string): Promise<ServerAdvanceResult> {
+    if (!this.settlementKey) {
+      throw new MarketApiError(
+        'Season advancement is not configured for this build.',
+        'advance_unavailable',
+        null,
+      );
+    }
+    return this.request('/api/v1/admin/settlements/next', {
+      method: 'POST',
+      body: { expected_game_date: expectedGameDate },
+      idempotencyKey: this.idempotencyKeyFactory(),
+      headers: { 'X-Settlement-Key': this.settlementKey },
+      parse: (value) => parseDataEnvelope(value, parseAdvanceResult),
+    });
+  }
+
   async resetAccount(expectedAccountVersion: number): Promise<ServerResetResult> {
     return this.mutation(
       '/api/v1/account/reset',
@@ -277,6 +330,7 @@ export class MarketApiClient {
             Accept: 'application/json',
             ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
             ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
+            ...(options.headers ?? {}),
           },
           body: options.body === undefined ? undefined : JSON.stringify(options.body),
           signal: controller.signal,

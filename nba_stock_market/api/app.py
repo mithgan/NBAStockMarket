@@ -90,7 +90,12 @@ def create_app(
             allow_origins=settings.cors_origins,
             allow_credentials=False,
             allow_methods=["GET", "POST"],
-            allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+            allow_headers=[
+                "Authorization",
+                "Content-Type",
+                "Idempotency-Key",
+                "X-Settlement-Key",
+            ],
         )
 
     if settings.auto_create_schema:

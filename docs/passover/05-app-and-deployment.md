@@ -71,8 +71,24 @@ settles each date exactly once per account, idempotently, when the user advances
   `npx expo export --platform web` from `app/`.
 - **Stale**: https://nba-stock-backsim.vercel.app still serves the OLD client-only
   backsim build (pre-server, superseded SimBar). Treat it as a historical demo; do not
-  iterate on it. The client-only backsim code was removed from `mith/experiments` on
-  2026-08-02 in favor of the MVP's SeasonControl.
+  iterate on it.
+
+## Branch difference: the progression bar (`mith/experiments` only)
+
+On `mith/experiments`, `SeasonControl.tsx` is rebuilt as Mith's active progression bar
+(SimBar design: gold progress track, "Day N / 174", +1 DAY / +1 WEEK / two-tap RESET).
+The advance buttons drive the server's `POST /api/v1/admin/settlements/next` (chaining
+one call per game date inside the calendar span) and appear ONLY when
+`EXPO_PUBLIC_NBA_STOCK_SETTLEMENT_KEY` is set to the server's
+`NBA_STOCK_SETTLEMENT_ADMIN_KEY` (≥32 chars). Without the key the bar renders the same
+visuals with the MVP's passive CHECK NOW button. Two hard constraints inherited from the
+server model: the replay clock is GLOBAL (`market_game_state` — advancing advances it for
+every account on that server, so this is a private-sandbox feature), and RESET resets
+YOUR account to the opening bankroll — it cannot rewind the world clock. An
+`EXPO_PUBLIC_*` value ships readably in the web bundle: only configure the key against a
+private sandbox server. Supporting changes: `state/simDates.ts` (calendar math + tests),
+`api/client.ts` `advanceSettlement`, `PortfolioContext` `advanceSeason`/
+`resetSeasonAccount`, and `X-Settlement-Key` added to the API's CORS allow-list.
 
 ## Traps before you edit
 

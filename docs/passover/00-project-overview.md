@@ -64,8 +64,11 @@ territory (this killed every real-money predecessor: Football Index, Mojo, Fante
 - `codex/nba-stock-sim-prototype` — **the MVP branch**: engine, research, backend, app.
 - `codex/standalone-web-flask` — Ryan's UI rebuild (Databallr design system) + Flask web
   preview; expected to fold back into the MVP.
-- `mith/experiments` — tracks the MVP exactly, plus these passover docs. (Its earlier
-  client-only backsim was retired 2026-08-02 when the MVP shipped its own SeasonControl.)
+- `mith/experiments` — tracks the MVP, plus these passover docs and Mith's sandbox
+  progression bar: `SeasonControl` is rebuilt as an active time bar (+1 DAY / +1 WEEK /
+  RESET) that drives the server's admin settlement endpoint when
+  `EXPO_PUBLIC_NBA_STOCK_SETTLEMENT_KEY` is configured (falls back to the passive
+  CHECK NOW behavior otherwise). Not intended for Ryan's MVP branch.
 
 ## Repo map (one line each)
 

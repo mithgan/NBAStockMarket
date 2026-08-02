@@ -13,9 +13,23 @@ test('public app config accepts only explicit HTTP URLs and a publishable key', 
       apiUrl: 'http://127.0.0.1:8011',
       supabaseUrl: 'https://example.supabase.co',
       supabasePublishableKey: 'public-key',
+      settlementKey: null,
     },
     error: null,
   });
+
+  assert.equal(resolvePublicAppConfig({
+    apiUrl: 'http://127.0.0.1:8011',
+    supabaseUrl: 'https://example.supabase.co',
+    supabasePublishableKey: 'public-key',
+    settlementKey: '  sandbox-replay-key-0123456789abcdef  ',
+  }).config?.settlementKey, 'sandbox-replay-key-0123456789abcdef');
+  assert.equal(resolvePublicAppConfig({
+    apiUrl: 'http://127.0.0.1:8011',
+    supabaseUrl: 'https://example.supabase.co',
+    supabasePublishableKey: 'public-key',
+    settlementKey: '   ',
+  }).config?.settlementKey, null);
 
   assert.match(resolvePublicAppConfig({
     apiUrl: 'file:///tmp/api',

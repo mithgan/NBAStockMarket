@@ -32,6 +32,7 @@ import {
   serverRefreshNotice,
   type ServerPresentationState,
 } from './serverState';
+import { addIsoDays } from './simDates';
 
 interface PortfolioContextValue {
   state: GameState | null;
@@ -65,6 +66,9 @@ interface PortfolioContextValue {
   refreshData: () => Promise<boolean>;
   confirmLocalTransition: () => Promise<boolean>;
   dismissNotice: () => void;
+  canAdvanceSeason: boolean;
+  advanceSeason: (calendarDays: 1 | 7) => Promise<boolean>;
+  resetSeasonAccount: () => Promise<boolean>;
 }
 
 const PortfolioContext = createContext<PortfolioContextValue | null>(null);
@@ -286,6 +290,71 @@ export function PortfolioProvider({
       `${player.name} boosted for ${gameDate}.`,
   ), [apiClient, runAction]);
 
+  const advanceSeason = useCallback(async (calendarDays: 1 | 7) => {
+    if (!apiClient.canAdvanceSeason) return false;
+    if (actionLock.current.has('account-refresh')) return false;
+    if (!actionLock.current.acquire('account-mutation')) return false;
+    if (!actionLock.current.acquire('season-advance')) {
+      actionLock.current.release('account-mutation');
+      return false;
+    }
+    updatePendingActions();
+    setMessage(null);
+    let anySettled = false;
+    try {
+      let expected = bootstrapRef.current?.game.next_game_date ?? null;
+      if (!expected) {
+        if (mounted.current) setMessage('The season replay is already complete.');
+        return false;
+      }
+      // Settle every game date inside the calendar span, so "+1 WEEK" collects
+      // the same dividends the week would have paid one day at a time.
+      const stop = addIsoDays(expected, calendarDays);
+      let settled = 0;
+      while (expected && expected < stop) {
+        const result = await apiClient.advanceSettlement(expected);
+        anySettled = true;
+        settled += 1;
+        expected = result.nextGameDate;
+        if (result.isComplete) break;
+      }
+      const refreshed = await loadSnapshot({
+        checkLocalTransition: false,
+        showInitialLoader: false,
+      });
+      if (!refreshed) return false;
+      if (mounted.current) {
+        const label = `${settled} game ${settled === 1 ? 'date' : 'dates'}`;
+        setMessage(expected === null
+          ? `Settled ${label} — the season replay is complete.`
+          : `Settled ${label}.`);
+      }
+      return true;
+    } catch (error) {
+      if (mounted.current) setMessage(errorMessage(error));
+      if (anySettled) {
+        await loadSnapshot({ checkLocalTransition: false, showInitialLoader: false });
+      }
+      return false;
+    } finally {
+      actionLock.current.release('season-advance');
+      actionLock.current.release('account-mutation');
+      updatePendingActions();
+    }
+  }, [apiClient, loadSnapshot, updatePendingActions]);
+
+  const resetSeasonAccount = useCallback(() => runAction(
+    'season-reset',
+    async () => {
+      const version = bootstrapRef.current?.portfolio.version;
+      if (version === undefined) {
+        throw new MarketApiError('Your account has not finished loading.', 'not_ready', null);
+      }
+      await apiClient.resetAccount(version);
+    },
+    'Account reset to the opening bankroll.',
+  ), [apiClient, runAction]);
+
   const confirmLocalTransition = useCallback(async () => {
     if (isTransitioning || !bootstrapRef.current || !legacySavePresent) return false;
     setIsTransitioning(true);
@@ -377,11 +446,17 @@ export function PortfolioProvider({
     refreshData,
     confirmLocalTransition,
     dismissNotice,
+    canAdvanceSeason: apiClient.canAdvanceSeason,
+    advanceSeason,
+    resetSeasonAccount,
   }), [
+    advanceSeason,
+    apiClient.canAdvanceSeason,
     armPlayerBoost,
     armShort,
     confirmLocalTransition,
     dismissNotice,
+    resetSeasonAccount,
     isGameplayReady,
     isLoading,
     isRefreshing,
