@@ -242,7 +242,7 @@ export function PlayerDetail({
             })}
           </View>
         </View>
-        {visiblePoints.length > 0 ? <DetailChart points={visiblePoints} /> : <Text style={styles.emptyChart}>No games played yet — advance the season</Text>}
+        {visiblePoints.length > 0 ? <DetailChart points={visiblePoints} /> : <Text style={styles.emptyChart}>No game data</Text>}
       </View>
 
       <Text accessibilityRole="header" style={styles.statsTitle}>Season snapshot</Text>
@@ -494,7 +494,6 @@ export function MarketScreen() {
             onTrade={trade}
             pending={pendingActions.has(`trade:${player.id}`)}
             player={player}
-            simDate={simDate}
           />
         ))}
         </View>

@@ -5,7 +5,6 @@ import { PortfolioHistoryChart } from '../components/PortfolioHistoryChart';
 import type { Player } from '../data/types';
 import { formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
-import { SIM_START } from '../state/sim';
 import { colors } from '../theme';
 import { PlayerDetail } from './MarketScreen';
 
