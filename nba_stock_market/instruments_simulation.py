@@ -19,7 +19,7 @@ import random
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 from nba_stock_market.backtest import (
@@ -27,6 +27,7 @@ from nba_stock_market.backtest import (
     load_salary_by_name,
     select_universe,
 )
+from nba_stock_market.bias import rolling_bias_for_date
 from nba_stock_market.engine import (
     INACTIVITY_DECAY_RATE as INACTIVITY_DECAY_DEFAULT,
     Market,
@@ -44,8 +45,6 @@ from nba_stock_market.instruments import (
 )
 
 
-ROLLING_WINDOW_DAYS = 30
-ROLLING_MIN_GAMES = 300
 FALLBACK_COLD_START = 0.35
 PRICE_SHORT_TAKE_PROFIT = 0.85
 
@@ -204,12 +203,6 @@ def run_simulation(
     positions_by_user_week: dict[tuple[str, str], list] = defaultdict(list)
     projection_cover = [0, 0]
 
-    def rolling_bias(day: date) -> float:
-        window = [s for d, s in raw_surprises if day - timedelta(days=ROLLING_WINDOW_DAYS) <= d < day]
-        if len(window) < ROLLING_MIN_GAMES:
-            return seed_bias
-        return statistics.fmean(window)
-
     def arm_weekly_shorts(week: str, prev_week: str | None) -> None:
         first_day = days_of_week[week][0]
         for uid, kind in archetype_of.items():
@@ -325,7 +318,11 @@ def run_simulation(
         weekly_trading(prev_week)
         manage_price_shorts(week_index)
         for day in days_of_week[week]:
-            correction = rolling_bias(day)
+            correction = rolling_bias_for_date(
+                raw_surprises,
+                day,
+                seed_bias=seed_bias,
+            )
             for row in games_by_date[day]:
                 player = market.players[row.player_id]
                 try:

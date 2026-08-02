@@ -294,10 +294,10 @@ class InstrumentsBook:
             for boost in self.boosts
             if boost.user_id == user_id
             and boost.player_id == player_id
-            and boost.game_date == game_date
+            and not boost.consumed
             and not boost.refunded
         ):
-            raise InstrumentError("already boosting this player for this game")
+            raise InstrumentError("already have an armed boost for this player")
         if self._boosts_used(user_id, week) >= BOOST_SLOTS:
             raise InstrumentError("all boost slots used this week")
         fee = BOOST_FEE_PCT * player.current_price

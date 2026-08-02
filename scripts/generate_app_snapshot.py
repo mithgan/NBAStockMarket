@@ -22,6 +22,7 @@ DEFAULT_OPENINGS = ROOT / "output/opening-prices-2026-27.csv"
 DEFAULT_BACKTEST = ROOT / "output/backtest-2026.json"
 DEFAULT_GAME_LOG = ROOT / "data/raw/2025-26/player_game_logs.csv"
 DEFAULT_OUTPUT = ROOT / "app/src/data/snapshot.ts"
+DEFAULT_API_OUTPUT = ROOT / "data/generated/market-seed.json"
 
 DEMO_RIVALS = (
     (1, "portfolio-048", 168_604_261, 20.43),
@@ -141,12 +142,38 @@ def generate_snapshot(
     return render_snapshot(players, events)
 
 
+def generate_api_seed(
+    openings: Path = DEFAULT_OPENINGS,
+    game_log: Path = DEFAULT_GAME_LOG,
+    *,
+    limit: int = 30,
+) -> str:
+    players = _load_players(openings, game_log, limit)
+    payload = {
+        "schema_version": 1,
+        "players": [
+            {
+                "id": player["id"],
+                "name": player["name"],
+                "tier": player["tier"],
+                "current_price_cents": player["listing_price"] * 100,
+                "opening_price_cents": player["listing_price"] * 100,
+                "actual_salary_cents": player["actual_salary"] * 100,
+                "shares_outstanding": 100,
+            }
+            for player in players
+        ],
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--openings", type=Path, default=DEFAULT_OPENINGS)
     parser.add_argument("--backtest", type=Path, default=DEFAULT_BACKTEST)
     parser.add_argument("--game-log", type=Path, default=DEFAULT_GAME_LOG)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--api-output", type=Path, default=DEFAULT_API_OUTPUT)
     parser.add_argument("--limit", type=int, default=30)
     args = parser.parse_args(argv)
 
@@ -158,6 +185,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(rendered, encoding="utf-8")
+    api_seed = generate_api_seed(
+        args.openings,
+        args.game_log,
+        limit=args.limit,
+    )
+    args.api_output.parent.mkdir(parents=True, exist_ok=True)
+    args.api_output.write_text(api_seed, encoding="utf-8")
     return 0
 
 

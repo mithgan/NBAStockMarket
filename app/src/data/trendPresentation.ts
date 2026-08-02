@@ -1,6 +1,13 @@
 export type TrendDirection = 'up' | 'down';
 export type TrendRange = 'L5' | 'L15' | 'Season';
 
+export interface TrendPoint {
+  date: string;
+  np: number;
+  expected_np: number;
+  dividend_per_holder: number;
+}
+
 export interface IndexedValue {
   index: number;
   value: number;
@@ -9,6 +16,14 @@ export interface IndexedValue {
 export function selectTrendRange<T>(points: readonly T[], range: TrendRange): T[] {
   if (range === 'Season') return [...points];
   return points.slice(-Number(range.slice(1)));
+}
+
+export function selectSettledTrendPoints<T extends { date: string }>(
+  points: readonly T[],
+  latestSettledDate: string | null,
+): T[] {
+  if (latestSettledDate === null) return [];
+  return points.filter((point) => point.date <= latestSettledDate);
 }
 
 export function cumulativeValues(values: readonly number[]): number[] {

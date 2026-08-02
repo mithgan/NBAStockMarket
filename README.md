@@ -142,6 +142,117 @@ the strongest candidate that stayed below the prototype price-safety gates. The 
 the fee decision lowers the base fee to 0.25% and caps the softened flip surcharge at 1.5%, keeping
 anti-churn friction while sharply reducing wealth destruction under high turnover.
 
+## Backend API (Phase 1 foundation)
+
+The FastAPI service in `nba_stock_market/api/` is the authoritative first backend slice. It owns
+account creation, the $140M starting balance, listings, one-whole-player holdings, fees, price
+impact, idempotent buys/sells, the portfolio leaderboard, and the global historical replay clock.
+Daily settlements are atomic and idempotent: the server pays the signed canonical dividend to each
+current holder, records a per-account ledger row, advances exactly one date, and stores
+reconciliation totals in one transaction. The initial market and replay events are generated from
+the same sources used by Expo, so the app and API do not maintain separate calculation paths.
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `GET /healthz` | Public | Liveness check |
+| `GET /readyz` | Public | Database migration, connectivity, and seed readiness |
+| `GET /api/v1/market` | Bearer | Current listings, float, ownership, and volume |
+| `GET /api/v1/portfolio` | Bearer | Cash, holdings, P&L, and recent trades |
+| `GET /api/v1/portfolio/history` | Bearer | Cursor-paginated daily closing portfolio values |
+| `GET /api/v1/activity` | Bearer | Cursor-paginated trades, instruments, and settlement activity |
+| `GET /api/v1/dividends` | Bearer | Cursor-paginated per-player dividend activity |
+| `GET /api/v1/game` | Bearer | Global replay date and completion state |
+| `GET /api/v1/instruments` | Bearer | Weekly slot usage, reserved collateral, and current short/boost positions |
+| `POST /api/v1/instruments/weekly-shorts` | Bearer + `Idempotency-Key` | Arm a server-dated weekly performance short |
+| `POST /api/v1/instruments/boosts` | Bearer + `Idempotency-Key` | Boost one owned player's signed dividend for a specified replay date |
+| `GET /api/v1/settlements` | Bearer | Daily settlement totals and the current user's dividends |
+| `POST /api/v1/trades` | Bearer + `Idempotency-Key` | Authoritative whole-player buy or sell |
+| `POST /api/v1/account/reset` | Bearer + `Idempotency-Key` | One-time, pre-play local-save transition |
+| `GET /api/v1/leaderboard` | Bearer | Current portfolio-value ranking |
+| `POST /api/v1/admin/settlements/next` | `X-Settlement-Key` + `Idempotency-Key` | Scheduler-only, expected-date-guarded clock advancement |
+
+Create the generated market seed and start a local database:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+python scripts/generate_app_snapshot.py
+python scripts/generate_app_trends.py
+set -a && source .env && set +a
+uvicorn nba_stock_market.api.main:app --host 127.0.0.1 --port 8011 --reload
+```
+
+Copy `.env.example` to the gitignored `.env` before sourcing it. Protected routes fail closed until
+`NBA_STOCK_SUPABASE_URL` is configured. Asymmetric Supabase user JWTs are verified locally against
+the project's JWKS; legacy HS256 user tokens are checked through Supabase Auth and additionally
+require `NBA_STOCK_SUPABASE_PUBLISHABLE_KEY`. A service-role key is neither required nor accepted by
+this API configuration.
+
+For deployment, use `postgresql+psycopg://...` for `NBA_STOCK_DATABASE_URL`, set
+`NBA_STOCK_ENVIRONMENT=production`, and leave `NBA_STOCK_AUTO_CREATE_SCHEMA=false`. A direct or
+session-pooler connection on port 5432 is preferred for a persistent backend. Supabase transaction
+pooler URLs on port 6543 are also supported; the API automatically disables psycopg prepared
+statements for that mode. Production schema changes must happen through separately reviewed
+migrations; the API process must never create or mutate its own schema. Set a separate random
+`NBA_STOCK_SETTLEMENT_ADMIN_KEY` only on the API and scheduler; it must never ship in the mobile
+client. Signed settlement losses may take cash below zero, but affordability checks block new buys
+and instrument risk until the account recovers. Active weekly-short collateral is reserved rather
+than removed from cash and is excluded from every affordability check. Weekly shorts and boosts use
+the server's Monday-Sunday replay week, enforce their per-user slot and cross-position rules
+transactionally, and settle in the same transaction as the base dividend. Historical replay uses
+the current replay date as its arming cutoff; production live-season wiring must replace that guard
+with authoritative game tipoff timestamps. Projection-only DNP rows carry a zero base dividend so
+armed boosts refund and zero-qualifying-game shorts void without inventing a played result. `/docs`
+is disabled in production.
+
+Activity and portfolio-history pages are ordered deterministically and use opaque, account-scoped
+cursors. The portfolio response exposes an account `version` for optimistic writes and `reset_at`
+as an informational transition timestamp. History membership uses durable account rows and daily
+snapshots plus migration-captured legacy membership rather than comparing application-worker
+clocks. Reset requires the exact `RESET`
+confirmation plus the latest account version and is available only once, before the first
+server-side trade or instrument. It clears idle-account snapshots while preserving global market
+prices and the replay clock. Once an account participates in the economy, reset fails with
+`reset_not_eligible` and cannot erase losses or retain market impact while restoring cash.
+Retrying the original successful reset key returns the stored response.
+The account-history migration backfills activity from the authoritative trade, dividend, short,
+and boost ledgers. Exact portfolio-value history begins with the migration because historical
+closing market values cannot be reconstructed safely; the existing settlement feed preserves
+all older global dates for accounts present at cutover through durable account/settlement
+membership rows. The migration takes the NBA-26 global write barrier, locks accounts before the
+source ledgers, then leaves compatibility triggers in place so older rolling-deployment workers
+cannot create activity or settlement-history gaps. Deploy through NBA-26 before applying it.
+
+The Expo API cutover intentionally does not import the historical AsyncStorage prototype save into
+the authoritative economy. On first authenticated launch, the client must explain the one-time
+reset, load a valid server portfolio, and only then clear the old gameplay save. If authentication
+or the portfolio load fails, the local save remains untouched and the transition can be retried.
+
+The market database is intentionally separate from the Databallr production database. Databallr
+Supabase remains the authentication issuer, while `NBA_STOCK_DATABASE_URL` points at the dedicated
+NBA Stock Market Postgres project. Authenticate the Supabase CLI, identify the dedicated project,
+then use the fail-closed helper to apply the checked-in schema and canonical 30-player seed. The
+helper stops if linking or the dry run fails, verifies the linked project before mutation, and
+prompts for the password without putting it in command arguments:
+
+```bash
+npx supabase login
+export SUPABASE_PROJECT_REF="vykoykabweuemstpqljg"
+./scripts/push_supabase_schema.sh
+unset SUPABASE_PROJECT_REF
+```
+
+The schema migration enables RLS and revokes `anon` and `authenticated` table privileges. The seed
+migration is idempotent and never overwrites listings that already exist. Mobile clients must use
+the FastAPI routes; they never read or mutate market balances, holdings, prices, or trades through
+Supabase's Data API.
+
+`generate_app_trends.py` updates only the unversioned app and replay JSON artifacts by default. If
+replay instrument data changes after a migration is applied, pass
+`--api-instruments-sql-output supabase/migrations/<new-version>_seed_replay_instruments.sql`; never
+reuse an applied migration filename.
+
 ## Backtest
 
 The historical replay covers the complete 2025-26 NBA regular season using cached ESPN

@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   cumulativeValues,
   selectHighLowPoints,
+  selectSettledTrendPoints,
   selectTrendRange,
   sparklineHeights,
   trendDirection,
@@ -27,6 +28,18 @@ test('trend range selects the most recent 5, 15, or full-season points without m
   assert.deepEqual(selectTrendRange(points, 'L15').map((point) => point.index), [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
   assert.deepEqual(selectTrendRange(points, 'Season').map((point) => point.index), points.map((point) => point.index));
   assert.equal(points.length, 18);
+});
+
+test('settled trend points never expose future replay results', () => {
+  const points = [
+    { date: '2025-10-21', value: 1 },
+    { date: '2025-10-23', value: 2 },
+    { date: '2025-10-25', value: 3 },
+  ];
+
+  assert.deepEqual(selectSettledTrendPoints(points, null), []);
+  assert.deepEqual(selectSettledTrendPoints(points, '2025-10-23'), points.slice(0, 2));
+  assert.equal(points.length, 3);
 });
 
 test('cumulative chart values and high/low points are deterministic', () => {

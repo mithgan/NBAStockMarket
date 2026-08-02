@@ -17,3 +17,9 @@ output/*
 !output/trader-simulation.json
 !output/instruments-sim.md
 .env
+!.env.example
+nba-stock-market.db
+nba-stock-market.db-shm
+nba-stock-market.db-wal
+supabase/.temp/
+supabase/.branches/

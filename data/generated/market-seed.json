@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "players": [
+    {
+      "id": "3112335",
+      "name": "Nikola Jokic",
+      "tier": "star",
+      "current_price_cents": 5166832600,
+      "opening_price_cents": 5166832600,
+      "actual_salary_cents": 5903311400,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4278073",
+      "name": "Shai Gilgeous-Alexander",
+      "tier": "star",
+      "current_price_cents": 5035523300,
+      "opening_price_cents": 5035523300,
+      "actual_salary_cents": 4080615000,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "5104157",
+      "name": "Victor Wembanyama",
+      "tier": "star",
+      "current_price_cents": 4713443300,
+      "opening_price_cents": 4713443300,
+      "actual_salary_cents": 1686824600,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "3945274",
+      "name": "Luka Doncic",
+      "tier": "star",
+      "current_price_cents": 4701275300,
+      "opening_price_cents": 4701275300,
+      "actual_salary_cents": 4896738000,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "6450",
+      "name": "Kawhi Leonard",
+      "tier": "star",
+      "current_price_cents": 4262628700,
+      "opening_price_cents": 4262628700,
+      "actual_salary_cents": 5030000000,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4432166",
+      "name": "Cade Cunningham",
+      "tier": "star",
+      "current_price_cents": 4089871100,
+      "opening_price_cents": 4089871100,
+      "actual_salary_cents": 5010562800,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "3078576",
+      "name": "Derrick White",
+      "tier": "star",
+      "current_price_cents": 3919545700,
+      "opening_price_cents": 3919545700,
+      "actual_salary_cents": 3034800000,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "3908809",
+      "name": "Donovan Mitchell",
+      "tier": "star",
+      "current_price_cents": 3727209300,
+      "opening_price_cents": 3727209300,
+      "actual_salary_cents": 5010562800,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4066261",
+      "name": "Bam Adebayo",
+      "tier": "star",
+      "current_price_cents": 3713927900,
+      "opening_price_cents": 3713927900,
+      "actual_salary_cents": 5103360000,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4433255",
+      "name": "Chet Holmgren",
+      "tier": "star",
+      "current_price_cents": 3701047800,
+      "opening_price_cents": 3701047800,
+      "actual_salary_cents": 1373136800,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4431678",
+      "name": "Tyrese Maxey",
+      "tier": "star",
+      "current_price_cents": 3617501800,
+      "opening_price_cents": 3617501800,
+      "actual_salary_cents": 4077052000,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4433134",
+      "name": "Scottie Barnes",
+      "tier": "star",
+      "current_price_cents": 3603916000,
+      "opening_price_cents": 3603916000,
+      "actual_salary_cents": 4175463600,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "3136195",
+      "name": "Karl-Anthony Towns",
+      "tier": "star",
+      "current_price_cents": 3501292700,
+      "opening_price_cents": 3501292700,
+      "actual_salary_cents": 5707872800,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4432816",
+      "name": "LaMelo Ball",
+      "tier": "star",
+      "current_price_cents": 3454288300,
+      "opening_price_cents": 3454288300,
+      "actual_salary_cents": 4077052000,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4684740",
+      "name": "Amen Thompson",
+      "tier": "star",
+      "current_price_cents": 3426507400,
+      "opening_price_cents": 3426507400,
+      "actual_salary_cents": 1225860900,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "3202",
+      "name": "Kevin Durant",
+      "tier": "star",
+      "current_price_cents": 3417004300,
+      "opening_price_cents": 3417004300,
+      "actual_salary_cents": 5470860900,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "3136193",
+      "name": "Devin Booker",
+      "tier": "star",
+      "current_price_cents": 3301146100,
+      "opening_price_cents": 3301146100,
+      "actual_salary_cents": 5707872800,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "3032977",
+      "name": "Giannis Antetokounmpo",
+      "tier": "star",
+      "current_price_cents": 3223577500,
+      "opening_price_cents": 3223577500,
+      "actual_salary_cents": 5845649000,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4869342",
+      "name": "Dyson Daniels",
+      "tier": "star",
+      "current_price_cents": 3172946100,
+      "opening_price_cents": 3172946100,
+      "actual_salary_cents": 770770900,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4432158",
+      "name": "Evan Mobley",
+      "tier": "star",
+      "current_price_cents": 3163204400,
+      "opening_price_cents": 3163204400,
+      "actual_salary_cents": 5010562800,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "3936299",
+      "name": "Jamal Murray",
+      "tier": "star",
+      "current_price_cents": 3134881200,
+      "opening_price_cents": 3134881200,
+      "actual_salary_cents": 5010562800,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4433621",
+      "name": "Jalen Duren",
+      "tier": "star",
+      "current_price_cents": 3131619200,
+      "opening_price_cents": 3131619200,
+      "actual_salary_cents": 648314400,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "3934672",
+      "name": "Jalen Brunson",
+      "tier": "star",
+      "current_price_cents": 3107064500,
+      "opening_price_cents": 3107064500,
+      "actual_salary_cents": 3773952100,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4066320",
+      "name": "Desmond Bane",
+      "tier": "star",
+      "current_price_cents": 3031027700,
+      "opening_price_cents": 3031027700,
+      "actual_salary_cents": 3944609000,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "5105565",
+      "name": "Donovan Clingan",
+      "tier": "mid",
+      "current_price_cents": 2948609100,
+      "opening_price_cents": 2948609100,
+      "actual_salary_cents": 751992000,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "3917376",
+      "name": "Jaylen Brown",
+      "tier": "mid",
+      "current_price_cents": 2920583500,
+      "opening_price_cents": 2920583500,
+      "actual_salary_cents": 5707872800,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "5061575",
+      "name": "Kon Knueppel",
+      "tier": "mid",
+      "current_price_cents": 2896002500,
+      "opening_price_cents": 2896002500,
+      "actual_salary_cents": 0,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4066259",
+      "name": "De'Aaron Fox",
+      "tier": "mid",
+      "current_price_cents": 2837693600,
+      "opening_price_cents": 2837693600,
+      "actual_salary_cents": 3709662000,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "3934719",
+      "name": "OG Anunoby",
+      "tier": "mid",
+      "current_price_cents": 2829196300,
+      "opening_price_cents": 2829196300,
+      "actual_salary_cents": 4250000000,
+      "shares_outstanding": 100
+    },
+    {
+      "id": "4278585",
+      "name": "Collin Gillespie",
+      "tier": "mid",
+      "current_price_cents": 2815221000,
+      "opening_price_cents": 2815221000,
+      "actual_salary_cents": 0,
+      "shares_outstanding": 100
+    }
+  ]
+}

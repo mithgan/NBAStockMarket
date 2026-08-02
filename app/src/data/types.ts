@@ -6,6 +6,8 @@ export interface Player {
   tier: PlayerTier;
   listing_price: number;
   actual_salary: number;
+  available_shares?: number;
+  buy_fee?: number;
 }
 
 export interface DividendEvent {

@@ -16,14 +16,22 @@ test('tab pills use their exact equal-width 44px Pressable bounds', () => {
 
 test('market actions expose concise player-specific button labels', () => {
   assert.match(marketSource, /accessibilityLabel=\{`View \$\{player\.name\} details`\}/);
-  assert.match(marketSource, /accessibilityLabel=\{held \? `Sell \$\{player\.name\}` : `Buy \$\{player\.name\} for \$\{formatMoney\(player\.listing_price\)\}`\}/);
+  assert.match(marketSource, /\? `Sell \$\{player\.name\}`/);
+  assert.match(marketSource, /\? `\$\{player\.name\} is sold out`/);
+  assert.match(marketSource, /: `Buy \$\{player\.name\} for \$\{formatMoney\(buyTotal\)\} including fee`/);
   assert.match(marketSource, /accessibilityLabel=\{`Close \$\{player\.name\} details`\}/);
   assert.match(marketSource, /option === 'Season' \? 'Full season' : `Last \$\{option\.slice\(1\)\} games`/);
 });
 
+test('leaderboard rows use stable account identities instead of display names', () => {
+  const leaderboardSource = readFileSync(resolve(testDirectory, '../screens/LeaderboardScreen.tsx'), 'utf8');
+  assert.match(leaderboardSource, /key=\{entry\.id\}/);
+  assert.doesNotMatch(leaderboardSource, /key=\{entry\.name\}/);
+});
+
 test('detail dividend chart follows the selected range and renders labeled extrema', () => {
   assert.match(marketSource, /const rangeTotal = visiblePoints\.reduce/);
-  assert.match(marketSource, /range === 'Season' \? 'This season'/);
+  assert.match(marketSource, /range === 'Season' \? 'Settled season'/);
   assert.match(marketSource, /\['L5', 'L15', 'Season'\]/);
   assert.match(marketSource, /<Path d=\{linePath\}/);
   assert.match(marketSource, /\['HIGH', extrema\.high\]/);

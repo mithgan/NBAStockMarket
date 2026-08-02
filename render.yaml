@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: nba-stock-market-api
+    runtime: python
+    plan: free
+    region: oregon
+    repo: https://github.com/mithgan/NBAStockMarket
+    branch: codex/nba-stock-sim-prototype
+    autoDeploy: true
+    buildCommand: uv sync --frozen --no-dev
+    startCommand: uv run --frozen --no-dev uvicorn nba_stock_market.api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /readyz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: UV_VERSION
+        value: 0.11.30
+      - key: NBA_STOCK_ENVIRONMENT
+        value: production
+      - key: NBA_STOCK_AUTO_CREATE_SCHEMA
+        value: "false"
+      - key: NBA_STOCK_DATABASE_URL
+        sync: false
+      - key: NBA_STOCK_SUPABASE_URL
+        value: https://bvwahamwfvolchcezxnw.supabase.co
+      - key: NBA_STOCK_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: NBA_STOCK_SUPABASE_JWT_AUDIENCE
+        value: authenticated
+      - key: NBA_STOCK_SETTLEMENT_ADMIN_KEY
+        sync: false
+      - key: NBA_STOCK_CORS_ORIGINS
+        value: '["http://localhost:8081","http://127.0.0.1:8081"]'
