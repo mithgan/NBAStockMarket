@@ -29,6 +29,22 @@ test('the MVP exposes four stable primary workflows and an always-visible season
   assert.match(seasonControlSource, /accessibilityLabel=/);
   assert.match(seasonControlSource, /accessibilityState=\{\{ disabled \}\}/);
   assert.match(seasonControlSource, /minHeight: 44/);
+  assert.match(seasonControlSource, /ADVANCE DAY/);
+  assert.match(seasonControlSource, /This cannot be undone/);
+  assert.match(seasonControlSource, /CONFIRM/);
+  assert.match(portfolioContextSource, /apiClient\.settleNext\(nextGameDate\)/);
+  assert.match(portfolioContextSource, /mutationFailureMayHaveCommitted\(error\)/);
+  assert.match(portfolioContextSource, /weekly_short_targets\.find/);
+  assert.match(portfolioContextSource, /candidate\.game_date === gameDate/);
+  assert.match(portfolioContextSource, /apiClient\.armWeeklyShort\([\s\S]*target\.game_date[\s\S]*market_version/);
+  assert.match(playsSource, /armShort\(player, gameDate\)/);
+  assert.match(portfolioContextSource, /apiClient\.armBoost\([\s\S]*gameDate[\s\S]*market_version/);
+  assert.match(portfolioContextSource, /isCommitted: \(bootstrap: ServerBootstrap\) => boolean/);
+  assert.match(portfolioContextSource, /existingPositionIds = new Set/);
+  assert.match(portfolioContextSource, /!existingPositionIds\.has\(position\.id\)/);
+  assert.match(portfolioContextSource, /response was interrupted, but the server state is confirmed/);
+  assert.match(seasonControlSource, /actions: \{[\s\S]*flexWrap: 'wrap'/);
+  assert.match(seasonControlSource, /refreshButton/);
 });
 
 test('market discovery supports search and a clear empty result', () => {

@@ -137,7 +137,7 @@ export function PlaysScreen() {
                   accessibilityRole="button"
                   accessibilityState={{ disabled }}
                   disabled={disabled}
-                  onPress={() => void armShort(player)}
+                  onPress={() => void armShort(player, gameDate)}
                   style={({ pressed }) => [styles.actionButton, disabled && styles.disabled, pressed && styles.pressed]}
                 >
                   <Text style={styles.actionText}>{pending ? 'WAIT' : 'SHORT'}</Text>

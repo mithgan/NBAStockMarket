@@ -142,9 +142,17 @@ the strongest candidate that stayed below the prototype price-safety gates. The 
 the fee decision lowers the base fee to 0.25% and caps the softened flip surcharge at 1.5%, keeping
 anti-churn friction while sharply reducing wealth destruction under high turnover.
 
-## Backend API (Phase 1 foundation)
+## Backend API
 
-The FastAPI service in `nba_stock_market/api/` is the authoritative first backend slice. It owns
+The current Expo client uses the Databallr Flask implementation under
+`/api/nba-stock-market`. That backend owns production accounts, trades, instruments,
+settlements, and leaderboard state. Configure its base URL with
+`EXPO_PUBLIC_NBA_STOCK_API_URL`; the mobile client never talks directly to the database.
+
+### Legacy Phase 1 reference
+
+The original FastAPI service in `nba_stock_market/api/` remains as the Phase 1 reference and test
+harness. It owns
 account creation, the $140M starting balance, listings, one-whole-player holdings, fees, price
 impact, idempotent buys/sells, the portfolio leaderboard, and the global historical replay clock.
 Daily settlements are atomic and idempotent: the server pays the signed canonical dividend to each
@@ -245,7 +253,7 @@ unset SUPABASE_PROJECT_REF
 
 The schema migration enables RLS and revokes `anon` and `authenticated` table privileges. The seed
 migration is idempotent and never overwrites listings that already exist. Mobile clients must use
-the FastAPI routes; they never read or mutate market balances, holdings, prices, or trades through
+the Flask routes; they never read or mutate market balances, holdings, prices, or trades through
 Supabase's Data API.
 
 `generate_app_trends.py` updates only the unversioned app and replay JSON artifacts by default. If

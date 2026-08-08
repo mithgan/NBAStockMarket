@@ -8,6 +8,7 @@ export interface Player {
   actual_salary: number;
   available_shares?: number;
   buy_fee?: number;
+  market_version?: number;
 }
 
 export interface DividendEvent {

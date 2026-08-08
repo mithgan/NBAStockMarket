@@ -48,6 +48,7 @@ interface PortfolioContextValue {
   isRefreshing: boolean;
   isTransitioning: boolean;
   isGameplayReady: boolean;
+  canAdvanceDay: boolean;
   pendingActions: ReadonlySet<string>;
   shortSlots: { used: number; total: number; remaining: number };
   boostSlots: { used: number; total: number; remaining: number };
@@ -60,9 +61,10 @@ interface PortfolioContextValue {
   currentWeek: string | null;
   trade: (player: Player, side: TradeSide) => Promise<boolean>;
   owns: (playerId: string) => boolean;
-  armShort: (player: Player) => Promise<boolean>;
+  armShort: (player: Player, gameDate: string) => Promise<boolean>;
   armPlayerBoost: (player: Player, gameDate: string) => Promise<boolean>;
   refreshData: () => Promise<boolean>;
+  advanceDay: () => Promise<boolean>;
   confirmLocalTransition: () => Promise<boolean>;
   dismissNotice: () => void;
 }
@@ -191,6 +193,7 @@ export function PortfolioProvider({
     key: string,
     action: () => Promise<unknown>,
     successMessage: string,
+    isCommitted: (bootstrap: ServerBootstrap) => boolean,
   ): Promise<boolean> => {
     if (!actionLock.current.acquire('account-mutation')) return false;
     if (!actionLock.current.acquire(key)) {
@@ -209,14 +212,75 @@ export function PortfolioProvider({
       if (mounted.current) setMessage(successMessage);
       return true;
     } catch (error) {
-      if (mounted.current) setMessage(errorMessage(error));
-      return false;
+      if (!mutationFailureMayHaveCommitted(error)) {
+        if (mounted.current) setMessage(errorMessage(error));
+        return false;
+      }
+      const refreshed = await loadSnapshot({
+        checkLocalTransition: false,
+        showInitialLoader: false,
+      });
+      if (!refreshed) return false;
+      const committed = isCommitted(refreshed);
+      if (mounted.current) {
+        setMessage(
+          committed
+            ? `${successMessage} The response was interrupted, but the server state is confirmed.`
+            : 'The interrupted request did not change your account. You can safely try again.',
+        );
+      }
+      return committed;
     } finally {
       actionLock.current.release(key);
       actionLock.current.release('account-mutation');
       updatePendingActions();
     }
   }, [loadSnapshot, updatePendingActions]);
+
+  const advanceDay = useCallback(async () => {
+    const nextGameDate = bootstrapRef.current?.game.next_game_date ?? null;
+    if (!nextGameDate || !bootstrapRef.current?.capabilities.can_advance_day) return false;
+    if (!actionLock.current.acquire('account-mutation')) return false;
+    if (!actionLock.current.acquire('advance-day')) {
+      actionLock.current.release('account-mutation');
+      return false;
+    }
+    updatePendingActions();
+    setMessage(null);
+    try {
+      await apiClient.settleNext(nextGameDate);
+      const refreshed = await loadSnapshot({
+        checkLocalTransition: false,
+        showInitialLoader: false,
+      });
+      if (!refreshed) return false;
+      if (mounted.current) setMessage(`Settled ${nextGameDate}.`);
+      return true;
+    } catch (error) {
+      if (!mutationFailureMayHaveCommitted(error)) {
+        if (mounted.current) setMessage(errorMessage(error));
+        return false;
+      }
+      const refreshed = await loadSnapshot({
+        checkLocalTransition: false,
+        showInitialLoader: false,
+      });
+      if (!refreshed) return false;
+      const committed = refreshed.game.next_game_date !== nextGameDate;
+      if (mounted.current) {
+        setMessage(
+          committed
+            ? `Settled ${nextGameDate}. The response was interrupted, but the server state is confirmed.`
+            : 'The interrupted settlement did not advance the replay. You can safely try again.',
+        );
+      }
+      return committed;
+    } finally {
+      actionLock.current.release('advance-day');
+      actionLock.current.release('account-mutation');
+      updatePendingActions();
+    }
+  }, [apiClient, loadSnapshot, updatePendingActions]);
 
   const trade = useCallback(async (player: Player, side: TradeSide) => {
     const key = `trade:${player.id}`;
@@ -232,7 +296,12 @@ export function PortfolioProvider({
     try {
       const previous = bootstrapRef.current;
       const settledResultsAfter = previous?.game.last_settled_date ?? undefined;
-      const result = await apiClient.trade(player.id, side, settledResultsAfter);
+      const result = await apiClient.trade(
+        player.id,
+        side,
+        player.market_version ?? 0,
+        settledResultsAfter,
+      );
       tradeCommitted = true;
       let incoming = result.bootstrap;
       if (!incoming) {
@@ -274,17 +343,48 @@ export function PortfolioProvider({
     }
   }, [apiClient, installBootstrap, updatePendingActions]);
 
-  const armShort = useCallback((player: Player) => runAction(
-    `short:${player.id}`,
-    () => apiClient.armWeeklyShort(player.id),
-    `Weekly short armed on ${player.name}.`,
-  ), [apiClient, runAction]);
+  const armShort = useCallback((player: Player, gameDate: string) => {
+    const target = bootstrapRef.current?.portfolio.instruments.weekly_short_targets.find(
+      (candidate) => candidate.player_id === player.id && candidate.game_date === gameDate,
+    );
+    if (!target) return Promise.resolve(false);
+    const existingPositionIds = new Set(
+      bootstrapRef.current?.portfolio.instruments.weekly_shorts.map(
+        (position) => position.id,
+      ) ?? [],
+    );
+    return runAction(
+      `short:${player.id}`,
+      () => apiClient.armWeeklyShort(
+        player.id,
+        target.game_date,
+        player.market_version ?? 0,
+      ),
+      `Weekly short armed on ${player.name}.`,
+      (refreshed) => refreshed.portfolio.instruments.weekly_shorts.some(
+        (position) => position.player_id === player.id
+          && !existingPositionIds.has(position.id),
+      ),
+    );
+  }, [apiClient, runAction]);
 
-  const armPlayerBoost = useCallback((player: Player, gameDate: string) => runAction(
+  const armPlayerBoost = useCallback((player: Player, gameDate: string) => {
+    const existingPositionIds = new Set(
+      bootstrapRef.current?.portfolio.instruments.boosts.map(
+        (position) => position.id,
+      ) ?? [],
+    );
+    return runAction(
       `boost:${player.id}`,
-      () => apiClient.armBoost(player.id, gameDate),
+      () => apiClient.armBoost(player.id, gameDate, player.market_version ?? 0),
       `${player.name} boosted for ${gameDate}.`,
-  ), [apiClient, runAction]);
+      (refreshed) => refreshed.portfolio.instruments.boosts.some(
+        (position) => position.player_id === player.id
+          && position.game_date === gameDate
+          && !existingPositionIds.has(position.id),
+      ),
+    );
+  }, [apiClient, runAction]);
 
   const confirmLocalTransition = useCallback(async () => {
     if (isTransitioning || !bootstrapRef.current || !legacySavePresent) return false;
@@ -356,6 +456,7 @@ export function PortfolioProvider({
     isRefreshing,
     isTransitioning,
     isGameplayReady,
+    canAdvanceDay: presentation?.canAdvanceDay ?? false,
     pendingActions,
     shortSlots: presentation?.shortSlots
       ? { ...presentation.shortSlots, remaining: Math.max(0, presentation.shortSlots.total - presentation.shortSlots.used) }
@@ -375,11 +476,13 @@ export function PortfolioProvider({
     armShort,
     armPlayerBoost,
     refreshData,
+    advanceDay,
     confirmLocalTransition,
     dismissNotice,
   }), [
     armPlayerBoost,
     armShort,
+    advanceDay,
     confirmLocalTransition,
     dismissNotice,
     isGameplayReady,

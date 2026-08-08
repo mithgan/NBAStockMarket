@@ -74,6 +74,8 @@ interface RequestOptions<T> {
   parse: (value: unknown) => T;
 }
 
+const MARKET_API_ROOT = '/api/nba-stock-market';
+
 function randomIdempotencyKey(): string {
   const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
   if (randomUUID) return `app-${randomUUID()}`;
@@ -109,7 +111,7 @@ export class MarketApiClient {
   }
 
   async market(): Promise<MarketListing[]> {
-    return this.request('/api/v1/market', {
+    return this.request(`${MARKET_API_ROOT}/market`, {
       parse: (value) => parseDataEnvelope(value, (data, path) => {
         if (!Array.isArray(data)) throw new ContractError(`${path} must be an array.`);
         return data.map((item, index) => parseMarketListing(item, `${path}[${index}]`));
@@ -118,25 +120,25 @@ export class MarketApiClient {
   }
 
   async portfolio(): Promise<ServerPortfolio> {
-    return this.request('/api/v1/portfolio', {
+    return this.request(`${MARKET_API_ROOT}/portfolio`, {
       parse: (value) => parseDataEnvelope(value, parsePortfolio),
     });
   }
 
   async game(): Promise<ServerGameState> {
-    return this.request('/api/v1/game', {
+    return this.request(`${MARKET_API_ROOT}/game`, {
       parse: (value) => parseDataEnvelope(value, parseGameState),
     });
   }
 
   async instruments(): Promise<InstrumentSummary> {
-    return this.request('/api/v1/instruments', {
+    return this.request(`${MARKET_API_ROOT}/instruments`, {
       parse: (value) => parseDataEnvelope(value, parseInstrumentSummary),
     });
   }
 
   async activity(limit = 100) {
-    return this.request(`/api/v1/activity?limit=${limit}`, {
+    return this.request(`${MARKET_API_ROOT}/activity?limit=${limit}`, {
       parse: (value) => parseDataEnvelope(
         value,
         (data, path) => parseCursorPage(data, path ?? 'response.data', parseActivity),
@@ -145,7 +147,7 @@ export class MarketApiClient {
   }
 
   async portfolioHistory(limit = 100) {
-    return this.request(`/api/v1/portfolio/history?limit=${limit}`, {
+    return this.request(`${MARKET_API_ROOT}/portfolio/history?limit=${limit}`, {
       parse: (value) => parseDataEnvelope(
         value,
         (data, path) => parseCursorPage(data, path ?? 'response.data', parsePortfolioPoint),
@@ -154,7 +156,7 @@ export class MarketApiClient {
   }
 
   async settlements(limit = 30) {
-    return this.request(`/api/v1/settlements?limit=${limit}`, {
+    return this.request(`${MARKET_API_ROOT}/settlements?limit=${limit}`, {
       parse: (value) => parseDataEnvelope(value, (data, path) => {
         if (!Array.isArray(data)) throw new ContractError(`${path} must be an array.`);
         return data.map((item, index) => parseSettlement(item, `${path}[${index}]`));
@@ -163,7 +165,7 @@ export class MarketApiClient {
   }
 
   async leaderboard(limit = 100) {
-    return this.request(`/api/v1/leaderboard?limit=${limit}`, {
+    return this.request(`${MARKET_API_ROOT}/leaderboard?limit=${limit}`, {
       parse: (value) => parseDataEnvelope(value, (data, path) => {
         if (!Array.isArray(data)) throw new ContractError(`${path} must be an array.`);
         return data.map((item, index) => parseLeaderboardRow(item, `${path}[${index}]`));
@@ -175,7 +177,7 @@ export class MarketApiClient {
     const query = settledResultsAfter
       ? `?settled_results_after=${encodeURIComponent(settledResultsAfter)}`
       : '';
-    return this.request(`/api/v1/bootstrap${query}`, {
+    return this.request(`${MARKET_API_ROOT}/bootstrap${query}`, {
       parse: (value) => parseDataEnvelope(value, parseBootstrap),
     });
   }
@@ -183,40 +185,71 @@ export class MarketApiClient {
   async trade(
     playerId: string,
     side: 'buy' | 'sell',
+    expectedPlayerVersion = 0,
     settledResultsAfter?: string,
   ): Promise<ServerTradeResult> {
     return this.mutation(
-      '/api/v1/trades',
+      `${MARKET_API_ROOT}/trades`,
       {
         player_id: playerId,
         side,
+        expected_player_version: expectedPlayerVersion,
         ...(settledResultsAfter ? { settled_results_after: settledResultsAfter } : {}),
       },
       parseTradeResult,
     );
   }
 
-  async armWeeklyShort(playerId: string): Promise<ServerMutationResult> {
+  async armWeeklyShort(
+    playerId: string,
+    expectedGameDate: string,
+    expectedPlayerVersion: number,
+  ): Promise<ServerMutationResult> {
     return this.mutation(
-      '/api/v1/instruments/weekly-shorts',
-      { player_id: playerId },
+      `${MARKET_API_ROOT}/instruments/weekly-shorts`,
+      {
+        player_id: playerId,
+        expected_game_date: expectedGameDate,
+        expected_player_version: expectedPlayerVersion,
+      },
       parseMutationResult,
     );
   }
 
-  async armBoost(playerId: string, gameDate: string): Promise<ServerMutationResult> {
+  async armBoost(
+    playerId: string,
+    gameDate: string,
+    expectedPlayerVersion: number,
+  ): Promise<ServerMutationResult> {
     return this.mutation(
-      '/api/v1/instruments/boosts',
-      { player_id: playerId, game_date: gameDate },
+      `${MARKET_API_ROOT}/instruments/boosts`,
+      {
+        player_id: playerId,
+        game_date: gameDate,
+        expected_player_version: expectedPlayerVersion,
+      },
       parseMutationResult,
     );
   }
 
   async resetAccount(expectedAccountVersion: number): Promise<ServerResetResult> {
     return this.mutation(
-      '/api/v1/account/reset',
+      `${MARKET_API_ROOT}/account/reset`,
       { confirmation: 'RESET', expected_account_version: expectedAccountVersion },
       parseResetResult,
+    );
+  }
+
+  async settleNext(expectedGameDate: string): Promise<Record<string, unknown>> {
+    return this.mutation(
+      `${MARKET_API_ROOT}/admin/settlements/next`,
+      { expected_game_date: expectedGameDate },
+      (value, path = 'settlement') => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          throw new ContractError(`${path} must be an object.`);
+        }
+        return value as Record<string, unknown>;
+      },
     );
   }
 

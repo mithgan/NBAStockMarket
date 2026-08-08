@@ -6,6 +6,7 @@ import {
   MarketApiError,
   mutationFailureMayHaveCommitted,
 } from './client';
+import { parseLeaderboardRow } from './contracts';
 
 test('mutation failures distinguish definite rejections from indeterminate commits', () => {
   assert.equal(
@@ -40,6 +41,28 @@ test('mutation failures distinguish definite rejections from indeterminate commi
   );
 });
 
+test('leaderboard rows prefer opaque IDs and keep legacy Flask rows unique', () => {
+  const opaque = parseLeaderboardRow({
+    rank: 1,
+    entry_id: 'trader_opaque_one',
+    display_name: 'Trader abc123',
+    total_value_cents: 14_000_000_000,
+    return_bps: 0,
+    is_current_user: false,
+  });
+  const legacy = parseLeaderboardRow({
+    rank: 2,
+    display_name: 'Trader abc123',
+    total_value_cents: 13_000_000_000,
+    return_bps: -100,
+    is_current_user: false,
+  });
+
+  assert.equal(opaque.account_id, 'trader_opaque_one');
+  assert.equal(legacy.account_id, 'legacy:2:Trader abc123');
+  assert.notEqual(opaque.account_id, legacy.account_id);
+});
+
 const portfolio = {
   account_id: 'alice',
   display_name: 'Alice',
@@ -69,7 +92,8 @@ const market = [{
   id: 'sga', name: 'Shai Gilgeous-Alexander', tier: 'star',
   current_price_cents: 5_000_000_000, opening_price_cents: 5_000_000_000,
   actual_salary_cents: 4_000_000_000, shares_outstanding: 100,
-  available_shares: 100, buy_fee_cents: 12_500_000, ownership_bps: 0, volume_30d: 0,
+  available_shares: 100, buy_fee_cents: 12_500_000, ownership_bps: 0,
+  volume_30d: 0, version: 7,
 }];
 
 const bootstrapPayload = {
@@ -84,6 +108,7 @@ const bootstrapPayload = {
   settlements: [],
   leaderboard: [],
   settled_results: [],
+  capabilities: { can_advance_day: true },
 };
 
 const aliceToken = async () => ({ accessToken: 'token', userId: 'alice' });
@@ -175,8 +200,8 @@ test('a cold-start retry gets a longer timeout without changing the request', as
   assert.equal((await client.portfolio()).account_id, 'alice');
   assert.equal(calls, 2);
   assert.deepEqual(seenUrls, [
-    'https://api.example.com/api/v1/portfolio',
-    'https://api.example.com/api/v1/portfolio',
+    'https://api.example.com/api/nba-stock-market/portfolio',
+    'https://api.example.com/api/nba-stock-market/portfolio',
   ]);
   assert.deepEqual(seenMethods, ['GET', 'GET']);
 });
@@ -386,7 +411,8 @@ test('bootstrap loads one server-owned snapshot instead of stitching client read
   const result = await client.bootstrap();
 
   assert.equal(result.portfolio.account_id, 'alice');
-  assert.deepEqual(requestedPaths, ['/api/v1/bootstrap']);
+  assert.equal(result.capabilities.can_advance_day, true);
+  assert.deepEqual(requestedPaths, ['/api/nba-stock-market/bootstrap']);
 });
 
 test('bootstrap can request only results after the last installed settlement', async () => {
@@ -404,7 +430,7 @@ test('bootstrap can request only results after the last installed settlement', a
   await client.bootstrap('2025-10-21');
 
   assert.deepEqual(requestedUrls, [
-    'https://api.example.com/api/v1/bootstrap?settled_results_after=2025-10-21',
+    'https://api.example.com/api/nba-stock-market/bootstrap?settled_results_after=2025-10-21',
   ]);
 });
 
@@ -426,14 +452,15 @@ test('trade requests one authoritative incremental snapshot in its mutation resp
     },
   });
 
-  const result = await client.trade('sga', 'buy', '2025-10-21');
+  const result = await client.trade('sga', 'buy', 7, '2025-10-21');
 
   assert.equal(result.bootstrap?.portfolio.account_id, 'alice');
   assert.deepEqual(requests, [{
-    url: 'https://api.example.com/api/v1/trades',
+    url: 'https://api.example.com/api/nba-stock-market/trades',
     body: {
       player_id: 'sga',
       side: 'buy',
+      expected_player_version: 7,
       settled_results_after: '2025-10-21',
     },
   }]);
@@ -449,9 +476,73 @@ test('trade remains compatible with an older backend that omits the snapshot', a
     }), { status: 201 }),
   });
 
-  const result = await client.trade('sga', 'buy', '2025-10-21');
+  const result = await client.trade('sga', 'buy', 7, '2025-10-21');
 
   assert.equal(result.bootstrap, null);
+});
+
+test('weekly plays send Flask stale-state guards', async () => {
+  const requests: Array<{ url: string; body: unknown }> = [];
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    idempotencyKeyFactory: () => 'weekly-play-key',
+    fetchImpl: async (input, init) => {
+      requests.push({
+        url: String(input),
+        body: JSON.parse(String(init?.body)),
+      });
+      return new Response(JSON.stringify({ data: { replayed: false, portfolio } }), { status: 201 });
+    },
+  });
+
+  await client.armWeeklyShort('sga', '2025-10-22', 7);
+  await client.armBoost('sga', '2025-10-23', 7);
+
+  assert.deepEqual(requests, [
+    {
+      url: 'https://api.example.com/api/nba-stock-market/instruments/weekly-shorts',
+      body: {
+        player_id: 'sga',
+        expected_game_date: '2025-10-22',
+        expected_player_version: 7,
+      },
+    },
+    {
+      url: 'https://api.example.com/api/nba-stock-market/instruments/boosts',
+      body: {
+        player_id: 'sga',
+        game_date: '2025-10-23',
+        expected_player_version: 7,
+      },
+    },
+  ]);
+});
+
+test('admin day advancement targets the Flask settlement route with an idempotency key', async () => {
+  const requests: Array<{ url: string; headers: Headers; body: unknown }> = [];
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    idempotencyKeyFactory: () => 'advance-day-key',
+    fetchImpl: async (input, init) => {
+      requests.push({
+        url: String(input),
+        headers: new Headers(init?.headers),
+        body: JSON.parse(String(init?.body)),
+      });
+      return new Response(JSON.stringify({ data: { replayed: false } }), { status: 201 });
+    },
+  });
+
+  await client.settleNext('2025-10-22');
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, 'https://api.example.com/api/nba-stock-market/admin/settlements/next');
+  assert.equal(requests[0].headers.get('Idempotency-Key'), 'advance-day-key');
+  assert.deepEqual(requests[0].body, { expected_game_date: '2025-10-22' });
 });
 
 test('bootstrap rejects future-result contract corruption before it becomes app state', async () => {

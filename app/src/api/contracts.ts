@@ -17,6 +17,7 @@ export interface MarketListing {
   buy_fee_cents: number;
   ownership_bps: number;
   volume_30d: number;
+  version: number;
 }
 
 export interface ServerHolding {
@@ -187,6 +188,9 @@ export interface ServerBootstrap {
   settlements: ServerSettlement[];
   leaderboard: ServerLeaderboardRow[];
   settledResults: ServerSettledResult[];
+  capabilities: {
+    can_advance_day: boolean;
+  };
 }
 
 type Parser<T> = (value: unknown, path?: string) => T;
@@ -305,6 +309,7 @@ export function parseMarketListing(value: unknown, path = 'listing'): MarketList
     buy_fee_cents: nonNegativeInteger(row.buy_fee_cents, `${path}.buy_fee_cents`),
     ownership_bps: nonNegativeInteger(row.ownership_bps, `${path}.ownership_bps`),
     volume_30d: nonNegativeInteger(row.volume_30d, `${path}.volume_30d`),
+    version: nonNegativeInteger(row.version, `${path}.version`),
   };
 }
 
@@ -495,10 +500,17 @@ export function parseSettledResult(value: unknown, path = 'settled_result'): Ser
 
 export function parseLeaderboardRow(value: unknown, path = 'leaderboard'): ServerLeaderboardRow {
   const row = record(value, path);
+  const displayName = text(row.display_name, `${path}.display_name`);
+  const rank = nonNegativeInteger(row.rank, `${path}.rank`);
+  const publicIdentity = row.entry_id === undefined
+    ? row.account_id === undefined
+      ? `legacy:${rank}:${displayName}`
+      : text(row.account_id, `${path}.account_id`)
+    : text(row.entry_id, `${path}.entry_id`);
   return {
-    rank: nonNegativeInteger(row.rank, `${path}.rank`),
-    account_id: text(row.account_id, `${path}.account_id`),
-    display_name: text(row.display_name, `${path}.display_name`),
+    rank,
+    account_id: publicIdentity,
+    display_name: displayName,
     total_value_cents: integer(row.total_value_cents, `${path}.total_value_cents`),
     return_bps: integer(row.return_bps, `${path}.return_bps`),
     is_current_user: flag(row.is_current_user, `${path}.is_current_user`),
@@ -507,6 +519,9 @@ export function parseLeaderboardRow(value: unknown, path = 'leaderboard'): Serve
 
 export function parseBootstrap(value: unknown, path = 'bootstrap'): ServerBootstrap {
   const row = record(value, path);
+  const capabilities = row.capabilities === undefined
+    ? null
+    : record(row.capabilities, `${path}.capabilities`);
   return {
     market: list(row.market, `${path}.market`, parseMarketListing),
     portfolio: parsePortfolio(row.portfolio, `${path}.portfolio`),
@@ -524,6 +539,14 @@ export function parseBootstrap(value: unknown, path = 'bootstrap'): ServerBootst
       `${path}.settled_results`,
       parseSettledResult,
     ),
+    capabilities: {
+      can_advance_day: capabilities === null
+        ? false
+        : flag(
+          capabilities.can_advance_day,
+          `${path}.capabilities.can_advance_day`,
+        ),
+    },
   };
 }
 

@@ -1,6 +1,6 @@
 # NBA Stock Market mobile app
 
-This directory contains the Expo + TypeScript client. Authenticated FastAPI responses are the
+This directory contains the Expo + TypeScript client. Authenticated Databallr Flask responses are the
 only gameplay authority; the app does not read or write market state through Supabase directly.
 
 ## Run locally
@@ -14,8 +14,9 @@ cd app
 cp .env.example .env
 ```
 
-For local web or iOS Simulator development, start FastAPI on `127.0.0.1:8011` and keep the template's
-API URL. Android Emulator users should set `EXPO_PUBLIC_NBA_STOCK_API_URL=http://10.0.2.2:8011`.
+For local web or iOS Simulator development, start the Databallr Flask backend on
+`127.0.0.1:8011` with its NBA stock market blueprint enabled, then keep the template's API URL.
+Android Emulator users should set `EXPO_PUBLIC_NBA_STOCK_API_URL=http://10.0.2.2:8011`.
 A physical device cannot reach your computer through `127.0.0.1`; use an HTTPS development
 endpoint that the device can reach instead. Remote API and Supabase URLs must use HTTPS.
 
@@ -27,7 +28,7 @@ npx expo start
 ```
 
 The app presents an explicit configuration error when any public variable is missing or unsafe.
-After sign-in, it restores the Supabase session, loads the account from FastAPI, and keeps the
+After sign-in, it restores the Supabase session, loads the account from Flask, and keeps the
 legacy prototype save untouched until the user confirms the one-time server-account transition.
 
 ## Verify locally

@@ -29,6 +29,7 @@ export interface ServerPresentationState {
   latestSettledDate: string | null;
   currentWeek: string | null;
   isComplete: boolean;
+  canAdvanceDay: boolean;
   displayName: string;
   shortSlots: { used: number; total: number };
   boostSlots: { used: number; total: number };
@@ -191,6 +192,7 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
     actual_salary: dollars(listing.actual_salary_cents),
     available_shares: listing.available_shares,
     buy_fee: dollars(listing.buy_fee_cents),
+    market_version: listing.version,
   }));
   const names = new Map(players.map((player) => [player.id, player.name]));
   const latestSettledDate = bootstrap.game.last_settled_date;
@@ -288,6 +290,7 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
     latestSettledDate,
     currentWeek: nextDate === null ? null : weekKey(nextDate),
     isComplete: bootstrap.game.is_complete,
+    canAdvanceDay: bootstrap.capabilities?.can_advance_day ?? false,
     displayName: bootstrap.portfolio.display_name,
     shortSlots: {
       used: instruments.weekly_short_slots.used,
