@@ -1,0 +1,93 @@
+name: Mirror Vercel deployment
+
+# Temporary utility: the mith-exp-databallr.vercel.app deployment was made
+# from a machine whose working tree is unreachable, so the deployed bundle is
+# the only surviving copy of that UI. This job mirrors the deployment into
+# vercel-mirror/ so it can be reconstructed into source. Delete this file once
+# the reconstruction lands.
+
+on:
+  push:
+    branches: [claude/remote-control-v36xep]
+    paths: ['.github/workflows/mirror-vercel.yml']
+
+permissions:
+  contents: write
+
+concurrency: mirror-vercel
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mirror site
+        run: |
+          set -uo pipefail
+          SITE="https://mith-exp-databallr.vercel.app"
+          OUT="vercel-mirror"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          MANIFEST="$OUT/MANIFEST.txt"
+          : > "$MANIFEST"
+
+          fetch() { # $1 = site-relative path (may include query)
+            local rel="${1#/}"
+            local clean="${rel%%\?*}"
+            [ -z "$clean" ] && clean="index.html"
+            local dest="$OUT/$clean"
+            [ -e "$dest" ] && return 0
+            mkdir -p "$(dirname "$dest")"
+            local code
+            code=$(curl -sS -L -o "$dest" -w '%{http_code}' --retry 3 --retry-delay 2 "$SITE/$rel" || echo "ERR")
+            echo "$code /$rel -> $clean" >> "$MANIFEST"
+            if [ "$code" != "200" ]; then rm -f "$dest"; fi
+          }
+
+          # 1. Entry points and common Expo-export root files
+          fetch "/"
+          cp "$OUT/index.html" "$OUT/__index_root.html" 2>/dev/null || true
+          for p in favicon.ico manifest.json metadata.json asset-map.json; do fetch "/$p"; done
+
+          # 2. Assets referenced from the HTML
+          grep -oE '(src|href)="[^"]+"' "$OUT/index.html" 2>/dev/null \
+            | sed -E 's/^(src|href)="//; s/"$//' \
+            | grep -E '^/' | sort -u > html_assets.txt || true
+          while read -r a; do [ -n "$a" ] && fetch "$a"; done < html_assets.txt
+
+          # 3. Paths referenced inside JS/CSS (Expo hashed assets, fonts, images)
+          for round in 1 2; do
+            find "$OUT" -name '*.js' -o -name '*.css' | while read -r f; do
+              grep -oE '"/(assets|_expo)/[^"]+"' "$f" 2>/dev/null | tr -d '"'
+              grep -oE 'url\(/[^)]+\)' "$f" 2>/dev/null | sed -E 's/^url\(//; s/\)$//'
+            done | sort -u > bundle_assets.txt || true
+            while read -r a; do [ -n "$a" ] && fetch "$a"; done < bundle_assets.txt
+          done
+
+          # 4. Source maps, declared or adjacent
+          find "$OUT" -name '*.js' | while read -r f; do
+            rel="${f#"$OUT"/}"
+            fetch "/$rel.map"
+            grep -oE 'sourceMappingURL=[^ ]+\.map' "$f" 2>/dev/null \
+              | sed 's/sourceMappingURL=//' | while read -r m; do
+                case "$m" in
+                  /*) fetch "$m" ;;
+                  http*) : ;;
+                  *) fetch "/$(dirname "$rel")/$m" ;;
+                esac
+              done
+          done
+
+          echo "== MANIFEST =="
+          cat "$MANIFEST"
+          du -sh "$OUT"
+
+      - name: Commit mirror
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f vercel-mirror
+          git commit -m "chore: mirror mith-exp-databallr.vercel.app deployment for reconstruction"
+          git push
