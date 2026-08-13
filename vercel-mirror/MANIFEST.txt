@@ -1,0 +1,7 @@
+200 / -> index.html
+200 /favicon.ico -> favicon.ico
+200 /manifest.json -> manifest.json
+200 /metadata.json -> metadata.json
+200 /asset-map.json -> asset-map.json
+200 /_expo/static/js/web/index-f638793e8fc2cbcda43a32610683168e.js -> _expo/static/js/web/index-f638793e8fc2cbcda43a32610683168e.js
+403 /_expo/static/js/web/index-f638793e8fc2cbcda43a32610683168e.js.map -> _expo/static/js/web/index-f638793e8fc2cbcda43a32610683168e.js.map
