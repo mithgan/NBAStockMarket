@@ -83,6 +83,7 @@ interface PortfolioContextValue {
   canAdvanceSandbox: boolean;
   advanceSandboxDays: (calendarDays: 1 | 7) => Promise<boolean>;
   resetSeasonAccount: () => Promise<boolean>;
+  resetSeasonWorld: () => Promise<boolean>;
 }
 
 const PortfolioContext = createContext<PortfolioContextValue | null>(null);
@@ -502,7 +503,7 @@ export function PortfolioProvider({
       if (mounted.current) {
         const label = `${settled} game ${settled === 1 ? 'date' : 'dates'}`;
         setMessage(expected === null
-          ? `Settled ${label} — the season replay is complete.`
+          ? `Settled ${label}. The season replay is complete.`
           : `Settled ${label}.`);
       }
       return true;
@@ -518,6 +519,14 @@ export function PortfolioProvider({
       updatePendingActions();
     }
   }, [apiClient, loadSnapshot, updatePendingActions]);
+
+  // Sandbox-only: rewinds the shared season clock itself, so every account —
+  // not just this one — starts the replay over from opening night.
+  const resetSeasonWorld = useCallback(() => runFullRefreshAction(
+    'season-world-reset',
+    () => apiClient.resetSeason(),
+    'Season rewound to opening night. Everyone starts over.',
+  ), [apiClient, runFullRefreshAction]);
 
   const resetSeasonAccount = useCallback(() => runFullRefreshAction(
     'season-reset',
@@ -642,9 +651,11 @@ export function PortfolioProvider({
     canAdvanceSandbox: apiClient.canAdvanceSeason,
     advanceSandboxDays,
     resetSeasonAccount,
+    resetSeasonWorld,
   }), [
     advanceSeason,
     advanceSandboxDays,
+    resetSeasonWorld,
     apiClient.canAdvanceSeason,
     armPlayerBoost,
     armShort,

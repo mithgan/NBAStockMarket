@@ -466,7 +466,9 @@ export function getGameSummary(
   const names = new Map(players.map((player) => [player.id, player.name]));
   const holdings = state.holdings.map((holding) => {
     const currentPrice = state.prices[holding.player_id] ?? 0;
-    const costBasis = holding.cost_basis ?? holding.average_price * (1 + FEE_PCT);
+    // Server holdings carry an authoritative cost_basis; legacy local holdings
+    // fall back to entry price plus the 0.25% buy fee.
+    const costBasis = holding.cost_basis ?? 1.0025 * holding.average_price;
     return {
       ...holding,
       name: names.get(holding.player_id) ?? holding.player_id,
@@ -868,11 +870,7 @@ export function advanceReplayDay(
 
     // The committed dividend already includes the rolling projection-bias correction.
     const surprise = item.dividendPerHolder / DOLLARS_PER_NET_POINT;
-    const shortAccrual = -clamp(
-      surprise,
-      -WEEKLY_GAME_CLAMP_NP,
-      WEEKLY_GAME_CLAMP_NP,
-    );
+    const shortAccrual = -clamp(surprise, -25, WEEKLY_GAME_CLAMP_NP);
     weeklyShorts = weeklyShorts.map((position) =>
       position.status === 'active' &&
       position.week === currentWeek &&
@@ -893,7 +891,9 @@ export function advanceReplayDay(
       ) {
         return boost;
       }
-      const payout = (BOOST_MULTIPLIER - 1) * item.dividendPerHolder;
+      // The base dividend was already credited above, so a 2x boost adds
+      // exactly one extra dividend share.
+      const payout = 1 * item.dividendPerHolder;
       cash += payout;
       additions.push(
         transitionActivity(
@@ -982,11 +982,8 @@ export function advanceReplayDay(
         return { ...position, status: 'voided', payout: 0 };
       }
       const payout =
-        clamp(
-          position.accruedNetPoints,
-          -WEEKLY_TOTAL_CLAMP_NP,
-          WEEKLY_TOTAL_CLAMP_NP,
-        ) * DOLLARS_PER_NET_POINT;
+        clamp(position.accruedNetPoints, -50, WEEKLY_TOTAL_CLAMP_NP)
+        * DOLLARS_PER_NET_POINT;
       cash += payout;
       additions.push(
         transitionActivity(
