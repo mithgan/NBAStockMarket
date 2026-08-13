@@ -1,4 +1,4 @@
-export type TrendRange = 'L5' | 'L15' | 'Season';
+export type TrendRange = 'L5' | 'L15' | 'L30' | 'Season';
 
 export interface TrendPoint {
   date: string;

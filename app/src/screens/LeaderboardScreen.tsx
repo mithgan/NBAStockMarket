@@ -6,9 +6,10 @@ import {
   formatMoney,
   formatSignedMoney,
 } from '../format';
+import { rankBand } from '../data/rankBand';
 import { usePortfolio } from '../state/PortfolioContext';
 import { DisplayValue, SectionHeader, Tag } from '../ui/primitives';
-import { colors, fonts, labelStyle, numeric, space, type, weight } from '../theme';
+import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
 
 function formatReturn(returnPct: number): string {
   return `${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(2)}%`;
@@ -23,6 +24,12 @@ export function LeaderboardScreen() {
   const largeText = fontScale > 1.3;
   if (!summary) return null;
   const you = leaderboard.find((entry) => entry.isUser) ?? null;
+  // The gap bars place each portfolio on the field between the page's low and
+  // high, so the distance between neighbours reads without parsing numbers.
+  const values = leaderboard.map((entry) => entry.value);
+  const high = values.length ? Math.max(...values) : 1;
+  const low = values.length ? Math.min(...values) : 0;
+  const spread = high - low;
   const dayPositive = summary.latestDailyChange >= 0;
 
   return (
@@ -33,12 +40,13 @@ export function LeaderboardScreen() {
         {you ? (
           <>
             <DisplayValue
-              accessibilityLabel={`Your rank, ${you.rank}. Portfolio ${formatMoney(you.value)}, ${formatReturn(you.returnPct)} from 140 million. ${formatSignedMoney(summary.latestDailyChange)} on the latest replay date.`}
-              label={`OF TOP ${leaderboard.length}`}
+              accessibilityLabel={`Your rank, ${you.rank} of ${leaderboard.length}, ${rankBand(you.rank, leaderboard.length)}. Portfolio ${formatMoney(you.value)}, ${formatReturn(you.returnPct)} from 140 million. ${formatSignedMoney(summary.latestDailyChange)} on the latest replay date.`}
+              label={`OF ${leaderboard.length}`}
               tone="gold"
               value={`#${you.rank}`}
             />
             <View style={styles.heroMeta}>
+              <Tag label={rankBand(you.rank, leaderboard.length).toUpperCase()} tone="gold" />
               <Text style={styles.heroValue}>{formatCompactMoney(you.value)}</Text>
               <Tag label={`${formatReturn(you.returnPct)} FROM $140M`} tone={you.returnPct >= 0 ? 'up' : 'down'} />
               <Tag label={`${formatCompactSignedMoney(summary.latestDailyChange)} LAST DAY`} tone={dayPositive ? 'up' : 'down'} />
@@ -92,9 +100,20 @@ export function LeaderboardScreen() {
                 >
                   {String(entry.rank).padStart(2, '0')}
                 </Text>
-                <Text numberOfLines={1} style={[styles.name, styles.nameColumn, entry.isUser && styles.you]}>
-                  {entry.name}
-                </Text>
+                <View style={styles.nameColumn}>
+                  <Text numberOfLines={1} style={[styles.name, entry.isUser && styles.you]}>
+                    {entry.name}
+                  </Text>
+                  <View style={styles.gapTrack}>
+                    <View
+                      style={[
+                        styles.gapFill,
+                        entry.isUser && styles.gapFillYou,
+                        { width: `${Math.max(4, Math.round(100 * (spread <= 0 ? 1 : (entry.value - low) / spread)))}%` },
+                      ]}
+                    />
+                  </View>
+                </View>
                 <Text
                   maxFontSizeMultiplier={1.6}
                   numberOfLines={1}
@@ -133,7 +152,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },
-  heroLabel: { ...labelStyle, color: colors.gold, marginBottom: space.xs },
+  heroLabel: { ...labelStyle, color: colors.goldInk, marginBottom: space.xs },
   heroMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm, marginTop: space.sm },
   heroValue: { ...numeric, color: colors.text, fontSize: type.title, fontWeight: weight.black },
   subtle: { color: colors.muted, fontFamily: fonts.body, fontSize: type.label, lineHeight: 17 },
@@ -164,6 +183,16 @@ const styles = StyleSheet.create({
   rowWrapped: { flexWrap: 'wrap' },
   lastRow: { borderBottomWidth: 0 },
   youRow: { backgroundColor: colors.goldSoft },
+  gapTrack: {
+    height: 3,
+    marginTop: 5,
+    marginRight: space.md,
+    borderRadius: radius.xs,
+    backgroundColor: colors.border,
+    overflow: 'hidden',
+  },
+  gapFill: { height: 3, borderRadius: radius.xs, backgroundColor: colors.borderStrong },
+  gapFillYou: { backgroundColor: colors.gold },
   youAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, backgroundColor: colors.gold },
 
   rankColumn: { width: 24, flexShrink: 0 },
@@ -173,14 +202,14 @@ const styles = StyleSheet.create({
   returnColumn: { width: 76, textAlign: 'right', flexShrink: 0 },
   flexColumn: { flexShrink: 0, textAlign: 'right' },
 
-  rank: { ...numeric, color: colors.faint, fontSize: type.label, fontWeight: weight.black },
+  rank: { ...numeric, color: colors.muted, fontSize: type.title, fontWeight: weight.black },
   name: {
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: type.body,
     fontWeight: weight.heavy,
   },
-  you: { color: colors.gold },
+  you: { color: colors.goldInk },
   value: { ...numeric, color: colors.muted, fontSize: type.body, fontWeight: weight.bold },
   returnValue: { ...numeric, fontSize: type.body, fontWeight: weight.black },
   positive: { color: colors.green },

@@ -1,40 +1,28 @@
-export interface ChartCoordinate {
-  x: number;
-  y: number;
-}
+import type { ChartCoordinate } from './marketPresentation';
 
-export interface PortfolioChangePoint {
-  totalValue: number;
-}
-
-export function portfolioPeriodChange(
-  points: readonly PortfolioChangePoint[],
-  baselineTotalValue: number,
-): number {
-  if (points.length === 0 || !Number.isFinite(baselineTotalValue)) return 0;
-  const last = points.at(-1)!;
-  return last.totalValue - baselineTotalValue;
-}
-
-export function chartCoordinates(
-  values: number[],
+/**
+ * Index of the plotted point nearest to a pointer position, or null when there
+ * is nothing to snap to. Scrub readouts must always name a night that actually
+ * happened, so the pointer never reads between points — it snaps to the closest
+ * one. The x offset is clamped into the surface first so a pointer skimming
+ * just past either edge still resolves to the edge point instead of nothing.
+ */
+export function nearestPointIndex(
+  points: readonly ChartCoordinate[],
+  offsetX: number,
   width: number,
-  height: number,
-): ChartCoordinate[] {
-  if (values.length === 0 || width <= 0 || height <= 0) return [];
+): number | null {
+  if (points.length === 0 || width <= 0) return null;
 
-  const minimum = Math.min(...values);
-  const maximum = Math.max(...values);
-  const span = maximum - minimum;
-  const xInset = 10;
-  const yInset = 12;
-
-  return values.map((value, index) => ({
-    x: values.length === 1
-      ? width / 2
-      : xInset + (index / (values.length - 1)) * (width - xInset * 2),
-    y: span === 0
-      ? height / 2
-      : yInset + ((maximum - value) / span) * (height - yInset * 2),
-  }));
+  const clampedX = Math.max(0, Math.min(width, offsetX));
+  let nearest = 0;
+  let smallestDistance = Infinity;
+  points.forEach((point, index) => {
+    const distance = Math.abs(point.x - clampedX);
+    if (distance < smallestDistance) {
+      smallestDistance = distance;
+      nearest = index;
+    }
+  });
+  return nearest;
 }

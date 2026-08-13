@@ -11,7 +11,7 @@ export function formatOwnership(ownershipBps: number | undefined): string {
 
 /** Bare percentage for a column that is already headed OWNED. */
 export function formatOwnershipShort(ownershipBps: number | undefined): string {
-  if (!Number.isFinite(ownershipBps)) return '—';
+  if (!Number.isFinite(ownershipBps)) return '-';
   const percentage = Math.max(0, Math.min(10_000, ownershipBps!)) / 100;
   return `${Number.isInteger(percentage) ? percentage.toFixed(0) : percentage.toFixed(1)}%`;
 }
@@ -79,7 +79,11 @@ export function lineChartCoordinates(
   const span = maximum - minimum;
   const centerY = height / 2;
   return values.map((value, index) => ({
-    x: inset + (index / Math.max(values.length - 1, 1)) * (width - inset * 2),
+    // A single point sits in the middle of the surface, not on the left inset,
+    // so a one-game series still reads as a deliberate mark.
+    x: values.length === 1
+      ? width / 2
+      : inset + (index / (values.length - 1)) * (width - inset * 2),
     y: span === 0
       ? centerY
       : inset + ((maximum - value) / span) * (height - inset * 2),

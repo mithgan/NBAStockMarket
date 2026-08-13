@@ -23,7 +23,7 @@ function displayDate(value: string | null): string {
  * every advance path routes through an explicit confirmation.
  */
 export function SeasonControl() {
-  const [confirmation, setConfirmation] = useState<'day' | 'week' | 'season' | null>(null);
+  const [confirmation, setConfirmation] = useState<'day' | 'week' | 'season' | 'rewind' | null>(null);
   const reducedMotion = useReducedMotion();
   const {
     advanceDay,
@@ -38,6 +38,7 @@ export function SeasonControl() {
     pendingActions,
     refreshData,
     resetSeasonAccount,
+    resetSeasonWorld,
     settledGameDateCount,
     seasonReplayProgress,
     state,
@@ -55,6 +56,7 @@ export function SeasonControl() {
   const isSettling = pendingActions.has('advance');
   const isSettlingWeek = pendingActions.has('season-advance');
   const isSettlingSeason = pendingActions.has('advance-season');
+  const isRewinding = pendingActions.has('season-world-reset');
   const day = seasonDayNumber(nextGameDate);
   const progress = seasonProgress(nextGameDate);
 
@@ -71,6 +73,11 @@ export function SeasonControl() {
   const confirmSeason = async () => {
     setConfirmation(null);
     await advanceSeason();
+  };
+
+  const confirmRewind = async () => {
+    setConfirmation(null);
+    await resetSeasonWorld();
   };
 
   return (
@@ -107,7 +114,9 @@ export function SeasonControl() {
             accessibilityRole="button"
             accessibilityState={{ disabled }}
             disabled={disabled}
-            onPress={() => void refreshData()}
+            onPress={() => {
+              refreshData();
+            }}
             style={({ pressed }) => [
               styles.refreshButton,
               disabled && styles.refreshButtonDisabled,
@@ -149,23 +158,36 @@ export function SeasonControl() {
             </View>
           ) : null}
           {canAdvanceSandbox ? (
-            <Button
-              accessibilityLabel={confirmingReset
-                ? 'Confirm resetting your account to the opening bankroll'
-                : 'Reset your account to the opening bankroll'}
-              compact
-              disabled={disabled}
-              label={confirmingReset ? 'SURE?' : 'RESET'}
-              onPress={() => {
-                if (confirmingReset) {
-                  setConfirmingReset(false);
-                  void resetSeasonAccount();
-                } else {
-                  setConfirmingReset(true);
-                }
-              }}
-              tone="ghost"
-            />
+            <View style={styles.advanceActions}>
+              {/* "RESET ME" only touches the caller's account, so a second tap
+                  confirms it inline; rewinding the whole world goes through the
+                  same modal as the other shared actions. */}
+              <Button
+                accessibilityLabel={confirmingReset
+                  ? 'Confirm resetting your account to the opening bankroll'
+                  : 'Reset your account to the opening bankroll'}
+                compact
+                disabled={disabled}
+                label={confirmingReset ? 'SURE?' : 'RESET ME'}
+                onPress={() => {
+                  if (confirmingReset) {
+                    setConfirmingReset(false);
+                    resetSeasonAccount();
+                  } else {
+                    setConfirmingReset(true);
+                  }
+                }}
+                tone="ghost"
+              />
+              <Button
+                accessibilityLabel="Rewind the whole season to opening night"
+                compact
+                disabled={disabled}
+                label={isRewinding ? 'REWINDING' : 'RESET SEASON'}
+                onPress={() => setConfirmation('rewind')}
+                tone="danger"
+              />
+            </View>
           ) : null}
         </View>
 
@@ -173,7 +195,7 @@ export function SeasonControl() {
           accessibilityLabel={`Season progress: day ${day} of ${SEASON_TOTAL_DAYS}`}
           style={styles.track}
         >
-          <View style={[styles.fill, { width: `${Math.max(progress * 100, 0.5)}%` }]} />
+          <View style={[styles.fill, { width: `${Math.max(100 * progress, 0.5)}%` }]} />
         </View>
 
         {seasonReplayProgress ? (
@@ -183,7 +205,7 @@ export function SeasonControl() {
         ) : null}
       </View>
 
-      {confirmation && canSettleNextDay ? (
+      {confirmation && (confirmation === 'rewind' || canSettleNextDay) ? (
         <Modal
           animationType={reducedMotion ? 'none' : 'fade'}
           onRequestClose={() => setConfirmation(null)}
@@ -198,14 +220,18 @@ export function SeasonControl() {
                   ? 'Advance the shared replay?'
                   : confirmation === 'week'
                     ? 'Advance one calendar week?'
-                    : 'Simulate the rest of the season?'}
+                    : confirmation === 'rewind'
+                      ? 'Rewind to opening night?'
+                      : 'Simulate the rest of the season?'}
               </Text>
               <Text style={styles.modalBody}>
                 {confirmation === 'day'
                   ? `This settles ${displayDate(nextGameDate)} for every play-tester. It cannot be undone.`
                   : confirmation === 'week'
                     ? 'This settles every game date in the next 7 calendar days for every play-tester. It cannot be undone.'
-                    : 'This settles every remaining 2025-26 game date for every play-tester. Completed dates are saved, so an interrupted run can be resumed. It cannot be undone.'}
+                    : confirmation === 'rewind'
+                      ? 'This erases every settlement, trade, and play on this server, returns all bankrolls to $140M, restores opening prices, and moves the clock back to October 21. It cannot be undone.'
+                      : 'This settles every remaining 2025-26 game date for every play-tester. Completed dates are saved, so an interrupted run can be resumed. It cannot be undone.'}
               </Text>
               <View style={styles.modalActions}>
                 <Button
@@ -219,20 +245,26 @@ export function SeasonControl() {
                     ? 'Confirm replay advancement'
                     : confirmation === 'week'
                       ? 'Confirm week advancement'
-                      : 'Confirm full season simulation'}
+                      : confirmation === 'rewind'
+                        ? 'Confirm rewinding the season to opening night'
+                        : 'Confirm full season simulation'}
                   label={confirmation === 'day'
                     ? 'SETTLE NEXT DAY'
                     : confirmation === 'week'
                       ? 'SETTLE THE WEEK'
-                      : 'SIMULATE SEASON'}
-                  onPress={() => void (
+                      : confirmation === 'rewind'
+                        ? 'REWIND SEASON'
+                        : 'SIMULATE SEASON'}
+                  onPress={() => {
                     confirmation === 'day'
                       ? confirmAdvance()
                       : confirmation === 'week'
                         ? confirmWeek()
-                        : confirmSeason()
-                  )}
-                  tone="primary"
+                        : confirmation === 'rewind'
+                          ? confirmRewind()
+                          : confirmSeason();
+                  }}
+                  tone={confirmation === 'rewind' ? 'danger' : 'primary'}
                 />
               </View>
             </View>
@@ -251,7 +283,8 @@ const styles = StyleSheet.create({
     gap: space.md,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
-    backgroundColor: colors.background,
+    // The season strip is the softest chrome step, one shade off the page.
+    backgroundColor: colors.chromeSoft,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },
@@ -298,7 +331,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   fill: { height: '100%', borderRadius: 4, backgroundColor: colors.gold },
-  seasonProgress: { ...labelStyle, color: colors.gold, width: '100%' },
+  seasonProgress: { ...labelStyle, color: colors.goldInk, width: '100%' },
 
   modalBackdrop: {
     flex: 1,
