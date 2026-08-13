@@ -59,9 +59,9 @@ function matchesQuery(name: string, normalizedQuery: string): boolean {
 }
 
 /**
- * One pass that resolves price, movement, form, ownership and affordability for
- * every listing, then filters and sorts. Kept pure so the ordering rules can be
- * unit tested without rendering ~300 rows.
+ * One pass that resolves price, movement, form, trending window, ownership and
+ * affordability for every listing, then filters and sorts. Kept pure so the
+ * ordering rules can be unit tested without rendering ~300 rows.
  */
 export function buildMarketRows({
   players,
@@ -125,6 +125,8 @@ export function buildMarketRows({
       return rows.sort(descendingBy((row) => row.changePercent));
     case 'form':
       return rows.sort(descendingBy((row) => row.formSurprise));
+    case 'trending':
+      return rows.sort(descendingBy((row) => row.windowSurprise));
     case 'value':
     default:
       return rows.sort(descendingBy((row) => row.currentPrice));

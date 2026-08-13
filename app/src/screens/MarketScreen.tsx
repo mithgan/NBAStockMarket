@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
-  Image,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,20 +14,18 @@ import Svg, {
   Circle,
   Defs,
   G,
+  Line,
   LinearGradient,
   Path,
+  Polygon,
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
 
-import {
-  cumulativeValues,
-  selectHighLowPoints,
-  selectSettledTrendPoints,
-  selectTrendRange,
-  type TrendPoint,
-  type TrendRange,
-} from '../data/trendPresentation';
+import { PlayerAvatar } from '../components/PlayerAvatar';
+import { PlayerStats } from '../components/PlayerStats';
+import { Sparkline } from '../components/Sparkline';
+import { nearestPointIndex } from '../data/chartGeometry';
 import {
   buildMarketRows,
   MARKET_FILTERS,
@@ -42,12 +40,19 @@ import {
   formatSignedMetric,
   formatSignedPercent,
   formatTradeVolume,
-  lineChartCoordinates,
   metricDirection,
   priceChangePercent,
   recentForm,
   smoothLinePath,
 } from '../data/marketPresentation';
+import {
+  cumulativeValues,
+  selectHighLowPoints,
+  selectSettledTrendPoints,
+  selectTrendRange,
+  type TrendPoint,
+  type TrendRange,
+} from '../data/trendPresentation';
 import type { Player } from '../data/types';
 import {
   formatCompactMoney,
@@ -55,46 +60,30 @@ import {
   formatMoney,
   formatSignedMoney,
 } from '../format';
+import { useChartSurface } from '../hooks/useChartSurface';
 import { usePortfolio } from '../state/PortfolioContext';
+import { useWatchlist } from '../state/watchlist';
 import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
+import { rowMarker } from '../ui/domMarkers';
 import { SectionHeader, Segmented } from '../ui/primitives';
 import { MAX_ROW_FONT_SCALE, marketActionWidth, marketRowHeight } from './marketRowHeight';
 
 
-function initials(name: string) {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('');
-}
-
 /**
- * Rectangular tinted headshot tile rather than a circular avatar — this is the
- * player-card shape used across databallr.com's draft boards, and the flat crop
- * keeps a column of 300 faces aligned.
+ * Windows the trending sort can rank over. The hints double as the segmented
+ * control's accessibility labels; `games: null` means the whole settled season.
  */
-function PlayerAvatar({ player, size = 38 }: { player: Player; size?: number }) {
-  const [failed, setFailed] = useState(false);
-
-  return (
-    <View style={[styles.avatar, { width: size, height: size }]}>
-      {failed ? (
-        <Text style={styles.avatarInitials}>{initials(player.name)}</Text>
-      ) : (
-        <Image
-          accessibilityIgnoresInvertColors
-          accessibilityLabel={`${player.name} headshot`}
-          onError={() => setFailed(true)}
-          resizeMode="cover"
-          source={{ uri: `https://a.espncdn.com/i/headshots/nba/players/full/${player.id}.png` }}
-          style={{ width: size, height: size * 1.16, marginTop: size * 0.1 }}
-        />
-      )}
-    </View>
-  );
-}
+export const TRENDING_WINDOWS: {
+  key: TrendRange;
+  label: string;
+  hint: string;
+  games: number | null;
+}[] = [
+  { key: 'L5', label: 'L5', hint: 'Trending over the last five settled games', games: 5 },
+  { key: 'L15', label: 'L15', hint: 'Trending over the last fifteen settled games', games: 15 },
+  { key: 'L30', label: 'L30', hint: 'Trending over the last thirty settled games', games: 30 },
+  { key: 'Season', label: 'Season', hint: 'Trending across the settled season', games: null },
+];
 
 /** Broadcast convention: quiet given name, loud surname. */
 function splitName(name: string): { first: string; last: string } {
@@ -109,35 +98,97 @@ function average(points: TrendPoint[], key: 'np' | 'expected_np') {
 }
 
 function DetailChart({ points }: { points: TrendPoint[] }) {
-  const [width, setWidth] = useState(0);
-  const values = cumulativeValues(points.map((point) => point.dividend_per_holder));
-  const extrema = selectHighLowPoints(values);
-  const minimum = Math.min(...values);
-  const maximum = Math.max(...values);
-  const span = maximum - minimum || 1;
-  const chartHeight = 168;
-  const horizontalInset = 10;
-  const topInset = 26;
-  const bottomInset = 22;
-  const coordinates = values.map((value, index) => ({
-    x: horizontalInset + (index / Math.max(values.length - 1, 1)) * Math.max(width - horizontalInset * 2, 0),
-    y: topInset + ((maximum - value) / span) * (chartHeight - topInset - bottomInset),
-  }));
-  const linePath = smoothLinePath(coordinates);
-  const color = values.at(-1)! >= 0 ? colors.green : colors.red;
-  const areaPath = coordinates.length > 0
-    ? `${linePath} L ${coordinates.at(-1)!.x} ${chartHeight - bottomInset} L ${coordinates[0].x} ${chartHeight - bottomInset} Z`
-    : '';
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
+  // The scrub callbacks are stable (empty deps) so they read the freshest
+  // geometry through a ref instead of closing over a stale coordinate array.
+  const geometry = useRef<{ coordinates: { x: number; y: number }[]; width: number }>({
+    coordinates: [],
+    width: 0,
+  });
+  const handleScrub = useCallback((x: number) => {
+    const index = nearestPointIndex(geometry.current.coordinates, x, geometry.current.width);
+    setScrubIndex((previous) => (previous === index ? previous : index));
+  }, []);
+  const clearScrub = useCallback(() => setScrubIndex(null), []);
+  const { width, ref, onLayout } = useChartSurface({
+    onScrub: handleScrub,
+    onScrubEnd: clearScrub,
+  });
+
+  const { values, coordinates, linePath, areaPath, color, extrema } = useMemo(() => {
+    const values = cumulativeValues(points.map((point) => point.dividend_per_holder));
+    const maximum = Math.max(...values);
+    const minimum = Math.min(...values);
+    const span = maximum - minimum || 1;
+    // 168px surface: 26px of headroom for the HIGH label, 22px of footroom for
+    // the LOW label, 10px horizontal insets so end dots are not clipped.
+    const coordinates = values.map((value, index) => ({
+      x: 10 + (index / Math.max(values.length - 1, 1)) * Math.max(width - 20, 0),
+      y: 26 + ((maximum - value) / span) * 120,
+    }));
+    const linePath = smoothLinePath(coordinates);
+    return {
+      values,
+      coordinates,
+      linePath,
+      areaPath: coordinates.length > 0
+        ? `${linePath} L ${coordinates.at(-1)!.x} 146 L ${coordinates[0].x} 146 Z`
+        : '',
+      color: (values.at(-1) ?? 0) >= 0 ? colors.green : colors.red,
+      extrema: selectHighLowPoints(values),
+    };
+  }, [points, width]);
+  geometry.current = { coordinates, width };
+
+  // Hover arrives through the DOM pointer events wired up by useChartSurface;
+  // the PanResponder covers touch drags, where hover never fires.
+  const responder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (event) => handleScrub(event.nativeEvent.locationX),
+        onPanResponderMove: (event) => handleScrub(event.nativeEvent.locationX),
+        onPanResponderRelease: clearScrub,
+        onPanResponderTerminate: clearScrub,
+      }),
+    [clearScrub, handleScrub],
+  );
+
+  const scrubbedPoint = scrubIndex === null ? null : points[scrubIndex] ?? null;
+  const scrubbedCoordinate = scrubIndex === null ? null : coordinates[scrubIndex] ?? null;
+  // With fewer than five points the HIGH/LOW callouts label almost every dot,
+  // which is noise rather than orientation.
+  const showHighLow = points.length >= 5;
 
   return (
     <View
       accessible
       accessibilityLabel={`${points.length} game cumulative dividend chart, high ${formatCompactSignedMoney(extrema.high?.value ?? 0)}, low ${formatCompactSignedMoney(extrema.low?.value ?? 0)}`}
-      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+      nativeID="scrub-plot-detail"
+      onLayout={onLayout}
+      ref={ref}
       style={styles.chart}
+      {...responder.panHandlers}
     >
+      {/* The readout keeps a fixed height so the chart does not jump when a
+          scrub begins or ends. */}
+      <View style={styles.detailReadout}>
+        {scrubbedPoint ? (
+          <>
+            <Text style={styles.detailReadoutValue}>
+              {`${formatCompactSignedMoney(values[scrubIndex!] ?? 0)} cumulative`}
+            </Text>
+            <Text numberOfLines={1} style={styles.detailReadoutMeta}>
+              {`${scrubbedPoint.date} · ${scrubbedPoint.np.toFixed(1)} NP vs ${scrubbedPoint.expected_np.toFixed(1)} projected · ${formatCompactSignedMoney(scrubbedPoint.dividend_per_holder)} that night`}
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.detailReadoutMeta}>Hover the chart to read a night exactly.</Text>
+        )}
+      </View>
       {width > 0 ? (
-        <Svg height={chartHeight} width={width}>
+        <Svg height={168} width={width}>
           <Defs>
             <LinearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1">
               <Stop offset="0" stopColor={color} stopOpacity="0.22" />
@@ -146,20 +197,54 @@ function DetailChart({ points }: { points: TrendPoint[] }) {
           </Defs>
           <Path d={areaPath} fill="url(#chartFill)" />
           <Path d={linePath} fill="none" stroke={color} strokeLinecap="round" strokeWidth={2.5} />
-          {([['HIGH', extrema.high], ['LOW', extrema.low]] as const).map(([label, point]) => {
+          {scrubbedCoordinate ? (
+            <G>
+              <Line
+                stroke={colors.borderStrong}
+                strokeDasharray="3 4"
+                strokeWidth={1}
+                x1={scrubbedCoordinate.x}
+                x2={scrubbedCoordinate.x}
+                y1={0}
+                y2={168}
+              />
+              <Circle
+                cx={scrubbedCoordinate.x}
+                cy={scrubbedCoordinate.y}
+                fill={color}
+                fillOpacity={0.2}
+                r={11}
+              />
+              <Circle cx={scrubbedCoordinate.x} cy={scrubbedCoordinate.y} fill={color} r={5} />
+            </G>
+          ) : null}
+          {/* HIGH/LOW callouts step aside while a scrub is active — they would
+              collide with the marker and its readout. */}
+          {(scrubbedCoordinate || !showHighLow
+            ? []
+            : ([['HIGH', extrema.high], ['LOW', extrema.low]] as const)
+          ).map(([label, point]) => {
             if (!point) return null;
             const coordinate = coordinates[point.index];
             const isHigh = label === 'HIGH';
             return (
               <G key={label}>
-                <Circle cx={coordinate.x} cy={coordinate.y} fill={colors.background} r={4.5} stroke={color} strokeWidth={2.5} />
+                <Circle
+                  cx={coordinate.x}
+                  cy={coordinate.y}
+                  fill={colors.background}
+                  r={4.5}
+                  stroke={color}
+                  strokeWidth={2.5}
+                />
                 <SvgText
-                  fill={colors.text}
+                  fill={colors.muted}
+                  fontFamily={fonts.display}
                   fontSize={11}
-                  fontWeight="800"
+                  fontWeight="700"
                   textAnchor={coordinate.x < 56 ? 'start' : coordinate.x > width - 56 ? 'end' : 'middle'}
                   x={coordinate.x}
-                  y={Math.max(12, Math.min(chartHeight - 4, coordinate.y + (isHigh ? -10 : 19)))}
+                  y={Math.max(18, Math.min(162, coordinate.y + (isHigh ? -12 : 20)))}
                 >
                   {label} {formatCompactSignedMoney(point.value)}
                 </SvgText>
@@ -203,11 +288,16 @@ export function PlayerDetail({
   const points = selectSettledTrendPoints(trendPoints, latestSettledDate);
   const visiblePoints = selectTrendRange(points, range);
   const rangeTotal = visiblePoints.reduce((sum, point) => sum + point.dividend_per_holder, 0);
-  const bestPayout = points.length > 0
-    ? Math.max(...points.map((point) => point.dividend_per_holder))
-    : 0;
-  const l5Form = recentForm(points);
+  const bestPoint = points.reduce<TrendPoint | null>(
+    (best, point) =>
+      best === null || point.dividend_per_holder > best.dividend_per_holder ? point : best,
+    null,
+  );
+  const bestPayout = bestPoint?.dividend_per_holder ?? 0;
+  const form = recentForm(points);
   const change = priceChangePercent(currentPrice, player.listing_price);
+  const watchlist = useWatchlist();
+  const watching = watchlist.isWatched(player.id);
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.detailContent}>
@@ -218,6 +308,23 @@ export function PlayerDetail({
         style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
       >
         <Text style={styles.backText}>‹  {backLabel}</Text>
+      </Pressable>
+
+      <Pressable
+        accessibilityLabel={watching ? `Stop watching ${player.name}` : `Watch ${player.name}`}
+        accessibilityRole="button"
+        accessibilityState={{ selected: watching }}
+        onPress={() => watchlist.toggle(player.id)}
+        style={({ pressed }) => [
+          styles.watchButton,
+          watching && styles.watchButtonOn,
+          pressed && styles.pressed,
+        ]}
+        {...rowMarker}
+      >
+        <Text style={[styles.watchText, watching && styles.watchTextOn]}>
+          {watching ? 'WATCHING' : 'WATCH'}
+        </Text>
       </Pressable>
 
       <View style={styles.detailHeader}>
@@ -254,7 +361,7 @@ export function PlayerDetail({
       <View style={styles.chartHeading}>
         <Text accessibilityRole="header" style={styles.sectionTitle}>CUMULATIVE DIVIDENDS</Text>
         <View accessibilityRole="tablist" style={styles.rangeToggle}>
-          {(['L5', 'L15', 'Season'] as const).map((option) => {
+          {(['L5', 'L15', 'L30', 'Season'] as const).map((option) => {
             const selected = range === option;
             return (
               <Pressable
@@ -285,7 +392,11 @@ export function PlayerDetail({
         <Stat exact={formatMoney(player.actual_salary)} label="Actual salary" value={formatCompactMoney(player.actual_salary)} />
         <Stat label="Settled games" value={String(points.length)} />
         <Stat label="Avg NP / expected" value={`${average(points, 'np').toFixed(1)} / ${average(points, 'expected_np').toFixed(1)}`} />
-        <Stat exact={formatSignedMoney(bestPayout)} label="Best settled payout" value={formatCompactSignedMoney(bestPayout)} />
+        <Stat
+          exact={bestPoint ? `${formatSignedMoney(bestPayout)} on ${bestPoint.date}` : formatSignedMoney(bestPayout)}
+          label="Best settled payout"
+          value={bestPoint ? `${formatCompactSignedMoney(bestPayout)} · ${bestPoint.date}` : formatCompactSignedMoney(bestPayout)}
+        />
         <Stat label="Market ownership" value={formatOwnership(player.ownership_bps)} />
         <Stat
           label="Shares available"
@@ -294,41 +405,31 @@ export function PlayerDetail({
         <Stat label="30-day activity" value={formatTradeVolume(player.volume_30d)} />
         <Stat
           label="Recent form vs expected"
-          value={l5Form ? `L${l5Form.games} ${formatSignedMetric(l5Form.averageSurprise)} NP` : 'No settled games'}
+          value={form ? `L${form.games} ${formatSignedMetric(form.averageSurprise)} NP` : 'No settled games'}
         />
       </View>
+
+      <SectionHeader
+        label="SEASON TO DATE"
+        meta={points.length > 0 ? `${points.length} GAMES` : undefined}
+      />
+      <PlayerStats points={points} />
     </ScrollView>
   );
 }
 
-function Sparkline({ points }: { points: TrendPoint[] }) {
-  const dividends = points.map((point) => point.dividend_per_holder);
-  const values = [0, ...cumulativeValues(dividends)];
-  const cumulativeDividend = values.at(-1) ?? 0;
-  const color = cumulativeDividend >= 0 ? colors.green : colors.red;
-  const width = 52;
-  const height = 26;
-  const coordinates = lineChartCoordinates(values, width, height);
-  const linePath = smoothLinePath(coordinates);
-  const zeroY = coordinates[0]?.y ?? height / 2;
-
+/** Watchlist star: gold when watching, an outline when not. */
+function WatchStar({ on }: { on: boolean }) {
   return (
-    <View
-      accessible
-      accessibilityLabel={`Last ${points.length} settled games, cumulative dividends ${formatCompactSignedMoney(cumulativeDividend)}`}
-      style={styles.sparkline}
-    >
-      <Svg height={height} width={width}>
-        <Path
-          d={`M 2 ${zeroY} L ${width - 2} ${zeroY}`}
-          fill="none"
-          stroke={colors.border}
-          strokeDasharray="2 3"
-          strokeWidth={1}
-        />
-        <Path d={linePath} fill="none" stroke={color} strokeLinecap="round" strokeWidth={2} />
-      </Svg>
-    </View>
+    <Svg height={18} width={18} viewBox="0 0 18 18">
+      <Polygon
+        fill={on ? colors.gold : 'none'}
+        points="9,1.6 11.2,6.6 16.6,7.2 12.6,10.9 13.7,16.2 9,13.5 4.3,16.2 5.4,10.9 1.4,7.2 6.8,6.6"
+        stroke={on ? colors.gold : colors.borderStrong}
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+      />
+    </Svg>
   );
 }
 
@@ -346,6 +447,8 @@ interface MarketRowProps {
   locked: boolean;
   onOpen: (player: Player) => void;
   onTrade: (player: Player, side: 'buy' | 'sell') => Promise<boolean>;
+  watching: boolean;
+  onToggleWatch: (playerId: string) => void;
 }
 
 function MarketRow({
@@ -362,6 +465,8 @@ function MarketRow({
   locked,
   onOpen,
   onTrade,
+  watching,
+  onToggleWatch,
 }: MarketRowProps) {
   const { player, currentPrice, changePercent, held } = row;
   const { first, last } = splitName(player.name);
@@ -421,6 +526,7 @@ function MarketRow({
       <Pressable
         accessibilityLabel={rowAccessibilityLabel}
         accessibilityRole="button"
+        {...rowMarker}
         onPress={() => onOpen(player)}
         style={({ pressed }) => [styles.playerDetails, pressed && styles.pressed]}
       >
@@ -457,20 +563,31 @@ function MarketRow({
         <View style={styles.quote}>
           <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.price}>{formatCompactMoney(currentPrice)}</Text>
           {changePercent === null ? null : (
-            <Text
-              maxFontSizeMultiplier={MAX_ROW_FONT_SCALE}
-              numberOfLines={1}
+            <View
               style={[
-                styles.priceChange,
+                styles.changeChip,
                 changeDirection > 0
-                  ? styles.positive
+                  ? styles.chipUp
                   : changeDirection < 0
-                    ? styles.negative
-                    : styles.neutral,
+                    ? styles.chipDown
+                    : styles.chipFlat,
               ]}
             >
-              {formatSignedPercent(changePercent)}
-            </Text>
+              <Text
+                maxFontSizeMultiplier={MAX_ROW_FONT_SCALE}
+                numberOfLines={1}
+                style={[
+                  styles.changeChipText,
+                  changeDirection > 0
+                    ? styles.positive
+                    : changeDirection < 0
+                      ? styles.negative
+                      : styles.neutral,
+                ]}
+              >
+                {formatSignedPercent(changePercent)}
+              </Text>
+            </View>
           )}
         </View>
       </Pressable>
@@ -518,6 +635,15 @@ function MarketRow({
           {tradeLabel}
         </Text>
       </Pressable>
+      <Pressable
+        accessibilityLabel={watching ? `Stop watching ${player.name}` : `Watch ${player.name}`}
+        accessibilityRole="button"
+        accessibilityState={{ selected: watching }}
+        onPress={() => onToggleWatch(player.id)}
+        style={({ pressed }) => [styles.watchDot, pressed && styles.pressed]}
+      >
+        <WatchStar on={watching} />
+      </Pressable>
     </View>
   );
 }
@@ -543,6 +669,8 @@ export function MarketScreen() {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<MarketSort>('value');
   const [filter, setFilter] = useState<MarketFilter>('all');
+  const [trendingWindow, setTrendingWindow] = useState<TrendRange>('L15');
+  const watchlist = useWatchlist();
 
   const compact = width < 420;
   // Only surface the ownership column once the table is wide enough that it
@@ -598,6 +726,7 @@ export function MarketScreen() {
       query,
       sort,
       filter,
+      trendingGames: TRENDING_WINDOWS.find((window) => window.key === trendingWindow)?.games ?? null,
     });
   }, [
     activeBoostPlayerIds,
@@ -620,6 +749,7 @@ export function MarketScreen() {
         freeCash={freeCash}
         locked={accountMutationPending}
         onOpen={(player) => setSelectedPlayerId(player.id)}
+        onToggleWatch={watchlist.toggle}
         onTrade={trade}
         pending={pendingActions.has(`trade:${item.player.id}`)}
         row={item}
@@ -628,6 +758,7 @@ export function MarketScreen() {
         showOwnership={roomy}
         showSparkline={!compact && !largeText}
         trendPoints={settledTrends[item.player.id] ?? []}
+        watching={watchlist.isWatched(item.player.id)}
       />
     ),
     [
@@ -638,6 +769,7 @@ export function MarketScreen() {
       compact,
       freeCash,
       largeText,
+      watchlist,
       pendingActions,
       roomy,
       rowHeight,
@@ -716,6 +848,16 @@ export function MarketScreen() {
       >
         <Segmented groupLabel="Sort players" onChange={setSort} options={MARKET_SORTS} value={sort} />
         <Segmented groupLabel="Filter players" onChange={setFilter} options={MARKET_FILTERS} value={filter} />
+        {/* The window picker only earns its row space while trending is the
+            active sort — it has no effect on any other ordering. */}
+        {sort === 'trending' ? (
+          <Segmented
+            groupLabel="Trending window"
+            onChange={setTrendingWindow}
+            options={TRENDING_WINDOWS}
+            value={trendingWindow}
+          />
+        ) : null}
       </ScrollView>
 
       {/* Column strip doubles as the live result count. */}
@@ -808,7 +950,7 @@ const styles = StyleSheet.create({
     },
   titleMeta: { ...labelStyle, marginTop: 2 },
   cashBlock: { alignItems: 'flex-end', flexShrink: 0, minWidth: 84 },
-  cashLabel: { ...labelStyle, color: colors.gold },
+  cashLabel: { ...labelStyle, color: colors.goldInk },
   cashValue: { ...numeric, color: colors.text, fontSize: 20, fontWeight: weight.black, marginTop: 1 },
 
   search: {
@@ -857,21 +999,6 @@ const styles = StyleSheet.create({
   playerRowHeld: { borderLeftColor: colors.gold, backgroundColor: colors.surface },
   playerDetails: { flex: 1, minWidth: 0, height: '100%', flexDirection: 'row', alignItems: 'center', gap: space.sm },
 
-  avatar: {
-    overflow: 'hidden',
-    borderRadius: radius.sm,
-    backgroundColor: colors.surfaceRaised,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  avatarInitials: {
-    color: colors.faint,
-    fontFamily: fonts.display,
-    fontSize: type.body,
-    fontWeight: weight.black,
-  },
-
   playerCopy: { flex: 1, minWidth: 0 },
   playerName: {
     color: colors.text,
@@ -880,7 +1007,13 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
     },
   playerFirst: { color: colors.muted, fontWeight: weight.medium },
-  playerMeta: { ...labelStyle, color: colors.faint, marginTop: 2, letterSpacing: 0.5 },
+  playerMeta: {
+    ...numeric,
+    color: colors.faint,
+    fontSize: type.body,
+    fontWeight: weight.medium,
+    marginTop: 2,
+  },
 
   ownership: {
     ...labelStyle,
@@ -891,9 +1024,26 @@ const styles = StyleSheet.create({
   },
   sparkline: { width: 52, height: 26, flexShrink: 0 },
 
-  quote: { alignItems: 'flex-end', minWidth: 62, flexShrink: 0 },
-  price: { ...numeric, color: colors.text, fontSize: 15, fontWeight: weight.black },
-  priceChange: { ...numeric, fontSize: type.label, fontWeight: weight.heavy, marginTop: 2 },
+  quote: { alignItems: 'flex-end', minWidth: 72, flexShrink: 0, gap: 4 },
+  price: { ...numeric, color: colors.text, fontSize: 16, fontWeight: weight.heavy },
+  changeChip: {
+    borderRadius: radius.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 54,
+    alignItems: 'center',
+  },
+  chipUp: { backgroundColor: colors.greenSoft },
+  chipDown: { backgroundColor: colors.redSoft },
+  chipFlat: { backgroundColor: colors.surfaceRaised },
+  changeChipText: { ...numeric, fontSize: type.label, fontWeight: weight.heavy },
+  watchDot: {
+    width: 34,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
 
   tradeButton: {
     minHeight: 44,
@@ -952,9 +1102,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: space.md,
   },
+  watchButton: {
+    alignSelf: 'flex-start',
+    minHeight: 34,
+    justifyContent: 'center',
+    marginHorizontal: space.md,
+    marginBottom: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderColor: colors.goldLine,
+    borderWidth: 1,
+  },
+  watchButtonOn: { backgroundColor: colors.goldSoft },
+  watchText: {
+    color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.black,
+    letterSpacing: 0.9,
+  },
+  watchTextOn: { color: colors.goldInk },
   backText: {
     ...labelStyle,
-    color: colors.gold,
+    color: colors.goldInk,
     fontSize: type.body,
     letterSpacing: 0.6,
   },
@@ -1012,8 +1182,23 @@ const styles = StyleSheet.create({
   rangeButton: { minWidth: 46, minHeight: 44, paddingHorizontal: space.sm, alignItems: 'center', justifyContent: 'center' },
   rangeButtonSelected: { backgroundColor: colors.surfaceRaised },
   rangeText: { ...labelStyle, color: colors.faint },
-  rangeTextSelected: { color: colors.gold },
-  chart: { height: 168, marginHorizontal: space.md },
+  rangeTextSelected: { color: colors.goldInk },
+  detailReadout: {
+    height: 46,
+    justifyContent: 'center',
+    paddingHorizontal: space.md,
+    paddingBottom: space.xs,
+  },
+  detailReadoutValue: { ...numeric, color: colors.text, fontSize: type.value, fontWeight: weight.heavy },
+  detailReadoutMeta: {
+    ...numeric,
+    color: colors.faint,
+    fontSize: type.body,
+    fontWeight: weight.medium,
+    marginTop: 1,
+  },
+  // No fixed height here — the readout (46) plus the Svg (168) set it.
+  chart: { marginHorizontal: space.md },
   emptyChart: {
     color: colors.faint,
     fontFamily: fonts.body,
