@@ -41,7 +41,6 @@ export function AuthScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.mark}><Text style={styles.markText}>DB</Text></View>
-        <Text style={styles.eyebrow}>NBA STOCK MARKET</Text>
         <Text accessibilityRole="header" style={styles.title}>Your portfolio, everywhere</Text>
         <Text style={styles.copy}>
           Sign in to trade players and keep one server-backed balance across devices.
@@ -147,11 +146,10 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1, justifyContent: 'center', alignSelf: 'center', width: '100%', maxWidth: 480, padding: 24 },
   mark: { width: 44, height: 44, borderRadius: 7, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   markText: { color: colors.background, fontSize: 13, fontWeight: '900' },
-  eyebrow: { color: colors.gold, fontSize: 11, fontWeight: '900', letterSpacing: 1.4, marginTop: 24 },
-  title: { color: colors.text, fontSize: 31, lineHeight: 36, fontWeight: '900', marginTop: 6 },
+  title: { color: colors.text, fontSize: 31, lineHeight: 36, fontWeight: '900', marginTop: 22 },
   copy: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 10 },
   message: { borderWidth: 1, borderRadius: 7, padding: 12, marginTop: 18 },
-  errorMessage: { borderColor: colors.red, backgroundColor: '#3b1d24' },
+  errorMessage: { borderColor: colors.red, backgroundColor: colors.redSoft },
   noticeMessage: { borderColor: colors.gold, backgroundColor: colors.goldSoft },
   messageText: { color: colors.text, fontSize: 12, lineHeight: 18, fontWeight: '700' },
   form: { marginTop: 24, gap: 10 },

@@ -236,6 +236,25 @@ export class MarketApiClient {
     );
   }
 
+  // Sandbox-only: rewinds the shared season replay to opening night. Gated on
+  // the same settlement key as advanceDay, so public builds never expose it.
+  async resetSeason(): Promise<void> {
+    if (!this.settlementKey) {
+      throw new MarketApiError(
+        'Season reset is not configured for this build.',
+        'advance_unavailable',
+        null,
+      );
+    }
+    await this.request('/api/v1/admin/season/reset', {
+      method: 'POST',
+      body: { confirmation: 'RESET_SEASON' },
+      idempotencyKey: this.idempotencyKeyFactory(),
+      headers: { 'X-Settlement-Key': this.settlementKey },
+      parse: () => {},
+    });
+  }
+
   async advanceDay(expectedGameDate: string): Promise<ServerAdvanceResult> {
     if (!this.settlementKey) {
       throw new MarketApiError(
