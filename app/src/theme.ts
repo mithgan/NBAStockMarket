@@ -1,60 +1,80 @@
 /**
- * Databallr design tokens.
+ * Design tokens.
  *
- * Colours are the hex equivalents of the HSL custom properties in the
- * databallr.com stylesheet (`src/index.css`), so this app sits in the same
- * navy/gold world as the rest of the product rather than approximating it:
+ * Every colour is exposed two ways:
  *
- *   --background 220 24% 14%  -> #1b212c      --primary   42 100% 67% -> #ffcd57
- *   --card       220 24% 18%  -> #232a39      --secondary 198 93% 60% -> #3abff8
- *   --muted      220 20% 22%  -> #2d3443      --border    220 18% 22% -> #2e3542
+ *  - `BASE_PALETTE` holds the literal hex values of the default (Flat navy)
+ *    variant. Non-web platforms and anything that must do colour math read
+ *    from here.
+ *  - `colors` wraps each token in `var(--c-<name>, <hex>)` on web, so a design
+ *    variant can restyle the whole app by rewriting custom properties on
+ *    `:root` (see theme/variants.ts and web/globalStyles.ts) while native
+ *    keeps the plain value.
+ *
+ * The chrome tokens are the app frame's own steps: `chrome` is the brand bar,
+ * `chromeMid` the tab bar, `chromeSoft` the season strip. They default to the
+ * base surface/background so a variant that says nothing about its frame looks
+ * exactly as it did before the tokens existed; variants that darken or lighten
+ * their surfaces override them explicitly.
  */
-export const colors = {
-  /** Page background. */
-  background: '#1b212c',
-  /** Raised surface: rows, tiles, inputs. */
-  surface: '#232a39',
-  /** Pressed / selected surface. */
-  surfaceRaised: '#2d3443',
-  /** Highest surface: modals, popovers. */
-  surfaceHigh: '#2a3347',
-  /** Hairlines and section rules. */
-  border: '#2e3542',
-  /** Stronger divider for structural edges. */
-  borderStrong: '#3d475c',
+const isWeb = typeof document !== 'undefined';
 
-  text: '#fafafa',
-  muted: '#b0b5bf',
-  /**
-   * Dimmest legible tier. Verified >= 4.5:1 against background, surface,
-   * surfaceRaised, redSoft and goldSoft — it carries real 11px text, so it
-   * cannot be a decorative grey.
-   */
-  faint: '#9aa3b0',
+function webVar(name: string, fallback: string): string {
+  return isWeb ? `var(--c-${name}, ${fallback})` : fallback;
+}
 
-  /** Primary accent. You, selected, primary action, positive moments. */
+export const BASE_PALETTE = {
+  background: '#0e1218',
+  surface: '#151b24',
+  surfaceRaised: '#1d2531',
+  surfaceHigh: '#222b39',
+  chrome: '#151b24',
+  chromeMid: '#151b24',
+  chromeSoft: '#0e1218',
+  border: '#212936',
+  borderStrong: '#323c4e',
+  text: '#f7f8fa',
+  muted: '#aab2c0',
+  faint: '#8d97a8',
   gold: '#ffcd57',
-  goldSoft: '#3a2f14',
+  goldInk: '#ffcd57',
+  goldSoft: '#2f2610',
   goldLine: '#6b571f',
-
-  /** Secondary accent. Rivals, informational states. */
   cyan: '#3abff8',
   cyanSoft: '#12303f',
-
-  green: '#34d399',
-  greenSoft: '#123b2b',
-  /** Lightened from the databallr --destructive so 11px P&L clears 4.5:1. */
-  red: '#ff7a83',
-  redSoft: '#3b1d24',
-
+  green: '#3ddc97',
+  greenSoft: '#0f3225',
+  red: '#ff8189',
+  redSoft: '#33181e',
   focus: '#7cc4ff',
 };
 
-/**
- * Databallr's own `--radius` is 16px, but this surface is a dense data table
- * rather than a marketing page, so it stays flat: 8px is the ceiling and most
- * structure is expressed with rules instead of rounded containers.
- */
+export const colors = {
+  background: webVar('background', BASE_PALETTE.background),
+  surface: webVar('surface', BASE_PALETTE.surface),
+  surfaceRaised: webVar('surfaceRaised', BASE_PALETTE.surfaceRaised),
+  surfaceHigh: webVar('surfaceHigh', BASE_PALETTE.surfaceHigh),
+  chrome: webVar('chrome', BASE_PALETTE.chrome),
+  chromeMid: webVar('chromeMid', BASE_PALETTE.chromeMid),
+  chromeSoft: webVar('chromeSoft', BASE_PALETTE.chromeSoft),
+  border: webVar('border', BASE_PALETTE.border),
+  borderStrong: webVar('borderStrong', BASE_PALETTE.borderStrong),
+  text: webVar('text', BASE_PALETTE.text),
+  muted: webVar('muted', BASE_PALETTE.muted),
+  faint: webVar('faint', BASE_PALETTE.faint),
+  gold: webVar('gold', BASE_PALETTE.gold),
+  goldInk: webVar('goldInk', BASE_PALETTE.goldInk),
+  goldSoft: webVar('goldSoft', BASE_PALETTE.goldSoft),
+  goldLine: webVar('goldLine', BASE_PALETTE.goldLine),
+  cyan: webVar('cyan', BASE_PALETTE.cyan),
+  cyanSoft: webVar('cyanSoft', BASE_PALETTE.cyanSoft),
+  green: webVar('green', BASE_PALETTE.green),
+  greenSoft: webVar('greenSoft', BASE_PALETTE.greenSoft),
+  red: webVar('red', BASE_PALETTE.red),
+  redSoft: webVar('redSoft', BASE_PALETTE.redSoft),
+  focus: webVar('focus', BASE_PALETTE.focus),
+};
+
 export const radius = {
   none: 0,
   xs: 3,
@@ -72,30 +92,28 @@ export const space = {
   xxl: 32,
 };
 
-/**
- * DM Sans is the databallr.com display face. On web it is loaded by
- * `installGlobalWebStyles`; native falls back to the system stack.
- */
-export const fonts = {
-  display: '"DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-  body: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+const DISPLAY_STACK = '"DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const BODY_STACK = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+/** Literal font stacks, for the same reason BASE_PALETTE exists. */
+export const BASE_FONTS = {
+  display: DISPLAY_STACK,
+  body: BODY_STACK,
 };
 
-/**
- * Four deliberate roles. Nothing renders below 11px.
- *
- *  label   tiny uppercase, wide tracking — names a value, never competes with it
- *  body    row text
- *  value   numbers inside rows
- *  title   section and screen headings
- *  display the one number per screen that should be read first
- */
+/** Variant-aware font stacks: custom-property indirection on web only. */
+export const fonts = {
+  display: isWeb ? `var(--f-display, ${DISPLAY_STACK})` : DISPLAY_STACK,
+  body: isWeb ? `var(--f-body, ${BODY_STACK})` : BODY_STACK,
+};
+
 export const type = {
   label: 11,
   body: 13,
   value: 15,
   title: 17,
   display: 34,
+  hero: 46,
 };
 
 export const weight = {
@@ -106,7 +124,6 @@ export const weight = {
   black: '900',
 } as const;
 
-/** Uppercase micro-label used above every number and section. */
 export const labelStyle = {
   fontFamily: fonts.display,
   fontSize: type.label,
@@ -116,8 +133,25 @@ export const labelStyle = {
   textTransform: 'uppercase',
 } as const;
 
-/** Tabular figures so columns of money never jitter as values change. */
-export const numeric: { fontFamily: string; fontVariant: 'tabular-nums'[] } = {
+export const headingStyle = {
+  fontFamily: fonts.display,
+  fontSize: type.title,
+  fontWeight: weight.heavy,
+  letterSpacing: -0.3,
+  color: colors.text,
+} as const;
+
+/** Columns of live numbers hold still only when every digit is the same width. */
+export const numeric = {
   fontFamily: fonts.display,
   fontVariant: ['tabular-nums'],
-};
+} as const;
+
+export const heroNumber = {
+  fontFamily: fonts.display,
+  fontVariant: ['tabular-nums'],
+  fontSize: type.hero,
+  fontWeight: weight.bold,
+  letterSpacing: -1.6,
+  color: colors.text,
+} as const;

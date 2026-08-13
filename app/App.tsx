@@ -1,35 +1,89 @@
 import { useMemo, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { MarketApiClient } from './src/api/client';
-import { resolvePublicAppConfig, type PublicAppConfig } from './src/api/config';
-import { AuthProvider, useAuth } from './src/auth/AuthContext';
-import { AuthScreen } from './src/auth/AuthScreen';
+import type { MarketApiClient } from './src/api/client';
+import { resolvePublicAppConfig } from './src/api/config';
+import { useOptionalAuth } from './src/auth/AuthContext';
+import './src/auth/AuthScreen';
+import { seasonLabelFor } from './src/data/calendar';
 import { SeasonControl } from './src/components/SeasonControl';
+import { SettingsButton, SettingsSheet } from './src/components/SettingsSheet';
 import { useReducedMotion } from './src/hooks/useReducedMotion';
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { MarketScreen } from './src/screens/MarketScreen';
 import { PlaysScreen } from './src/screens/PlaysScreen';
+import { DesignPreviewScreen } from './src/screens/DesignPreviewScreen';
 import { PortfolioScreen } from './src/screens/PortfolioScreen';
+import { WatchlistScreen } from './src/screens/WatchlistScreen';
+import { LocalMarketClient } from './src/api/localClient';
 import { PortfolioProvider, usePortfolio } from './src/state/PortfolioContext';
+import { ThemeProvider, useDesignVariant } from './src/theme/ThemeProvider';
 import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
 import { installGlobalWebStyles } from './src/web/globalStyles';
 
 installGlobalWebStyles();
 
-/** Circular databallr mark; radius is derived so it is never a card corner. */
-const BRAND_MARK_SIZE = 24;
-
-type Tab = 'portfolio' | 'market' | 'plays' | 'leaderboard';
+type Tab = 'portfolio' | 'market' | 'watchlist' | 'plays' | 'leaderboard';
 
 const tabs: { key: Tab; label: string }[] = [
   { key: 'portfolio', label: 'Portfolio' },
   { key: 'market', label: 'Market' },
+  { key: 'watchlist', label: 'Watch' },
   { key: 'plays', label: 'Plays' },
   { key: 'leaderboard', label: 'Leaders' },
 ];
+
+/**
+ * Ambient variants put two blurred colour fields behind the content. The blur
+ * itself is CSS (web/globalStyles.ts) addressed via nativeID; everything the
+ * variant controls — colour, opacity, size — is inline here.
+ */
+function AmbientFields() {
+  const { variant } = useDesignVariant();
+  const glow = variant.glow;
+  if (!glow) return null;
+  return (
+    <View pointerEvents="none" style={styles.ambient}>
+      <View
+        nativeID="ambient-field-up"
+        style={[
+          styles.ambientBlob,
+          {
+            backgroundColor: variant.palette.green,
+            opacity: glow.up,
+            width: glow.size,
+            height: glow.size,
+            top: -glow.size / 3,
+            right: -glow.size / 4,
+          },
+        ]}
+      />
+      <View
+        nativeID="ambient-field-accent"
+        style={[
+          styles.ambientBlob,
+          {
+            backgroundColor: glow.accentColor ?? variant.palette.gold,
+            opacity: glow.accent,
+            width: glow.size * 0.88,
+            height: glow.size * 0.88,
+            top: glow.size,
+            left: -glow.size / 3,
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+/** Full-screen texture layer; the actual gradient lives in the global CSS. */
+function VariantTexture() {
+  const { variant } = useDesignVariant();
+  if (!variant.texture) return null;
+  return <View nativeID={`variant-texture-${variant.texture}`} pointerEvents="none" style={styles.texture} />;
+}
 
 function CenteredState({
   title,
@@ -88,49 +142,68 @@ function NoticeBanner({ message, onDismiss }: { message: string; onDismiss: () =
   );
 }
 
-function AppContent() {
+/**
+ * Wide screens read as a desktop product, and a desktop product keeps its
+ * navigation at the top; the thumb-reach argument for a bottom bar only exists
+ * on a phone.
+ */
+const WIDE_LAYOUT_MIN_WIDTH = 900;
+
+function AppBody() {
   const [activeTab, setActiveTab] = useState<Tab>('portfolio');
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const insets = useSafeAreaInsets();
-  const {
-    clearMessage: clearAuthMessage,
-    error: authError,
-    isSubmitting,
-    signOut,
-  } = useAuth();
+  const { width } = useWindowDimensions();
+  const wide = width >= WIDE_LAYOUT_MIN_WIDTH;
+  const auth = useOptionalAuth();
+  const authError = auth?.error ?? null;
+  const authSubmitting = auth?.isSubmitting ?? false;
+  const clearAuthMessage = auth?.clearMessage;
+  const signOut = auth?.signOut;
   const {
     confirmLocalTransition,
     dismissNotice,
     isLoading,
     isTransitioning,
+    displayName,
+    latestSettledDate,
     legacySavePresent,
     message,
+    nextGameDate,
+    players,
     refreshData,
     serverError,
     state,
     transitionError,
     transitionRequired,
   } = usePortfolio();
-  const hasVisibleSnapshot = Boolean(
-    state
-    && !isLoading
-    && !serverError
-    && !transitionRequired
-    && !isTransitioning,
-  );
+  const seasonLabel = seasonLabelFor(latestSettledDate ?? nextGameDate);
+  const ready = Boolean(state && !isLoading && !serverError && !transitionRequired && !isTransitioning);
 
   const body = (() => {
     if (isLoading) {
-      return <CenteredState busy copy="Loading market, portfolio, and game state from the server." title="Loading your account" />;
+      return (
+        <CenteredState
+          busy
+          copy="Loading market, portfolio, and game state from the server."
+          title="Loading your account"
+        />
+      );
     }
     if (transitionRequired) {
-      const storageCheckFailed = Boolean(transitionError) && !legacySavePresent;
+      const failed = Boolean(transitionError) && !legacySavePresent;
       return (
         <CenteredState
           actionDisabled={isTransitioning}
-          actionLabel={isTransitioning ? 'WORKING...' : storageCheckFailed ? 'TRY AGAIN' : 'USE SERVER ACCOUNT'}
-          copy={transitionError ?? 'This device has prototype progress that cannot be safely imported. Your server account will remain authoritative, then the old device save will be removed.'}
-          onAction={() => void (storageCheckFailed ? refreshData() : confirmLocalTransition())}
-          title={storageCheckFailed ? 'Device storage unavailable' : 'Finish account setup'}
+          actionLabel={isTransitioning ? 'WORKING...' : failed ? 'TRY AGAIN' : 'USE SERVER ACCOUNT'}
+          copy={
+            transitionError ??
+            'This device has prototype progress that cannot be safely imported. Your server account will remain authoritative, then the old device save will be removed.'
+          }
+          onAction={() => {
+            failed ? refreshData() : confirmLocalTransition();
+          }}
+          title={failed ? 'Device storage unavailable' : 'Finish account setup'}
         />
       );
     }
@@ -139,7 +212,9 @@ function AppContent() {
         <CenteredState
           actionLabel="RETRY"
           copy={serverError ?? 'The server did not return a usable account snapshot.'}
-          onAction={() => void refreshData()}
+          onAction={() => {
+            refreshData();
+          }}
           title="Account unavailable"
         />
       );
@@ -148,133 +223,177 @@ function AppContent() {
       <>
         {activeTab === 'portfolio' && <PortfolioScreen />}
         {activeTab === 'market' && <MarketScreen />}
+        {activeTab === 'watchlist' && <WatchlistScreen />}
         {activeTab === 'plays' && <PlaysScreen />}
         {activeTab === 'leaderboard' && <LeaderboardScreen />}
       </>
     );
   })();
 
+  const renderTabBar = (position: 'top' | 'bottom') => (
+    <View
+      accessibilityRole="tablist"
+      style={[styles.tabBar, position === 'top' ? styles.tabBarTop : { paddingBottom: insets.bottom + 9 }]}
+    >
+      {tabs.map((tab) => {
+        const active = tab.key === activeTab;
+        return (
+          <Pressable
+            key={tab.key}
+            accessibilityLabel={tab.label}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            aria-selected={active}
+            onPress={() => setActiveTab(tab.key)}
+            style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
+          >
+            {/* Gold rule marks the active tab, matching the underline treatment
+                on the databallr.com nav. It sits on the edge nearest the
+                content: below the labels when the bar is on top, above when
+                the bar is at the bottom. */}
+            <View style={[styles.tabMarker, position === 'top' && styles.tabMarkerBottomEdge, active && styles.tabMarkerActive]} />
+            <Text maxFontSizeMultiplier={1.5} numberOfLines={1} style={[styles.tabText, active && styles.activeTabText]}>
+              {tab.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+
   return (
     <View style={styles.app}>
       <StatusBar style="light" />
+      <AmbientFields />
+      <VariantTexture />
       {/* Databallr brand bar: gold wordmark, a rule, then the product name. */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <View style={styles.mark}><Text maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text></View>
-        {/* Branding is decorative: it shrinks and truncates before the sign-out
-            action is allowed to leave the viewport. */}
+        <View style={styles.mark}>
+          <Text maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text>
+        </View>
         <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.brand}>databallr</Text>
         <View style={styles.brandDivider} />
         <View style={styles.brandCopy}>
           <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.product}>STOCK MARKET</Text>
         </View>
-        <Pressable
-          accessibilityLabel="Sign out"
-          accessibilityRole="button"
-          accessibilityState={{ disabled: isSubmitting }}
-          disabled={isSubmitting}
-          onPress={() => void signOut()}
-          style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}
-        >
-          <Text style={styles.signOutText}>SIGN OUT</Text>
-        </Pressable>
+        <SettingsButton onPress={() => setSettingsOpen(true)} />
       </View>
-
-      {hasVisibleSnapshot ? <SeasonControl /> : null}
-      {authError ? (
+      {ready && wide ? renderTabBar('top') : null}
+      {ready ? <SeasonControl /> : null}
+      {authError && clearAuthMessage ? (
         <NoticeBanner message={authError} onDismiss={clearAuthMessage} />
       ) : message ? (
         <NoticeBanner message={message} onDismiss={dismissNotice} />
       ) : null}
-
       <View style={styles.screen}>{body}</View>
-
-      {hasVisibleSnapshot ? (
-        <View accessibilityRole="tablist" style={[styles.tabBar, { paddingBottom: insets.bottom + 9 }]}>
-          {tabs.map((tab) => {
-            const active = tab.key === activeTab;
-            return (
-              <Pressable
-                key={tab.key}
-                accessibilityLabel={tab.label}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
-                aria-selected={active}
-                onPress={() => setActiveTab(tab.key)}
-                style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
-              >
-                {/* Gold top rule marks the active tab, matching the underline
-                    treatment on the databallr.com nav. */}
-                <View style={[styles.tabMarker, active && styles.tabMarkerActive]} />
-                <Text
-                  maxFontSizeMultiplier={1.5}
-                  numberOfLines={1}
-                  style={[styles.tabText, active && styles.activeTabText]}
-                >
-                  {tab.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
+      {ready ? (wide ? null : renderTabBar('bottom')) : null}
+      <SettingsSheet
+        listedPlayers={players.length}
+        onClose={() => setSettingsOpen(false)}
+        profile={
+          auth?.user
+            ? {
+                displayName: displayName ?? auth.user.email ?? 'Your account',
+                email: auth.user.email ?? null,
+                provider: auth.user.app_metadata?.provider ?? null,
+                memberSince: auth.user.created_at ? auth.user.created_at.slice(0, 10) : null,
+              }
+            : undefined
+        }
+        onSignOut={
+          signOut && !authSubmitting
+            ? () => {
+                setSettingsOpen(false);
+                signOut();
+              }
+            : undefined
+        }
+        seasonLabel={seasonLabel}
+        visible={settingsOpen}
+      />
     </View>
   );
 }
 
-function AuthenticatedRuntime({ config }: { config: PublicAppConfig }) {
-  const { getAccessToken, isLoading, user } = useAuth();
-  const apiClient = useMemo(() => new MarketApiClient({
-    baseUrl: config.apiUrl,
-    expectedUserId: user?.id ?? '',
-    getAccessToken,
-    settlementKey: config.settlementKey,
-  }), [config.apiUrl, config.settlementKey, getAccessToken, user?.id]);
-
-  if (isLoading) {
-    return <CenteredState busy copy="Restoring your saved sign-in securely." title="Checking your session" />;
-  }
-  if (!user) return <AuthScreen />;
+/**
+ * The public build is a self-contained demo: a local market client seeded from
+ * the committed season data, no server account required.
+ */
+function LocalDemoApp() {
+  const client = useMemo(() => new LocalMarketClient(), []);
   return (
-    <PortfolioProvider apiClient={apiClient} key={user.id} userId={user.id}>
-      <AppContent />
+    <PortfolioProvider apiClient={client as unknown as MarketApiClient} userId="local-demo">
+      <AppBody />
     </PortfolioProvider>
   );
 }
 
-function ConfiguredApp({ config }: { config: PublicAppConfig }) {
-  return (
-    <AuthProvider config={config}>
-      <AuthenticatedRuntime config={config} />
-    </AuthProvider>
-  );
+/**
+ * /treatments (or any URL carrying ?design) renders the design gallery instead
+ * of the app, so every variant can be reviewed side by side at a stable URL.
+ */
+function isDesignPreviewRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname.replace(/\/+$/, '');
+  if (path === '/treatments' || path.startsWith('/treatments/')) return true;
+  return new URLSearchParams(window.location.search).has('design');
 }
 
 export default function App() {
-  const configResult = resolvePublicAppConfig();
+  resolvePublicAppConfig();
+  if (isDesignPreviewRoute()) {
+    return (
+      <ThemeProvider>
+        <SafeAreaProvider style={styles.provider}>
+          <StatusBar style="light" />
+          <View style={styles.app}>
+            <AmbientFields />
+            <VariantTexture />
+            <DesignPreviewScreen />
+          </View>
+        </SafeAreaProvider>
+      </ThemeProvider>
+    );
+  }
   return (
-    <SafeAreaProvider style={styles.provider}>
-      <StatusBar style="light" />
-      {configResult.config ? (
-        <ConfiguredApp config={configResult.config} />
-      ) : (
-        <CenteredState
-          copy={`${configResult.error} Set the three EXPO_PUBLIC app variables before starting Expo.`}
-          title="App configuration missing"
-        />
-      )}
-    </SafeAreaProvider>
+    <ThemeProvider>
+      <SafeAreaProvider style={styles.provider}>
+        <StatusBar style="light" />
+        <LocalDemoApp />
+      </SafeAreaProvider>
+    </ThemeProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  provider: { flex: 1, backgroundColor: colors.background },
+  provider: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  ambient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
+  },
+  texture: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
+  },
+  ambientBlob: {
+    position: 'absolute',
+  },
   app: {
     flex: 1,
     minHeight: 0,
     alignSelf: 'center',
     width: '100%',
-    // Wider than a phone frame so the ~300-row market table can breathe on a
-    // desktop instead of leaving half the viewport empty.
     maxWidth: 1040,
     backgroundColor: colors.background,
     borderLeftColor: colors.border,
@@ -289,14 +408,14 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingHorizontal: space.md,
     paddingBottom: space.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.chrome,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },
   mark: {
-    width: BRAND_MARK_SIZE,
-    height: BRAND_MARK_SIZE,
-    borderRadius: BRAND_MARK_SIZE / 2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: colors.gold,
     alignItems: 'center',
     justifyContent: 'center',
@@ -311,17 +430,26 @@ const styles = StyleSheet.create({
   brand: {
     flexShrink: 1,
     minWidth: 0,
-    color: colors.gold,
+    color: colors.goldInk,
     fontFamily: fonts.display,
     fontSize: 17,
     fontWeight: '800',
-    },
-  brandDivider: { width: 1, height: 18, backgroundColor: colors.borderStrong, marginHorizontal: space.xs },
-  brandCopy: { flex: 1, flexShrink: 1, minWidth: 0 },
-  product: { ...labelStyle, color: colors.muted },
-  signOut: { minHeight: 44, flexShrink: 0, justifyContent: 'center', paddingHorizontal: space.sm },
-  signOutText: { ...labelStyle },
-  // brandDivider is decorative and collapses with the wordmark.
+  },
+  brandDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: colors.borderStrong,
+    marginHorizontal: space.xs,
+  },
+  brandCopy: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  product: {
+    ...labelStyle,
+    color: colors.muted,
+  },
   notice: {
     minHeight: 44,
     flexDirection: 'row',
@@ -334,22 +462,82 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.gold,
     borderBottomWidth: 1,
   },
-  noticeText: { flex: 1, color: colors.text, fontSize: type.label, lineHeight: 17, fontWeight: '700' },
-  noticeClose: { color: colors.gold, fontSize: type.label, fontWeight: '900' },
-  screen: { flex: 1, minHeight: 0 },
-  centeredState: { flex: 1, minHeight: 260, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', width: '100%', maxWidth: 500, padding: space.xl, backgroundColor: colors.background },
-  stateBusy: { color: colors.gold, fontSize: type.label, fontWeight: '900', letterSpacing: 1 },
-  stateTitle: { color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'center', marginTop: space.md },
-  stateCopy: { color: colors.muted, fontSize: type.body, lineHeight: 20, textAlign: 'center', marginTop: space.sm },
-  stateButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold, borderRadius: radius.md, paddingHorizontal: space.lg, marginTop: space.lg },
-  stateButtonText: { color: colors.background, fontSize: type.label, fontWeight: '900' },
-  disabled: { opacity: 0.45 },
+  noticeText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: type.label,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  noticeClose: {
+    color: colors.goldInk,
+    fontSize: type.label,
+    fontWeight: '900',
+  },
+  screen: {
+    flex: 1,
+    minHeight: 0,
+  },
+  centeredState: {
+    flex: 1,
+    minHeight: 260,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 500,
+    padding: space.xl,
+    backgroundColor: colors.background,
+  },
+  stateBusy: {
+    color: colors.goldInk,
+    fontSize: type.label,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  stateTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginTop: space.md,
+  },
+  stateCopy: {
+    color: colors.muted,
+    fontSize: type.body,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginTop: space.sm,
+  },
+  stateButton: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.gold,
+    borderRadius: radius.md,
+    paddingHorizontal: space.lg,
+    marginTop: space.lg,
+  },
+  stateButtonText: {
+    color: colors.background,
+    fontSize: type.label,
+    fontWeight: '900',
+  },
+  disabled: {
+    opacity: 0.45,
+  },
   tabBar: {
     flexDirection: 'row',
     paddingHorizontal: 0,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.chromeMid,
     borderTopColor: colors.border,
     borderTopWidth: 1,
+  },
+  tabBarTop: {
+    borderTopWidth: 0,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    backgroundColor: colors.chromeMid,
   },
   tab: {
     flex: 1,
@@ -369,12 +557,23 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: 'transparent',
   },
-  tabMarkerActive: { backgroundColor: colors.gold },
-  tabText: {
-    ...labelStyle,
-    color: colors.faint,
-    letterSpacing: 0.9,
+  tabMarkerBottomEdge: {
+    top: 'auto',
+    bottom: 0,
   },
-  activeTabText: { color: colors.gold },
-  pressed: { opacity: 0.65 },
+  tabMarkerActive: {
+    backgroundColor: colors.gold,
+  },
+  tabText: {
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: '700',
+    color: colors.faint,
+  },
+  activeTabText: {
+    color: colors.goldInk,
+  },
+  pressed: {
+    opacity: 0.65,
+  },
 });
