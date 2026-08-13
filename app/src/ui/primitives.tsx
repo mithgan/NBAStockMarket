@@ -52,7 +52,9 @@ export function Label({ children, tone }: { children: ReactNode; tone?: 'gold' |
     <Text
       style={[
         styles.label,
-        tone === 'gold' && { color: colors.gold },
+        // goldInk, not gold: the text-safe gold that light variants darken so
+        // small print holds 4.5:1. Raw gold stays reserved for fills and rules.
+        tone === 'gold' && { color: colors.goldInk },
         tone === 'cyan' && { color: colors.cyan },
       ]}
     >
@@ -236,7 +238,7 @@ const toneStyles: Record<ButtonTone, { box: ViewStyle; text: { color: string } }
   },
   secondary: {
     box: { backgroundColor: 'transparent', borderColor: colors.goldLine },
-    text: { color: colors.gold },
+    text: { color: colors.goldInk },
   },
   ghost: {
     box: { backgroundColor: colors.surface, borderColor: colors.border },
@@ -266,7 +268,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     flexShrink: 0,
   },
-  sectionLabelAccent: { color: colors.gold },
+  sectionLabelAccent: { color: colors.goldInk },
   sectionRule: { flex: 1, height: 1, backgroundColor: colors.border, minWidth: space.lg },
   sectionMeta: { ...labelStyle, flexShrink: 0 },
 
@@ -330,7 +332,7 @@ const styles = StyleSheet.create({
     color: colors.faint,
     textTransform: 'uppercase',
   },
-  segmentTextSelected: { color: colors.gold },
+  segmentTextSelected: { color: colors.goldInk },
 
   tag: {
     fontFamily: fonts.display,
@@ -350,7 +352,7 @@ const styles = StyleSheet.create({
 
 const tagTones = StyleSheet.create({
   neutral: { color: colors.faint, backgroundColor: colors.surfaceRaised },
-  gold: { color: colors.gold, backgroundColor: colors.goldSoft },
+  gold: { color: colors.goldInk, backgroundColor: colors.goldSoft },
   cyan: { color: colors.cyan, backgroundColor: colors.cyanSoft },
   up: { color: colors.green, backgroundColor: colors.greenSoft },
   down: { color: colors.red, backgroundColor: colors.redSoft },
