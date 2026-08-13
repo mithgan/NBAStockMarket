@@ -90,11 +90,56 @@ export function lineChartCoordinates(
   }));
 }
 
+/**
+ * Below this many points the midpoint-bezier smoothing invents curvature that
+ * the data does not have, so sparse series fall back to honest straight
+ * segments.
+ */
+const SMOOTH_MIN_POINTS = 5;
+
 export function smoothLinePath(coordinates: readonly ChartCoordinate[]): string {
   if (coordinates.length === 0) return '';
+  const start = `M ${coordinates[0].x} ${coordinates[0].y}`;
+  if (coordinates.length < SMOOTH_MIN_POINTS) {
+    return coordinates.slice(1).reduce((path, point) => `${path} L ${point.x} ${point.y}`, start);
+  }
   return coordinates.slice(1).reduce((path, point, index) => {
     const previous = coordinates[index];
     const middleX = (previous.x + point.x) / 2;
     return `${path} C ${middleX} ${previous.y}, ${middleX} ${point.y}, ${point.x} ${point.y}`;
-  }, `M ${coordinates[0].x} ${coordinates[0].y}`);
+  }, start);
+}
+
+/**
+ * Average surprise (actual minus projected net points) over the last
+ * `games` settled games, or over the whole settled season when `games` is
+ * null. This is the number behind the market's Trending sort, so the window
+ * definition has to live in one place.
+ */
+export function windowSurprise(
+  points: readonly TrendPoint[],
+  games: number | null,
+): number | null {
+  const visible = games === null ? points : points.slice(-games);
+  if (visible.length === 0) return null;
+  return (
+    visible.reduce((sum, point) => sum + point.np - point.expected_np, 0) / visible.length
+  );
+}
+
+/**
+ * How much a player's last five games have out- or under-performed the ten
+ * games before them, in surprise per game. Needs at least eight settled games
+ * so the baseline holds three or more — with less than that, "momentum" would
+ * just be noise wearing a trend's clothes.
+ */
+export function playerMomentum(points: readonly TrendPoint[]): number | null {
+  if (points.length < 8) return null;
+  const surprise = (point: TrendPoint) => point.np - point.expected_np;
+  const mean = (values: number[]) =>
+    values.reduce((sum, value) => sum + value, 0) / values.length;
+  const recent = points.slice(-5).map(surprise);
+  const baseline = points.slice(Math.max(0, points.length - 5 - 10), -5).map(surprise);
+  if (baseline.length === 0) return null;
+  return mean(recent) - mean(baseline);
 }

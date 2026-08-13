@@ -1,7 +1,9 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { PlayerAvatar } from '../components/PlayerAvatar';
+import { PositionCard } from '../components/PositionCard';
 import type { Player } from '../data/types';
-import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
+import { formatCompactMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
 import { DOLLARS_PER_NET_POINT, WEEKLY_TOTAL_CLAMP_NP } from '../state/game';
 import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
@@ -44,9 +46,15 @@ export function PlaysScreen() {
     state,
     weeklyShortTargets,
   } = usePortfolio();
+  const { width } = useWindowDimensions();
   if (!state) return null;
   const playerById = new Map(players.map((player) => [player.id, player]));
   const accountMutationPending = pendingActions.size > 0;
+  // Position cards pack into as many columns as fit a comfortable card width,
+  // capped at the same 1040px content column the rest of the app uses.
+  const contentWidth = Math.min(width, 1040) - 2 * space.md;
+  const columns = contentWidth >= 880 ? 5 : contentWidth >= 660 ? 4 : contentWidth >= 460 ? 3 : 2;
+  const cardWidth = Math.floor((contentWidth - space.sm * (columns - 1)) / columns);
   const priceOf = (playerId: string) =>
     state.prices[playerId] ?? playerById.get(playerId)?.listing_price ?? 0;
 
@@ -75,6 +83,7 @@ export function PlaysScreen() {
     const disabled = slots.remaining === 0 || accountMutationPending;
     return (
       <View key={player.id} style={[styles.actionRow, isLast && styles.lastRow]}>
+        <PlayerAvatar player={player} size={34} />
         <View
           accessible
           accessibilityLabel={`${player.name}. Price ${formatMoney(priceOf(player.id))}. Next game ${gameDate}. Fee ${formatMoney(fee)}`}
@@ -134,55 +143,41 @@ export function PlaysScreen() {
           <Text style={styles.subtle}>Use one only when you have a real conviction.</Text>
         </View>
       ) : (
-        <View style={styles.listCard}>
-          {activeShorts.map((position, index) => {
-            const player = playerById.get(position.playerId);
+        <View style={styles.cardGrid}>
+          {activeShorts.map((position) => {
             const markedPayout = Math.max(
               -WEEKLY_TOTAL_CLAMP_NP,
               Math.min(WEEKLY_TOTAL_CLAMP_NP, position.accruedNetPoints),
             ) * DOLLARS_PER_NET_POINT;
-            const isLast = index === activeShorts.length - 1 && usedBoosts.length === 0;
             return (
-              <View key={position.id} style={[styles.positionRow, isLast && styles.lastRow]}>
-                <View style={styles.positionCopy}>
-                  <Text numberOfLines={1} style={styles.rowName}>{player?.name ?? position.playerId}</Text>
-                  <Text numberOfLines={1} style={styles.rowMeta}>
-                    WEEKLY SHORT · {position.qualifyingGames} games
-                  </Text>
-                </View>
-                <Text
-                  accessibilityLabel={`Marked at ${formatSignedMoney(markedPayout)}`}
-                  numberOfLines={1}
-                  style={[styles.positionValue, markedPayout >= 0 ? styles.positive : styles.negative]}
-                >
-                  {formatCompactSignedMoney(markedPayout)}
-                </Text>
-              </View>
+              <PositionCard
+                clampValue={WEEKLY_TOTAL_CLAMP_NP * DOLLARS_PER_NET_POINT}
+                key={position.id}
+                kind="SHORT"
+                markedLabel={`Marked at ${formatSignedMoney(markedPayout)}`}
+                markedValue={markedPayout}
+                meta={`${position.qualifyingGames} ${position.qualifyingGames === 1 ? 'game' : 'games'} settled`}
+                player={playerById.get(position.playerId)}
+                width={cardWidth}
+              />
             );
           })}
-          {usedBoosts.map((boost, index) => (
-            <View
+          {usedBoosts.map((boost) => (
+            <PositionCard
+              // A boost has no clamp; the meter just fills fully when settled.
+              clampValue={Math.max(Math.abs(boost.payout), 1)}
               key={boost.id}
-              style={[styles.positionRow, index === usedBoosts.length - 1 && styles.lastRow]}
-            >
-              <View style={styles.positionCopy}>
-                <Text numberOfLines={1} style={styles.rowName}>
-                  {playerById.get(boost.playerId)?.name ?? boost.playerId}
-                </Text>
-                <Text numberOfLines={1} style={styles.rowMeta}>
-                  BOOST · {boost.gameDate} · {boost.status.toUpperCase()}
-                </Text>
-              </View>
-              <Text
-                accessibilityLabel={boost.status === 'armed'
-                  ? 'Armed, not settled yet'
-                  : `Settled at ${formatSignedMoney(boost.payout)}`}
-                numberOfLines={1}
-                style={[styles.positionValue, boost.payout >= 0 ? styles.positive : styles.negative]}
-              >
-                {boost.status === 'armed' ? 'ARMED' : formatCompactSignedMoney(boost.payout)}
-              </Text>
-            </View>
+              kind="BOOST"
+              markedLabel={boost.status === 'armed'
+                ? 'Armed, not settled yet'
+                : `Settled at ${formatSignedMoney(boost.payout)}`}
+              markedValue={boost.payout}
+              meta={boost.status === 'armed'
+                ? `Armed for ${boost.gameDate}`
+                : `${boost.status} · ${boost.gameDate}`}
+              player={playerById.get(boost.playerId)}
+              width={cardWidth}
+            />
           ))}
         </View>
       )}
@@ -233,7 +228,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: 22,
     fontWeight: weight.black,
-    },
+  },
   titleMeta: { ...labelStyle, marginTop: 2 },
   subtle: { color: colors.muted, fontFamily: fonts.body, fontSize: type.label, lineHeight: 17 },
   rulesCopy: {
@@ -260,6 +255,13 @@ const styles = StyleSheet.create({
   slotTotal: { ...numeric, color: colors.faint, fontSize: type.value, fontWeight: weight.heavy, marginRight: space.xs },
 
   list: { borderTopColor: colors.border, borderTopWidth: 1 },
+  cardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingTop: space.xs,
+  },
   listCard: { borderTopColor: colors.border, borderTopWidth: 1 },
   emptyCard: {
     paddingHorizontal: space.md,
@@ -287,7 +289,26 @@ const styles = StyleSheet.create({
   },
   lastRow: { borderBottomWidth: 0 },
   positionCopy: { flex: 1, minWidth: 0 },
-  positionValue: { ...numeric, fontSize: type.body, fontWeight: weight.black, flexShrink: 0 },
+  positionValue: { ...numeric, fontSize: type.value, fontWeight: weight.black, flexShrink: 0 },
+  clampTrack: {
+    height: 4,
+    marginTop: 6,
+    borderRadius: radius.xs,
+    backgroundColor: colors.border,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  clampMidpoint: {
+    position: 'absolute',
+    left: '50%',
+    width: 1,
+    top: 0,
+    bottom: 0,
+    backgroundColor: colors.borderStrong,
+  },
+  clampFill: { position: 'absolute', left: '50%', height: 4, borderRadius: radius.xs },
+  clampUp: { backgroundColor: colors.green },
+  clampDown: { backgroundColor: colors.red, left: undefined, right: '50%' },
 
   actionRow: {
     paddingHorizontal: space.md,

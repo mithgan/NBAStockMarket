@@ -1,14 +1,15 @@
 import type { Player } from './types';
 import type { TrendPoint } from './trendPresentation';
-import { priceChangePercent, recentForm } from './marketPresentation';
+import { priceChangePercent, recentForm, windowSurprise } from './marketPresentation';
 
-export type MarketSort = 'value' | 'move' | 'form' | 'name';
+export type MarketSort = 'value' | 'move' | 'form' | 'trending' | 'name';
 export type MarketFilter = 'all' | 'held' | 'affordable';
 
 export const MARKET_SORTS: { key: MarketSort; label: string; hint: string }[] = [
   { key: 'value', label: 'Price', hint: 'Sort by highest price' },
   { key: 'move', label: 'Move', hint: 'Sort by biggest price move since listing' },
   { key: 'form', label: 'Form', hint: 'Sort by best recent form versus expected' },
+  { key: 'trending', label: 'Trending', hint: 'Sort by highest average net points over projection' },
   { key: 'name', label: 'A-Z', hint: 'Sort players alphabetically' },
 ];
 
@@ -23,6 +24,8 @@ export interface MarketRowModel {
   currentPrice: number;
   changePercent: number | null;
   formSurprise: number | null;
+  /** Average surprise across the selected trending window; null with no games. */
+  windowSurprise: number | null;
   held: boolean;
   affordable: boolean;
 }
@@ -42,6 +45,12 @@ export interface BuildMarketRowsInput {
   query: string;
   sort: MarketSort;
   filter: MarketFilter;
+  /**
+   * Window for the Trending sort, in settled games; null means the whole
+   * settled season. Owned by the screen's window picker so the sort and its
+   * label can never disagree.
+   */
+  trendingGames?: number | null;
 }
 
 function matchesQuery(name: string, normalizedQuery: string): boolean {
@@ -64,6 +73,7 @@ export function buildMarketRows({
   query,
   sort,
   filter,
+  trendingGames,
 }: BuildMarketRowsInput): MarketRowModel[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
 
@@ -86,6 +96,7 @@ export function buildMarketRows({
       currentPrice,
       changePercent: priceChangePercent(currentPrice, player.listing_price),
       formSurprise: form ? form.averageSurprise : null,
+      windowSurprise: windowSurprise(trends[player.id] ?? [], trendingGames ?? null),
       held,
       affordable,
     });
