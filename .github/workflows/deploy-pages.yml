@@ -1,0 +1,73 @@
+name: Deploy reconstruction to GitHub Pages
+
+# Publishes the reconstructed app (app/) as a static site at
+# https://mithgan.github.io/NBAStockMarket/ so the recovered UI has a live
+# URL again. The EXPO_PUBLIC_* values below are the same public values the
+# original deployment shipped inside its bundle (already committed in
+# vercel-mirror/), not secrets.
+
+on:
+  push:
+    branches: [claude/remote-control-v36xep]
+    paths: ['.github/workflows/deploy-pages.yml', 'app/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      EXPO_PUBLIC_NBA_STOCK_API_URL: https://nba-stock-market-api.onrender.com
+      EXPO_PUBLIC_SUPABASE_URL: https://vykoykabweuemstpqljg.supabase.co
+      EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_CiRgtAYJvtqo0ZI6HqL15g_XtDyHBeT
+      EXPO_PUBLIC_NBA_STOCK_SETTLEMENT_KEY: nbasandbox-Bo0vkao7fvdcF8bOrwqZCvuOFbrLtAguL1Wn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci --no-audit --no-fund
+      - name: Point the export at the Pages subpath
+        working-directory: app
+        run: |
+          node -e "
+            const fs = require('fs');
+            const config = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+            config.expo.experiments = { ...config.expo.experiments, baseUrl: '/NBAStockMarket' };
+            fs.writeFileSync('app.json', JSON.stringify(config, null, 2));
+          "
+      - name: Export web build
+        working-directory: app
+        run: npx expo export --platform web --output-dir dist
+      - name: Add SPA fallback and disable Jekyll
+        working-directory: app
+        run: |
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
