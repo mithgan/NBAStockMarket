@@ -2,9 +2,10 @@ name: Deploy reconstruction to GitHub Pages
 
 # Publishes the reconstructed app (app/) as a static site at
 # https://mithgan.github.io/NBAStockMarket/ so the recovered UI has a live
-# URL again. The EXPO_PUBLIC_* values below are the same public values the
-# original deployment shipped inside its bundle (already committed in
-# vercel-mirror/), not secrets.
+# URL again. Publishes via the classic gh-pages branch because the workflow
+# token may not create a Pages site through the API. The EXPO_PUBLIC_* values
+# below are the same public values the original deployment shipped inside its
+# bundle (already committed in vercel-mirror/), not secrets.
 
 on:
   push:
@@ -13,16 +14,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: deploy-pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
     env:
       EXPO_PUBLIC_NBA_STOCK_API_URL: https://nba-stock-market-api.onrender.com
@@ -56,18 +55,10 @@ jobs:
         run: |
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
-      - uses: actions/configure-pages@v5
+      - name: Publish to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: app/dist
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: app/dist
+          force_orphan: true
+          commit_message: 'deploy: reconstructed NBA Stock Market'
