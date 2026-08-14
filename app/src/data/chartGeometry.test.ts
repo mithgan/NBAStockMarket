@@ -1,37 +1,26 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { chartCoordinates, portfolioPeriodChange } from './chartGeometry';
+import { nearestPointIndex } from './chartGeometry';
 
-test('a one-day portfolio history renders a visible point in the chart center', () => {
-  assert.deepEqual(chartCoordinates([140_000_000], 320, 124), [
-    { x: 160, y: 62 },
-  ]);
+const points = [
+  { x: 10, y: 40 },
+  { x: 160, y: 20 },
+  { x: 310, y: 60 },
+];
+
+test('a pointer between plotted points snaps to the nearest one', () => {
+  assert.equal(nearestPointIndex(points, 70, 320), 0);
+  assert.equal(nearestPointIndex(points, 100, 320), 1);
+  assert.equal(nearestPointIndex(points, 250, 320), 2);
 });
 
-test('flat multi-day histories use the chart midpoint instead of the top edge', () => {
-  assert.deepEqual(chartCoordinates([140_000_000, 140_000_000], 320, 124), [
-    { x: 10, y: 62 },
-    { x: 310, y: 62 },
-  ]);
+test('a pointer skimming past either edge resolves to the edge point', () => {
+  assert.equal(nearestPointIndex(points, -25, 320), 0);
+  assert.equal(nearestPointIndex(points, 500, 320), 2);
 });
 
-test('a one-day portfolio period includes that day change', () => {
-  assert.equal(
-    portfolioPeriodChange([
-      { totalValue: 140_500_000 },
-    ], 140_000_000),
-    500_000,
-  );
-});
-
-test('a multi-day portfolio period compares with the point before the visible range', () => {
-  assert.equal(
-    portfolioPeriodChange([
-      { totalValue: 140_500_000 },
-      { totalValue: 140_200_000 },
-      { totalValue: 141_000_000 },
-    ], 139_900_000),
-    1_100_000,
-  );
+test('an empty plot or a collapsed surface has nothing to snap to', () => {
+  assert.equal(nearestPointIndex([], 50, 320), null);
+  assert.equal(nearestPointIndex(points, 50, 0), null);
 });

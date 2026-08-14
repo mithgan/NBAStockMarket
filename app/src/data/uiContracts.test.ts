@@ -13,7 +13,10 @@ test('tab pills use their exact equal-width 44px Pressable bounds', () => {
   // Formatting-agnostic: equal-width tabs with a 44px minimum.
   assert.match(appSource, /tab: \{\s*flex: 1,\s*minWidth: 0,\s*minHeight: 44,/);
   assert.match(appSource, /style=\{\(\{ pressed \}\) => \[styles\.tab, pressed && styles\.pressed\]\}/);
-  assert.match(appSource, /\[styles\.tabMarker, active && styles\.tabMarkerActive\]/);
+  assert.match(
+    appSource,
+    /\[styles\.tabMarker, position === 'top' && styles\.tabMarkerBottomEdge, active && styles\.tabMarkerActive\]/,
+  );
 });
 
 test('market actions expose concise player-specific button labels', () => {
@@ -36,7 +39,7 @@ test('leaderboard rows use stable account identities instead of display names', 
 test('detail dividend chart follows the selected range and renders labeled extrema', () => {
   assert.match(marketSource, /const rangeTotal = visiblePoints\.reduce/);
   assert.match(marketSource, /range === 'Season' \? 'Settled season'/);
-  assert.match(marketSource, /\['L5', 'L15', 'Season'\]/);
+  assert.match(marketSource, /\['L5', 'L15', 'L30', 'Season'\]/);
   assert.match(marketSource, /<Path d=\{linePath\}/);
   assert.match(marketSource, /\['HIGH', extrema\.high\]/);
   assert.match(marketSource, /\['LOW', extrema\.low\]/);

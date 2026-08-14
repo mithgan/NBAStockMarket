@@ -38,12 +38,12 @@ test('manual replay advancement is admin-gated and requires explicit confirmatio
   assert.match(seasonControlSource, /NEXT ·/);
   assert.match(seasonControlSource, /latestSettledDate/);
   assert.match(seasonControlSource, /accessibilityLabel="Refresh market data"/);
-  assert.match(seasonControlSource, /onPress=\{\(\) => void refreshData\(\)\}/);
+  assert.match(seasonControlSource, /onPress=\{\(\) => \{\s*refreshData\(\);\s*\}\}/);
   assert.match(seasonControlSource, /Advance the shared replay\?/);
   assert.match(seasonControlSource, /This settles .* for every play-tester/);
   assert.match(seasonControlSource, /accessibilityLabel="Cancel replay simulation"/);
   assert.match(seasonControlSource, /'Confirm replay advancement'/);
-  assert.match(seasonControlSource, /confirmation && canSettleNextDay \?/);
+  assert.match(seasonControlSource, /confirmation && \(confirmation === 'rewind' \|\| canSettleNextDay\) \?/);
   assert.match(seasonControlSource, /await advanceDay\(\)/);
   assert.match(seasonControlSource, /SIMULATE SEASON/);
   assert.match(seasonControlSource, /await advanceSeason\(\)/);
@@ -83,7 +83,7 @@ test('the market only widens into extra columns when the table has room', () => 
 });
 
 test('every compact figure in a play row keeps an exact spoken value', () => {
-  assert.match(playsSource, /accessibilityLabel=\{`Marked at \$\{formatSignedMoney\(markedPayout\)\}`\}/);
+  assert.match(playsSource, /markedLabel=\{`Marked at \$\{formatSignedMoney\(markedPayout\)\}`\}/);
   assert.match(playsSource, /`Settled at \$\{formatSignedMoney\(boost\.payout\)\}`/);
   // The candidate row shows a compact price, so the exact one must be spoken.
   assert.match(playsSource, /Price \$\{formatMoney\(priceOf\(player\.id\)\)\}/);
@@ -196,8 +196,8 @@ test('market charts only receive results through the latest settled replay date'
 test('player details resolve current server data and price changes name their timeframe', () => {
   assert.match(marketSource, /const \[selectedPlayerId, setSelectedPlayerId\]/);
   assert.match(marketSource, /players\.find\(\(player\) => player\.id === selectedPlayerId\)/);
-  assert.match(portfolioSource, /const \[selectedPlayerId, setSelectedPlayerId\]/);
-  assert.match(portfolioSource, /playerById\.get\(selectedPlayerId\)/);
+  assert.match(portfolioSource, /const \[detailPlayerId, setDetailPlayerId\]/);
+  assert.match(portfolioSource, /playerById\.get\(detailPlayerId\)/);
   assert.match(marketSource, /formatSignedPercent\(change\)\} since listing/);
   assert.match(marketSource, /styles\.detailPrice\}\s*>\s*\{formatCompactMoney\(currentPrice\)\}/);
   assert.match(marketSource, /Recent form vs expected/);
@@ -226,13 +226,16 @@ test('every compacted money Stat on the player detail carries its exact value', 
     ['Current price', 'formatMoney\\(currentPrice\\)'],
     ['Opening price', 'formatMoney\\(player\\.listing_price\\)'],
     ['Actual salary', 'formatMoney\\(player\\.actual_salary\\)'],
-    ['Best settled payout', 'formatSignedMoney\\(bestPayout\\)'],
+    [
+      'Best settled payout',
+      'bestPoint \\? `\\$\\{formatSignedMoney\\(bestPayout\\)\\} on \\$\\{bestPoint\\.date\\}` : formatSignedMoney\\(bestPayout\\)',
+    ],
   ] as const;
 
   for (const [label, exact] of moneyStats) {
     assert.match(
       marketSource,
-      new RegExp(`<Stat exact=\\{${exact}\\} label="${label}"`),
+      new RegExp(`exact=\\{${exact}\\}\\s*label="${label}"`),
       `${label} is announced only in compact form`,
     );
   }
@@ -325,15 +328,15 @@ test('weekly play eligibility, dates, and fees come only from server targets', (
 });
 
 test('portfolio provides server-backed activity, history, and exact cost basis', () => {
-  assert.match(portfolioSource, /label="HISTORY"/);
-  assert.match(portfolioSource, /label="ACTIVITY"/);
+  // History renders as the always-on chart; activity groups under its heading.
+  assert.match(portfolioSource, /<PortfolioHistoryChart/);
+  assert.match(portfolioSource, />Recent activity</);
   assert.match(portfolioSource, /holding\.costBasis/);
-  assert.match(portfolioSource, /incl\. fee/);
   assert.match(portfolioSource, /holding\.unrealizedPnl/);
   assert.match(portfolioSource, /No server settlement has reached this account yet/);
   assert.match(
     portfolioSource,
-    /Total portfolio-value change for that date, including cash payouts and player-price movement\./,
+    /Settled \$\{latestPoint\.date\}\. Includes cash payouts and player-price movement\./,
   );
   assert.doesNotMatch(portfolioSource, /Cash dividends, boosts, short settlements, and refunds/);
   assert.doesNotMatch(portfolioSource, /Reset progress|Alert\.alert/);
@@ -349,7 +352,7 @@ test('global server action notices are visible and dismissible', () => {
 test('ordinary sign out only revokes the current device session', () => {
   assert.match(authContextSource, /signOut\(\{ scope: 'local' \}\)/);
   assert.doesNotMatch(authContextSource, /auth\.signOut\(\)/);
-  assert.match(appSource, /error: authError/);
+  assert.match(appSource, /const authError = auth\?\.error \?\? null/);
   assert.match(appSource, /message=\{authError\}/);
 });
 
@@ -358,11 +361,11 @@ test('server and transition failures lock every gameplay surface until recovery'
   assert.doesNotMatch(appSource, /if \(isRefreshing\) \{/);
   assert.match(appSource, /if \(transitionRequired\)/);
   assert.match(appSource, /if \(serverError \|\| !state\)/);
-  assert.match(appSource, /const hasVisibleSnapshot = Boolean\(/);
-  assert.match(appSource, /\{hasVisibleSnapshot \? <SeasonControl/);
-  assert.match(appSource, /\{hasVisibleSnapshot \? \(/);
+  assert.match(appSource, /const ready = Boolean\(/);
+  assert.match(appSource, /\{ready \? <SeasonControl/);
+  assert.match(appSource, /\{ready \? \(wide \? null : renderTabBar\('bottom'\)\) : null\}/);
   assert.doesNotMatch(
-    appSource.match(/const hasVisibleSnapshot = Boolean\([\s\S]*?\);/)?.[0] ?? '',
+    appSource.match(/const ready = Boolean\([\s\S]*?\);/)?.[0] ?? '',
     /isRefreshing/,
   );
   assert.match(seasonControlSource, /!isGameplayReady \|\| isRefreshing \|\| pendingActions\.size > 0/);

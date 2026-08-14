@@ -61,8 +61,10 @@ test('the contrast helper itself is calibrated', () => {
 });
 
 test('the palette stays the databallr navy and gold, not a generic dark theme', () => {
-  // Hex equivalents of --background and --primary on databallr.com.
-  assert.equal(colors.background, '#1b212c');
+  // The base world deepened for the design variants, but it is still the
+  // databallr navy-and-gold family; Ryan's original #1b212c lives on as the
+  // OG variant (see theme/variants.ts).
+  assert.equal(colors.background, '#0e1218');
   assert.equal(colors.gold, '#ffcd57');
   assert.equal(colors.cyan, '#3abff8');
 });

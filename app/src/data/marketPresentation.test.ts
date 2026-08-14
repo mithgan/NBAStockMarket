@@ -56,6 +56,8 @@ test('line chart helpers produce a bounded non-empty path', () => {
   assert.ok(coordinates.every((point) => point.x >= 3 && point.x <= 55));
   assert.ok(coordinates.every((point) => point.y >= 3 && point.y <= 29));
   assert.match(path, /^M 3 /);
-  assert.match(path, / C /);
+  // Four points is below the smoothing floor, so the path stays as honest
+  // straight segments instead of a curve invented from too little data.
+  assert.match(path, / L /);
   assert.equal(smoothLinePath([]), '');
 });

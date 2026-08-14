@@ -25,6 +25,9 @@ import { installGlobalWebStyles } from './src/web/globalStyles';
 
 installGlobalWebStyles();
 
+/** Circular databallr mark; radius is derived so it is never a card corner. */
+const BRAND_MARK_SIZE = 24;
+
 type Tab = 'portfolio' | 'market' | 'watchlist' | 'plays' | 'leaderboard';
 
 const tabs: { key: Tab; label: string }[] = [
@@ -413,9 +416,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   mark: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: BRAND_MARK_SIZE,
+    height: BRAND_MARK_SIZE,
+    borderRadius: BRAND_MARK_SIZE / 2,
     backgroundColor: colors.gold,
     alignItems: 'center',
     justifyContent: 'center',

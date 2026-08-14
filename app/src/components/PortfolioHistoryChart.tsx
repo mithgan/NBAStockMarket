@@ -1,37 +1,124 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Polygon, Stop } from 'react-native-svg';
 
-import { chartCoordinates, portfolioPeriodChange } from '../data/chartGeometry';
-import { formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
+import { nearestPointIndex } from '../data/chartGeometry';
+import type { ChartCoordinate } from '../data/marketPresentation';
+import {
+  availablePortfolioRanges,
+  chartCoordinates,
+  portfolioPeriodChange,
+  selectPortfolioRange,
+  type PortfolioRange,
+} from '../data/portfolioRanges';
+import {
+  formatCompactMoney,
+  formatCompactSignedMoney,
+  formatMoney,
+  formatSignedMoney,
+} from '../format';
+import { useChartSurface } from '../hooks/useChartSurface';
+import { useCountUp } from '../hooks/useCountUp';
 import { STARTING_CASH, type PortfolioPoint } from '../state/game';
-import { colors, radius, space, type } from '../theme';
+import { colors, fonts, heroNumber, numeric, space, type, weight } from '../theme';
 
-export function PortfolioHistoryChart({ points }: { points: PortfolioPoint[] }) {
-  const [width, setWidth] = useState(0);
-  const visibleStartIndex = Math.max(0, points.length - 30);
-  const visible = points.slice(visibleStartIndex);
-  const baselineTotalValue = visibleStartIndex > 0
-    ? points[visibleStartIndex - 1].totalValue
-    : STARTING_CASH;
-  const values = visible.map((point) => point.totalValue);
-  const height = 124;
-  const coordinates = chartCoordinates(values, width, height);
-  const path = coordinates
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
-    .join(' ');
+const DEFAULT_CHART_HEIGHT = 168;
+
+/**
+ * The portfolio hero: an animated total, a scrubbable area chart of settled
+ * portfolio value, and range tabs that only appear once the history is long
+ * enough for a shorter window to mean anything.
+ *
+ * Scrubbing feeds one pair of handlers from two inputs: DOM pointer events
+ * via useChartSurface (hover on web) and a PanResponder (touch drags).
+ */
+export function PortfolioHistoryChart({
+  points,
+  height = DEFAULT_CHART_HEIGHT,
+  totalValue,
+  footnote,
+}: {
+  points: PortfolioPoint[];
+  height?: number;
+  totalValue?: number;
+  footnote?: string;
+}) {
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
+  const [range, setRange] = useState<PortfolioRange>('1M');
+  // The scrub handlers stay stable across renders; they read the latest
+  // geometry through this ref instead of re-subscribing pointer listeners.
+  const scrubGeometry = useRef<{ coordinates: ChartCoordinate[]; width: number }>({
+    coordinates: [],
+    width: 0,
+  });
+  const handleScrub = useCallback((locationX: number) => {
+    const index = nearestPointIndex(
+      scrubGeometry.current.coordinates,
+      locationX,
+      scrubGeometry.current.width,
+    );
+    setScrubIndex((current) => (current === index ? current : index));
+  }, []);
+  const endScrub = useCallback(() => setScrubIndex(null), []);
+  const { width, ref, onLayout } = useChartSurface({ onScrub: handleScrub, onScrubEnd: endScrub });
+  const ranges = useMemo(() => availablePortfolioRanges(points.length), [points.length]);
+  // A stored pick can outlive its availability when the history shrinks
+  // (account reset); fall back to the always-available full season.
+  const activeRange = ranges.includes(range) ? range : 'Season';
+  const { visible, baseline } = useMemo(
+    () => selectPortfolioRange(points, activeRange, STARTING_CASH),
+    [activeRange, points],
+  );
+  const { coordinates, linePath, areaPath } = useMemo(() => {
+    const coords = chartCoordinates(visible.map((point) => point.totalValue), width, height);
+    const line = coords
+      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+      .join(' ');
+    return {
+      coordinates: coords,
+      linePath: line,
+      areaPath: coords.length > 0
+        ? `${line} L ${coords.at(-1)!.x} ${height} L ${coords[0].x} ${height} Z`
+        : '',
+    };
+  }, [height, visible, width]);
   const lastCoordinate = coordinates.at(-1) ?? null;
-  const change = portfolioPeriodChange(visible, baselineTotalValue);
-  const color = change >= 0 ? colors.green : colors.red;
+  scrubGeometry.current = { coordinates, width };
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (event) => handleScrub(event.nativeEvent.locationX),
+        onPanResponderMove: (event) => handleScrub(event.nativeEvent.locationX),
+        onPanResponderRelease: endScrub,
+        onPanResponderTerminate: endScrub,
+      }),
+    [endScrub, handleScrub],
+  );
+  const scrubPoint = scrubIndex === null ? null : visible[scrubIndex] ?? null;
+  const scrubCoordinate = scrubIndex === null ? null : coordinates[scrubIndex] ?? null;
+  const latestValue = totalValue ?? visible.at(-1)?.totalValue ?? STARTING_CASH;
+  const shownValue = scrubPoint ? scrubPoint.totalValue : latestValue;
+  const change = scrubPoint
+    ? scrubPoint.totalValue - baseline
+    : portfolioPeriodChange(visible, baseline);
+  const changePct = baseline === 0 ? 0 : (change / baseline) * 100;
+  const up = change >= 0;
+  const changeColor = up ? colors.green : colors.red;
+  // Count up when the number moves on its own; scrubbing tracks instantly.
+  const animatedValue = useCountUp(shownValue, scrubPoint !== null);
 
   if (visible.length === 0) {
     return (
-      <View
-        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-        style={styles.empty}
-      >
+      <View onLayout={onLayout} ref={ref} style={[styles.emptyBlock, { minHeight: height }]}>
+        <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.heroValue}>
+          {formatCompactMoney(animatedValue)}
+        </Text>
         <Text style={styles.emptyTitle}>Your chart starts after the first replay day.</Text>
-        <Text style={styles.emptyText}>Buy a player, then settle the next date to see your portfolio move.</Text>
+        <Text style={styles.emptyText}>
+          Buy a player, then settle the next date to see your portfolio move.
+        </Text>
       </View>
     );
   }
@@ -39,40 +126,203 @@ export function PortfolioHistoryChart({ points }: { points: PortfolioPoint[] }) 
   return (
     <View
       accessible
-      accessibilityLabel={`Portfolio history, ${visible.length} dates, ending at ${formatMoney(visible.at(-1)!.totalValue)}, change ${formatSignedMoney(change)}`}
-      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-      style={styles.chart}
+      accessibilityLabel={`Portfolio value ${formatMoney(latestValue)}. Over the selected range, ${formatSignedMoney(portfolioPeriodChange(visible, baseline))} across ${visible.length} settled dates.`}
+      style={styles.block}
     >
-      {width > 0 ? (
-        <Svg height={height} width={width}>
-          <Path d={path} fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} />
-          {lastCoordinate ? (
-            <Circle
-              cx={lastCoordinate.x}
-              cy={lastCoordinate.y}
-              fill={colors.surface}
-              r={5}
-              stroke={color}
-              strokeWidth={3}
-            />
-          ) : null}
-        </Svg>
-      ) : null}
-      <View style={styles.captionRow}>
-        <Text style={styles.caption}>{visible[0].date}</Text>
-        <Text style={[styles.change, { color }]}>{formatCompactSignedMoney(change)}</Text>
-        <Text style={styles.caption}>{visible.at(-1)!.date}</Text>
+      <View style={styles.hero}>
+        <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.heroValue}>
+          {formatCompactMoney(animatedValue)}
+        </Text>
+        <View style={styles.changeRow}>
+          <ChangeArrow color={changeColor} up={up} />
+          <Text
+            maxFontSizeMultiplier={1.6}
+            numberOfLines={1}
+            style={[styles.change, { color: changeColor }]}
+          >
+            {formatCompactSignedMoney(change)}
+          </Text>
+          <Text
+            maxFontSizeMultiplier={1.6}
+            numberOfLines={1}
+            style={[styles.changePercent, { color: changeColor }]}
+          >
+            {`${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`}
+          </Text>
+          <Text numberOfLines={1} style={styles.changeMeta}>
+            {scrubPoint ? scrubPoint.date : rangeLabel(activeRange)}
+          </Text>
+        </View>
       </View>
+      <View
+        nativeID="scrub-plot-portfolio"
+        onLayout={onLayout}
+        ref={ref}
+        style={[styles.plot, { height }]}
+        {...panResponder.panHandlers}
+      >
+        {width > 0 ? (
+          <Svg height={height} width={width}>
+            <Defs>
+              <LinearGradient id="portfolioFill" x1="0" x2="0" y1="0" y2="1">
+                <Stop offset="0" stopColor={changeColor} stopOpacity={0.22} />
+                <Stop offset="1" stopColor={changeColor} stopOpacity={0} />
+              </LinearGradient>
+            </Defs>
+            <Path d={areaPath} fill="url(#portfolioFill)" />
+            <Path
+              d={linePath}
+              fill="none"
+              stroke={changeColor}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+            />
+            {scrubCoordinate ? (
+              <>
+                <Line
+                  stroke={colors.borderStrong}
+                  strokeDasharray="3 4"
+                  strokeWidth={1}
+                  x1={scrubCoordinate.x}
+                  x2={scrubCoordinate.x}
+                  y1={0}
+                  y2={height}
+                />
+                <Circle
+                  cx={scrubCoordinate.x}
+                  cy={scrubCoordinate.y}
+                  fill={changeColor}
+                  fillOpacity={0.2}
+                  r={11}
+                />
+                <Circle cx={scrubCoordinate.x} cy={scrubCoordinate.y} fill={changeColor} r={5} />
+              </>
+            ) : lastCoordinate ? (
+              <Circle cx={lastCoordinate.x} cy={lastCoordinate.y} fill={changeColor} r={4.5} />
+            ) : null}
+          </Svg>
+        ) : null}
+      </View>
+      {ranges.length > 1 ? (
+        <View accessibilityRole="tablist" aria-label="Chart range" style={styles.ranges}>
+          {ranges.map((option) => {
+            const selected = option === activeRange;
+            return (
+              <Pressable
+                accessibilityLabel={rangeLabel(option)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                aria-selected={selected}
+                key={option}
+                onPress={() => setRange(option)}
+                style={({ pressed }) => [styles.range, pressed && styles.pressed]}
+              >
+                <Text
+                  maxFontSizeMultiplier={1.4}
+                  numberOfLines={1}
+                  style={[styles.rangeText, selected && { color: changeColor }]}
+                >
+                  {option}
+                </Text>
+                <View style={[styles.rangeRule, selected && { backgroundColor: changeColor }]} />
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+      {footnote ? <Text style={styles.footnote}>{footnote}</Text> : null}
     </View>
   );
 }
 
+function ChangeArrow({ up, color }: { up: boolean; color: string }) {
+  return (
+    <Svg height={9} width={9} viewBox="0 0 10 10">
+      <Polygon fill={color} points={up ? '5,1 9.5,8.5 0.5,8.5' : '5,9 9.5,1.5 0.5,1.5'} />
+    </Svg>
+  );
+}
+
+function rangeLabel(range: PortfolioRange): string {
+  if (range === 'Season') return 'Settled season';
+  if (range === '1W') return 'Past week';
+  if (range === '1M') return 'Past month';
+  return 'Past 3 months';
+}
+
 const styles = StyleSheet.create({
-  chart: { minHeight: 152 },
-  captionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm },
-  caption: { color: colors.muted, fontSize: type.label },
-  change: { fontSize: type.label, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  empty: { minHeight: 124, justifyContent: 'center', padding: space.lg, backgroundColor: colors.background, borderRadius: radius.md },
-  emptyTitle: { color: colors.text, fontSize: type.body, fontWeight: '800' },
-  emptyText: { color: colors.muted, fontSize: type.label, lineHeight: 17, marginTop: 5 },
+  block: { paddingTop: space.lg },
+  hero: {
+    paddingHorizontal: space.lg,
+    paddingBottom: space.md,
+  },
+  heroValue: { ...heroNumber },
+  changeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    marginTop: space.xs,
+    flexWrap: 'wrap',
+  },
+  change: { ...numeric, fontSize: type.value, fontWeight: weight.heavy },
+  changePercent: { ...numeric, fontSize: type.value, fontWeight: weight.medium, opacity: 0.85 },
+  changeMeta: {
+    ...numeric,
+    color: colors.faint,
+    fontSize: type.body,
+    fontWeight: weight.medium,
+    marginLeft: space.xs,
+  },
+  plot: {},
+  ranges: {
+    flexDirection: 'row',
+    gap: space.xs,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+  },
+  // 44pt minimums keep each tab a full touch target.
+  range: {
+    minHeight: 44,
+    minWidth: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.sm,
+  },
+  rangeText: { ...numeric, color: colors.faint, fontSize: type.body, fontWeight: weight.heavy },
+  // Transparent until selected, so tabs don't jump when the rule appears.
+  rangeRule: {
+    height: 2,
+    alignSelf: 'stretch',
+    marginTop: 6,
+    backgroundColor: 'transparent',
+  },
+  footnote: {
+    color: colors.faint,
+    fontFamily: fonts.body,
+    fontSize: type.body,
+    lineHeight: 18,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+  },
+  emptyBlock: {
+    justifyContent: 'center',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    gap: space.xs,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.heavy,
+    marginTop: space.sm,
+  },
+  emptyText: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.body,
+    lineHeight: 19,
+  },
+  pressed: { opacity: 0.62 },
 });

@@ -17,6 +17,8 @@
  * exactly as it did before the tokens existed; variants that darken or lighten
  * their surfaces override them explicitly.
  */
+import type { TextStyle } from 'react-native';
+
 const isWeb = typeof document !== 'undefined';
 
 function webVar(name: string, fallback: string): string {
@@ -142,16 +144,16 @@ export const headingStyle = {
 } as const;
 
 /** Columns of live numbers hold still only when every digit is the same width. */
-export const numeric = {
+export const numeric: TextStyle = {
   fontFamily: fonts.display,
   fontVariant: ['tabular-nums'],
-} as const;
+};
 
-export const heroNumber = {
+export const heroNumber: TextStyle = {
   fontFamily: fonts.display,
   fontVariant: ['tabular-nums'],
   fontSize: type.hero,
   fontWeight: weight.bold,
   letterSpacing: -1.6,
   color: colors.text,
-} as const;
+};

@@ -1,4 +1,4 @@
-import type { ChartCoordinate } from './chartGeometry';
+import type { ChartCoordinate } from './marketPresentation';
 
 /**
  * Range selection for the portfolio history chart.
