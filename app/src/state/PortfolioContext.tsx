@@ -37,12 +37,6 @@ import {
   type MutationPriceUpdate,
   type ServerPresentationState,
 } from './serverState';
-import {
-  SeasonReplayError,
-  settleRemainingSeason,
-  type SeasonReplayProgress,
-} from './seasonReplay';
-import { addIsoDays } from './simDates';
 
 interface PortfolioContextValue {
   state: GameState | null;
@@ -60,7 +54,6 @@ interface PortfolioContextValue {
   isTransitioning: boolean;
   isGameplayReady: boolean;
   canAdvanceDay: boolean;
-  seasonReplayProgress: SeasonReplayProgress | null;
   pendingActions: ReadonlySet<string>;
   shortSlots: { used: number; total: number; remaining: number };
   boostSlots: { used: number; total: number; remaining: number };
@@ -76,14 +69,9 @@ interface PortfolioContextValue {
   armShort: (player: Player) => Promise<boolean>;
   armPlayerBoost: (player: Player, gameDate: string) => Promise<boolean>;
   advanceDay: () => Promise<boolean>;
-  advanceSeason: () => Promise<boolean>;
   refreshData: () => Promise<boolean>;
   confirmLocalTransition: () => Promise<boolean>;
   dismissNotice: () => void;
-  canAdvanceSandbox: boolean;
-  advanceSandboxDays: (calendarDays: 1 | 7) => Promise<boolean>;
-  resetSeasonAccount: () => Promise<boolean>;
-  resetSeasonWorld: () => Promise<boolean>;
 }
 
 const PortfolioContext = createContext<PortfolioContextValue | null>(null);
@@ -95,7 +83,6 @@ interface ReconciledActionResult {
 
 function errorMessage(error: unknown): string {
   if (error instanceof MarketApiError) return error.message;
-  if (error instanceof SeasonReplayError) return error.message;
   return 'The server could not load your account. Try again.';
 }
 
@@ -119,7 +106,6 @@ export function PortfolioProvider({
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [seasonReplayProgress, setSeasonReplayProgress] = useState<SeasonReplayProgress | null>(null);
   const actionLock = useRef(new ActionLock());
   const [pendingActions, setPendingActions] = useState<ReadonlySet<string>>(new Set());
   const mounted = useRef(true);
@@ -443,103 +429,6 @@ export function PortfolioProvider({
     );
   }, [apiClient, runFullRefreshAction]);
 
-  const advanceSeason = useCallback(async () => {
-    const nextGameDate = bootstrapRef.current?.game.next_game_date;
-    if (!nextGameDate) {
-      if (mounted.current) setMessage('The historical replay is complete.');
-      return false;
-    }
-    setSeasonReplayProgress(null);
-    try {
-      return await runFullRefreshAction(
-        'advance-season',
-        () => settleRemainingSeason(
-          nextGameDate,
-          (date) => apiClient.advanceDay(date),
-          (progress) => {
-            if (mounted.current) setSeasonReplayProgress(progress);
-          },
-        ),
-        'The historical season is fully settled. Prices and portfolios are updated.',
-      );
-    } finally {
-      if (mounted.current) setSeasonReplayProgress(null);
-    }
-  }, [apiClient, runFullRefreshAction]);
-
-  const advanceSandboxDays = useCallback(async (calendarDays: 1 | 7) => {
-    if (!apiClient.canAdvanceSeason) return false;
-    if (actionLock.current.has('account-refresh')) return false;
-    if (!actionLock.current.acquire('account-mutation')) return false;
-    if (!actionLock.current.acquire('season-advance')) {
-      actionLock.current.release('account-mutation');
-      return false;
-    }
-    updatePendingActions();
-    setMessage(null);
-    let anySettled = false;
-    try {
-      let expected = bootstrapRef.current?.game.next_game_date ?? null;
-      if (!expected) {
-        if (mounted.current) setMessage('The season replay is already complete.');
-        return false;
-      }
-      // Settle every game date inside the calendar span, so "+1 WEEK" collects
-      // the same dividends the week would have paid one day at a time.
-      const stop = addIsoDays(expected, calendarDays);
-      let settled = 0;
-      while (expected && expected < stop) {
-        const result = await apiClient.advanceDay(expected);
-        anySettled = true;
-        settled += 1;
-        expected = result.next_game_date;
-        if (result.is_complete) break;
-      }
-      const refreshed = await loadSnapshot({
-        checkLocalTransition: false,
-        showInitialLoader: false,
-      });
-      if (!refreshed) return false;
-      if (mounted.current) {
-        const label = `${settled} game ${settled === 1 ? 'date' : 'dates'}`;
-        setMessage(expected === null
-          ? `Settled ${label}. The season replay is complete.`
-          : `Settled ${label}.`);
-      }
-      return true;
-    } catch (error) {
-      if (mounted.current) setMessage(errorMessage(error));
-      if (anySettled) {
-        await loadSnapshot({ checkLocalTransition: false, showInitialLoader: false });
-      }
-      return false;
-    } finally {
-      actionLock.current.release('season-advance');
-      actionLock.current.release('account-mutation');
-      updatePendingActions();
-    }
-  }, [apiClient, loadSnapshot, updatePendingActions]);
-
-  // Sandbox-only: rewinds the shared season clock itself, so every account —
-  // not just this one — starts the replay over from opening night.
-  const resetSeasonWorld = useCallback(() => runFullRefreshAction(
-    'season-world-reset',
-    () => apiClient.resetSeason(),
-    'Season rewound to opening night. Everyone starts over.',
-  ), [apiClient, runFullRefreshAction]);
-
-  const resetSeasonAccount = useCallback(() => runFullRefreshAction(
-    'season-reset',
-    async () => {
-      const version = bootstrapRef.current?.portfolio.version;
-      if (version === undefined) {
-        throw new MarketApiError('Your account has not finished loading.', 'not_ready', null);
-      }
-      await apiClient.resetAccount(version);
-    },
-    'Account reset to the opening bankroll.',
-  ), [apiClient, runFullRefreshAction]);
-
   const confirmLocalTransition = useCallback(async () => {
     if (isTransitioning || !bootstrapRef.current || !legacySavePresent) return false;
     setIsTransitioning(true);
@@ -623,8 +512,7 @@ export function PortfolioProvider({
     isRefreshing,
     isTransitioning,
     isGameplayReady,
-    canAdvanceDay: (presentation?.canAdvanceDay ?? false) || apiClient.canAdvanceSeason,
-    seasonReplayProgress,
+    canAdvanceDay: presentation?.canAdvanceDay ?? false,
     pendingActions,
     shortSlots: presentation?.shortSlots
       ? { ...presentation.shortSlots, remaining: Math.max(0, presentation.shortSlots.total - presentation.shortSlots.used) }
@@ -644,25 +532,15 @@ export function PortfolioProvider({
     armShort,
     armPlayerBoost,
     advanceDay,
-    advanceSeason,
     refreshData,
     confirmLocalTransition,
     dismissNotice,
-    canAdvanceSandbox: apiClient.canAdvanceSeason,
-    advanceSandboxDays,
-    resetSeasonAccount,
-    resetSeasonWorld,
   }), [
-    advanceSeason,
-    advanceSandboxDays,
-    resetSeasonWorld,
-    apiClient.canAdvanceSeason,
     armPlayerBoost,
     armShort,
     advanceDay,
     confirmLocalTransition,
     dismissNotice,
-    resetSeasonAccount,
     isGameplayReady,
     isLoading,
     isRefreshing,
@@ -675,7 +553,6 @@ export function PortfolioProvider({
     presentation,
     refreshData,
     serverError,
-    seasonReplayProgress,
     state,
     summary,
     trade,

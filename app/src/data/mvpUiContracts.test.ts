@@ -42,13 +42,10 @@ test('manual replay advancement is admin-gated and requires explicit confirmatio
   assert.match(seasonControlSource, /Advance the shared replay\?/);
   assert.match(seasonControlSource, /This settles .* for every play-tester/);
   assert.match(seasonControlSource, /accessibilityLabel="Cancel replay simulation"/);
-  assert.match(seasonControlSource, /'Confirm replay advancement'/);
-  assert.match(seasonControlSource, /confirmation && \(confirmation === 'rewind' \|\| canSettleNextDay\) \?/);
+  assert.match(seasonControlSource, /accessibilityLabel="Confirm replay advancement"/);
+  assert.match(seasonControlSource, /confirmation && canSettleNextDay \?/);
   assert.match(seasonControlSource, /await advanceDay\(\)/);
-  assert.match(seasonControlSource, /SIMULATE SEASON/);
-  assert.match(seasonControlSource, /await advanceSeason\(\)/);
-  assert.match(portfolioContextSource, /settleRemainingSeason/);
-  assert.match(seasonControlSource, /Completed dates are saved/);
+  assert.doesNotMatch(seasonControlSource, /SIMULATE SEASON|RESET SEASON|\+1 WEEK/);
 });
 
 test('market discovery supports search and a clear empty result', () => {
@@ -371,7 +368,7 @@ test('server and transition failures lock every gameplay surface until recovery'
   assert.match(seasonControlSource, /!isGameplayReady \|\| isRefreshing \|\| pendingActions\.size > 0/);
   assert.match(portfolioContextSource, /&& !isRefreshing/);
   assert.match(portfolioContextSource, /acquire\('account-refresh'\)/);
-  assert.match(portfolioContextSource, /has\('account-refresh'\)/);
+  assert.match(portfolioContextSource, /reconciliationCoordinator\.current\.beginMutation/);
   assert.match(portfolioContextSource, /setServerError\(errorMessage\(error\)\)/);
   assert.match(
     portfolioContextSource,
