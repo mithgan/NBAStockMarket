@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -23,61 +23,31 @@ function displayDate(value: string | null): string {
  * every advance path routes through an explicit confirmation.
  */
 export function SeasonControl() {
-  const [confirmation, setConfirmation] = useState<'day' | 'week' | 'season' | 'rewind' | null>(null);
+  const [confirmation, setConfirmation] = useState<'day' | null>(null);
   const reducedMotion = useReducedMotion();
   const {
     advanceDay,
-    advanceSandboxDays,
-    advanceSeason,
     canAdvanceDay,
-    canAdvanceSandbox,
     isGameplayReady,
     isRefreshing,
     latestSettledDate,
     nextGameDate,
     pendingActions,
     refreshData,
-    resetSeasonAccount,
-    resetSeasonWorld,
     settledGameDateCount,
-    seasonReplayProgress,
     state,
   } = usePortfolio();
-  const [confirmingReset, setConfirmingReset] = useState(false);
-  useEffect(() => {
-    if (!confirmingReset) return;
-    const timer = setTimeout(() => setConfirmingReset(false), 4000);
-    return () => clearTimeout(timer);
-  }, [confirmingReset]);
   if (!state) return null;
 
   const disabled = !isGameplayReady || isRefreshing || pendingActions.size > 0;
   const canSettleNextDay = canAdvanceDay && nextGameDate !== null;
   const isSettling = pendingActions.has('advance');
-  const isSettlingWeek = pendingActions.has('season-advance');
-  const isSettlingSeason = pendingActions.has('advance-season');
-  const isRewinding = pendingActions.has('season-world-reset');
   const day = seasonDayNumber(nextGameDate);
   const progress = seasonProgress(nextGameDate);
 
   const confirmAdvance = async () => {
     setConfirmation(null);
     await advanceDay();
-  };
-
-  const confirmWeek = async () => {
-    setConfirmation(null);
-    await advanceSandboxDays(7);
-  };
-
-  const confirmSeason = async () => {
-    setConfirmation(null);
-    await advanceSeason();
-  };
-
-  const confirmRewind = async () => {
-    setConfirmation(null);
-    await resetSeasonWorld();
   };
 
   return (
@@ -137,56 +107,6 @@ export function SeasonControl() {
                 onPress={() => setConfirmation('day')}
                 tone="primary"
               />
-              {canAdvanceSandbox ? (
-                <Button
-                  accessibilityLabel="Advance one calendar week"
-                  compact
-                  disabled={disabled}
-                  label={isSettlingWeek ? 'SETTLING' : '+1 WEEK'}
-                  onPress={() => setConfirmation('week')}
-                  tone="secondary"
-                />
-              ) : null}
-              <Button
-                accessibilityLabel="Settle every remaining historical game date"
-                compact
-                disabled={disabled}
-                label={isSettlingSeason ? 'SIMULATING' : 'SIMULATE SEASON'}
-                onPress={() => setConfirmation('season')}
-                tone="secondary"
-              />
-            </View>
-          ) : null}
-          {canAdvanceSandbox ? (
-            <View style={styles.advanceActions}>
-              {/* "RESET ME" only touches the caller's account, so a second tap
-                  confirms it inline; rewinding the whole world goes through the
-                  same modal as the other shared actions. */}
-              <Button
-                accessibilityLabel={confirmingReset
-                  ? 'Confirm resetting your account to the opening bankroll'
-                  : 'Reset your account to the opening bankroll'}
-                compact
-                disabled={disabled}
-                label={confirmingReset ? 'SURE?' : 'RESET ME'}
-                onPress={() => {
-                  if (confirmingReset) {
-                    setConfirmingReset(false);
-                    resetSeasonAccount();
-                  } else {
-                    setConfirmingReset(true);
-                  }
-                }}
-                tone="ghost"
-              />
-              <Button
-                accessibilityLabel="Rewind the whole season to opening night"
-                compact
-                disabled={disabled}
-                label={isRewinding ? 'REWINDING' : 'RESET SEASON'}
-                onPress={() => setConfirmation('rewind')}
-                tone="danger"
-              />
             </View>
           ) : null}
         </View>
@@ -198,14 +118,9 @@ export function SeasonControl() {
           <View style={[styles.fill, { width: `${Math.max(100 * progress, 0.5)}%` }]} />
         </View>
 
-        {seasonReplayProgress ? (
-          <Text accessibilityLiveRegion="polite" numberOfLines={2} style={styles.seasonProgress}>
-            Simulating · {seasonReplayProgress.completedDates} dates settled · last {displayDate(seasonReplayProgress.lastSettledDate)}
-          </Text>
-        ) : null}
       </View>
 
-      {confirmation && (confirmation === 'rewind' || canSettleNextDay) ? (
+      {confirmation && canSettleNextDay ? (
         <Modal
           animationType={reducedMotion ? 'none' : 'fade'}
           onRequestClose={() => setConfirmation(null)}
@@ -216,22 +131,10 @@ export function SeasonControl() {
             <View style={styles.modal}>
               <Text style={styles.modalEyebrow}>SHARED REPLAY</Text>
               <Text accessibilityRole="header" style={styles.modalTitle}>
-                {confirmation === 'day'
-                  ? 'Advance the shared replay?'
-                  : confirmation === 'week'
-                    ? 'Advance one calendar week?'
-                    : confirmation === 'rewind'
-                      ? 'Rewind to opening night?'
-                      : 'Simulate the rest of the season?'}
+                Advance the shared replay?
               </Text>
               <Text style={styles.modalBody}>
-                {confirmation === 'day'
-                  ? `This settles ${displayDate(nextGameDate)} for every play-tester. It cannot be undone.`
-                  : confirmation === 'week'
-                    ? 'This settles every game date in the next 7 calendar days for every play-tester. It cannot be undone.'
-                    : confirmation === 'rewind'
-                      ? 'This erases every settlement, trade, and play on this server, returns all bankrolls to $140M, restores opening prices, and moves the clock back to October 21. It cannot be undone.'
-                      : 'This settles every remaining 2025-26 game date for every play-tester. Completed dates are saved, so an interrupted run can be resumed. It cannot be undone.'}
+                {`This settles ${displayDate(nextGameDate)} for every play-tester. It cannot be undone.`}
               </Text>
               <View style={styles.modalActions}>
                 <Button
@@ -241,30 +144,10 @@ export function SeasonControl() {
                   tone="ghost"
                 />
                 <Button
-                  accessibilityLabel={confirmation === 'day'
-                    ? 'Confirm replay advancement'
-                    : confirmation === 'week'
-                      ? 'Confirm week advancement'
-                      : confirmation === 'rewind'
-                        ? 'Confirm rewinding the season to opening night'
-                        : 'Confirm full season simulation'}
-                  label={confirmation === 'day'
-                    ? 'SETTLE NEXT DAY'
-                    : confirmation === 'week'
-                      ? 'SETTLE THE WEEK'
-                      : confirmation === 'rewind'
-                        ? 'REWIND SEASON'
-                        : 'SIMULATE SEASON'}
-                  onPress={() => {
-                    confirmation === 'day'
-                      ? confirmAdvance()
-                      : confirmation === 'week'
-                        ? confirmWeek()
-                        : confirmation === 'rewind'
-                          ? confirmRewind()
-                          : confirmSeason();
-                  }}
-                  tone={confirmation === 'rewind' ? 'danger' : 'primary'}
+                  accessibilityLabel="Confirm replay advancement"
+                  label="SETTLE NEXT DAY"
+                  onPress={confirmAdvance}
+                  tone="primary"
                 />
               </View>
             </View>
@@ -331,7 +214,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   fill: { height: '100%', borderRadius: 4, backgroundColor: colors.gold },
-  seasonProgress: { ...labelStyle, color: colors.goldInk, width: '100%' },
 
   modalBackdrop: {
     flex: 1,

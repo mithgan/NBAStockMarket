@@ -87,6 +87,26 @@ test('the default fetch keeps its browser global binding', async () => {
   }
 });
 
+test('a legacy Flask route base URL does not duplicate the market prefix', async () => {
+  let requestedUrl = '';
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com/api/nba-stock-market/',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    fetchImpl: async (url) => {
+      requestedUrl = String(url);
+      return new Response(JSON.stringify({ data: portfolio }), { status: 200 });
+    },
+  });
+
+  await client.portfolio();
+
+  assert.equal(
+    requestedUrl,
+    'https://api.example.com/api/nba-stock-market/portfolio',
+  );
+});
+
 test('authenticated reads refresh once after a 401', async () => {
   const tokens: boolean[] = [];
   const requests: RequestInit[] = [];
@@ -153,8 +173,8 @@ test('a cold-start retry gets a longer timeout without changing the request', as
   assert.equal((await client.portfolio()).account_id, 'alice');
   assert.equal(calls, 2);
   assert.deepEqual(seenUrls, [
-    'https://api.example.com/api/v1/portfolio',
-    'https://api.example.com/api/v1/portfolio',
+    'https://api.example.com/api/nba-stock-market/portfolio',
+    'https://api.example.com/api/nba-stock-market/portfolio',
   ]);
   assert.deepEqual(seenMethods, ['GET', 'GET']);
 });
@@ -186,7 +206,7 @@ test('trades use the Flask route and include the listing version', async () => {
   let requestedUrl = '';
   let requestedBody = '';
   const client = new MarketApiClient({
-    baseUrl: 'https://api.example.com/api/nba-stock-market/',
+    baseUrl: 'https://api.example.com/',
     expectedUserId: 'alice',
     getAccessToken: aliceToken,
     idempotencyKeyFactory: () => 'trade-contract-key',
@@ -203,7 +223,7 @@ test('trades use the Flask route and include the listing version', async () => {
 
   assert.equal(
     requestedUrl,
-    'https://api.example.com/api/nba-stock-market/api/v1/trades',
+    'https://api.example.com/api/nba-stock-market/trades',
   );
   assert.deepEqual(JSON.parse(requestedBody), {
     player_id: '3112335',
@@ -215,7 +235,7 @@ test('trades use the Flask route and include the listing version', async () => {
 test('weekly shorts bind the mutation to the displayed replay date', async () => {
   let requestedBody = '';
   const client = new MarketApiClient({
-    baseUrl: 'https://api.example.com/api/nba-stock-market',
+    baseUrl: 'https://api.example.com',
     expectedUserId: 'alice',
     getAccessToken: aliceToken,
     idempotencyKeyFactory: () => 'short-contract-key',
@@ -254,20 +274,19 @@ test('weekly shorts bind the mutation to the displayed replay date', async () =>
   });
 });
 
-test('historical day advancement requires and sends the settlement key', async () => {
+test('historical day advancement relies on the signed-in admin identity', async () => {
   let requestedUrl = '';
   let requestedBody = '';
-  let settlementHeader = '';
+  let requestedHeaders: Record<string, string> = {};
   const client = new MarketApiClient({
-    baseUrl: 'https://api.example.com/api/nba-stock-market',
+    baseUrl: 'https://api.example.com',
     expectedUserId: 'alice',
     getAccessToken: aliceToken,
-    settlementKey: 'sandbox-settlement-key-0123456789ab',
     idempotencyKeyFactory: () => 'advance-contract-key',
     fetchImpl: async (url, init) => {
       requestedUrl = String(url);
       requestedBody = String(init?.body);
-      settlementHeader = (init?.headers as Record<string, string>)['X-Settlement-Key'];
+      requestedHeaders = init?.headers as Record<string, string>;
       return new Response(JSON.stringify({
         data: {
           replayed: false,
@@ -291,32 +310,15 @@ test('historical day advancement requires and sends the settlement key', async (
 
   assert.equal(
     requestedUrl,
-    'https://api.example.com/api/nba-stock-market/api/v1/admin/settlements/next',
+    'https://api.example.com/api/nba-stock-market/admin/settlements/next',
   );
   assert.deepEqual(JSON.parse(requestedBody), {
+    confirmation: 'SETTLE',
     expected_game_date: '2025-10-20',
   });
-  assert.equal(settlementHeader, 'sandbox-settlement-key-0123456789ab');
+  assert.equal(requestedHeaders.Authorization, 'Bearer token');
+  assert.equal(requestedHeaders['X-Settlement-Key'], undefined);
   assert.equal(result.next_game_date, '2025-10-21');
-});
-
-test('day advancement without a settlement key fails closed before any request', async () => {
-  let fetchCalls = 0;
-  const client = new MarketApiClient({
-    baseUrl: 'https://api.example.com',
-    expectedUserId: 'alice',
-    getAccessToken: aliceToken,
-    fetchImpl: async () => {
-      fetchCalls += 1;
-      return new Response('{}', { status: 200 });
-    },
-  });
-
-  await assert.rejects(
-    client.advanceDay('2025-10-20'),
-    (error: unknown) => error instanceof MarketApiError && error.code === 'advance_unavailable',
-  );
-  assert.equal(fetchCalls, 0);
 });
 
 test('a mutation retries a failed response body with the same idempotency key', async () => {
@@ -537,7 +539,7 @@ test('bootstrap loads one server-owned snapshot instead of stitching client read
   const result = await client.bootstrap();
 
   assert.equal(result.portfolio.account_id, 'alice');
-  assert.deepEqual(requestedPaths, ['/api/v1/bootstrap']);
+  assert.deepEqual(requestedPaths, ['/api/nba-stock-market/bootstrap']);
 });
 
 test('bootstrap can request only results after the last installed settlement', async () => {
@@ -555,7 +557,7 @@ test('bootstrap can request only results after the last installed settlement', a
   await client.bootstrap('2025-10-21');
 
   assert.deepEqual(requestedUrls, [
-    'https://api.example.com/api/v1/bootstrap?settled_results_after=2025-10-21',
+    'https://api.example.com/api/nba-stock-market/bootstrap?settled_results_after=2025-10-21',
   ]);
 });
 

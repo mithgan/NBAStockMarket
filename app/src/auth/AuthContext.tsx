@@ -241,11 +241,7 @@ export function useAuth() {
   return context;
 }
 
-/**
- * The app shell renders with no AuthProvider mounted (local demo mode, or a
- * broken public config), so components that merely adapt to auth state read it
- * through this and treat null as "no server account in play".
- */
+/** Components shared with the design preview can render without authentication. */
 export function useOptionalAuth() {
   return useContext(AuthContext);
 }

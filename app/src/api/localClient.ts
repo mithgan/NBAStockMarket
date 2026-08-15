@@ -110,9 +110,6 @@ export class LocalMarketClient {
     this.restore();
   }
 
-  /** The sandbox always lets the user advance the replay. */
-  readonly canAdvanceSeason = true;
-
   /**
    * Merge the saved state over the defaults so a save written before a field
    * existed still loads with that field's default instead of `undefined`.
@@ -678,11 +675,5 @@ export class LocalMarketClient {
     this.state = { ...initialState(), settledDateCount };
     this.persist();
     return { replayed: false, portfolio: this.portfolio(), reset_at: this.stamp() };
-  }
-
-  /** Rewind everything to opening night. */
-  async resetSeason(): Promise<void> {
-    this.state = initialState();
-    this.persist();
   }
 }
