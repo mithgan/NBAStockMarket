@@ -75,7 +75,9 @@ export function WatchlistScreen() {
   if (watched.length === 0) {
     return (
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <Text accessibilityRole="header" style={styles.heading}>Watchlist</Text>
+        <View style={styles.headingRow}>
+          <Text accessibilityRole="header" style={styles.heading}>Watchlist</Text>
+        </View>
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Nobody on the list yet.</Text>
           <Text style={styles.subtle}>
@@ -260,7 +262,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.xl,
   },
-  heading: { ...headingStyle, paddingHorizontal: space.lg, paddingTop: space.xl },
+  // Padding lives on headingRow (both states render inside it), so the title
+  // never double-indents against the copy below it.
+  heading: { ...headingStyle },
   clear: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.sm },
   clearText: {
     color: colors.goldInk,

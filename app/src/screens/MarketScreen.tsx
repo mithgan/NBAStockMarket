@@ -85,6 +85,18 @@ export const TRENDING_WINDOWS: {
   { key: 'Season', label: 'Season', hint: 'Trending across the settled season', games: null },
 ];
 
+/**
+ * The profile chart plots either metric. Price is flat in the demo — prices
+ * move on trading, never on performance, and the demo has no volume — but the
+ * toggle ships now so the surface already exists when price dispersion does.
+ */
+type ChartMetric = 'dividends' | 'price';
+
+const CHART_METRICS: readonly { key: ChartMetric; label: string; hint: string }[] = [
+  { key: 'dividends', label: 'DIVIDENDS', hint: 'Cumulative dividends over the window' },
+  { key: 'price', label: 'PRICE', hint: 'Share price over the window' },
+];
+
 /** Broadcast convention: quiet given name, loud surname. */
 function splitName(name: string): { first: string; last: string } {
   const parts = name.trim().split(' ');
@@ -97,7 +109,15 @@ function average(points: TrendPoint[], key: 'np' | 'expected_np') {
   return points.reduce((sum, point) => sum + point[key], 0) / points.length;
 }
 
-function DetailChart({ points }: { points: TrendPoint[] }) {
+function DetailChart({
+  points,
+  metric,
+  currentPrice,
+}: {
+  points: TrendPoint[];
+  metric: ChartMetric;
+  currentPrice: number;
+}) {
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   // The scrub callbacks are stable (empty deps) so they read the freshest
   // geometry through a ref instead of closing over a stale coordinate array.
@@ -115,16 +135,21 @@ function DetailChart({ points }: { points: TrendPoint[] }) {
     onScrubEnd: clearScrub,
   });
 
-  const { values, coordinates, linePath, areaPath, color, extrema } = useMemo(() => {
-    const values = cumulativeValues(points.map((point) => point.dividend_per_holder));
+  const { values, coordinates, linePath, areaPath, color, extrema, flat } = useMemo(() => {
+    // Price has no per-night history in the demo world, so it plots the
+    // current quote across the same settled dates — honestly flat.
+    const values = metric === 'price'
+      ? points.map(() => currentPrice)
+      : cumulativeValues(points.map((point) => point.dividend_per_holder));
     const maximum = Math.max(...values);
     const minimum = Math.min(...values);
-    const span = maximum - minimum || 1;
+    const span = maximum - minimum;
     // 168px surface: 26px of headroom for the HIGH label, 22px of footroom for
-    // the LOW label, 10px horizontal insets so end dots are not clipped.
+    // the LOW label, 10px horizontal insets so end dots are not clipped. A
+    // flat series draws the midline instead of hugging the ceiling.
     const coordinates = values.map((value, index) => ({
       x: 10 + (index / Math.max(values.length - 1, 1)) * Math.max(width - 20, 0),
-      y: 26 + ((maximum - value) / span) * 120,
+      y: span === 0 ? 86 : 26 + ((maximum - value) / span) * 120,
     }));
     const linePath = smoothLinePath(coordinates);
     return {
@@ -134,10 +159,15 @@ function DetailChart({ points }: { points: TrendPoint[] }) {
       areaPath: coordinates.length > 0
         ? `${linePath} L ${coordinates.at(-1)!.x} 146 L ${coordinates[0].x} 146 Z`
         : '',
-      color: (values.at(-1) ?? 0) >= 0 ? colors.green : colors.red,
+      // Price is neither a gain nor a loss, so it draws in gold rather than
+      // borrowing the up/down colours.
+      color: metric === 'price'
+        ? colors.gold
+        : (values.at(-1) ?? 0) >= 0 ? colors.green : colors.red,
       extrema: selectHighLowPoints(values),
+      flat: span === 0,
     };
-  }, [points, width]);
+  }, [currentPrice, metric, points, width]);
   geometry.current = { coordinates, width };
 
   // Hover arrives through the DOM pointer events wired up by useChartSurface;
@@ -158,13 +188,17 @@ function DetailChart({ points }: { points: TrendPoint[] }) {
   const scrubbedPoint = scrubIndex === null ? null : points[scrubIndex] ?? null;
   const scrubbedCoordinate = scrubIndex === null ? null : coordinates[scrubIndex] ?? null;
   // With fewer than five points the HIGH/LOW callouts label almost every dot,
-  // which is noise rather than orientation.
-  const showHighLow = points.length >= 5;
+  // which is noise rather than orientation; on a flat line they label nothing.
+  const showHighLow = points.length >= 5 && !flat;
 
   return (
     <View
       accessible
-      accessibilityLabel={`${points.length} game cumulative dividend chart, high ${formatCompactSignedMoney(extrema.high?.value ?? 0)}, low ${formatCompactSignedMoney(extrema.low?.value ?? 0)}`}
+      accessibilityLabel={
+        metric === 'price'
+          ? `${points.length} game price chart, ${formatCompactMoney(currentPrice)} throughout`
+          : `${points.length} game cumulative dividend chart, high ${formatCompactSignedMoney(extrema.high?.value ?? 0)}, low ${formatCompactSignedMoney(extrema.low?.value ?? 0)}`
+      }
       nativeID="scrub-plot-detail"
       onLayout={onLayout}
       ref={ref}
@@ -177,14 +211,22 @@ function DetailChart({ points }: { points: TrendPoint[] }) {
         {scrubbedPoint ? (
           <>
             <Text style={styles.detailReadoutValue}>
-              {`${formatCompactSignedMoney(values[scrubIndex!] ?? 0)} cumulative`}
+              {metric === 'price'
+                ? `${formatCompactMoney(values[scrubIndex!] ?? currentPrice)} price`
+                : `${formatCompactSignedMoney(values[scrubIndex!] ?? 0)} cumulative`}
             </Text>
             <Text numberOfLines={1} style={styles.detailReadoutMeta}>
-              {`${scrubbedPoint.date} · ${scrubbedPoint.np.toFixed(1)} NP vs ${scrubbedPoint.expected_np.toFixed(1)} projected · ${formatCompactSignedMoney(scrubbedPoint.dividend_per_holder)} that night`}
+              {metric === 'price'
+                ? `${scrubbedPoint.date} · ${scrubbedPoint.np.toFixed(1)} NP vs ${scrubbedPoint.expected_np.toFixed(1)} projected · price unmoved by performance`
+                : `${scrubbedPoint.date} · ${scrubbedPoint.np.toFixed(1)} NP vs ${scrubbedPoint.expected_np.toFixed(1)} projected · ${formatCompactSignedMoney(scrubbedPoint.dividend_per_holder)} that night`}
             </Text>
           </>
         ) : (
-          <Text style={styles.detailReadoutMeta}>Hover the chart to read a night exactly.</Text>
+          <Text style={styles.detailReadoutMeta}>
+            {metric === 'price'
+              ? 'Prices move on trading, never on performance — flat until volume exists.'
+              : 'Hover the chart to read a night exactly.'}
+          </Text>
         )}
       </View>
       {width > 0 ? (
@@ -285,6 +327,7 @@ export function PlayerDetail({
   backLabel?: string;
 }) {
   const [range, setRange] = useState<TrendRange>('L15');
+  const [metric, setMetric] = useState<ChartMetric>('dividends');
   const points = selectSettledTrendPoints(trendPoints, latestSettledDate);
   const visiblePoints = selectTrendRange(points, range);
   const rangeTotal = visiblePoints.reduce((sum, point) => sum + point.dividend_per_holder, 0);
@@ -359,7 +402,9 @@ export function PlayerDetail({
       </View>
 
       <View style={styles.chartHeading}>
-        <Text accessibilityRole="header" style={styles.sectionTitle}>CUMULATIVE DIVIDENDS</Text>
+        {/* The metric toggle replaces the static section title: the selected
+            tab names the chart, and the window toggle keeps the right edge. */}
+        <Segmented groupLabel="Chart metric" onChange={setMetric} options={CHART_METRICS} value={metric} />
         <View accessibilityRole="tablist" style={styles.rangeToggle}>
           {(['L5', 'L15', 'L30', 'Season'] as const).map((option) => {
             const selected = range === option;
@@ -383,7 +428,11 @@ export function PlayerDetail({
           })}
         </View>
       </View>
-      {visiblePoints.length > 0 ? <DetailChart points={visiblePoints} /> : <Text style={styles.emptyChart}>No game data</Text>}
+      {visiblePoints.length > 0 ? (
+        <DetailChart currentPrice={currentPrice} metric={metric} points={visiblePoints} />
+      ) : (
+        <Text style={styles.emptyChart}>No game data</Text>
+      )}
 
       <SectionHeader label="SEASON SNAPSHOT" />
       <View style={styles.statsGrid}>
@@ -1166,10 +1215,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     paddingTop: space.lg,
     paddingBottom: space.sm,
-  },
-  sectionTitle: {
-    ...labelStyle,
-    color: colors.muted,
   },
   rangeToggle: {
     flexDirection: 'row',

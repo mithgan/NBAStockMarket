@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Defs, Line, LinearGradient, Path, Polygon, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Polygon, Stop, Text as SvgText } from 'react-native-svg';
 
 import { nearestPointIndex } from '../data/chartGeometry';
 import type { ChartCoordinate } from '../data/marketPresentation';
@@ -23,6 +23,13 @@ import { STARTING_CASH, type PortfolioPoint } from '../state/game';
 import { colors, fonts, heroNumber, numeric, space, type, weight } from '../theme';
 
 const DEFAULT_CHART_HEIGHT = 168;
+
+/**
+ * Right-hand gutter reserved for the value axis. The plot stops before it, so
+ * the line and end dot never run underneath their own figures — on a phone
+ * the full-width plot used to collide with the labels.
+ */
+const VALUE_GUTTER = 56;
 
 /**
  * The portfolio hero: an animated total, a scrubbable area chart of settled
@@ -70,7 +77,7 @@ export function PortfolioHistoryChart({
     [activeRange, points],
   );
   const { coordinates, linePath, areaPath } = useMemo(() => {
-    const coords = chartCoordinates(visible.map((point) => point.totalValue), width, height);
+    const coords = chartCoordinates(visible.map((point) => point.totalValue), Math.max(width - VALUE_GUTTER, 0), height);
     const line = coords
       .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
       .join(' ');
@@ -84,6 +91,33 @@ export function PortfolioHistoryChart({
   }, [height, visible, width]);
   const lastCoordinate = coordinates.at(-1) ?? null;
   scrubGeometry.current = { coordinates, width };
+  // The value grid mirrors chartCoordinates' mapping (12px insets): rules at
+  // the window's high, midpoint, and low so the curve reads against real
+  // figures instead of floating free.
+  const { gridLines, baselineY } = useMemo(() => {
+    const values = visible.map((point) => point.totalValue);
+    if (values.length === 0) return { gridLines: [], baselineY: null };
+    const high = Math.max(...values);
+    const low = Math.min(...values);
+    const span = high - low;
+    const yFor = (value: number) =>
+      span === 0 ? height / 2 : 12 + ((high - value) / span) * (height - 24);
+    const gridLines: { value: number; y: number }[] =
+      span === 0
+        ? [{ value: high, y: height / 2 }]
+        : [
+            { value: high, y: 12 },
+            { value: (high + low) / 2, y: height / 2 },
+            { value: low, y: height - 12 },
+          ];
+    // The range's baseline earns a rule only when it crosses the plot; when
+    // every settled value sits above it, the low rule already tells that story.
+    const baselineY = low < baseline && baseline < high ? yFor(baseline) : null;
+    return { gridLines, baselineY };
+  }, [baseline, height, visible]);
+  const firstDate = visible[0]?.date ?? null;
+  const lastDate = visible.at(-1)?.date ?? null;
+  const midDate = visible.length >= 5 ? visible[Math.floor((visible.length - 1) / 2)]?.date ?? null : null;
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -169,6 +203,28 @@ export function PortfolioHistoryChart({
                 <Stop offset="1" stopColor={changeColor} stopOpacity={0} />
               </LinearGradient>
             </Defs>
+            {gridLines.map((line) => (
+              <Line
+                key={`rule-${line.y}`}
+                stroke={colors.border}
+                strokeWidth={1}
+                x1={0}
+                x2={width}
+                y1={line.y}
+                y2={line.y}
+              />
+            ))}
+            {baselineY !== null ? (
+              <Line
+                stroke={colors.borderStrong}
+                strokeDasharray="3 5"
+                strokeWidth={1}
+                x1={0}
+                x2={width}
+                y1={baselineY}
+                y2={baselineY}
+              />
+            ) : null}
             <Path d={areaPath} fill="url(#portfolioFill)" />
             <Path
               d={linePath}
@@ -201,9 +257,47 @@ export function PortfolioHistoryChart({
             ) : lastCoordinate ? (
               <Circle cx={lastCoordinate.x} cy={lastCoordinate.y} fill={changeColor} r={4.5} />
             ) : null}
+            {/* Figures live in the reserved gutter, vertically centred on
+                their rules, the way a price axis reads. */}
+            {gridLines.map((line) => (
+              <SvgText
+                fill={colors.faint}
+                fontFamily={fonts.display}
+                fontSize={10}
+                fontWeight="700"
+                key={`figure-${line.y}`}
+                textAnchor="end"
+                x={width - 4}
+                y={line.y + 3.5}
+              >
+                {formatCompactMoney(line.value)}
+              </SvgText>
+            ))}
+            {baselineY !== null ? (
+              <SvgText
+                fill={colors.faint}
+                fontFamily={fonts.display}
+                fontSize={10}
+                fontWeight="700"
+                textAnchor="start"
+                x={10}
+                y={baselineY - 5}
+              >
+                {`START ${formatCompactMoney(baseline)}`}
+              </SvgText>
+            ) : null}
           </Svg>
         ) : null}
       </View>
+      {firstDate && lastDate ? (
+        <View style={[styles.dateAxis, { paddingRight: VALUE_GUTTER + 10 }]}>
+          <Text numberOfLines={1} style={styles.dateAxisText}>{shortDate(firstDate)}</Text>
+          {midDate ? <Text numberOfLines={1} style={styles.dateAxisText}>{shortDate(midDate)}</Text> : null}
+          {lastDate !== firstDate ? (
+            <Text numberOfLines={1} style={styles.dateAxisText}>{shortDate(lastDate)}</Text>
+          ) : null}
+        </View>
+      ) : null}
       {ranges.length > 1 ? (
         <View accessibilityRole="tablist" aria-label="Chart range" style={styles.ranges}>
           {ranges.map((option) => {
@@ -244,6 +338,16 @@ function ChangeArrow({ up, color }: { up: boolean; color: string }) {
   );
 }
 
+const MONTH_ABBREVIATIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "2025-10-21" → "Oct 21"; anything malformed passes through untouched. */
+function shortDate(date: string): string {
+  const month = Number(date.slice(5, 7));
+  const day = Number(date.slice(8, 10));
+  if (!Number.isFinite(month) || !Number.isFinite(day) || month < 1 || month > 12) return date;
+  return `${MONTH_ABBREVIATIONS[month - 1]} ${day}`;
+}
+
 function rangeLabel(range: PortfolioRange): string {
   if (range === 'Season') return 'Settled season';
   if (range === '1W') return 'Past week';
@@ -275,6 +379,19 @@ const styles = StyleSheet.create({
     marginLeft: space.xs,
   },
   plot: {},
+  // Date labels line up with the plot's 10px horizontal insets.
+  dateAxis: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingTop: space.xs,
+  },
+  dateAxisText: {
+    ...numeric,
+    color: colors.faint,
+    fontSize: type.label,
+    fontWeight: weight.medium,
+  },
   ranges: {
     flexDirection: 'row',
     gap: space.xs,
