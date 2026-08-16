@@ -9,7 +9,7 @@ name: Deploy reconstruction to GitHub Pages
 
 on:
   push:
-    branches: [claude/remote-control-v36xep]
+    branches: [claude/remote-control-v36xep, mith/experiments]
     paths: ['.github/workflows/deploy-pages.yml', 'app/**']
   workflow_dispatch:
 
