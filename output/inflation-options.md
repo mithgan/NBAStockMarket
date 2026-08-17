@@ -1,8 +1,14 @@
-DECIDED: Option B (Mith, 7/14) — now the default.
+> **Historical decision artifact.** Option B's bias correction remains the
+> default, but its $140M/$40K payout figures have been superseded by the
+> $207.824M/$80K calibration in `output/economy-calibration-2026.md`.
+
+DECIDED: Option B (Mith, 7/14) — bias correction remains the default.
 
 # NBA-12 inflation calibration options
 
-Decision owner: **Mith**. Option B is implemented as the engine and backtest default.
+Decision owner: **Mith**. Option B's expectation-bias correction is implemented
+as the engine and backtest default; the payout scale below is retained only as
+the evidence used for that earlier decision.
 
 The natural expectation-bias candidate is **+0.43586494964917194 net points per player-game**, the deterministic league mean of `actual - expected` across all **10,689** Dunks & Threes player-games in the listed-universe replay. Bias is added to every expectation before settlement: `adjusted expectation = D&T expectation + bias`.
 

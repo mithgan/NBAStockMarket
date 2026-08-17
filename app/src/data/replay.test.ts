@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import test, { before } from 'node:test';
 
 import {
+  DOLLARS_PER_NET_POINT,
   advanceReplayDay,
   createInitialGameState,
   isGameState,
   tradePlayer,
 } from '../state/game';
-import { players } from './snapshot';
+import { dividendEvents, players } from './snapshot';
 import { playerTrends } from './trends';
 
 const CORRUPT_PLAYER_ID = '__non_finite_test_player__';
@@ -59,6 +60,13 @@ test('day events are deterministic, finite, and unique per player and date', () 
       assert.equal(Number.isFinite(event.actualNetPoints), true);
       assert.equal(Number.isFinite(event.expectedNetPoints), true);
       assert.equal(Number.isFinite(event.dividendPerHolder), true);
+      assert.ok(
+        Math.abs(
+          event.dividendPerHolder
+          - (event.actualNetPoints - event.expectedNetPoints) * DOLLARS_PER_NET_POINT
+        ) <= 1,
+        `unexpected dividend rate for ${event.playerId}:${event.date}`,
+      );
 
       const eventKey = `${event.playerId}:${event.date}`;
       assert.equal(seenEvents.has(eventKey), false, `duplicate replay event ${eventKey}`);
@@ -87,8 +95,20 @@ test('retains the Jokic Christmas dividend source spot check', () => {
     date: '2025-12-25',
     actualNetPoints: 59.35,
     expectedNetPoints: 25.97274,
-    dividendPerHolder: 1335090.36,
+    dividendPerHolder: 2670180.73,
   });
+});
+
+test('snapshot dividend examples use the selected owned-player rate', () => {
+  for (const event of dividendEvents) {
+    const expectedDividend = (
+      event.actual_net_points - event.expected_net_points
+    ) * DOLLARS_PER_NET_POINT;
+    assert.ok(
+      Math.abs(event.dividend_per_holder - expectedDividend) <= 5,
+      `unexpected snapshot dividend rate for ${event.player_id}:${event.game_date}`,
+    );
+  }
 });
 
 test('weekKey matches the authoritative ISO Monday-Sunday week identifier', () => {
@@ -114,7 +134,7 @@ test('nextEventForPlayer returns the first event strictly after the requested da
   assert.equal(nextEventForPlayer('missing-player', null), null);
 });
 
-test('a valid high-salary roster replays through a negative-cash dividend day', () => {
+test('a valid high-salary roster replays through dividend volatility', () => {
   const { replayDays } = replay();
   const roster = new Set([
     'Derrick White',
@@ -145,6 +165,6 @@ test('a valid high-salary roster replays through a negative-cash dividend day', 
   }
 
   assert.equal(state.settledDates.at(-1), '2025-11-21');
-  assert.ok(state.cash < 0, 'the regression roster should reach negative cash');
+  assert.equal(Number.isFinite(state.cash), true);
   assert.equal(isGameState(state), true);
 });

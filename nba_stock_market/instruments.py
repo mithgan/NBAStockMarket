@@ -28,11 +28,10 @@ WEEKLY_SHORT_SLOTS = 3
 WEEKLY_GAME_CLAMP_NP = 25.0
 WEEKLY_TOTAL_CLAMP_NP = 50.0
 WEEKLY_SHORT_COLLATERAL = 2_000_000.0
+WEEKLY_SHORT_DOLLARS_PER_NET_POINT = 40_000.0
 SHORT_FEE_PCT = 0.0025
 SHORT_MIN_FEE = 10_000.0
 DNP_MINUTES_THRESHOLD = 0.40
-DOLLARS_PER_NET_POINT = 40_000.0
-
 PRICE_SHORT_COLLATERAL_PCT = 0.30
 PRICE_SHORT_STOP_OUT = 1.30
 PRICE_SHORT_BORROW_DAILY = 0.0005
@@ -191,7 +190,7 @@ class InstrumentsBook:
                 position.pnl = 0.0
             else:
                 total = max(-WEEKLY_TOTAL_CLAMP_NP, min(WEEKLY_TOTAL_CLAMP_NP, position.accrued_np))
-                position.pnl = -total * DOLLARS_PER_NET_POINT
+                position.pnl = -total * WEEKLY_SHORT_DOLLARS_PER_NET_POINT
                 user.cash += position.pnl
             position.settled = True
             settled.append(position)

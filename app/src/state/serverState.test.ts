@@ -30,9 +30,9 @@ function bootstrapFixture(): ServerBootstrap {
     ],
     portfolio: {
       account_id: 'alice', display_name: 'Alice', version: 3,
-      reset_at: '2026-07-21T00:00:00Z', cash_cents: 8_887_250_000,
-      free_cash_cents: 8_687_250_000, reserved_collateral_cents: 200_000_000,
-      market_value_cents: 5_100_000_000, total_value_cents: 13_987_250_000,
+      reset_at: '2026-07-21T00:00:00Z', cash_cents: 15_709_650_000,
+      free_cash_cents: 15_509_650_000, reserved_collateral_cents: 200_000_000,
+      market_value_cents: 5_100_000_000, total_value_cents: 20_809_650_000,
       holdings: [{
         player_id: 'sga', player_name: 'Shai Gilgeous-Alexander', shares: 1,
         average_cost_cents: 5_012_500_000, current_price_cents: 5_100_000_000,
@@ -92,15 +92,15 @@ function bootstrapFixture(): ServerBootstrap {
     portfolioHistory: {
       items: [
         {
-          game_date: '2025-10-22', cash_cents: 8_887_250_000,
-          free_cash_cents: 8_687_250_000, reserved_collateral_cents: 200_000_000,
-          market_value_cents: 5_100_000_000, total_value_cents: 13_987_250_000,
+          game_date: '2025-10-22', cash_cents: 15_709_650_000,
+          free_cash_cents: 15_509_650_000, reserved_collateral_cents: 200_000_000,
+          market_value_cents: 5_100_000_000, total_value_cents: 20_809_650_000,
           created_at: '2025-10-22T02:00:00Z',
         },
         {
-          game_date: '2025-10-21', cash_cents: 8_900_000_000,
-          free_cash_cents: 8_700_000_000, reserved_collateral_cents: 200_000_000,
-          market_value_cents: 5_050_000_000, total_value_cents: 13_950_000_000,
+          game_date: '2025-10-21', cash_cents: 15_722_400_000,
+          free_cash_cents: 15_522_400_000, reserved_collateral_cents: 200_000_000,
+          market_value_cents: 5_050_000_000, total_value_cents: 20_772_400_000,
           created_at: '2025-10-21T02:00:00Z',
         },
       ], next_cursor: null,
@@ -108,14 +108,14 @@ function bootstrapFixture(): ServerBootstrap {
     settlements: [],
     leaderboard: [{
       rank: 2, account_id: 'alice', display_name: 'Alice',
-      total_value_cents: 13_987_250_000, return_bps: -9,
+      total_value_cents: 20_809_650_000, return_bps: 13,
       is_current_user: true,
     }],
     settledResults: [{
       player_id: 'sga', game_date: '2025-10-21',
       actual_net_points_micros: 35_000_000,
       expected_net_points_micros: 25_000_000,
-      dividend_cents: 40_000_000,
+      dividend_cents: 80_000_000,
     }],
     capabilities: { can_advance_day: true },
   };
@@ -124,7 +124,7 @@ function bootstrapFixture(): ServerBootstrap {
 test('mapServerBootstrap converts exact server cents and state into screen data', () => {
   const mapped = mapServerBootstrap(bootstrapFixture());
 
-  assert.equal(mapped.state.cash, 88_872_500);
+  assert.equal(mapped.state.cash, 157_096_500);
   assert.equal(mapped.canAdvanceDay, true);
   assert.equal(mapped.state.prices.sga, 51_000_000);
   assert.equal(mapped.players[0].listing_price, 50_000_000);
@@ -149,9 +149,9 @@ test('mapServerBootstrap converts exact server cents and state into screen data'
   assert.equal(mapped.nextGameDate, '2025-10-22');
   assert.equal(mapped.settledGameDateCount, 1);
   assert.deepEqual(mapped.playerTrends.sga, [{
-    date: '2025-10-21', np: 35, expected_np: 25, dividend_per_holder: 400_000,
+    date: '2025-10-21', np: 35, expected_np: 25, dividend_per_holder: 800_000,
   }]);
-  assert.equal(mapped.leaderboard[0].returnPct, -0.09);
+  assert.equal(mapped.leaderboard[0].returnPct, 0.13);
   assert.equal(mapped.leaderboard[0].id, 'alice');
 });
 
@@ -166,7 +166,10 @@ test('activity and history are ordered for the existing UI without inventing unk
     '2025-10-21',
     '2025-10-22',
   ]);
-  assert.equal(mapped.state.portfolioHistory[0].dailyChange, -500_000);
+  assert.equal(
+    mapped.state.portfolioHistory[0].dailyChange,
+    207_724_000 - STARTING_CASH,
+  );
   assert.equal(mapped.state.portfolioHistory[1].dailyChange, 372_500);
 });
 
@@ -237,7 +240,7 @@ test('incremental bootstrap merges new settled results without duplicating histo
     player_id: 'sga', game_date: '2025-10-22',
     actual_net_points_micros: 42_000_000,
     expected_net_points_micros: 25_000_000,
-    dividend_cents: 68_000_000,
+    dividend_cents: 136_000_000,
   }];
 
   const merged = mergeIncrementalBootstrap(previous, incoming, '2025-10-21');
@@ -247,6 +250,7 @@ test('incremental bootstrap merges new settled results without duplicating histo
     '2025-10-21',
     '2025-10-22',
   ]);
+  assert.equal(merged.bootstrap.settledResults.at(-1)?.dividend_cents, 136_000_000);
 });
 
 test('incremental bootstrap requests a full reload when the server clock moves backward', () => {

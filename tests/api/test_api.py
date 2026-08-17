@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from nba_stock_market.api.auth import Principal
 from nba_stock_market.api.database import (
+    AccountRow,
     Database,
     HoldingRow,
     ReplayEventRow,
@@ -15,6 +16,10 @@ from nba_stock_market.api.database import (
     utcnow,
 )
 from nba_stock_market.api.service import KeyedLockRegistry
+from nba_stock_market.engine import STARTING_CASH
+
+
+STARTING_CASH_CENTS = round(STARTING_CASH * 100)
 
 
 def trade_headers(auth: dict[str, str], key: str) -> dict[str, str]:
@@ -234,17 +239,17 @@ def test_first_authenticated_read_creates_starting_portfolio(
         "display_name": "Alice",
         "version": 0,
         "reset_at": portfolio_data["reset_at"],
-        "cash_cents": 14_000_000_000,
-        "free_cash_cents": 14_000_000_000,
+        "cash_cents": STARTING_CASH_CENTS,
+        "free_cash_cents": STARTING_CASH_CENTS,
         "reserved_collateral_cents": 0,
         "market_value_cents": 0,
-        "total_value_cents": 14_000_000_000,
+        "total_value_cents": STARTING_CASH_CENTS,
         "holdings": [],
         "recent_trades": [],
         "instruments": {
             "week_start": "2025-10-20",
             "reserved_collateral_cents": 0,
-            "free_cash_cents": 14_000_000_000,
+            "free_cash_cents": STARTING_CASH_CENTS,
             "weekly_short_slots": {"limit": 3, "used": 0, "remaining": 3},
             "boost_slots": {"limit": 2, "used": 0, "remaining": 2},
             "weekly_shorts": [],
@@ -278,7 +283,7 @@ def test_buy_and_sell_are_server_authoritative_and_charge_fees(
     assert buy_data["trade"]["execution_price_cents"] == 5_000_000_000
     assert buy_data["trade"]["fee_cents"] == 12_500_000
     assert buy_data["trade"]["new_price_cents"] > 5_000_000_000
-    assert buy_data["portfolio"]["cash_cents"] == 8_987_500_000
+    assert buy_data["portfolio"]["cash_cents"] == STARTING_CASH_CENTS - 5_012_500_000
     assert buy_data["portfolio"]["holdings"][0]["player_id"] == "sga"
 
     sell = client.post(
@@ -357,6 +362,7 @@ def test_trade_idempotency_replays_once_and_rejects_body_reuse(
 
 def test_holding_cap_unknown_player_and_insufficient_cash_are_conflicts(
     client: TestClient,
+    database: Database,
     alice_headers: dict[str, str],
 ) -> None:
     first = client.post(
@@ -374,6 +380,10 @@ def test_holding_cap_unknown_player_and_insufficient_cash_are_conflicts(
         headers=trade_headers(alice_headers, "unknown-0001"),
         json={"player_id": "missing", "side": "buy"},
     )
+    with database.session() as session, session.begin():
+        account = session.get(AccountRow, "alice")
+        assert account is not None
+        account.cash_cents = 0
     too_expensive = client.post(
         "/api/v1/trades",
         headers=trade_headers(alice_headers, "cash-buy-0001"),

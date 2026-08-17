@@ -45,6 +45,21 @@ def _comparison_basis() -> str:
     )
 
 
+def _comparison_intro() -> str:
+    return (
+        "This deterministic comparison replays the same cached 2025-26 season, "
+        f"150-player universe, 100 synthetic portfolios, and the engine's {_comparison_basis()} "
+        "constant under `trailing`, `salary-projection`, `dnt`, and `production`. "
+        f"Each portfolio starts with {_money(engine.STARTING_CASH)}. "
+        "This audit comparison intentionally remains listing-neutral: all four models use the "
+        "same salary-only listing basis, and expectation bias is fixed at 0.00 so only the "
+        "expectation models differ. The canonical production economy instead applies the "
+        f"{engine.EXPECTATION_BIAS_NET_POINTS:.8f}-net-point league bias recorded in "
+        "`output/economy-calibration-2026.md`. "
+        "No network calls are made; D&T uses the 164 cached game dates in `data/raw/dnt`."
+    )
+
+
 def _source(model: str) -> object:
     if model == "trailing":
         return TrailingMeanExpectation(window=10)
@@ -121,12 +136,7 @@ def generate() -> str:
     lines = [
         "# Four-Way Expectation Model Comparison",
         "",
-        "This deterministic comparison replays the same cached 2025-26 season, "
-        f"150-player universe, 100 synthetic portfolios, and the engine's {_comparison_basis()} "
-        "constant under `trailing`, `salary-projection`, `dnt`, and `production`. "
-        "This audit comparison intentionally remains listing-neutral: all four models use the "
-        "same salary-only listing basis. "
-        "No network calls are made; D&T uses the 164 cached game dates in `data/raw/dnt`.",
+        _comparison_intro(),
         "",
         "## Net season inflation",
         "",

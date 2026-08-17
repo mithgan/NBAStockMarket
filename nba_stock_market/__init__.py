@@ -1,6 +1,7 @@
 """Standalone NBA stock-market pricing prototype."""
 
 from .engine import (
+    DOLLARS_PER_NET_POINT,
     INACTIVITY_DECAY_RATE,
     MIN_PRICE_FLOOR,
     MAX_SHARES_PER_USER_PER_PLAYER,
@@ -22,6 +23,7 @@ from .engine import (
 )
 
 __all__ = [
+    "DOLLARS_PER_NET_POINT",
     "INACTIVITY_DECAY_RATE",
     "MIN_PRICE_FLOOR",
     "MAX_SHARES_PER_USER_PER_PLAYER",

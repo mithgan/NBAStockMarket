@@ -1,6 +1,7 @@
 import type { Holding, Player, PortfolioSummary } from '../data/types';
+import { STARTING_CASH } from './game';
 
-export const STARTING_CASH = 140_000_000;
+export { STARTING_CASH };
 
 export interface PortfolioState {
   cash: number;
@@ -21,7 +22,7 @@ export interface LeaderboardEntry {
   returnPct: number;
 }
 
-type LeaderboardRival = Omit<LeaderboardEntry, 'rank'>;
+type LeaderboardRival = Pick<LeaderboardEntry, 'name' | 'value'>;
 
 export const initialPortfolioState: PortfolioState = {
   cash: STARTING_CASH,
@@ -36,15 +37,18 @@ export function rankLeaderboard(
   rivals: LeaderboardRival[],
   portfolioTotalValue: number,
 ): LeaderboardEntry[] {
-  const you: LeaderboardRival = {
+  const entries: LeaderboardRival[] = [...rivals, {
     name: 'You',
     value: portfolioTotalValue,
-    returnPct: (portfolioTotalValue / STARTING_CASH - 1) * 100,
-  };
+  }];
 
-  return [...rivals, you]
+  return entries
     .sort((left, right) => right.value - left.value)
-    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+    .map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+      returnPct: (entry.value / STARTING_CASH - 1) * 100,
+    }));
 }
 
 export function executeTrade(

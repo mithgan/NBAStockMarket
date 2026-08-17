@@ -15,6 +15,7 @@ const portfolioContextSource = source('../state/PortfolioContext.tsx');
 const portfolioSource = source('../screens/PortfolioScreen.tsx');
 const marketSource = source('../screens/MarketScreen.tsx');
 const playsSource = source('../screens/PlaysScreen.tsx');
+const leaderboardSource = source('../screens/LeaderboardScreen.tsx');
 const seasonControlSource = source('../components/SeasonControl.tsx');
 const portfolioChartSource = source('../components/PortfolioHistoryChart.tsx');
 const serverStateSource = source('../state/serverState.ts');
@@ -123,6 +124,12 @@ test('instrument UI explains finite weekly slots and never exposes price shorts'
   assert.match(playsSource, /2/);
   assert.match(playsSource, /accessibilityRole="button"/);
   assert.doesNotMatch(playsSource, /price short/i);
+});
+
+test('economy labels derive from the final bankroll while weekly shorts retain their rate', () => {
+  assert.doesNotMatch(leaderboardSource, /\$140M/);
+  assert.match(leaderboardSource, /STARTING_CASH\s*\/\s*1_000_000/);
+  assert.match(playsSource, /WEEKLY_SHORT_DOLLARS_PER_NET_POINT/);
 });
 
 test('weekly play eligibility, dates, and fees come only from server targets', () => {

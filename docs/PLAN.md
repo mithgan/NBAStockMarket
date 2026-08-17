@@ -9,7 +9,7 @@ before the market does** — not by predicting box scores.
 ## Economy v2 (current engine; overrides legacy economy notes below)
 
 The planning call moved the playable economy to NBA salary scale. Every user starts with
-**$140,000,000** in virtual cash, player shares resemble salaries (stars ~$40–70M, rotation
+**$207,824,000** in virtual cash (the 2025-26 second apron), player shares resemble salaries (stars ~$40–70M, rotation
 players ~$15–30M, bench players ~$2–12M). One share is the whole player at his listed salary;
 the float remains 100 shares, multiple users may own the player, and each user may hold at most
 one share per player. The 0.25% trading fee, capped escalating flip penalty, small idle-cash sink, seven-day
@@ -22,11 +22,11 @@ after each game as a cash dividend (or debit) to holders:
 ```
 dividend_per_share = (actual_net_points - expected_net_points)
                    * NET_POINTS_TO_DOLLARS / 100
-NET_POINTS_TO_DOLLARS = $4,000,000
+NET_POINTS_TO_DOLLARS = $8,000,000
 ```
 
-Thus exact expectation pays $0 and a +20 surprise pays one holder about $800,000 ($40,000 per
-net point per share). **Option B is decided (Mith, Discord 7/14):** keep this constant and add the
+Thus exact expectation pays $0 and a +20 surprise pays one holder about $1,600,000 ($80,000 per
+net point per owned player). **Option B is decided (Mith, Discord 7/14):** keep the bias correction and add the
 deterministic +0.43586494964917194 NP/player-game league-bias correction to D&T expectations by
 default. This removes systematic projection inflation; the intended idle-cash sink leaves the
 replayed season near zero at about −1.5% net inflation.

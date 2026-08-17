@@ -1,5 +1,5 @@
 export const GAME_STATE_VERSION = 1 as const;
-export const STARTING_CASH = 140_000_000;
+export const STARTING_CASH = 207_824_000;
 export const FEE_PCT = 0.0025;
 export const IMPACT_K = 0.003;
 
@@ -9,7 +9,8 @@ export const WEEKLY_TOTAL_CLAMP_NP = 50;
 export const WEEKLY_SHORT_COLLATERAL = 2_000_000;
 export const SHORT_FEE_PCT = 0.0025;
 export const SHORT_MIN_FEE = 10_000;
-export const DOLLARS_PER_NET_POINT = 40_000;
+export const DOLLARS_PER_NET_POINT = 80_000;
+export const WEEKLY_SHORT_DOLLARS_PER_NET_POINT = 40_000;
 
 export const BOOST_SLOTS = 2;
 export const BOOST_MULTIPLIER = 2;
@@ -986,7 +987,7 @@ export function advanceReplayDay(
           position.accruedNetPoints,
           -WEEKLY_TOTAL_CLAMP_NP,
           WEEKLY_TOTAL_CLAMP_NP,
-        ) * DOLLARS_PER_NET_POINT;
+        ) * WEEKLY_SHORT_DOLLARS_PER_NET_POINT;
       cash += payout;
       additions.push(
         transitionActivity(

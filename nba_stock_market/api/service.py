@@ -50,10 +50,10 @@ from nba_stock_market.engine import (
 from nba_stock_market.instruments import (
     BOOST_FEE_PCT,
     BOOST_SLOTS,
-    DOLLARS_PER_NET_POINT,
     MAX_WEEKLY_SHORTS_PER_PLAYER,
     SHORT_FEE_PCT,
     SHORT_MIN_FEE,
+    WEEKLY_SHORT_DOLLARS_PER_NET_POINT,
     WEEKLY_GAME_CLAMP_NP,
     WEEKLY_SHORT_COLLATERAL,
     WEEKLY_SHORT_SLOTS,
@@ -65,8 +65,8 @@ WEEKLY_SHORT_COLLATERAL_CENTS = round(WEEKLY_SHORT_COLLATERAL * 100)
 SHORT_MIN_FEE_CENTS = round(SHORT_MIN_FEE * 100)
 WEEKLY_GAME_CLAMP_MICROS = round(WEEKLY_GAME_CLAMP_NP * 1_000_000)
 WEEKLY_TOTAL_CLAMP_MICROS = round(WEEKLY_TOTAL_CLAMP_NP * 1_000_000)
-DOLLARS_PER_NET_POINT_MICRO_CENTS = round(
-    DOLLARS_PER_NET_POINT * 100 / 1_000_000
+WEEKLY_SHORT_DOLLARS_PER_NET_POINT_MICRO_CENTS = round(
+    WEEKLY_SHORT_DOLLARS_PER_NET_POINT * 100 / 1_000_000
 )
 LOGGER = logging.getLogger(__name__)
 
@@ -1083,7 +1083,8 @@ class MarketService:
                         ),
                     )
                     payout_cents = (
-                        clamped_micros * DOLLARS_PER_NET_POINT_MICRO_CENTS
+                        clamped_micros
+                        * WEEKLY_SHORT_DOLLARS_PER_NET_POINT_MICRO_CENTS
                     )
                     position.status = "settled"
                 position.payout_cents = payout_cents if position.status == "settled" else 0

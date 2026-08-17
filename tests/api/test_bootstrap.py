@@ -54,7 +54,10 @@ def test_local_bootstrap_creates_schema_and_loads_seed_file(tmp_path) -> None:
                                 "player_id": "sga",
                                 "actual_net_points_micros": 40_000_000,
                                 "expected_net_points_micros": 20_000_000,
-                                "dividend_cents": 80_000_000,
+                                    "dividend_cents": 160_000_000,
+                                    "actual_minutes_micros": 30_000_000,
+                                    "projected_minutes_micros": None,
+                                    "qualifies_for_instruments": False,
                             }
                         ],
                     }
@@ -137,6 +140,30 @@ def test_production_startup_requires_migrated_seeded_database(tmp_path) -> None:
         with pytest.raises(RuntimeError, match="no seeded player listings"):
             with TestClient(app):
                 pass
+    finally:
+        database.dispose()
+
+
+def test_non_production_startup_rejects_pending_local_economy_rebase(
+    tmp_path,
+) -> None:
+    database = Database(f"sqlite+pysqlite:///{tmp_path / 'legacy.db'}")
+    database.create_schema()
+    with database.engine.begin() as connection:
+        connection.execute(text("DELETE FROM market_local_schema_migrations"))
+    settings = ApiSettings(
+        environment="test",
+        database_url=database.url,
+        auto_create_schema=False,
+    )
+
+    try:
+        with pytest.raises(RuntimeError, match="local market economy rebase is pending"):
+            create_app(
+                settings=settings,
+                database=database,
+                token_verifier=FixtureTokenVerifier({}),
+            )
     finally:
         database.dispose()
 
@@ -271,6 +298,387 @@ def test_local_schema_upgrade_adds_and_backfills_account_reset_boundary(
         database.dispose()
 
 
+def test_local_schema_upgrade_rebases_second_apron_cash_once(tmp_path) -> None:
+    database = Database(f"sqlite+pysqlite:///{tmp_path / 'legacy-economy.db'}")
+    with database.engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE market_accounts (
+                    id varchar(128) primary key,
+                    display_name varchar(80) not null,
+                    cash_cents bigint not null,
+                    version integer not null,
+                    created_at timestamp not null,
+                    updated_at timestamp not null,
+                    reset_at timestamp,
+                    constraint ck_market_account_version check (version >= 0)
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO market_accounts (
+                    id, display_name, cash_cents, version,
+                    created_at, updated_at, reset_at
+                ) VALUES
+                    ('untouched', 'Untouched', 14000000000, 0,
+                     '2026-07-20 10:00:00', '2026-07-20 11:00:00', null),
+                    ('active', 'Active', 12300000000, 4,
+                     '2026-07-20 10:00:00', '2026-07-20 11:00:00', null)
+                """
+            )
+        )
+
+    try:
+        database.create_schema()
+        database.seed_players(
+            [
+                SeedPlayer(
+                    id="sga",
+                    name="Shai Gilgeous-Alexander",
+                    tier="star",
+                    current_price_cents=5_000_000_000,
+                    opening_price_cents=5_000_000_000,
+                    actual_salary_cents=4_080_615_000,
+                )
+            ]
+        )
+        database.seed_replay_events(
+            season_id="2025-26",
+            events=[
+                SeedReplayEvent(
+                    game_date=date(2025, 10, 21),
+                    player_id="sga",
+                    actual_net_points_micros=40_000_000,
+                    expected_net_points_micros=20_000_000,
+                    dividend_cents=160_000_000,
+                    actual_minutes_micros=2_100_000,
+                    projected_minutes_micros=3_000_000,
+                    qualifies_for_instruments=True,
+                )
+            ],
+        )
+        database.create_schema()
+        with database.engine.connect() as connection:
+            accounts = connection.execute(
+                text(
+                    "SELECT id, cash_cents, version FROM market_accounts "
+                    "ORDER BY id"
+                )
+            ).all()
+            migration_count = connection.scalar(
+                text(
+                    "SELECT count(*) FROM market_local_schema_migrations "
+                    "WHERE version = '20260815000000_second_apron_economy'"
+                )
+            )
+
+        assert [tuple(row) for row in accounts] == [
+            ("active", 19_082_400_000, 5),
+            ("untouched", 20_782_400_000, 0),
+        ]
+        assert migration_count == 1
+    finally:
+        database.dispose()
+
+
+def test_local_schema_economy_rebase_is_atomic_on_replay_conflict(tmp_path) -> None:
+    database = Database(f"sqlite+pysqlite:///{tmp_path / 'conflict-economy.db'}")
+    database.create_schema()
+    database.seed_players(
+        [
+            SeedPlayer(
+                id="sga",
+                name="Shai Gilgeous-Alexander",
+                tier="star",
+                current_price_cents=5_000_000_000,
+                opening_price_cents=5_000_000_000,
+                actual_salary_cents=4_080_615_000,
+            )
+        ]
+    )
+    with database.engine.begin() as connection:
+        connection.execute(
+            text(
+                "DELETE FROM market_local_schema_migrations "
+                "WHERE version = '20260815000000_second_apron_economy'"
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO market_accounts (
+                    id, display_name, cash_cents, version,
+                    created_at, updated_at, reset_at
+                ) VALUES (
+                    'alice', 'Alice', 14000000000, 0,
+                    '2026-07-20 10:00:00', '2026-07-20 11:00:00',
+                    '2026-07-20 10:00:00'
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO market_replay_events (
+                    game_date, player_id, actual_net_points_micros,
+                    expected_net_points_micros, dividend_cents,
+                    actual_minutes_micros, projected_minutes_micros,
+                    qualifies_for_instruments
+                ) VALUES (
+                    '2025-10-21', 'sga', 40000000, 20000000, 70000000,
+                    2100000, 3000000, 1
+                )
+                """
+            )
+        )
+
+    try:
+        with pytest.raises(ValueError, match="replay seed conflicts"):
+            database.seed_replay_events(
+                season_id="2025-26",
+                events=[
+                    SeedReplayEvent(
+                        game_date=date(2025, 10, 21),
+                        player_id="sga",
+                        actual_net_points_micros=40_000_000,
+                        expected_net_points_micros=20_000_000,
+                        dividend_cents=160_000_000,
+                        actual_minutes_micros=2_100_000,
+                        projected_minutes_micros=3_000_000,
+                        qualifies_for_instruments=True,
+                    )
+                ],
+            )
+        with database.engine.connect() as connection:
+            account_cash = connection.scalar(
+                text("SELECT cash_cents FROM market_accounts WHERE id = 'alice'")
+            )
+            dividend = connection.scalar(
+                text(
+                    "SELECT dividend_cents FROM market_replay_events "
+                    "WHERE game_date = '2025-10-21' AND player_id = 'sga'"
+                )
+            )
+            migration_count = connection.scalar(
+                text(
+                    "SELECT count(*) FROM market_local_schema_migrations "
+                    "WHERE version = '20260815000000_second_apron_economy'"
+                )
+            )
+
+        assert account_cash == 14_000_000_000
+        assert dividend == 70_000_000
+        assert migration_count == 0
+    finally:
+        database.dispose()
+
+
+def test_local_schema_economy_rebase_rejects_old_rate_for_missing_rows(
+    tmp_path,
+) -> None:
+    database = Database(f"sqlite+pysqlite:///{tmp_path / 'partial-economy.db'}")
+    database.create_schema()
+    database.seed_players(
+        [
+            SeedPlayer(
+                id="sga",
+                name="Shai Gilgeous-Alexander",
+                tier="star",
+                current_price_cents=5_000_000_000,
+                opening_price_cents=5_000_000_000,
+                actual_salary_cents=4_080_615_000,
+            )
+        ]
+    )
+    with database.engine.begin() as connection:
+        connection.execute(
+            text(
+                "DELETE FROM market_local_schema_migrations "
+                "WHERE version = '20260815000000_second_apron_economy'"
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO market_accounts (
+                    id, display_name, cash_cents, version,
+                    created_at, updated_at, reset_at
+                ) VALUES (
+                    'alice', 'Alice', 14000000000, 0,
+                    '2026-07-20 10:00:00', '2026-07-20 11:00:00',
+                    '2026-07-20 10:00:00'
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO market_replay_events (
+                    game_date, player_id, actual_net_points_micros,
+                    expected_net_points_micros, dividend_cents,
+                    actual_minutes_micros, projected_minutes_micros,
+                    qualifies_for_instruments
+                ) VALUES (
+                    '2025-10-21', 'sga', 40000000, 20000000, 80000000,
+                    2100000, 3000000, 1
+                )
+                """
+            )
+        )
+
+    try:
+        with pytest.raises(ValueError, match="selected economy"):
+            database.seed_replay_events(
+                season_id="2025-26",
+                events=[
+                    SeedReplayEvent(
+                        game_date=date(2025, 10, 21),
+                        player_id="sga",
+                        actual_net_points_micros=40_000_000,
+                        expected_net_points_micros=20_000_000,
+                        dividend_cents=160_000_000,
+                        actual_minutes_micros=2_100_000,
+                        projected_minutes_micros=3_000_000,
+                        qualifies_for_instruments=True,
+                    ),
+                    SeedReplayEvent(
+                        game_date=date(2025, 10, 22),
+                        player_id="sga",
+                        actual_net_points_micros=30_000_000,
+                        expected_net_points_micros=20_000_000,
+                        dividend_cents=40_000_000,
+                        actual_minutes_micros=2_100_000,
+                        projected_minutes_micros=3_000_000,
+                        qualifies_for_instruments=True,
+                    ),
+                ],
+            )
+        with database.engine.connect() as connection:
+            assert connection.scalar(
+                text("SELECT cash_cents FROM market_accounts WHERE id = 'alice'")
+            ) == 14_000_000_000
+            assert connection.scalar(
+                text("SELECT count(*) FROM market_replay_events")
+            ) == 1
+            assert connection.scalar(
+                text(
+                    "SELECT count(*) FROM market_local_schema_migrations "
+                    "WHERE version = '20260815000000_second_apron_economy'"
+                )
+            ) == 0
+    finally:
+        database.dispose()
+
+
+def test_local_schema_economy_rebase_rejects_settled_history(tmp_path) -> None:
+    database = Database(f"sqlite+pysqlite:///{tmp_path / 'settled-economy.db'}")
+    database.create_schema()
+    with database.engine.begin() as connection:
+        connection.execute(
+            text(
+                "DELETE FROM market_local_schema_migrations "
+                "WHERE version = '20260815000000_second_apron_economy'"
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO market_settlements (
+                    game_date, season_id, idempotency_key, request_fingerprint,
+                    event_count, payout_count, net_cash_cents,
+                    response_payload, settled_at
+                ) VALUES (
+                    '2025-10-21', '2025-26', 'settled-before-rebase',
+                    'fingerprint', 0, 0, 0, '{}', '2026-07-20 11:00:00'
+                )
+                """
+            )
+        )
+    try:
+        with pytest.raises(RuntimeError, match="after historical settlements exist"):
+            database.create_schema()
+    finally:
+        database.dispose()
+
+
+def test_local_startup_rejects_a_pending_economy_rebase_without_replay_seed(
+    tmp_path,
+) -> None:
+    database = Database(f"sqlite+pysqlite:///{tmp_path / 'pending-economy.db'}")
+    database.create_schema()
+    database.seed_players(
+        [
+            SeedPlayer(
+                id="sga",
+                name="Shai Gilgeous-Alexander",
+                tier="star",
+                current_price_cents=5_000_000_000,
+                opening_price_cents=5_000_000_000,
+                actual_salary_cents=4_080_615_000,
+            )
+        ]
+    )
+    database.seed_replay_events(
+        season_id="2025-26",
+        events=[
+            SeedReplayEvent(
+                game_date=date(2025, 10, 21),
+                player_id="sga",
+                actual_net_points_micros=40_000_000,
+                expected_net_points_micros=20_000_000,
+                dividend_cents=160_000_000,
+                actual_minutes_micros=2_100_000,
+                projected_minutes_micros=3_000_000,
+                qualifies_for_instruments=True,
+            )
+        ],
+    )
+    with database.engine.begin() as connection:
+        connection.execute(
+            text(
+                "DELETE FROM market_local_schema_migrations "
+                "WHERE version = '20260815000000_second_apron_economy'"
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO market_accounts (
+                    id, display_name, cash_cents, version,
+                    created_at, updated_at, reset_at
+                ) VALUES (
+                    'alice', 'Alice', 14000000000, 0,
+                    '2026-07-20 10:00:00', '2026-07-20 11:00:00',
+                    '2026-07-20 10:00:00'
+                )
+                """
+            )
+        )
+
+    settings = ApiSettings(
+        environment="test",
+        database_url=f"sqlite+pysqlite:///{tmp_path / 'pending-economy.db'}",
+        auto_create_schema=True,
+    )
+    try:
+        with pytest.raises(RuntimeError, match="economy rebase is pending"):
+            create_app(
+                settings=settings,
+                database=database,
+                token_verifier=FixtureTokenVerifier({}),
+            )
+        with pytest.raises(RuntimeError, match="economy rebase is pending"):
+            database.assert_ready()
+    finally:
+        database.dispose()
+
+
 def test_local_schema_upgrade_retries_partial_reset_boundary_backfill(
     tmp_path,
 ) -> None:
@@ -305,7 +713,6 @@ def test_local_schema_upgrade_retries_partial_reset_boundary_backfill(
                 """
             )
         )
-
     try:
         database.create_schema()
         with database.engine.connect() as connection:
@@ -364,6 +771,12 @@ def test_local_schema_upgrade_adds_and_backfills_replay_instrument_metadata(
                 """
             )
         )
+        connection.execute(
+            text(
+                "DELETE FROM market_local_schema_migrations "
+                "WHERE version = '20260815000000_second_apron_economy'"
+            )
+        )
 
     try:
         database.create_schema()
@@ -375,7 +788,7 @@ def test_local_schema_upgrade_adds_and_backfills_replay_instrument_metadata(
                     player_id="sga",
                     actual_net_points_micros=40_000_000,
                     expected_net_points_micros=20_000_000,
-                    dividend_cents=80_000_000,
+                    dividend_cents=160_000_000,
                     actual_minutes_micros=2_100_000,
                     projected_minutes_micros=3_000_000,
                     qualifies_for_instruments=True,
@@ -392,8 +805,8 @@ def test_local_schema_upgrade_adds_and_backfills_replay_instrument_metadata(
             metadata = connection.execute(
                 text(
                     """
-                    SELECT actual_minutes_micros, projected_minutes_micros,
-                           qualifies_for_instruments
+                    SELECT dividend_cents, actual_minutes_micros,
+                           projected_minutes_micros, qualifies_for_instruments
                     FROM market_replay_events
                     WHERE game_date = '2025-10-21' AND player_id = 'sga'
                     """
@@ -405,7 +818,7 @@ def test_local_schema_upgrade_adds_and_backfills_replay_instrument_metadata(
             "projected_minutes_micros",
             "qualifies_for_instruments",
         } <= columns
-        assert tuple(metadata) == (2_100_000, 3_000_000, 1)
+        assert tuple(metadata) == (160_000_000, 2_100_000, 3_000_000, 1)
     finally:
         database.dispose()
 

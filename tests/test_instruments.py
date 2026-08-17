@@ -3,10 +3,18 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from nba_stock_market.engine import Market, Player, TradeSide, User
+import nba_stock_market.instruments as instruments_module
+from nba_stock_market.engine import (
+    DOLLARS_PER_NET_POINT as OWNED_PLAYER_DOLLARS_PER_NET_POINT,
+    NET_POINTS_TO_DOLLARS,
+    SHARES_OUT,
+    Market,
+    Player,
+    TradeSide,
+    User,
+)
 from nba_stock_market.instruments import (
     BOOST_FEE_PCT,
-    DOLLARS_PER_NET_POINT,
     InstrumentError,
     InstrumentsBook,
     MAX_WEEKLY_SHORTS_PER_PLAYER,
@@ -15,6 +23,7 @@ from nba_stock_market.instruments import (
     PRICE_SHORT_STOP_OUT,
     SHORT_FEE_PCT,
     SHORT_MIN_FEE,
+    WEEKLY_SHORT_DOLLARS_PER_NET_POINT,
     WEEKLY_SHORT_COLLATERAL,
     week_of,
 )
@@ -40,6 +49,15 @@ def make_book(*, users: int = 3, price: float = 40_000_000.0) -> InstrumentsBook
 
 
 class WeeklyShortTest(unittest.TestCase):
+    def test_weekly_short_rate_is_independent_of_owned_player_rate(self) -> None:
+        self.assertEqual(OWNED_PLAYER_DOLLARS_PER_NET_POINT, 80_000.0)
+        self.assertEqual(
+            OWNED_PLAYER_DOLLARS_PER_NET_POINT,
+            NET_POINTS_TO_DOLLARS / SHARES_OUT,
+        )
+        self.assertEqual(WEEKLY_SHORT_DOLLARS_PER_NET_POINT, 40_000.0)
+        self.assertFalse(hasattr(instruments_module, "DOLLARS_PER_NET_POINT"))
+
     def test_arm_charges_percent_fee_and_reserves_collateral(self) -> None:
         book = make_book()
         cash_before = book.market.users["u0"].cash
@@ -88,7 +106,7 @@ class WeeklyShortTest(unittest.TestCase):
         cash_before = book.market.users["u0"].cash
         (settled,) = book.settle_week(week_of(MONDAY))
         self.assertAlmostEqual(settled.accrued_np, 25.0 + 25.0 + 10.0)
-        self.assertAlmostEqual(settled.pnl, -50.0 * DOLLARS_PER_NET_POINT)
+        self.assertAlmostEqual(settled.pnl, -2_000_000.0)
         self.assertAlmostEqual(book.market.users["u0"].cash - cash_before, settled.pnl)
         self.assertEqual(book.reserved["u0"], 0.0)
 
@@ -96,11 +114,13 @@ class WeeklyShortTest(unittest.TestCase):
         book = make_book()
         book.arm_weekly_short("u0", "star", MONDAY)
         book.record_game(
-            "star", MONDAY, surprise_np=-12.0, dividend_per_share=-480_000.0,
+            "star", MONDAY, surprise_np=-12.0, dividend_per_share=-960_000.0,
             actual_minutes=30.0, projected_minutes=32.0,
         )
         (settled,) = book.settle_week(week_of(MONDAY))
-        self.assertAlmostEqual(settled.pnl, 12.0 * DOLLARS_PER_NET_POINT)
+        self.assertAlmostEqual(
+            settled.pnl, 12.0 * WEEKLY_SHORT_DOLLARS_PER_NET_POINT
+        )
 
     def test_dnp_games_accrue_nothing_and_empty_week_refunds(self) -> None:
         book = make_book()
@@ -207,11 +227,11 @@ class BoostTest(unittest.TestCase):
         book.arm_boost("u0", "star", MONDAY)
         cash_before = book.market.users["u0"].cash
         book.record_game(
-            "star", MONDAY, surprise_np=8.0, dividend_per_share=320_000.0,
+            "star", MONDAY, surprise_np=8.0, dividend_per_share=640_000.0,
             actual_minutes=34.0, projected_minutes=34.0,
         )
         self.assertAlmostEqual(
-            book.market.users["u0"].cash - cash_before, 320_000.0
+            book.market.users["u0"].cash - cash_before, 640_000.0
         )
 
     def test_two_slots_per_week_and_void_returns_slot(self) -> None:
@@ -230,7 +250,7 @@ class BoostTest(unittest.TestCase):
         boost = book.arm_boost("u0", "star", MONDAY)
         cash_after_fee = book.market.users["u0"].cash
         book.record_game(
-            "star", MONDAY, surprise_np=10.0, dividend_per_share=400_000.0,
+            "star", MONDAY, surprise_np=10.0, dividend_per_share=800_000.0,
             actual_minutes=3.0, projected_minutes=34.0,
         )
         book.expire_boosts(MONDAY)
