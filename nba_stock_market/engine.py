@@ -7,7 +7,7 @@ from enum import IntEnum
 from typing import Protocol, Union, runtime_checkable
 
 
-STARTING_CASH = 140_000_000.0
+STARTING_CASH = 207_824_000.0
 # NBA-17 fee calibration: 0.25% base plus a repeat-flip surcharge that
 # increases by 0.5 percentage points and stops at 1.5%.
 FEE_PCT = 0.0025
@@ -24,9 +24,10 @@ MIN_PRICE_FLOOR = 350_000.0
 GRACE_DAYS = 7
 INACTIVITY_DECAY_RATE = 0.005
 
-# DECIDED 2026-07-14 (Mith, Discord 7/14). With 100 float shares, this is
-# $40,000 per net point per holder, so a +20 surprise pays one holder $800K.
-NET_POINTS_TO_DOLLARS = 4_000_000.0
+# Selected by the 2025-26 deterministic economy replay on 2026-08-15. This is
+# the lowest candidate satisfying the four product calibration constraints.
+DOLLARS_PER_NET_POINT = 80_000.0
+NET_POINTS_TO_DOLLARS = DOLLARS_PER_NET_POINT * SHARES_OUT
 # The deterministic D&T replay's league-mean actual-minus-expected surprise.
 # Adding it to expectations removes the systematic projection faucet.
 EXPECTATION_BIAS_NET_POINTS = 0.43586494964917194

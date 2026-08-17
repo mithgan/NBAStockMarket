@@ -23,10 +23,12 @@ from nba_stock_market.api.database import (
 )
 from nba_stock_market.api.service import MarketService
 from nba_stock_market.api.settings import ApiSettings
+from nba_stock_market.engine import STARTING_CASH
 from tests.api.conftest import FixtureTokenVerifier
 
 
 ADMIN_KEY = "test-settlement-admin-key-at-least-32"
+STARTING_CASH_CENTS = round(STARTING_CASH * 100)
 
 
 @pytest.fixture
@@ -61,21 +63,21 @@ def settlement_database(tmp_path) -> Database:
                 player_id="jokic",
                 actual_net_points_micros=20_000_000,
                 expected_net_points_micros=25_000_000,
-                dividend_cents=-20_000_000,
+                dividend_cents=-40_000_000,
             ),
             SeedReplayEvent(
                 game_date=date(2025, 10, 21),
                 player_id="sga",
                 actual_net_points_micros=40_000_000,
                 expected_net_points_micros=20_000_000,
-                dividend_cents=80_000_000,
+                dividend_cents=160_000_000,
             ),
             SeedReplayEvent(
                 game_date=date(2025, 10, 22),
                 player_id="sga",
                 actual_net_points_micros=5_000_000,
                 expected_net_points_micros=20_000_000,
-                dividend_cents=-60_000_000,
+                dividend_cents=-120_000_000,
             ),
         ],
     )
@@ -163,7 +165,7 @@ def test_local_replay_seed_is_idempotent_but_rejects_conflicting_events(
         player_id="sga",
         actual_net_points_micros=40_000_000,
         expected_net_points_micros=20_000_000,
-        dividend_cents=80_000_000,
+        dividend_cents=160_000_000,
     )
     settlement_database.seed_replay_events(
         season_id="2025-26",
@@ -321,25 +323,25 @@ def test_daily_settlement_pays_holders_once_and_reconciles_history(
         "next_game_date": "2025-10-22",
         "is_complete": False,
         "event_count": 2,
-            "payout_count": 1,
-            "net_cash_cents": 80_000_000,
-            "cash_breakdown_cents": {
-                "dividends": 80_000_000,
-                "boosts": 0,
-                "weekly_shorts": 0,
-            },
-        }
+        "payout_count": 1,
+        "net_cash_cents": 160_000_000,
+        "cash_breakdown_cents": {
+            "dividends": 160_000_000,
+            "boosts": 0,
+            "weekly_shorts": 0,
+        },
+    }
 
     after = settlement_client.get("/api/v1/portfolio", headers=auth()).json()["data"]
-    assert after["cash_cents"] - before["cash_cents"] == 80_000_000
+    assert after["cash_cents"] - before["cash_cents"] == 160_000_000
     history = settlement_client.get("/api/v1/settlements", headers=auth()).json()["data"]
     assert history == [
         {
             "game_date": "2025-10-21",
             "event_count": 2,
             "payout_count": 1,
-            "net_cash_cents": 80_000_000,
-            "current_user_dividend_cents": 80_000_000,
+            "net_cash_cents": 160_000_000,
+            "current_user_dividend_cents": 160_000_000,
             "settled_at": history[0]["settled_at"],
         }
     ]
@@ -365,14 +367,14 @@ def test_settlement_reconciles_every_holder_and_skips_unowned_events(
 
     assert response.status_code == 201
     assert response.json()["data"]["payout_count"] == 2
-    assert response.json()["data"]["net_cash_cents"] == 160_000_000
+    assert response.json()["data"]["net_cash_cents"] == 320_000_000
     with settlement_database.session() as session:
         rows = session.scalars(
             select(DividendRow).order_by(DividendRow.account_id)
         ).all()
         assert [row.account_id for row in rows] == ["alice", "bob"]
         assert {row.player_id for row in rows} == {"sga"}
-        assert sum(row.amount_cents for row in rows) == 160_000_000
+        assert sum(row.amount_cents for row in rows) == 320_000_000
 
 
 def test_stale_expected_date_and_idempotency_misuse_do_not_advance_clock(
@@ -475,7 +477,10 @@ def test_sqlite_trade_waits_for_settlement_and_observes_post_settlement_state(
 
     assert settlement_response.status_code == 201
     assert trade_response.status_code == 201
-    assert trade_response.json()["data"]["portfolio"]["cash_cents"] == 6_982_500_000
+    assert (
+        trade_response.json()["data"]["portfolio"]["cash_cents"]
+        == STARTING_CASH_CENTS - 7_017_500_000
+    )
     with settlement_database.session() as session:
         bob_dividends = session.scalar(
             select(func.count(DividendRow.account_id)).where(
@@ -507,7 +512,7 @@ def test_signed_dividend_can_make_cash_negative_and_blocks_new_buys(
     )
     assert second.status_code == 201
     portfolio = settlement_client.get("/api/v1/portfolio", headers=auth()).json()["data"]
-    assert portfolio["cash_cents"] == -50_000_000
+    assert portfolio["cash_cents"] == -110_000_000
     blocked = settlement_client.post(
         "/api/v1/trades",
         headers={**auth(), "Idempotency-Key": "blocked-negative-cash"},

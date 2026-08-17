@@ -37,6 +37,14 @@ EXPECTED_SEASON = "2025-26"
 EXPECTED_SEASON_START = date(2025, 10, 21)
 EXPECTED_SEASON_END = date(2026, 4, 12)
 EXPECTED_REGULAR_SEASON_GAMES = 1230
+ECONOMY_CANDIDATE_RATES = (
+    40_000.0,
+    60_000.0,
+    80_000.0,
+    100_000.0,
+    120_000.0,
+)
+CALIBRATION_PERCENTILES = (0.50, 0.75, 0.90, 0.95)
 DEFAULT_OPENING_PRICES_PATH = (
     Path(__file__).resolve().parents[1] / "output/opening-prices-2026-27.csv"
 )
@@ -86,6 +94,7 @@ class ReplaySummary:
     calendar_day_count: int
     idle_cash_sunk: float
     evaluations: tuple["GameEvaluation", ...]
+    daily_portfolio_moves: tuple[float, ...] = ()
     expectation_fallback_count: int = 0
 
 
@@ -207,16 +216,22 @@ def replay_game_records(
         for game_date, games_on_date in groupby(ordered, key=lambda game: game.game_date)
     }
     if not ordered:
-        return ReplaySummary(0, 0, 0, 0.0, (), 0)
+        return ReplaySummary(0, 0, 0, 0.0, ())
     current_date = ordered[0].game_date
     end_date = ordered[-1].game_date
     evaluations: list[GameEvaluation] = []
     calendar_day_count = 0
     expectation_fallback_count = 0
+    daily_portfolio_moves: list[float] = []
     processed_settlements: set[tuple[str, str]] = set()
     while current_date <= end_date:
         calendar_day_count += 1
         games_on_date = games_by_date.get(current_date, [])
+        portfolio_values_before = (
+            {user_id: market.portfolio_value(user_id) for user_id in market.users}
+            if games_on_date
+            else {}
+        )
         if games_on_date:
             game_day_count += 1
         for game in games_on_date:
@@ -259,6 +274,11 @@ def replay_game_records(
         market.advance_day(apply_reversion=False, apply_idle_fee=True)
         cash_after = sum(user.cash for user in market.users.values())
         idle_cash_sunk += cash_before - cash_after
+        if games_on_date:
+            daily_portfolio_moves.extend(
+                abs(market.portfolio_value(user_id) - starting_value)
+                for user_id, starting_value in portfolio_values_before.items()
+            )
         current_date += timedelta(days=1)
 
     return ReplaySummary(
@@ -267,6 +287,7 @@ def replay_game_records(
         calendar_day_count,
         idle_cash_sunk,
         tuple(evaluations),
+        tuple(daily_portfolio_moves),
         expectation_fallback_count,
     )
 
@@ -433,6 +454,24 @@ def _round_money(value: float) -> float:
     return 0.0 if rounded == 0 else rounded
 
 
+def _percentile_summary(values: list[float]) -> dict[str, float]:
+    return {
+        f"p{round(quantile * 100)}": _round_money(_percentile(values, quantile))
+        for quantile in CALIBRATION_PERCENTILES
+    }
+
+
+def _percentile_pct_summary(
+    values: list[float], *, denominator: float
+) -> dict[str, float]:
+    return {
+        f"p{round(quantile * 100)}": round(
+            100 * _percentile(values, quantile) / denominator, 6
+        )
+        for quantile in CALIBRATION_PERCENTILES
+    }
+
+
 def _player_row(player: ListedPlayer, per_share: float, holder_total: float) -> dict[str, Any]:
     return {
         "player_id": player.player_id,
@@ -527,19 +566,22 @@ def _build_report(
         and item.actual_net_points > item.expected_net_points
     ]
     great_game_surprise = _percentile(star_positive_surprises, 0.90)
-    great_game_payout = great_game_surprise * market.net_points_to_dollars / SHARES_OUT
+    per_holder_rate = market.net_points_to_dollars / SHARES_OUT
+    great_game_payout = great_game_surprise * per_holder_rate
     calibration = {
-        "status": "DECIDED 2026-07-14 (Mith, Discord 7/14)",
-        "definition": "one holder receives $40,000 per net-point surprise",
+        "status": "SELECTED 2026-08-15 by deterministic candidate replay",
+        "definition": (
+            f"one holder receives ${per_holder_rate:,.0f} per net-point surprise"
+        ),
         "target_surprise_net_points": 20.0,
-        "target_per_holder_payout": 800_000.0,
+        "target_per_holder_payout": _round_money(20 * per_holder_rate),
         "great_game_surprise_net_points": round(great_game_surprise, 4),
         "current_net_points_to_dollars": market.net_points_to_dollars,
-        "dividend_per_net_point_per_share": market.net_points_to_dollars / SHARES_OUT,
+        "dividend_per_net_point_per_share": per_holder_rate,
         "current_great_game_per_holder_payout": _round_money(great_game_payout),
         "decision": (
-            "Option B: keep $40K per net point per holder and apply the "
-            "league-mean expectation-bias correction"
+            "lowest candidate satisfying the +20 impact, +5 visibility, season "
+            "drift, and pre-clamp symmetry constraints"
         ),
         "applied_net_points_to_dollars": market.net_points_to_dollars,
         "tiers": tier_metrics,
@@ -592,6 +634,11 @@ def _build_report(
             }
         )
 
+    absolute_game_payouts = [
+        abs(item.dividend_per_share) for item in replay.evaluations
+    ]
+    absolute_daily_moves = list(replay.daily_portfolio_moves)
+
     return {
         "data_sources": {
             "actuals": {
@@ -619,6 +666,7 @@ def _build_report(
             "calendar_days": replay.calendar_day_count,
             "portfolio_count": len(market.users),
             "portfolio_size": 10,
+            "starting_cash": STARTING_CASH,
             "max_shares_per_user_per_player": MAX_SHARES_PER_USER_PER_PLAYER,
             "expectation_model": expectation_model,
             "expectation_bias_mode": expectation_bias_mode,
@@ -678,6 +726,26 @@ def _build_report(
             "net_inflation_pct": round(100 * net_inflation / initial_wealth, 6),
         },
         "calibration": calibration,
+        "replay_metrics": {
+            "absolute_player_game_payout_per_holder": _percentile_summary(
+                absolute_game_payouts
+            ),
+            "absolute_daily_portfolio_move": _percentile_summary(
+                absolute_daily_moves
+            ),
+            "absolute_daily_portfolio_move_pct_of_starting_cash": (
+                _percentile_pct_summary(
+                    absolute_daily_moves,
+                    denominator=STARTING_CASH,
+                )
+            ),
+            "active_portfolio_day_observations": len(absolute_daily_moves),
+            "active_day_definition": (
+                "one absolute end-to-end portfolio value change for every synthetic "
+                "portfolio on each league game day, including dividends and the daily "
+                "idle-cash sink"
+            ),
+        },
         "distribution": {"top_10": ranked[:10], "bottom_10": list(reversed(ranked[-10:]))},
         "portfolio_spread": {
             "best": portfolio_rows[-1],
@@ -689,9 +757,300 @@ def _build_report(
     }
 
 
+def economy_candidate_row(report: dict[str, Any]) -> dict[str, Any]:
+    """Extract every product calibration metric from one candidate replay."""
+
+    starting_cash = float(report["metadata"]["starting_cash"])
+    per_holder_rate = float(
+        report["calibration"]["dividend_per_net_point_per_share"]
+    )
+    plus_5 = 5 * per_holder_rate
+    plus_20 = 20 * per_holder_rate
+    minus_5 = -plus_5
+    minus_20 = -plus_20
+    plus_5_ui_rounded = round(plus_5 / 100_000) * 100_000.0
+    plus_20_pct = 100 * plus_20 / starting_cash
+    economy_drift_pct = float(report["money_supply"]["net_inflation_pct"])
+    symmetric = math.isclose(plus_5, abs(minus_5)) and math.isclose(
+        plus_20, abs(minus_20)
+    )
+    constraints = {
+        "plus_20_at_least_0_75_pct_of_starting_cash": {
+            "passes": plus_20_pct >= 0.75,
+            "minimum_pct": 0.75,
+            "actual_pct": round(plus_20_pct, 6),
+            "minimum_dollars": _round_money(0.0075 * starting_cash),
+        },
+        "plus_5_visible_at_0_1m_rounding": {
+            "passes": plus_5_ui_rounded != 0.0,
+            "ui_rounding_increment": 100_000.0,
+            "rounded_dollars": plus_5_ui_rounded,
+        },
+        "full_season_drift_within_5_pct": {
+            "passes": abs(economy_drift_pct) <= 5.0,
+            "minimum_pct": -5.0,
+            "maximum_pct": 5.0,
+            "actual_pct": economy_drift_pct,
+        },
+        "symmetric_before_instrument_clamps": {
+            "passes": symmetric,
+            "plus_5": plus_5,
+            "minus_5": minus_5,
+            "plus_20": plus_20,
+            "minus_20": minus_20,
+        },
+    }
+    sga = next(
+        item
+        for item in report["examples"]
+        if item["player"] == "Shai Gilgeous-Alexander"
+        and item["game_date"] == "2025-10-23"
+    )
+    replay_metrics = report["replay_metrics"]
+    return {
+        "dollars_per_net_point_per_holder": per_holder_rate,
+        "net_points_to_dollars_full_float": per_holder_rate * SHARES_OUT,
+        "absolute_player_game_payout_per_holder": replay_metrics[
+            "absolute_player_game_payout_per_holder"
+        ],
+        "absolute_daily_portfolio_move": replay_metrics[
+            "absolute_daily_portfolio_move"
+        ],
+        "absolute_daily_portfolio_move_pct_of_starting_cash": replay_metrics[
+            "absolute_daily_portfolio_move_pct_of_starting_cash"
+        ],
+        "active_portfolio_day_observations": replay_metrics[
+            "active_portfolio_day_observations"
+        ],
+        "full_season_economy_drift": {
+            "dollars": report["money_supply"]["net_inflation"],
+            "pct": economy_drift_pct,
+        },
+        "surprise_payout_per_holder": {
+            "plus_5": plus_5,
+            "plus_5_ui_rounded_to_0_1m": plus_5_ui_rounded,
+            "minus_5": minus_5,
+            "plus_20": plus_20,
+            "minus_20": minus_20,
+            "plus_20_pct_of_starting_cash": round(plus_20_pct, 6),
+        },
+        "sga_55_point_reference": {
+            "player": sga["player"],
+            "game_date": sga["game_date"],
+            "points": sga["box_score"]["pts"],
+            "actual_net_points": sga["actual_net_points"],
+            "expected_net_points": sga["expected_net_points"],
+            "surprise_net_points": sga["surprise_net_points"],
+            "payout_per_holder": sga["payout_per_share"],
+        },
+        "constraints": constraints,
+        "passes_all_constraints": all(
+            constraint["passes"] for constraint in constraints.values()
+        ),
+    }
+
+
+def select_economy_rate(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    passing = [
+        candidate
+        for candidate in candidates
+        if candidate["passes_all_constraints"]
+    ]
+    if not passing:
+        raise ValueError("no economy calibration candidate satisfies all constraints")
+    return min(
+        passing,
+        key=lambda candidate: candidate["dollars_per_net_point_per_holder"],
+    )
+
+
+def _economy_calibration_report(
+    candidates: list[dict[str, Any]],
+    source_report: dict[str, Any],
+) -> dict[str, Any]:
+    selected = select_economy_rate(candidates)
+    metadata = source_report["metadata"]
+    return {
+        "metadata": {
+            "season": metadata["season"],
+            "starting_cash": metadata["starting_cash"],
+            "candidate_rates_per_net_point_per_holder": list(
+                ECONOMY_CANDIDATE_RATES
+            ),
+            "seed": metadata["seed"],
+            "portfolio_count": metadata["portfolio_count"],
+            "portfolio_size": metadata["portfolio_size"],
+            "universe_players": metadata["universe_players"],
+            "universe_player_games": metadata["universe_player_games"],
+            "game_days": metadata["game_days"],
+            "expectation_model": metadata["expectation_model"],
+            "expectation_bias_net_points": metadata.get(
+                "expectation_bias_net_points", 0.0
+            ),
+            "active_day_definition": source_report["replay_metrics"][
+                "active_day_definition"
+            ],
+        },
+        "constraint_definitions": {
+            "plus_20_at_least_0_75_pct_of_starting_cash": (
+                "a +20 net-point surprise pays at least 0.75% of starting cash"
+            ),
+            "plus_5_visible_at_0_1m_rounding": (
+                "a +5 net-point surprise remains non-zero after rounding to $0.1M"
+            ),
+            "full_season_drift_within_5_pct": (
+                "full-season deterministic economy drift is within +/-5%"
+            ),
+            "symmetric_before_instrument_clamps": (
+                "equal positive and negative surprises have equal payout magnitude "
+                "before instrument-specific clamps"
+            ),
+        },
+        "selection": {
+            "rule": "lowest candidate passing all four constraints",
+            "dollars_per_net_point_per_holder": selected[
+                "dollars_per_net_point_per_holder"
+            ],
+            "net_points_to_dollars_full_float": selected[
+                "net_points_to_dollars_full_float"
+            ],
+        },
+        "candidates": sorted(
+            candidates,
+            key=lambda candidate: candidate[
+                "dollars_per_net_point_per_holder"
+            ],
+        ),
+    }
+
+
 def _money(value: float) -> str:
     sign = "-" if value < 0 else ""
     return f"{sign}${abs(value):,.0f}"
+
+
+def _render_economy_calibration_markdown(report: dict[str, Any]) -> str:
+    metadata = report["metadata"]
+    selection = report["selection"]
+    lines = [
+        "# 2025-26 Economy Calibration",
+        "",
+        "Five payout candidates were replayed against the same cached 2025-26 "
+        "season, 150-player universe, and 100 deterministic 10-player portfolios.",
+        "",
+        f"Starting cash is **{_money(metadata['starting_cash'])}**. The selected rate is "
+        f"**{_money(selection['dollars_per_net_point_per_holder'])} per net point per "
+        "holder**, the lowest candidate passing all four product constraints.",
+        "",
+        "## Constraints",
+        "",
+        f"1. A +20 surprise pays at least 0.75% of starting cash "
+        f"({_money(0.0075 * metadata['starting_cash'])}).",
+        "2. A +5 surprise remains visible after UI rounding to $0.1M.",
+        "3. Full-season deterministic economy drift remains inside +/-5%.",
+        "4. Equal positive and negative surprises have equal magnitude before "
+        "instrument-specific clamps.",
+        "",
+        "## Candidate Results",
+        "",
+        "| Rate / NP / holder | +5 | +5 at $0.1M | +20 | +20 / bankroll | Season drift | Symmetry | Result |",
+        "|---:|---:|---:|---:|---:|---:|:---:|:---:|",
+    ]
+    for candidate in report["candidates"]:
+        surprise = candidate["surprise_payout_per_holder"]
+        drift = candidate["full_season_economy_drift"]
+        symmetry = candidate["constraints"][
+            "symmetric_before_instrument_clamps"
+        ]["passes"]
+        lines.append(
+            f"| {_money(candidate['dollars_per_net_point_per_holder'])} | "
+            f"{_money(surprise['plus_5'])} | "
+            f"{_money(surprise['plus_5_ui_rounded_to_0_1m'])} | "
+            f"{_money(surprise['plus_20'])} | "
+            f"{surprise['plus_20_pct_of_starting_cash']:.4f}% | "
+            f"{_money(drift['dollars'])} ({drift['pct']:.4f}%) | "
+            f"{'PASS' if symmetry else 'FAIL'} | "
+            f"{'PASS' if candidate['passes_all_constraints'] else 'FAIL'} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Absolute Player-Game Payouts",
+            "",
+            "Per-holder payout magnitude across every listed-universe player-game.",
+            "",
+            "| Rate / NP / holder | p50 | p75 | p90 | p95 |",
+            "|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for candidate in report["candidates"]:
+        metrics = candidate["absolute_player_game_payout_per_holder"]
+        lines.append(
+            f"| {_money(candidate['dollars_per_net_point_per_holder'])} | "
+            f"{_money(metrics['p50'])} | {_money(metrics['p75'])} | "
+            f"{_money(metrics['p90'])} | {_money(metrics['p95'])} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Absolute Daily Portfolio Moves",
+            "",
+            f"{metadata['active_day_definition'].capitalize()}. Each cell reports "
+            "dollars and percentage of starting cash.",
+            "",
+            "| Rate / NP / holder | p50 | p75 | p90 | p95 | Observations |",
+            "|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for candidate in report["candidates"]:
+        dollars = candidate["absolute_daily_portfolio_move"]
+        percentages = candidate[
+            "absolute_daily_portfolio_move_pct_of_starting_cash"
+        ]
+        cells = [
+            f"{_money(dollars[key])} ({percentages[key]:.4f}%)"
+            for key in ("p50", "p75", "p90", "p95")
+        ]
+        lines.append(
+            f"| {_money(candidate['dollars_per_net_point_per_holder'])} | "
+            f"{' | '.join(cells)} | "
+            f"{candidate['active_portfolio_day_observations']:,} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## SGA 55-Point Reference",
+            "",
+            "| Rate / NP / holder | Actual NP | Expected NP | Surprise NP | Payout / holder |",
+            "|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for candidate in report["candidates"]:
+        sga = candidate["sga_55_point_reference"]
+        lines.append(
+            f"| {_money(candidate['dollars_per_net_point_per_holder'])} | "
+            f"{sga['actual_net_points']:.4f} | {sga['expected_net_points']:.4f} | "
+            f"+{sga['surprise_net_points']:.4f} | "
+            f"{_money(sga['payout_per_holder'])} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Reproduction",
+            "",
+            "```bash",
+            "python -m nba_stock_market.backtest --economy-calibration",
+            "python -m nba_stock_market.backtest",
+            "```",
+            "",
+            "Both commands use only cached replay inputs during report generation.",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _render_markdown(report: dict[str, Any]) -> str:
@@ -700,6 +1059,8 @@ def _render_markdown(report: dict[str, Any]) -> str:
     money = report["money_supply"]
     calibration = report["calibration"]
     portfolio = report["portfolio_spread"]
+    starting_cash = metadata.get("starting_cash", STARTING_CASH)
+    per_holder_rate = calibration["dividend_per_net_point_per_share"]
     bias = metadata.get("expectation_bias_net_points", 0.0)
     if metadata.get("expectation_bias_mode") == "auto":
         bias_statement = (
@@ -760,13 +1121,15 @@ def _render_markdown(report: dict[str, Any]) -> str:
         "",
         f"**DECIDED DESIGN (Russ, Discord 7/12): {share_design}; "
         "each user may hold at most one share per player; dividends settle actual game logs "
-        f"against {metadata['expectation']}. This replay keeps $40,000 per net point per holder "
+        f"against {metadata['expectation']}. This replay uses "
+        f"{_money(per_holder_rate)} per net point per holder "
         f"and {bias_design}. "
         f"{listing_statement}**",
         "",
         "This deterministic replay covers the 1,230-game 2025-26 NBA regular season. "
         "The universe is the top 150 players by final regular-season minutes. One hundred "
-        "synthetic users each begin at $140M and hold one share of 10 unique players. "
+        f"synthetic users each begin at {_money(starting_cash)} and hold one share of 10 "
+        "unique players. "
         f"Trading and inactivity decay are off; prices stay at {fixed_price_basis}, so "
         "the measured economy is dividends minus the daily idle-cash sink.",
         "",
@@ -833,7 +1196,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
             "",
             "## D. Portfolio spread",
             "",
-            "| Portfolio | Final value | P/L vs $140M | Return |",
+            f"| Portfolio | Final value | P/L vs {_money(starting_cash)} | Return |",
             "|---|---:|---:|---:|",
             f"| Best ({portfolio['best']['portfolio_id']}) | {_money(portfolio['best']['final_value'])} | {_money(portfolio['best']['profit_loss'])} | {portfolio['best']['return_pct']:.4f}% |",
             f"| Median | {_money(portfolio['median_final_value'])} | {_money(portfolio['median_final_value'] - STARTING_CASH)} | {100 * (portfolio['median_final_value'] / STARTING_CASH - 1):.4f}% |",
@@ -998,12 +1361,69 @@ def run_backtest(
     return report
 
 
+def run_economy_calibration(
+    data_dir: Path,
+    output_dir: Path,
+    *,
+    seed: int = 2026,
+    portfolio_count: int = 100,
+    expectation_window: int = 10,
+    opening_prices_path: Path | None = DEFAULT_OPENING_PRICES_PATH,
+) -> dict[str, Any]:
+    """Replay every fixed candidate and write deterministic comparison evidence."""
+
+    candidate_rows: list[dict[str, Any]] = []
+    source_report: dict[str, Any] | None = None
+    for per_holder_rate in ECONOMY_CANDIDATE_RATES:
+        candidate_report = run_backtest(
+            data_dir,
+            output_dir,
+            seed=seed,
+            portfolio_count=portfolio_count,
+            expectation_window=expectation_window,
+            expectation_model="dnt",
+            opening_prices_path=opening_prices_path,
+            expectation_bias="auto",
+            net_points_to_dollars=per_holder_rate * SHARES_OUT,
+            write_outputs=False,
+        )
+        if source_report is None:
+            source_report = candidate_report
+        candidate_rows.append(economy_candidate_row(candidate_report))
+
+    assert source_report is not None
+    report = _economy_calibration_report(candidate_rows, source_report)
+    selected_rate = report["selection"]["dollars_per_net_point_per_holder"]
+    configured_rate = NET_POINTS_TO_DOLLARS / SHARES_OUT
+    if selected_rate != configured_rate:
+        raise ValueError(
+            "selected calibration rate does not match engine constants: "
+            f"selected={selected_rate}, configured={configured_rate}"
+        )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "economy-calibration-2026.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (output_dir / "economy-calibration-2026.md").write_text(
+        _render_economy_calibration_markdown(report) + "\n",
+        encoding="utf-8",
+    )
+    return report
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Replay the 2025-26 NBA season through Engine v2")
     parser.add_argument("--data-dir", type=Path, default=Path("data/raw/2025-26"))
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--portfolios", type=int, default=100)
+    parser.add_argument(
+        "--economy-calibration",
+        action="store_true",
+        help="replay all five candidate payout rates and write the comparison report",
+    )
     parser.add_argument(
         "--expectation",
         choices=("trailing", "projection", "dnt", "production"),
@@ -1018,6 +1438,23 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+    if args.economy_calibration:
+        if args.expectation != "dnt" or args.expectation_bias != "auto":
+            parser.error(
+                "economy calibration requires the canonical dnt expectation and auto bias"
+            )
+        report = run_economy_calibration(
+            args.data_dir,
+            args.output_dir,
+            seed=args.seed,
+            portfolio_count=args.portfolios,
+        )
+        selected = report["selection"]["dollars_per_net_point_per_holder"]
+        print(
+            "Wrote economy-calibration-2026.md/json: selected "
+            f"{_money(selected)} per net point per holder"
+        )
+        return
     report = run_backtest(
         args.data_dir,
         args.output_dir,

@@ -37,7 +37,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from nba_stock_market.api.auth import MAX_DISPLAY_NAME_LENGTH
-from nba_stock_market.engine import STARTING_CASH
+from nba_stock_market.engine import DOLLARS_PER_NET_POINT, STARTING_CASH
 
 
 DATABASE_CONNECT_TIMEOUT_SECONDS = 5
@@ -54,12 +54,23 @@ EXPECTED_MARKET_MIGRATIONS = {
     "20260723000000",
     "20260723010000",
     "20260724000000",
+    "20260815000000",
 }
 GAME_STATE_ID = "historical-2025-26"
 EXPECTED_REPLAY_EVENT_COUNT = 2_126
 EXPECTED_REPLAY_SEED_SHA256 = (
-    "64c229b14261500f2a605b8f96d09959e19ce28628a490d42409c6746324354a"
+    "81c9332fe9fabb0090669f6b4f295a8f4ab7d7d2a11aeda876db8658d424df4b"
 )
+SQLITE_ECONOMY_REBASE_VERSION = "20260815000000_second_apron_economy"
+LEGACY_STARTING_CASH_CENTS = 14_000_000_000
+STARTING_CASH_CENTS = round(STARTING_CASH * 100)
+SECOND_APRON_CASH_DELTA_CENTS = (
+    STARTING_CASH_CENTS - LEGACY_STARTING_CASH_CENTS
+)
+HELD_DIVIDEND_CENTS_PER_NET_POINT_MICRO = round(
+    DOLLARS_PER_NET_POINT * 100 / 1_000_000
+)
+REPLAY_DIVIDEND_ROUNDING_TOLERANCE_CENTS = 50
 
 
 def utcnow() -> datetime:
@@ -842,6 +853,7 @@ class Database:
             self._migrate_sqlite_replay_instrument_columns()
             self._migrate_sqlite_account_cash_constraint()
             self._migrate_sqlite_account_reset_at()
+            self._prepare_sqlite_second_apron_economy()
             self._backfill_sqlite_account_activity()
             self._migrate_sqlite_settlement_memberships()
 
@@ -972,6 +984,76 @@ class Database:
         finally:
             cursor.close()
             raw_connection.close()
+
+    def _prepare_sqlite_second_apron_economy(self) -> None:
+        with self.session() as session, session.begin():
+            session.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS market_local_schema_migrations ("
+                    "version VARCHAR(64) PRIMARY KEY, "
+                    "applied_at DATETIME NOT NULL)"
+                )
+            )
+            applied = session.scalar(
+                text(
+                    "SELECT version FROM market_local_schema_migrations "
+                    "WHERE version = :version"
+                ),
+                {"version": SQLITE_ECONOMY_REBASE_VERSION},
+            )
+            if applied is not None:
+                return
+
+            settlement_count = session.scalar(
+                select(func.count()).select_from(SettlementRow)
+            )
+            if settlement_count:
+                raise RuntimeError(
+                    "cannot rebase the local market economy after historical "
+                    "settlements exist; recreate the SQLite database"
+                )
+
+            account_count = session.scalar(
+                select(func.count()).select_from(AccountRow)
+            )
+            replay_count = session.scalar(
+                select(func.count()).select_from(ReplayEventRow)
+            )
+            if account_count or replay_count:
+                return
+
+            session.execute(
+                text(
+                    "INSERT INTO market_local_schema_migrations "
+                    "(version, applied_at) VALUES (:version, :applied_at)"
+                ),
+                {
+                    "version": SQLITE_ECONOMY_REBASE_VERSION,
+                    "applied_at": utcnow(),
+                },
+            )
+
+    def assert_local_economy_ready(self) -> None:
+        if self.engine.dialect.name != "sqlite":
+            return
+        try:
+            with self.engine.connect() as connection:
+                applied = connection.scalar(
+                    text(
+                        "SELECT version FROM market_local_schema_migrations "
+                        "WHERE version = :version"
+                    ),
+                    {"version": SQLITE_ECONOMY_REBASE_VERSION},
+                )
+        except SQLAlchemyError as exc:
+            raise RuntimeError(
+                "local market economy migration state is unavailable"
+            ) from exc
+        if applied is None:
+            raise RuntimeError(
+                "local market economy rebase is pending; configure the canonical "
+                "replay seed or recreate the SQLite database"
+            )
 
     @staticmethod
     def _sqlite_activity_id(account_id: str, source_key: str) -> str:
@@ -1270,6 +1352,7 @@ class Database:
                         "market database is missing required tables: "
                         + ", ".join(sorted(missing_tables))
                     )
+                self.assert_local_economy_ready()
 
                 if connection.dialect.name == "postgresql":
                     migration_versions = {
@@ -1460,6 +1543,22 @@ class Database:
             )
             if event.qualifies_for_instruments != expected_qualification:
                 raise ValueError("replay event instrument qualification is invalid")
+            expected_dividend_cents = (
+                0
+                if event.actual_minutes_micros == 0
+                else (
+                    event.actual_net_points_micros
+                    - event.expected_net_points_micros
+                )
+                * HELD_DIVIDEND_CENTS_PER_NET_POINT_MICRO
+            )
+            if (
+                abs(event.dividend_cents - expected_dividend_cents)
+                > REPLAY_DIVIDEND_ROUNDING_TOLERANCE_CENTS
+            ):
+                raise ValueError(
+                    "replay event dividend does not match the selected economy"
+                )
 
         with self.session() as session, session.begin():
             player_ids = {event.player_id for event in events}
@@ -1474,11 +1573,33 @@ class Database:
             existing_events = {
                 (row.game_date, row.player_id): row
                 for row in session.scalars(
-                    select(ReplayEventRow).where(
-                        ReplayEventRow.player_id.in_(player_ids)
-                    )
+                    select(ReplayEventRow)
                 )
             }
+            sqlite_economy_rebase_pending = False
+            if session.bind is not None and session.bind.dialect.name == "sqlite":
+                economy_migration = session.scalar(
+                    text(
+                        "SELECT version FROM market_local_schema_migrations "
+                        "WHERE version = :version"
+                    ),
+                    {"version": SQLITE_ECONOMY_REBASE_VERSION},
+                )
+                settlement_count = session.scalar(
+                    select(func.count()).select_from(SettlementRow)
+                )
+                if economy_migration is None:
+                    if settlement_count:
+                        raise RuntimeError(
+                            "cannot rebase the local market economy after historical "
+                            "settlements exist; recreate the SQLite database"
+                        )
+                    unexpected_keys = set(existing_events) - event_keys
+                    if unexpected_keys:
+                        raise ValueError(
+                            "replay seed cannot atomically rebase all existing events"
+                        )
+                    sqlite_economy_rebase_pending = True
             for event in events:
                 existing_row = existing_events.get(
                     (event.game_date, event.player_id)
@@ -1502,12 +1623,21 @@ class Database:
                     )
                     if existing == expected:
                         continue
-                    if existing[:3] != expected[:3] or existing[3:] != (
-                        0,
-                        None,
-                        False,
+                    same_inputs = existing[:2] == expected[:2]
+                    dividend_matches = existing[2] == expected[2]
+                    legacy_dividend_matches = bool(
+                        sqlite_economy_rebase_pending
+                        and abs((existing[2] * 2) - expected[2]) <= 1
+                    )
+                    metadata_matches = existing[3:] == expected[3:]
+                    legacy_metadata_matches = existing[3:] == (0, None, False)
+                    if not (
+                        same_inputs
+                        and (dividend_matches or legacy_dividend_matches)
+                        and (metadata_matches or legacy_metadata_matches)
                     ):
                         raise ValueError("replay seed conflicts with an existing event")
+                    existing_row.dividend_cents = event.dividend_cents
                     existing_row.actual_minutes_micros = event.actual_minutes_micros
                     existing_row.projected_minutes_micros = (
                         event.projected_minutes_micros
@@ -1527,6 +1657,30 @@ class Database:
                         projected_minutes_micros=event.projected_minutes_micros,
                         qualifies_for_instruments=event.qualifies_for_instruments,
                     )
+                )
+
+            if sqlite_economy_rebase_pending:
+                session.execute(
+                    text(
+                        "UPDATE market_accounts "
+                        "SET cash_cents = cash_cents + :cash_delta, "
+                        "version = CASE WHEN version = 0 THEN 0 ELSE version + 1 END, "
+                        "updated_at = :updated_at"
+                    ),
+                    {
+                        "cash_delta": SECOND_APRON_CASH_DELTA_CENTS,
+                        "updated_at": utcnow(),
+                    },
+                )
+                session.execute(
+                    text(
+                        "INSERT INTO market_local_schema_migrations "
+                        "(version, applied_at) VALUES (:version, :applied_at)"
+                    ),
+                    {
+                        "version": SQLITE_ECONOMY_REBASE_VERSION,
+                        "applied_at": utcnow(),
+                    },
                 )
 
             state = session.get(GameStateRow, GAME_STATE_ID)

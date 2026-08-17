@@ -21,10 +21,12 @@ from nba_stock_market.api.database import (
     WeeklyShortRow,
 )
 from nba_stock_market.api.settings import ApiSettings
+from nba_stock_market.engine import STARTING_CASH
 from tests.api.conftest import FixtureTokenVerifier
 
 
 ADMIN_KEY = "test-settlement-admin-key-at-least-32"
+STARTING_CASH_CENTS = round(STARTING_CASH * 100)
 
 
 def auth(token: str = "alice-token") -> dict[str, str]:
@@ -115,7 +117,7 @@ def instrument_database(tmp_path) -> Database:
                 player_id="jokic",
                 actual_net_points_micros=35_000_000,
                 expected_net_points_micros=25_000_000,
-                dividend_cents=40_000_000,
+                dividend_cents=80_000_000,
                 actual_minutes_micros=34_000_000,
                 projected_minutes_micros=34_000_000,
                 qualifies_for_instruments=True,
@@ -135,7 +137,7 @@ def instrument_database(tmp_path) -> Database:
                 player_id="sga",
                 actual_net_points_micros=10_000_000,
                 expected_net_points_micros=20_000_000,
-                dividend_cents=-40_000_000,
+                dividend_cents=-80_000_000,
                 actual_minutes_micros=32_000_000,
                 projected_minutes_micros=32_000_000,
                 qualifies_for_instruments=True,
@@ -158,7 +160,7 @@ def instrument_database(tmp_path) -> Database:
                 player_id="sga",
                 actual_net_points_micros=50_000_000,
                 expected_net_points_micros=20_000_000,
-                dividend_cents=120_000_000,
+                dividend_cents=240_000_000,
                 actual_minutes_micros=35_000_000,
                 projected_minutes_micros=35_000_000,
                 qualifies_for_instruments=True,
@@ -245,7 +247,7 @@ def test_instrument_summary_starts_with_server_week_and_full_capacity(
     assert response.json()["data"] == {
         "week_start": "2025-10-20",
         "reserved_collateral_cents": 0,
-        "free_cash_cents": 14_000_000_000,
+        "free_cash_cents": STARTING_CASH_CENTS,
         "weekly_short_slots": {"limit": 3, "used": 0, "remaining": 3},
         "boost_slots": {"limit": 2, "used": 0, "remaining": 2},
         "weekly_shorts": [],
@@ -356,9 +358,9 @@ def test_arm_short_is_server_owned_idempotent_and_reserves_collateral(
         "created_at": data["position"]["created_at"],
     }
     portfolio = data["portfolio"]
-    assert portfolio["cash_cents"] == 13_987_500_000
+    assert portfolio["cash_cents"] == STARTING_CASH_CENTS - 12_500_000
     assert portfolio["reserved_collateral_cents"] == 200_000_000
-    assert portfolio["free_cash_cents"] == 13_787_500_000
+    assert portfolio["free_cash_cents"] == STARTING_CASH_CENTS - 212_500_000
     assert portfolio["instruments"]["weekly_short_slots"]["used"] == 1
 
     with instrument_database.session() as session:
@@ -518,11 +520,11 @@ def test_settlement_atomically_applies_dividends_boosts_and_weekly_shorts(
 
     assert day_one.status_code == 201
     assert day_one.json()["data"]["cash_breakdown_cents"] == {
-        "dividends": 40_000_000,
-        "boosts": 40_000_000,
+        "dividends": 80_000_000,
+        "boosts": 80_000_000,
         "weekly_shorts": 0,
     }
-    assert day_one.json()["data"]["net_cash_cents"] == 80_000_000
+    assert day_one.json()["data"]["net_cash_cents"] == 160_000_000
     assert day_two.status_code == 201
     assert day_two.json()["data"]["cash_breakdown_cents"] == {
         "dividends": 0,
@@ -533,7 +535,7 @@ def test_settlement_atomically_applies_dividends_boosts_and_weekly_shorts(
     assert replay.json()["data"] == {**day_two.json()["data"], "replayed": True}
 
     after = instrument_client.get("/api/v1/portfolio", headers=auth()).json()["data"]
-    assert after["cash_cents"] - before["cash_cents"] == 20_000_000
+    assert after["cash_cents"] - before["cash_cents"] == 100_000_000
     assert after["reserved_collateral_cents"] == 0
     short = after["instruments"]["weekly_shorts"][0]
     assert short["status"] == "settled"
@@ -542,7 +544,7 @@ def test_settlement_atomically_applies_dividends_boosts_and_weekly_shorts(
     assert short["payout_cents"] == -60_000_000
     boost = after["instruments"]["boosts"][0]
     assert boost["status"] == "consumed"
-    assert boost["payout_cents"] == 40_000_000
+    assert boost["payout_cents"] == 80_000_000
 
     with instrument_database.session() as session:
         assert session.scalar(select(func.count(WeeklyShortRow.id))) == 1
@@ -685,7 +687,7 @@ def test_concurrent_duplicate_command_only_debits_once(
         assert session.scalar(select(func.count(WeeklyShortRow.id))) == 1
         alice = session.get(AccountRow, "alice")
         assert alice is not None
-        assert alice.cash_cents == 13_987_500_000
+        assert alice.cash_cents == STARTING_CASH_CENTS - 12_500_000
 
 
 def test_weekly_short_loss_can_make_cash_negative_and_blocks_new_risk(
@@ -773,7 +775,7 @@ def test_concurrent_arming_enforces_league_cap_and_does_not_overcharge(
         assert session.scalar(select(func.count(WeeklyShortRow.id))) == 25
         charged_accounts = session.scalar(
             select(func.count(AccountRow.id)).where(
-                AccountRow.cash_cents == 13_987_500_000
+                AccountRow.cash_cents == STARTING_CASH_CENTS - 12_500_000
             )
         )
         assert charged_accounts == 25

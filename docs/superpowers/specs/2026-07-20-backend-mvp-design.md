@@ -1,5 +1,8 @@
 # NBA Stock Market Backend MVP Design
 
+> Historical design snapshot. The current economy uses a $207.824M bankroll and
+> $80K/NP owned-player dividends; see `docs/PLAN.md` and `docs/pricing-writeup.md`.
+
 ## Goal
 
 Move the market's trust boundary out of the Expo client. The server owns balances,

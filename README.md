@@ -3,14 +3,15 @@
 A persistent, skill-based **fantasy stock market for NBA players**, played with in-platform
 (fake) cash. Users buy and sell shares of players; prices move with **market demand**, while
 **real on-court performance versus expectation** pays signed cash dividends tied to NBA
-results. Everyone starts with $140,000,000 and competes on a leaderboard by net worth. It never
+results. Everyone starts with $207,824,000 and competes on a leaderboard by net worth. It never
 resets — it's a long game of being right about players before the crowd is.
 
 No real money, no cash-out — which keeps it out of gambling/securities territory entirely.
 
 ## Economy v2
 
-Engine v2 uses a **$140,000,000 virtual bankroll** and salary-like per-share prices: roughly
+Engine v2 uses a **$207,824,000 virtual bankroll**, matching the official 2025-26 second apron,
+and salary-like per-share prices: roughly
 $40–70M for stars, $15–30M for rotation players, and $2–12M for bench players. Each player
 has a 100-share float, but **one share represents the whole player at his listed salary** and
 each user may hold at most one share of a given player. Trading fees, flip penalties, the
@@ -23,15 +24,16 @@ performance reaches holders through a daily actual-versus-expected dividend:
 
 ```
 dividend_per_share = (actual_net_points - expected_net_points)
-                   × $4,000,000 / 100 shares
+                   × $8,000,000 / 100 shares
 expected_net_points = D&T projection + 0.43586494964917194 NP league-bias correction
 ```
 
 Exact bias-corrected expectation pays $0 and underperformance produces a negative dividend. The
-`NET_POINTS_TO_DOLLARS = $4,000,000` means $40,000 per net point per holder, so a +20
-surprise pays that holder about $800,000. **Option B was decided by Mith on Discord 7/14:** the
-constant stays fixed and the deterministic league-mean expectation-bias correction is on by
-default, leaving near-zero season inflation by design (about −1.5% from the idle-cash sink).
+`NET_POINTS_TO_DOLLARS = $8,000,000` means $80,000 per net point per holder, so a +20
+surprise pays that holder $1,600,000. The deterministic 2025-26 candidate replay selected
+$80,000 as the lowest rate satisfying the +20 impact, +5 UI visibility, season-drift, and
+pre-clamp symmetry constraints. The league-mean expectation-bias correction remains on by
+default; at the selected rate the replay's full-season economy drift is -1.744779%.
 Cached Dunks & Threes pregame projections are the canonical expectation source;
 `trailing`, `projection`, and `production` remain comparison modes. The
 box-score-to-net-points model is transparent and swappable, as is the injected expectation
@@ -70,14 +72,14 @@ and untraded players just decay −0.5%/day. It's a popularity contest with a di
 stapled on.
 
 Engine v2 keeps exponential impact, fees, dividends, and equal starts while moving to the
-$140M salary scale. Daily surprise dividends carry the performance signal; liquidity-scaled
+$207.824M second-apron scale. Daily surprise dividends carry the performance signal; liquidity-scaled
 impact resists whale manipulation, and explicit sinks help control inflation.
 
 ## Key mechanics at a glance
 
 | Mechanic | Rule |
 |---|---|
-| Starting bankroll | $140,000,000 for everyone; score = cash + (shares × price) |
+| Starting bankroll | $207,824,000 for everyone; score = cash + (shares × price) |
 | Execution | Single price, no spread; 0.25% fee on every buy and sell |
 | Anti-churn | 0.5% escalating flip surcharge on same-player round-trips within 24h, capped at 1.5% |
 | Roster / anti-cornering | One whole-player share at listed salary; max one per player per user |
@@ -85,7 +87,7 @@ impact resists whale manipulation, and explicit sinks help control inflation.
 | Fair-value reversion | Default off (`0`); retained only as an experiment |
 | Floor | $350,000 absolute minimum (the old $25 floor scaled by 14,000×) |
 | IPOs | Model-seeded fair value + opening auction; 7-day grace period |
-| Daily dividend | D&T-projected vs actual; `$40,000 × bias-corrected surprise net points` per holder |
+| Daily dividend | D&T-projected vs actual; `$80,000 × bias-corrected surprise net points` per holder |
 | Award/WARP dividends | Optional/dormant; not part of the daily v1 economy |
 | Economy | League-bias correction targets zero net dividends; fees, flip penalties, and idle cash are sinks |
 
@@ -153,7 +155,7 @@ settlements, and leaderboard state. Configure its base URL with
 
 The original FastAPI service in `nba_stock_market/api/` remains as the Phase 1 reference and test
 harness. It owns
-account creation, the $140M starting balance, listings, one-whole-player holdings, fees, price
+account creation, the $207.824M starting balance, listings, one-whole-player holdings, fees, price
 impact, idempotent buys/sells, the portfolio leaderboard, and the global historical replay clock.
 Daily settlements are atomic and idempotent: the server pays the signed canonical dividend to each
 current holder, records a per-account ledger row, advances exactly one date, and stores
@@ -261,6 +263,17 @@ replay instrument data changes after a migration is applied, pass
 `--api-instruments-sql-output supabase/migrations/<new-version>_seed_replay_instruments.sql`; never
 reuse an applied migration filename.
 
+The second-apron economy intentionally regenerates the canonical replay seed at
+$80,000 per net point. Existing databases must apply the checked-in guarded
+`20260815000000_rebase_market_economy.sql` migration before the matching Flask
+deployment. Supabase CLI records the version for the migration under `supabase/migrations`;
+the direct-psql Flask companion records it atomically itself. Readiness includes that
+version so a mixed $140M/$207.824M deployment fails closed. The migration also retains a
+database trigger that rejects an explicit legacy $140M account insert atomically. An old
+worker that survives quiescing therefore fails closed instead of persisting or returning an
+underfunded account. The Supabase CLI migration intentionally has no explicit `COMMIT`, keeping the
+cash grant and CLI-owned migration-history write atomic.
+
 ## Backtest
 
 The historical replay covers the complete 2025-26 NBA regular season using cached ESPN
@@ -282,6 +295,7 @@ python -m nba_stock_market.opening_prices
 python -m nba_stock_market.fv_validation
 python scripts/fetch_backtest_data.py
 python scripts/fetch_dnt_predictions.py
+python -m nba_stock_market.backtest --economy-calibration
 python -m nba_stock_market.backtest
 python scripts/generate_app_snapshot.py
 python scripts/generate_app_trends.py
@@ -293,7 +307,9 @@ The fetchers are idempotent and resume their caches. `prepare_fv_inputs.py` copi
 input from an exact committed snapshot and verifies it against
 `data/manifests/fv-inputs.json`; `--refresh` checks live providers separately and reports drift.
 Once cached,
-report generation makes no network calls. The replay selects the top 150 players by regular-season minutes, lists them from
+report generation makes no network calls. `output/economy-calibration-2026.md` compares all five
+candidate rates and records the lowest-passing selection; `output/backtest-2026.md` is the
+canonical selected-rate replay. The replay selects the top 150 players by regular-season minutes, lists them from
 `output/opening-prices-2026-27.csv` using projected-WAR fair value plus a 10% salary blend
 (with reported salary fallbacks), and evaluates 100 seeded buy-and-hold 10-player portfolios. The default expectation
 model is cached Dunks & Threes; missing projection rows use the salary-implied cold-start prior.

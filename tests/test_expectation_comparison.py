@@ -12,6 +12,14 @@ def test_comparison_basis_reads_engine_dividend_constant() -> None:
     assert "$2,000,000-per-net-point full-float" in basis
 
 
+def test_comparison_report_declares_current_economy_and_zero_bias() -> None:
+    intro = generate_expectation_comparison._comparison_intro()
+
+    assert "Each portfolio starts with $207,824,000" in intro
+    assert "expectation bias is fixed at 0.00" in intro
+    assert "0.43586495-net-point league bias" in intro
+
+
 def test_generate_uses_explicit_zero_bias_for_every_comparison_report() -> None:
     with (
         patch.object(generate_expectation_comparison, "run_backtest", return_value={}) as run,

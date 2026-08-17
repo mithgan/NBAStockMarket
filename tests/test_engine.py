@@ -4,6 +4,7 @@ import math
 import unittest
 from datetime import date
 
+from nba_stock_market import engine as engine_module
 from nba_stock_market.engine import (
     FEE_PCT,
     MAX_SHARES_PER_USER_PER_PLAYER,
@@ -71,8 +72,8 @@ class PricingEngineTest(unittest.TestCase):
         self.assertIsNone(player.actual_salary)
 
     def test_engine_v2_uses_salary_cap_bankroll(self) -> None:
-        self.assertEqual(STARTING_CASH, 140_000_000.0)
-        self.assertEqual(User("new_user").cash, 140_000_000.0)
+        self.assertEqual(STARTING_CASH, 207_824_000.0)
+        self.assertEqual(User("new_user").cash, 207_824_000.0)
         self.assertEqual(SHARES_OUT, 100)
         self.assertEqual(MAX_SHARES_PER_USER_PER_PLAYER, 1)
         self.assertEqual(FEE_PCT, 0.0025)
@@ -149,7 +150,7 @@ class PricingEngineTest(unittest.TestCase):
         self.assertAlmostEqual(event.dividend_per_share, 0.0)
         self.assertAlmostEqual(event.total_cash_change, 0.0)
 
-    def test_decided_dividend_pays_800k_for_bias_corrected_twenty_point_surprise(self) -> None:
+    def test_selected_dividend_pays_1_6m_for_bias_corrected_twenty_point_surprise(self) -> None:
         holder = User("holder", holdings={"p": 1})
         market = Market(
             [Player("p", "Holder Player", "star", 50_000_000.0, 50_000_000.0)],
@@ -160,8 +161,9 @@ class PricingEngineTest(unittest.TestCase):
             actual_net_points=40.0 + market.expectation_bias,
             expected_net_points=20.0,
         )
-        self.assertEqual(event.dividend_per_share, 800_000.0)
-        self.assertEqual(holder.cash - STARTING_CASH, 800_000.0)
+        self.assertEqual(engine_module.DOLLARS_PER_NET_POINT, 80_000.0)
+        self.assertEqual(event.dividend_per_share, 1_600_000.0)
+        self.assertEqual(holder.cash - STARTING_CASH, 1_600_000.0)
 
     def test_duplicate_settlement_returns_prior_event_without_changing_cash(self) -> None:
         holder = User("holder", holdings={"p": 1})
@@ -203,7 +205,7 @@ class PricingEngineTest(unittest.TestCase):
                 settlement_key=settlement_key,
             )
 
-        self.assertEqual(holder.cash - STARTING_CASH, 1_600_000.0)
+        self.assertEqual(holder.cash - STARTING_CASH, 3_200_000.0)
         self.assertEqual(len(market.dividend_events), 2)
 
     def test_daily_dividend_positive_and_negative_results_are_symmetric(self) -> None:
@@ -286,7 +288,7 @@ class PricingEngineTest(unittest.TestCase):
         )
 
         self.assertIs(duplicate, first)
-        self.assertEqual(holder.cash - STARTING_CASH, 800_000.0)
+        self.assertEqual(holder.cash - STARTING_CASH, 1_600_000.0)
 
     def test_market_rejects_preloaded_holdings_beyond_player_float(self) -> None:
         player = Player("p", "Finite Float", "star", 50_000_000.0, 50_000_000.0)

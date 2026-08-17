@@ -30,7 +30,7 @@ After a game, every holder receives or loses virtual cash based on actual perfor
 pregame Dunks & Threes projection:
 
 ```
-dividend_per_holder = (actual_net_points - expected_net_points) × $40,000
+dividend_per_holder = (actual_net_points - expected_net_points) × $80,000
 ```
 
 Exact expectation pays $0. A positive surprise pays holders; underperformance debits them. This is
@@ -39,7 +39,7 @@ game without an algorithm automatically changing either market price.
 
 ## Other rules
 
-- Everyone starts with $140M in virtual cash.
+- Everyone starts with $207.824M in virtual cash, matching the 2025-26 second apron.
 - One share represents the whole player at his salary-like listed price.
 - A user may own at most one share of a player.
 - Prices also decay 0.5% per inactive day after the seven-day grace period.

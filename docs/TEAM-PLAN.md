@@ -1,5 +1,8 @@
 # Team Plan — NBA Stock Market (Ryan / Mith split)
 
+> Historical team-plan snapshot. The current economy uses a $207.824M bankroll and
+> $80K/NP owned-player dividends; see `docs/PLAN.md` and `docs/pricing-writeup.md`.
+
 Working agreement as of 2026-07-11. Anchored to the group call decisions:
 $140M salary-cap bankroll, ~10-player portfolios, 100 shares/player with 40% ownership cap,
 **no fair-value reversion** (daily dividends carry the performance signal), price = supply/demand

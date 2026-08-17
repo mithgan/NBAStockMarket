@@ -40,7 +40,7 @@ settle against the same projections as dividends, so one calibration governs eve
 
 | Parameter | Value | Rationale |
 |---|---|---|
-| Payout rate | $40,000 per net point (mirror of one held share) | Symmetry with dividends |
+| Payout rate | $40,000 per net point | Keeps weekly shorts lower-volatility than owned-player dividends |
 | Per-game clamp | ±25 NP | Blowout/garbage-time guard |
 | Weekly clamp | ±50 NP → max win/loss **$2.0M** | Bounds every position |
 | Collateral | $2.0M reserved while armed | Covers max loss exactly |
@@ -168,7 +168,7 @@ BOOST_FEE_PCT             = 0.0025
 MAX_WEEKLY_SHORTS_PER_PLAYER = 25           # league-wide, concurrent
 MAX_PRICE_SHORTS_PER_PLAYER  = 10           # league-wide, open
 BORROW_BUFFER_DAYS        = 14              # spending guard vs accrued borrow
-DOLLARS_PER_NET_POINT     = $40,000         # engine NET_POINTS_TO_DOLLARS / 100
+SHORT_DOLLARS_PER_NET_POINT = $40,000       # intentionally independent of held-player dividends
 BIAS_WINDOW_DAYS          = 30
 BIAS_COLD_START           = last season's October mean
 ```

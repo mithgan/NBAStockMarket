@@ -13,6 +13,7 @@ import {
   STARTING_CASH,
   WEEKLY_GAME_CLAMP_NP,
   WEEKLY_SHORT_COLLATERAL,
+  WEEKLY_SHORT_DOLLARS_PER_NET_POINT,
   WEEKLY_SHORT_SLOTS,
   WEEKLY_TOTAL_CLAMP_NP,
   advanceReplayDay,
@@ -69,7 +70,7 @@ function assertAtomicError(
 
 test('exports the decided economy constants', () => {
   assert.equal(GAME_STATE_VERSION, 1);
-  assert.equal(STARTING_CASH, 140_000_000);
+  assert.equal(STARTING_CASH, 207_824_000);
   assert.equal(FEE_PCT, 0.0025);
   assert.equal(IMPACT_K, 0.003);
   assert.equal(WEEKLY_SHORT_SLOTS, 3);
@@ -78,7 +79,8 @@ test('exports the decided economy constants', () => {
   assert.equal(WEEKLY_SHORT_COLLATERAL, 2_000_000);
   assert.equal(SHORT_FEE_PCT, 0.0025);
   assert.equal(SHORT_MIN_FEE, 10_000);
-  assert.equal(DOLLARS_PER_NET_POINT, 40_000);
+  assert.equal(DOLLARS_PER_NET_POINT, 80_000);
+  assert.equal(WEEKLY_SHORT_DOLLARS_PER_NET_POINT, 40_000);
   assert.equal(BOOST_SLOTS, 2);
   assert.equal(BOOST_FEE_PCT, 0.0025);
 });
@@ -253,8 +255,8 @@ test('weekly short accrual negates and clamps each surprise and the weekly payou
       state,
       date,
       [
-        event('alpha', date, -100, 0, -4_000_000),
-        event('beta', date, 100, 0, 4_000_000),
+        event('alpha', date, -100, 0, -100 * DOLLARS_PER_NET_POINT),
+        event('beta', date, 100, 0, 100 * DOLLARS_PER_NET_POINT),
       ],
       next,
       players,
@@ -264,10 +266,10 @@ test('weekly short accrual negates and clamps each surprise and the weekly payou
   const alpha = state.weeklyShorts.find((position) => position.playerId === 'alpha');
   const beta = state.weeklyShorts.find((position) => position.playerId === 'beta');
   assert.equal(alpha?.accruedNetPoints, 75);
-  assert.equal(alpha?.payout, 50 * DOLLARS_PER_NET_POINT);
+  assert.equal(alpha?.payout, 50 * WEEKLY_SHORT_DOLLARS_PER_NET_POINT);
   assert.equal(alpha?.status, 'settled');
   assert.equal(beta?.accruedNetPoints, -75);
-  assert.equal(beta?.payout, -50 * DOLLARS_PER_NET_POINT);
+  assert.equal(beta?.payout, -50 * WEEKLY_SHORT_DOLLARS_PER_NET_POINT);
   assert.equal(beta?.status, 'settled');
 });
 
@@ -277,13 +279,16 @@ test('weekly shorts settle from the bias-corrected dividend signal', () => {
   const settled = advanceReplayDay(
     armed,
     monday,
-    [event('alpha', monday, 100, 0, 400_000)],
+    [event('alpha', monday, 100, 0, 10 * DOLLARS_PER_NET_POINT)],
     '2026-01-05',
     players,
   ).state;
 
   assert.equal(settled.weeklyShorts[0].accruedNetPoints, -10);
-  assert.equal(settled.weeklyShorts[0].payout, -400_000);
+  assert.equal(
+    settled.weeklyShorts[0].payout,
+    -10 * WEEKLY_SHORT_DOLLARS_PER_NET_POINT,
+  );
 });
 
 test('a weekly short with no qualifying event voids and refunds its fee', () => {
@@ -463,7 +468,7 @@ test('ISO year rollover keeps shorts open until the Monday-Sunday week ends', ()
   const newYear = advanceReplayDay(
     armed,
     '2025-12-31',
-    [event('alpha', '2025-12-31', 10, 0, 400_000)],
+    [event('alpha', '2025-12-31', 10, 0, 10 * DOLLARS_PER_NET_POINT)],
     '2026-01-01',
     players,
   ).state;
@@ -477,7 +482,10 @@ test('ISO year rollover keeps shorts open until the Monday-Sunday week ends', ()
     players,
   ).state;
   assert.equal(boundary.weeklyShorts[0].status, 'settled');
-  assert.equal(boundary.weeklyShorts[0].payout, -400_000);
+  assert.equal(
+    boundary.weeklyShorts[0].payout,
+    -10 * WEEKLY_SHORT_DOLLARS_PER_NET_POINT,
+  );
 });
 
 test('non-finite state and settlement inputs are rejected without mutation', () => {

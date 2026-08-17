@@ -1,5 +1,10 @@
 # Daily Dividend Model v3 — proposal (coupon + surprise)
 
+> **Historical proposal (superseded).** This document records an unimplemented
+> $40K-per-net-point coupon experiment. The selected held-player economy uses
+> $80K per net point with no coupon; see `README.md` and
+> `output/economy-calibration-2026.md` for the canonical rules and calibration.
+
 Status: proposal for group discussion. Builds on Economy v2 + Option B (cached Dunks & Threes
 pregame projections with the league-bias correction). Research grounding:
 `docs/fv-research-log.md` §7-8 (the dividend-inversion findings).

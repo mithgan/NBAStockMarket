@@ -69,7 +69,7 @@ def database(tmp_path, players: list[SeedPlayer]) -> Database:
                 player_id="sga",
                 actual_net_points_micros=40_000_000,
                 expected_net_points_micros=20_000_000,
-                dividend_cents=80_000_000,
+                    dividend_cents=160_000_000,
             )
         ],
     )

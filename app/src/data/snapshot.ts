@@ -36,9 +36,9 @@ export const players: Player[] = [
 ];
 
 export const dividendEvents: DividendEvent[] = [
-  { player_id: "4278073", game_date: "2025-10-23", actual_net_points: 43.6, expected_net_points: 23.2488, dividend_per_holder: 814049.8 },
-  { player_id: "3112335", game_date: "2025-12-25", actual_net_points: 59.35, expected_net_points: 25.9831, dividend_per_holder: 1334675.2 },
-  { player_id: "3945274", game_date: "2026-03-19", actual_net_points: 54.45, expected_net_points: 25.063, dividend_per_holder: 1175480.8 },
+  { player_id: "4278073", game_date: "2025-10-23", actual_net_points: 43.6, expected_net_points: 23.2488, dividend_per_holder: 1628099.6 },
+  { player_id: "3112335", game_date: "2025-12-25", actual_net_points: 59.35, expected_net_points: 25.9831, dividend_per_holder: 2669350.4 },
+  { player_id: "3945274", game_date: "2026-03-19", actual_net_points: 54.45, expected_net_points: 25.063, dividend_per_holder: 2350961.6 },
 ];
 
 // Demo opponents until the multiplayer leaderboard API is wired.

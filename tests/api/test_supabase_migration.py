@@ -22,6 +22,7 @@ from nba_stock_market.api.database import (
     Base,
     EXPECTED_MARKET_MIGRATIONS,
     EXPECTED_MARKET_SEED,
+    EXPECTED_REPLAY_EVENT_COUNT,
     EXPECTED_REPLAY_SEED_SHA256,
     database_connect_args,
     replay_seed_digest,
@@ -78,6 +79,12 @@ REPLAY_INSTRUMENT_MIGRATION = (
     / "migrations"
     / "20260723010000_seed_replay_instrument_metadata.sql"
 )
+ECONOMY_MIGRATION = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "20260815000000_rebase_market_economy.sql"
+)
 PUSH_SCRIPT = Path(__file__).parents[2] / "scripts" / "push_supabase_schema.sh"
 
 
@@ -88,7 +95,7 @@ def normalized_sql() -> str:
 def cumulative_sql() -> str:
     return "\n".join(
         migration.read_text(encoding="utf-8").lower()
-        for migration in SCHEMA_MIGRATIONS
+        for migration in (*SCHEMA_MIGRATIONS, ECONOMY_MIGRATION)
     )
 
 
@@ -196,13 +203,22 @@ def test_supabase_migration_keeps_market_data_server_only() -> None:
 
     assert "references auth.users" not in sql
     assert sql.startswith("begin;")
-    assert sql.endswith("commit;")
+    for migration in SCHEMA_MIGRATIONS:
+        migration_sql = re.sub(
+            r"\s+", " ", migration.read_text(encoding="utf-8").lower()
+        ).strip()
+        assert migration_sql.startswith("begin;")
+        assert migration_sql.endswith("commit;")
 
 
 def test_supabase_migration_preserves_authoritative_economy_constraints() -> None:
     sql = normalized_sql()
 
-    assert "cash_cents bigint not null default 14000000000" in sql
+    assert (
+        "alter table public.market_accounts alter column cash_cents "
+        "set default 20782400000"
+        in sql
+    )
     assert "constraint ck_market_holding_whole_player check (shares = 1)" in sql
     assert "unique (account_id, idempotency_key)" in sql
     assert "held_shares >= 0 and held_shares <= shares_outstanding" in sql
@@ -306,7 +322,7 @@ def test_seed_migration_reproduces_the_canonical_market_without_overwriting() ->
     assert "on conflict (id) do nothing" in sql
 
 
-def test_replay_seed_migration_reproduces_generated_events_without_overwriting() -> None:
+def test_replay_seed_migrations_preserve_historical_inputs_before_rebase() -> None:
     payload = json.loads(REPLAY_SEED.read_text(encoding="utf-8"))
     sql = REPLAY_SEED_MIGRATION.read_text(encoding="utf-8").lower()
     events = [event for day in payload["days"] for event in day["events"]]
@@ -336,19 +352,26 @@ def test_replay_seed_migration_reproduces_generated_events_without_overwriting()
         sorted(digest_rows, key=lambda row: (row[0], row[1]))
     ) == EXPECTED_REPLAY_SEED_SHA256
     for event in played_events:
-        row = (
-            f"('{event['game_date']}', '{event['player_id']}', "
-            f"{event['actual_net_points_micros']}, "
-            f"{event['expected_net_points_micros']}, {event['dividend_cents']})"
+        legacy_dividends = {
+            event["dividend_cents"] // 2,
+            -(-event["dividend_cents"] // 2),
+        }
+        assert any(
+            (
+                f"('{event['game_date']}', '{event['player_id']}', "
+                f"{event['actual_net_points_micros']}, "
+                f"{event['expected_net_points_micros']}, {dividend})"
+            )
+            in sql
+            for dividend in legacy_dividends
         )
-        assert row in sql
     for event in void_events:
-        row = (
+        row_prefix = (
             f"('{event['game_date']}', '{event['player_id']}', "
             f"{event['actual_net_points_micros']}, "
-            f"{event['expected_net_points_micros']}, {event['dividend_cents']})"
+            f"{event['expected_net_points_micros']},"
         )
-        assert row not in sql
+        assert row_prefix not in sql
 
     assert "on conflict (game_date, player_id) do nothing" in sql
     assert "'historical-2025-26', '2025-26', null" in sql
@@ -361,14 +384,21 @@ def test_replay_seed_migration_reproduces_generated_events_without_overwriting()
             else "null"
         )
         qualifies = "true" if event["qualifies_for_instruments"] else "false"
-        row = (
-            f"('{event['game_date']}', '{event['player_id']}', "
-            f"{event['actual_net_points_micros']}, "
-            f"{event['expected_net_points_micros']}, "
-            f"{event['dividend_cents']}, {event['actual_minutes_micros']}, "
-            f"{projected_minutes}, {qualifies})"
+        legacy_dividends = {
+            event["dividend_cents"] // 2,
+            -(-event["dividend_cents"] // 2),
+        }
+        assert any(
+            (
+                f"('{event['game_date']}', '{event['player_id']}', "
+                f"{event['actual_net_points_micros']}, "
+                f"{event['expected_net_points_micros']}, "
+                f"{dividend}, {event['actual_minutes_micros']}, "
+                f"{projected_minutes}, {qualifies})"
+            )
+            in instrument_sql
+            for dividend in legacy_dividends
         )
-        assert row in instrument_sql
     assert "create temporary table market_replay_instrument_seed" in instrument_sql
     assert "raise exception 'canonical replay event conflict'" in instrument_sql
     assert "qualifies_for_instruments = excluded.qualifies_for_instruments" in (
@@ -382,6 +412,7 @@ def test_replay_seed_migration_reproduces_generated_events_without_overwriting()
         "20260723000000",
         "20260723010000",
         "20260724000000",
+        "20260815000000",
     }
 
 
@@ -412,6 +443,57 @@ def test_database_connection_args_support_supabase_transaction_pooler() -> None:
     assert database_connect_args("sqlite+pysqlite:///:memory:") == {
         "check_same_thread": False
     }
+
+
+def test_economy_migration_rebases_full_seed_without_self_recording() -> None:
+    sql = ECONOMY_MIGRATION.read_text(encoding="utf-8").lower()
+    normalized = re.sub(r"\s+", " ", sql)
+
+    assert sql.count("\n    ('20") == EXPECTED_REPLAY_EVENT_COUNT
+    assert "where version = '20260815000000'" in sql
+    assert "insert into supabase_migrations.schema_migrations" not in sql
+    assert "cannot rebase market economy after historical settlements exist" in sql
+    assert "before insert on public.market_accounts" in sql
+    assert "if new.cash_cents = 14000000000 then" in sql
+    assert "message = 'legacy $140m market worker rejected'" in sql
+    assert (
+        "revoke all on function public.market_reject_legacy_starting_cash() "
+        "from public"
+    ) in re.sub(r"\s+", " ", sql)
+    assert (
+        "if to_regclass('public.market_production_settlement_events') "
+        "is not null then"
+    ) in re.sub(r"\s+", " ", sql)
+    assert "required market production settlement table is missing" not in sql
+    assert "before insert on public.market_production_settlement_events" in sql
+    assert "message = 'legacy settlement worker rejected'" in sql
+    assert ") is distinct from true then" in sql
+    assert (
+        "net-points-v1+dnt-bias-0.43586495+usd-80000" in sql
+        and "net-points-v1+dnt-bias-0.43586495+usd-40000" in sql
+    )
+    assert (
+        "revoke all on function public.market_guard_settlement_economy() "
+        "from public"
+    ) in re.sub(r"\s+", " ", sql)
+    assert "actual_minutes_micros bigint not null" in sql
+    assert "projected_minutes_micros bigint" in sql
+    assert "qualifies_for_instruments boolean not null" in sql
+    assert sql.count("update public.market_portfolio_snapshots") == 1
+    assert "free_cash_cents = free_cash_cents + 6782400000" in sql
+    assert "total_value_cents = total_value_cents + 6782400000" in sql
+    assert (
+        "from public.market_settlements as settlement where "
+        "settlement.game_date = event.game_date"
+    ) not in normalized
+    assert "is distinct from seed.projected_minutes_micros" in sql
+    assert (
+        "('2025-12-25', '3112335', 59350000, 25972740, 267018073, "
+        "43000000, 32308300, true)"
+        in sql
+    )
+    assert not sql.startswith("begin;")
+    assert not sql.rstrip().endswith("commit;")
 
 
 def test_supabase_push_helper_stops_when_linking_fails(tmp_path) -> None:

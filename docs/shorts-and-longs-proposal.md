@@ -1,5 +1,9 @@
 # Shorts & Longs — proposal for the 10-player roster format
 
+> Historical proposal snapshot. The current economy uses a $207.824M bankroll and
+> $80K/NP owned-player dividends while weekly shorts remain fixed at $40K/NP; see
+> `docs/PLAN.md`, `docs/pricing-writeup.md`, and `docs/shorting-spec.md`.
+
 Status: proposal for group discussion. Sources: the 7/14 call transcript (Russell's price-short
 example, the short-term vs long-term short distinction, temporary-longs-at-a-premium, the
 injury concern, Ryan's simplicity constraint) and the current Economy v2 engine (one

@@ -1,0 +1,390 @@
+{
+  "candidates": [
+    {
+      "absolute_daily_portfolio_move": {
+        "p50": 360991.93,
+        "p75": 658386.91,
+        "p90": 994744.03,
+        "p95": 1223979.06
+      },
+      "absolute_daily_portfolio_move_pct_of_starting_cash": {
+        "p50": 0.173701,
+        "p75": 0.3168,
+        "p90": 0.478647,
+        "p95": 0.58895
+      },
+      "absolute_player_game_payout_per_holder": {
+        "p50": 192392.6,
+        "p75": 328599.0,
+        "p90": 473087.84,
+        "p95": 562608.52
+      },
+      "active_portfolio_day_observations": 16400,
+      "constraints": {
+        "full_season_drift_within_5_pct": {
+          "actual_pct": -1.111584,
+          "maximum_pct": 5.0,
+          "minimum_pct": -5.0,
+          "passes": true
+        },
+        "plus_20_at_least_0_75_pct_of_starting_cash": {
+          "actual_pct": 0.384941,
+          "minimum_dollars": 1558680.0,
+          "minimum_pct": 0.75,
+          "passes": false
+        },
+        "plus_5_visible_at_0_1m_rounding": {
+          "passes": true,
+          "rounded_dollars": 200000.0,
+          "ui_rounding_increment": 100000.0
+        },
+        "symmetric_before_instrument_clamps": {
+          "minus_20": -800000.0,
+          "minus_5": -200000.0,
+          "passes": true,
+          "plus_20": 800000.0,
+          "plus_5": 200000.0
+        }
+      },
+      "dollars_per_net_point_per_holder": 40000.0,
+      "full_season_economy_drift": {
+        "dollars": -231013858.77,
+        "pct": -1.111584
+      },
+      "net_points_to_dollars_full_float": 4000000.0,
+      "passes_all_constraints": false,
+      "sga_55_point_reference": {
+        "actual_net_points": 43.6,
+        "expected_net_points": 23.2488,
+        "game_date": "2025-10-23",
+        "payout_per_holder": 814049.8,
+        "player": "Shai Gilgeous-Alexander",
+        "points": 55.0,
+        "surprise_net_points": 20.3512
+      },
+      "surprise_payout_per_holder": {
+        "minus_20": -800000.0,
+        "minus_5": -200000.0,
+        "plus_20": 800000.0,
+        "plus_20_pct_of_starting_cash": 0.384941,
+        "plus_5": 200000.0,
+        "plus_5_ui_rounded_to_0_1m": 200000.0
+      }
+    },
+    {
+      "absolute_daily_portfolio_move": {
+        "p50": 541285.28,
+        "p75": 986581.42,
+        "p90": 1492599.23,
+        "p95": 1834067.48
+      },
+      "absolute_daily_portfolio_move_pct_of_starting_cash": {
+        "p50": 0.260454,
+        "p75": 0.47472,
+        "p90": 0.718203,
+        "p95": 0.88251
+      },
+      "absolute_player_game_payout_per_holder": {
+        "p50": 288588.9,
+        "p75": 492898.5,
+        "p90": 709631.76,
+        "p95": 843912.78
+      },
+      "active_portfolio_day_observations": 16400,
+      "constraints": {
+        "full_season_drift_within_5_pct": {
+          "actual_pct": -1.427904,
+          "maximum_pct": 5.0,
+          "minimum_pct": -5.0,
+          "passes": true
+        },
+        "plus_20_at_least_0_75_pct_of_starting_cash": {
+          "actual_pct": 0.577412,
+          "minimum_dollars": 1558680.0,
+          "minimum_pct": 0.75,
+          "passes": false
+        },
+        "plus_5_visible_at_0_1m_rounding": {
+          "passes": true,
+          "rounded_dollars": 300000.0,
+          "ui_rounding_increment": 100000.0
+        },
+        "symmetric_before_instrument_clamps": {
+          "minus_20": -1200000.0,
+          "minus_5": -300000.0,
+          "passes": true,
+          "plus_20": 1200000.0,
+          "plus_5": 300000.0
+        }
+      },
+      "dollars_per_net_point_per_holder": 60000.0,
+      "full_season_economy_drift": {
+        "dollars": -296752634.64,
+        "pct": -1.427904
+      },
+      "net_points_to_dollars_full_float": 6000000.0,
+      "passes_all_constraints": false,
+      "sga_55_point_reference": {
+        "actual_net_points": 43.6,
+        "expected_net_points": 23.2488,
+        "game_date": "2025-10-23",
+        "payout_per_holder": 1221074.7,
+        "player": "Shai Gilgeous-Alexander",
+        "points": 55.0,
+        "surprise_net_points": 20.3512
+      },
+      "surprise_payout_per_holder": {
+        "minus_20": -1200000.0,
+        "minus_5": -300000.0,
+        "plus_20": 1200000.0,
+        "plus_20_pct_of_starting_cash": 0.577412,
+        "plus_5": 300000.0,
+        "plus_5_ui_rounded_to_0_1m": 300000.0
+      }
+    },
+    {
+      "absolute_daily_portfolio_move": {
+        "p50": 721685.62,
+        "p75": 1314511.43,
+        "p90": 1989804.99,
+        "p95": 2444542.54
+      },
+      "absolute_daily_portfolio_move_pct_of_starting_cash": {
+        "p50": 0.347258,
+        "p75": 0.632512,
+        "p90": 0.957447,
+        "p95": 1.176256
+      },
+      "absolute_player_game_payout_per_holder": {
+        "p50": 384785.2,
+        "p75": 657198.0,
+        "p90": 946175.68,
+        "p95": 1125217.04
+      },
+      "active_portfolio_day_observations": 16400,
+      "constraints": {
+        "full_season_drift_within_5_pct": {
+          "actual_pct": -1.744779,
+          "maximum_pct": 5.0,
+          "minimum_pct": -5.0,
+          "passes": true
+        },
+        "plus_20_at_least_0_75_pct_of_starting_cash": {
+          "actual_pct": 0.769882,
+          "minimum_dollars": 1558680.0,
+          "minimum_pct": 0.75,
+          "passes": true
+        },
+        "plus_5_visible_at_0_1m_rounding": {
+          "passes": true,
+          "rounded_dollars": 400000.0,
+          "ui_rounding_increment": 100000.0
+        },
+        "symmetric_before_instrument_clamps": {
+          "minus_20": -1600000.0,
+          "minus_5": -400000.0,
+          "passes": true,
+          "plus_20": 1600000.0,
+          "plus_5": 400000.0
+        }
+      },
+      "dollars_per_net_point_per_holder": 80000.0,
+      "full_season_economy_drift": {
+        "dollars": -362606944.74,
+        "pct": -1.744779
+      },
+      "net_points_to_dollars_full_float": 8000000.0,
+      "passes_all_constraints": true,
+      "sga_55_point_reference": {
+        "actual_net_points": 43.6,
+        "expected_net_points": 23.2488,
+        "game_date": "2025-10-23",
+        "payout_per_holder": 1628099.6,
+        "player": "Shai Gilgeous-Alexander",
+        "points": 55.0,
+        "surprise_net_points": 20.3512
+      },
+      "surprise_payout_per_holder": {
+        "minus_20": -1600000.0,
+        "minus_5": -400000.0,
+        "plus_20": 1600000.0,
+        "plus_20_pct_of_starting_cash": 0.769882,
+        "plus_5": 400000.0,
+        "plus_5_ui_rounded_to_0_1m": 400000.0
+      }
+    },
+    {
+      "absolute_daily_portfolio_move": {
+        "p50": 901931.22,
+        "p75": 1643645.11,
+        "p90": 2487764.05,
+        "p95": 3056520.46
+      },
+      "absolute_daily_portfolio_move_pct_of_starting_cash": {
+        "p50": 0.433988,
+        "p75": 0.790883,
+        "p90": 1.197053,
+        "p95": 1.470725
+      },
+      "absolute_player_game_payout_per_holder": {
+        "p50": 480981.51,
+        "p75": 821497.49,
+        "p90": 1182719.59,
+        "p95": 1406521.3
+      },
+      "active_portfolio_day_observations": 16400,
+      "constraints": {
+        "full_season_drift_within_5_pct": {
+          "actual_pct": -2.062582,
+          "maximum_pct": 5.0,
+          "minimum_pct": -5.0,
+          "passes": true
+        },
+        "plus_20_at_least_0_75_pct_of_starting_cash": {
+          "actual_pct": 0.962353,
+          "minimum_dollars": 1558680.0,
+          "minimum_pct": 0.75,
+          "passes": true
+        },
+        "plus_5_visible_at_0_1m_rounding": {
+          "passes": true,
+          "rounded_dollars": 500000.0,
+          "ui_rounding_increment": 100000.0
+        },
+        "symmetric_before_instrument_clamps": {
+          "minus_20": -2000000.0,
+          "minus_5": -500000.0,
+          "passes": true,
+          "plus_20": 2000000.0,
+          "plus_5": 500000.0
+        }
+      },
+      "dollars_per_net_point_per_holder": 100000.0,
+      "full_season_economy_drift": {
+        "dollars": -428653940.51,
+        "pct": -2.062582
+      },
+      "net_points_to_dollars_full_float": 10000000.0,
+      "passes_all_constraints": true,
+      "sga_55_point_reference": {
+        "actual_net_points": 43.6,
+        "expected_net_points": 23.2488,
+        "game_date": "2025-10-23",
+        "payout_per_holder": 2035124.51,
+        "player": "Shai Gilgeous-Alexander",
+        "points": 55.0,
+        "surprise_net_points": 20.3512
+      },
+      "surprise_payout_per_holder": {
+        "minus_20": -2000000.0,
+        "minus_5": -500000.0,
+        "plus_20": 2000000.0,
+        "plus_20_pct_of_starting_cash": 0.962353,
+        "plus_5": 500000.0,
+        "plus_5_ui_rounded_to_0_1m": 500000.0
+      }
+    },
+    {
+      "absolute_daily_portfolio_move": {
+        "p50": 1082032.78,
+        "p75": 1972917.43,
+        "p90": 2985245.65,
+        "p95": 3668684.72
+      },
+      "absolute_daily_portfolio_move_pct_of_starting_cash": {
+        "p50": 0.520649,
+        "p75": 0.949321,
+        "p90": 1.43643,
+        "p95": 1.765284
+      },
+      "absolute_player_game_payout_per_holder": {
+        "p50": 577177.81,
+        "p75": 985796.99,
+        "p90": 1419263.51,
+        "p95": 1687825.56
+      },
+      "active_portfolio_day_observations": 16400,
+      "constraints": {
+        "full_season_drift_within_5_pct": {
+          "actual_pct": -2.381169,
+          "maximum_pct": 5.0,
+          "minimum_pct": -5.0,
+          "passes": true
+        },
+        "plus_20_at_least_0_75_pct_of_starting_cash": {
+          "actual_pct": 1.154823,
+          "minimum_dollars": 1558680.0,
+          "minimum_pct": 0.75,
+          "passes": true
+        },
+        "plus_5_visible_at_0_1m_rounding": {
+          "passes": true,
+          "rounded_dollars": 600000.0,
+          "ui_rounding_increment": 100000.0
+        },
+        "symmetric_before_instrument_clamps": {
+          "minus_20": -2400000.0,
+          "minus_5": -600000.0,
+          "passes": true,
+          "plus_20": 2400000.0,
+          "plus_5": 600000.0
+        }
+      },
+      "dollars_per_net_point_per_holder": 120000.0,
+      "full_season_economy_drift": {
+        "dollars": -494864112.92,
+        "pct": -2.381169
+      },
+      "net_points_to_dollars_full_float": 12000000.0,
+      "passes_all_constraints": true,
+      "sga_55_point_reference": {
+        "actual_net_points": 43.6,
+        "expected_net_points": 23.2488,
+        "game_date": "2025-10-23",
+        "payout_per_holder": 2442149.41,
+        "player": "Shai Gilgeous-Alexander",
+        "points": 55.0,
+        "surprise_net_points": 20.3512
+      },
+      "surprise_payout_per_holder": {
+        "minus_20": -2400000.0,
+        "minus_5": -600000.0,
+        "plus_20": 2400000.0,
+        "plus_20_pct_of_starting_cash": 1.154823,
+        "plus_5": 600000.0,
+        "plus_5_ui_rounded_to_0_1m": 600000.0
+      }
+    }
+  ],
+  "constraint_definitions": {
+    "full_season_drift_within_5_pct": "full-season deterministic economy drift is within +/-5%",
+    "plus_20_at_least_0_75_pct_of_starting_cash": "a +20 net-point surprise pays at least 0.75% of starting cash",
+    "plus_5_visible_at_0_1m_rounding": "a +5 net-point surprise remains non-zero after rounding to $0.1M",
+    "symmetric_before_instrument_clamps": "equal positive and negative surprises have equal payout magnitude before instrument-specific clamps"
+  },
+  "metadata": {
+    "active_day_definition": "one absolute end-to-end portfolio value change for every synthetic portfolio on each league game day, including dividends and the daily idle-cash sink",
+    "candidate_rates_per_net_point_per_holder": [
+      40000.0,
+      60000.0,
+      80000.0,
+      100000.0,
+      120000.0
+    ],
+    "expectation_bias_net_points": 0.43586494964917194,
+    "expectation_model": "dnt",
+    "game_days": 164,
+    "portfolio_count": 100,
+    "portfolio_size": 10,
+    "season": "2025-26",
+    "seed": 2026,
+    "starting_cash": 207824000.0,
+    "universe_player_games": 10689,
+    "universe_players": 150
+  },
+  "selection": {
+    "dollars_per_net_point_per_holder": 80000.0,
+    "net_points_to_dollars_full_float": 8000000.0,
+    "rule": "lowest candidate passing all four constraints"
+  }
+}

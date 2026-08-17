@@ -27,7 +27,14 @@ from nba_stock_market.backtest import (
     run_backtest,
     select_universe,
 )
-from nba_stock_market.engine import BoxScoreLine, Market, NetPointsModel, Player, User
+from nba_stock_market.engine import (
+    STARTING_CASH,
+    BoxScoreLine,
+    Market,
+    NetPointsModel,
+    Player,
+    User,
+)
 from nba_stock_market.expectations import (
     DunksAndThreesExpectation,
     SalaryProjectionExpectation,
@@ -170,6 +177,12 @@ class ExpectationSourceTest(unittest.TestCase):
 
 
 class BacktestReplayTest(unittest.TestCase):
+    def test_economy_calibration_candidates_are_fixed_by_design(self) -> None:
+        self.assertEqual(
+            backtest_module.ECONOMY_CANDIDATE_RATES,
+            (40_000.0, 60_000.0, 80_000.0, 100_000.0, 120_000.0),
+        )
+
     def test_auto_bias_is_finite_league_mean_surprise(self) -> None:
         class FixedExpectation:
             def expected_performance(self, player: Player, game_date: date) -> float:
@@ -212,6 +225,110 @@ class BacktestReplayTest(unittest.TestCase):
 
     def test_money_rounding_canonicalizes_negative_zero(self) -> None:
         self.assertEqual(math.copysign(1.0, _round_money(-0.001)), 1.0)
+
+    def test_candidate_row_reports_every_required_metric_and_constraint(self) -> None:
+        report = {
+            "metadata": {"starting_cash": 207_824_000.0},
+            "money_supply": {
+                "net_inflation": -4_000_000.0,
+                "net_inflation_pct": -1.9247,
+            },
+            "calibration": {"dividend_per_net_point_per_share": 80_000.0},
+            "replay_metrics": {
+                "absolute_player_game_payout_per_holder": {
+                    "p50": 100_000.0,
+                    "p75": 200_000.0,
+                    "p90": 300_000.0,
+                    "p95": 400_000.0,
+                },
+                "absolute_daily_portfolio_move": {
+                    "p50": 500_000.0,
+                    "p75": 600_000.0,
+                    "p90": 700_000.0,
+                    "p95": 800_000.0,
+                },
+                "absolute_daily_portfolio_move_pct_of_starting_cash": {
+                    "p50": 0.24059,
+                    "p75": 0.288706,
+                    "p90": 0.336823,
+                    "p95": 0.384941,
+                },
+                "active_portfolio_day_observations": 16_400,
+            },
+            "examples": [
+                {
+                    "player": "Shai Gilgeous-Alexander",
+                    "game_date": "2025-10-23",
+                    "box_score": {"pts": 55.0},
+                    "actual_net_points": 43.6,
+                    "expected_net_points": 23.2488,
+                    "surprise_net_points": 20.3512,
+                    "payout_per_share": 1_628_096.0,
+                }
+            ],
+        }
+
+        row = backtest_module.economy_candidate_row(report)
+
+        self.assertEqual(row["dollars_per_net_point_per_holder"], 80_000.0)
+        self.assertEqual(
+            row["absolute_player_game_payout_per_holder"],
+            report["replay_metrics"]["absolute_player_game_payout_per_holder"],
+        )
+        self.assertEqual(
+            row["absolute_daily_portfolio_move"],
+            report["replay_metrics"]["absolute_daily_portfolio_move"],
+        )
+        self.assertEqual(
+            row["absolute_daily_portfolio_move_pct_of_starting_cash"],
+            report["replay_metrics"][
+                "absolute_daily_portfolio_move_pct_of_starting_cash"
+            ],
+        )
+        self.assertEqual(row["full_season_economy_drift"]["pct"], -1.9247)
+        self.assertEqual(row["surprise_payout_per_holder"]["plus_5"], 400_000.0)
+        self.assertEqual(row["surprise_payout_per_holder"]["plus_20"], 1_600_000.0)
+        self.assertEqual(row["sga_55_point_reference"]["points"], 55.0)
+        self.assertEqual(
+            set(row["constraints"]),
+            {
+                "plus_20_at_least_0_75_pct_of_starting_cash",
+                "plus_5_visible_at_0_1m_rounding",
+                "full_season_drift_within_5_pct",
+                "symmetric_before_instrument_clamps",
+            },
+        )
+        self.assertTrue(row["passes_all_constraints"])
+
+    def test_lowest_passing_candidate_is_selected(self) -> None:
+        candidates = [
+            {
+                "dollars_per_net_point_per_holder": rate,
+                "passes_all_constraints": passes,
+            }
+            for rate, passes in (
+                (120_000.0, True),
+                (40_000.0, False),
+                (100_000.0, True),
+                (80_000.0, True),
+                (60_000.0, False),
+            )
+        ]
+
+        selected = backtest_module.select_economy_rate(candidates)
+
+        self.assertEqual(selected["dollars_per_net_point_per_holder"], 80_000.0)
+
+    def test_selecting_rate_fails_when_no_candidate_passes(self) -> None:
+        with self.assertRaisesRegex(ValueError, "no economy calibration candidate"):
+            backtest_module.select_economy_rate(
+                [
+                    {
+                        "dollars_per_net_point_per_holder": 40_000.0,
+                        "passes_all_constraints": False,
+                    }
+                ]
+            )
 
     def test_cli_defaults_to_dnt_expectation(self) -> None:
         report = {"money_supply": {"net_inflation": 1.0, "final_portfolio_wealth": 2.0}}
@@ -338,6 +455,11 @@ class BacktestReplayTest(unittest.TestCase):
 
         self.assertAlmostEqual(holder.cash, cash_before_sink * 0.90)
         self.assertAlmostEqual(summary.idle_cash_sunk, cash_before_sink * 0.10)
+        self.assertEqual(len(summary.daily_portfolio_moves), 1)
+        self.assertAlmostEqual(
+            summary.daily_portfolio_moves[0],
+            abs(holder.cash - 100_000_000),
+        )
 
     def test_replay_integrates_engine_dividends_and_updates_expectation_after_game(self) -> None:
         player = Player("p", "Replay Player", "star", 40_000_000, 40_000_000)
@@ -428,7 +550,7 @@ class BacktestReplayTest(unittest.TestCase):
                 next(player.salary for player in players if player.player_id == player_id)
                 for player_id in user.holdings
             )
-            self.assertAlmostEqual(user.cash + invested, 140_000_000)
+            self.assertAlmostEqual(user.cash + invested, STARTING_CASH)
 
     def test_synthetic_portfolios_cannot_exceed_one_share_per_user_float(self) -> None:
         players = [
@@ -441,6 +563,52 @@ class BacktestReplayTest(unittest.TestCase):
 
 
 class OpeningListingLoaderTest(unittest.TestCase):
+    def test_checked_in_economy_report_selects_lowest_passing_candidate(self) -> None:
+        calibration = json.loads(
+            Path("output/economy-calibration-2026.json").read_text(encoding="utf-8")
+        )
+        canonical = json.loads(
+            Path("output/backtest-2026.json").read_text(encoding="utf-8")
+        )
+
+        candidates = calibration["candidates"]
+        self.assertEqual(
+            [row["dollars_per_net_point_per_holder"] for row in candidates],
+            list(backtest_module.ECONOMY_CANDIDATE_RATES),
+        )
+        passing_rates = [
+            row["dollars_per_net_point_per_holder"]
+            for row in candidates
+            if row["passes_all_constraints"]
+        ]
+        self.assertEqual(passing_rates, [80_000.0, 100_000.0, 120_000.0])
+        self.assertEqual(
+            calibration["selection"]["dollars_per_net_point_per_holder"],
+            min(passing_rates),
+        )
+        for row in candidates:
+            self.assertEqual(len(row["constraints"]), 4)
+            self.assertEqual(
+                set(row["absolute_player_game_payout_per_holder"]),
+                {"p50", "p75", "p90", "p95"},
+            )
+            self.assertEqual(
+                set(row["absolute_daily_portfolio_move"]),
+                {"p50", "p75", "p90", "p95"},
+            )
+            self.assertEqual(
+                set(row["absolute_daily_portfolio_move_pct_of_starting_cash"]),
+                {"p50", "p75", "p90", "p95"},
+            )
+            self.assertEqual(row["sga_55_point_reference"]["points"], 55.0)
+
+        self.assertEqual(calibration["metadata"]["starting_cash"], 207_824_000.0)
+        self.assertEqual(canonical["metadata"]["starting_cash"], 207_824_000.0)
+        self.assertEqual(
+            canonical["calibration"]["dividend_per_net_point_per_share"],
+            80_000.0,
+        )
+
     def test_report_player_row_separates_listing_price_and_actual_salary(self) -> None:
         row = _player_row(
             ListedPlayer(

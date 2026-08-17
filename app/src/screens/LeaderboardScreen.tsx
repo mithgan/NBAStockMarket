@@ -2,6 +2,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
+import { STARTING_CASH } from '../state/game';
 import { colors } from '../theme';
 
 export function LeaderboardScreen() {
@@ -20,7 +21,7 @@ export function LeaderboardScreen() {
         <Text style={styles.winner}>{winner.name}</Text>
         <Text adjustsFontSizeToFit minimumFontScale={0.75} numberOfLines={1} style={styles.winnerValue}>{formatMoney(winner.value)}</Text>
         <Text style={[styles.winnerReturn, { color: winner.returnPct >= 0 ? colors.green : colors.red }]}>
-          {winner.returnPct >= 0 ? '+' : ''}{winner.returnPct.toFixed(2)}% from $140M
+          {winner.returnPct >= 0 ? '+' : ''}{winner.returnPct.toFixed(2)}% from ${STARTING_CASH / 1_000_000}M
         </Text>
       </View> : (
         <View style={styles.emptyCard}>

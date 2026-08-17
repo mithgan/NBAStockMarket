@@ -1,5 +1,8 @@
 # NBA Stock Market Mobile MVP Design
 
+> Historical design snapshot. The current economy uses a $207.824M bankroll and
+> $80K/NP owned-player dividends; see `docs/PLAN.md` and `docs/pricing-writeup.md`.
+
 This is the tracked product design for NBA-10. The operational source used by workers is `.context/orchestration/20260720-mobile-mvp/DESIGN.md`; the two documents intentionally describe the same approved scope.
 
 ## Outcome

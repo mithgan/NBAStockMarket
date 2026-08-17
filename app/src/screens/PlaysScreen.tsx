@@ -3,7 +3,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Player } from '../data/types';
 import { formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
-import { DOLLARS_PER_NET_POINT, WEEKLY_TOTAL_CLAMP_NP } from '../state/game';
+import {
+  WEEKLY_SHORT_DOLLARS_PER_NET_POINT,
+  WEEKLY_TOTAL_CLAMP_NP,
+} from '../state/game';
 import { colors } from '../theme';
 
 interface PlayCandidate {
@@ -70,7 +73,7 @@ export function PlaysScreen() {
       </View>
       <View style={styles.ruleCard}>
         <Text style={styles.ruleTitle}>{currentWeek ?? 'Season complete'}</Text>
-        <Text style={styles.ruleText}>Shorts reserve $2M collateral and settle at up to +/-{formatMoney(WEEKLY_TOTAL_CLAMP_NP * DOLLARS_PER_NET_POINT)}.</Text>
+        <Text style={styles.ruleText}>Shorts reserve $2M collateral and settle at up to +/-{formatMoney(WEEKLY_TOTAL_CLAMP_NP * WEEKLY_SHORT_DOLLARS_PER_NET_POINT)}.</Text>
         <Text style={styles.ruleText}>Boosts cost 0.25% and add one extra signed dividend, including losses.</Text>
       </View>
 
@@ -87,7 +90,7 @@ export function PlaysScreen() {
             const markedPayout = Math.max(
               -WEEKLY_TOTAL_CLAMP_NP,
               Math.min(WEEKLY_TOTAL_CLAMP_NP, position.accruedNetPoints),
-            ) * DOLLARS_PER_NET_POINT;
+            ) * WEEKLY_SHORT_DOLLARS_PER_NET_POINT;
             return (
               <View key={position.id} style={styles.positionRow}>
                 <View style={styles.positionCopy}>

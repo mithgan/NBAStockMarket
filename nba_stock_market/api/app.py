@@ -99,6 +99,7 @@ def create_app(
             database.seed_from_file(settings.seed_file)
         if settings.replay_seed_file is not None:
             database.seed_replay_from_file(settings.replay_seed_file)
+    database.assert_local_economy_ready()
 
     @app.exception_handler(ApiProblem)
     async def api_problem_handler(request: Request, exc: ApiProblem) -> JSONResponse:

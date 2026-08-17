@@ -1,5 +1,9 @@
 # Shorts, Longs & Two Calibration Issues — consolidated proposal
 
+> Historical proposal snapshot. The current economy uses a $207.824M bankroll and
+> $80K/NP owned-player dividends while weekly shorts remain fixed at $40K/NP; see
+> `docs/PLAN.md`, `docs/pricing-writeup.md`, and `docs/shorting-spec.md`.
+
 Status: team proposal (Mith, 2026-07-15). This is the actionable summary of the
 shorts/longs design plus the two economy issues the simulations surfaced. Full design
 history and alternatives considered: `docs/shorts-and-longs-proposal.md`. Simulation code:

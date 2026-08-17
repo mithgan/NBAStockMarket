@@ -21,6 +21,10 @@ from nba_stock_market.api.database import (
     utcnow,
 )
 from nba_stock_market.api.service import MarketService
+from nba_stock_market.engine import STARTING_CASH
+
+
+STARTING_CASH_CENTS = round(STARTING_CASH * 100)
 
 
 def test_account_history_schema_has_authoritative_read_models(database: Database) -> None:
@@ -278,8 +282,8 @@ def test_settlement_records_cash_activity_and_closing_snapshots(
         ).all()
 
     assert [(row.account_id, row.kind, row.amount_cents) for row in settlement_activity] == [
-        ("alice", "boost_consumed", 80_000_000),
-        ("alice", "dividend", 80_000_000),
+        ("alice", "boost_consumed", 160_000_000),
+        ("alice", "dividend", 160_000_000),
         ("bob", "weekly_short_settled", -80_000_000),
     ]
     assert len({row.source_key for row in settlement_activity}) == 3
@@ -313,7 +317,7 @@ def test_account_created_after_a_settlement_only_gets_future_history(
                 player_id="sga",
                 actual_net_points_micros=5_000_000,
                 expected_net_points_micros=20_000_000,
-                dividend_cents=-60_000_000,
+                dividend_cents=-120_000_000,
             )
         ],
     )
@@ -617,7 +621,7 @@ def test_history_apis_are_authenticated_paginated_and_account_scoped(
     assert dividends.status_code == 200
     assert dividends.json()["data"]["next_cursor"] is None
     assert dividends.json()["data"]["items"][0]["kind"] == "dividend"
-    assert dividends.json()["data"]["items"][0]["amount_cents"] == 80_000_000
+    assert dividends.json()["data"]["items"][0]["amount_cents"] == 160_000_000
     assert history.status_code == 200
     assert history.json()["data"]["next_cursor"] is None
     assert history.json()["data"]["items"] == [
@@ -731,10 +735,10 @@ def test_account_reset_is_one_time_pristine_transition_and_isolated(
 
     reset = first.json()["data"]
     assert reset["replayed"] is False
-    assert reset["portfolio"]["cash_cents"] == 14_000_000_000
-    assert reset["portfolio"]["free_cash_cents"] == 14_000_000_000
+    assert reset["portfolio"]["cash_cents"] == STARTING_CASH_CENTS
+    assert reset["portfolio"]["free_cash_cents"] == STARTING_CASH_CENTS
     assert reset["portfolio"]["market_value_cents"] == 0
-    assert reset["portfolio"]["total_value_cents"] == 14_000_000_000
+    assert reset["portfolio"]["total_value_cents"] == STARTING_CASH_CENTS
     assert reset["portfolio"]["holdings"] == []
     assert reset["portfolio"]["recent_trades"] == []
     assert reset["portfolio"]["version"] == before["version"] + 1
