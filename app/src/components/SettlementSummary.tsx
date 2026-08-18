@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { TrendPoint } from '../data/trendPresentation';
+import { surpriseLabel, type TrendPoint } from '../data/trendPresentation';
 import type { Player } from '../data/types';
 import { formatCompactSignedMoney, formatSignedMoney } from '../format';
 import type { GameHolding } from '../state/game';
@@ -99,7 +99,7 @@ export function SettlementSummary({ contributions, settledDate }: {
                     {contribution.player.name}
                   </Text>
                   <Text numberOfLines={1} style={styles.rowMeta}>
-                    {`${contribution.netPoints.toFixed(1)} NP vs ${contribution.expectedNetPoints.toFixed(1)} projected`}
+                    {surpriseLabel({ np: contribution.netPoints, expected_np: contribution.expectedNetPoints })}
                   </Text>
                 </View>
                 <Text
@@ -119,7 +119,11 @@ export function SettlementSummary({ contributions, settledDate }: {
 }
 
 const styles = StyleSheet.create({
+  // Bordered on both edges: the block now rides between the hero number and
+  // the plot, so it must read as its own strip.
   block: {
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },

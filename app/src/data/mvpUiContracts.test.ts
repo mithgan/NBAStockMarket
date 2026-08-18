@@ -43,7 +43,7 @@ test('manual replay advancement is admin-gated and requires explicit confirmatio
   assert.match(seasonControlSource, /This settles .* for every play-tester/);
   assert.match(seasonControlSource, /accessibilityLabel="Cancel replay simulation"/);
   assert.match(seasonControlSource, /'Confirm replay advancement'/);
-  assert.match(seasonControlSource, /confirmation && \(confirmation === 'rewind' \|\| canSettleNextDay\) \?/);
+  assert.match(seasonControlSource, /confirmation && \(confirmation === 'rewind' \|\| confirmation === 'me' \|\| canSettleNextDay\) \?/);
   assert.match(seasonControlSource, /await advanceDay\(\)/);
   assert.match(seasonControlSource, /SIMULATE SEASON/);
   assert.match(seasonControlSource, /await advanceSeason\(\)/);

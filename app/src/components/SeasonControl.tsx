@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePortfolio } from '../state/PortfolioContext';
@@ -23,7 +23,13 @@ function displayDate(value: string | null): string {
  * every advance path routes through an explicit confirmation.
  */
 export function SeasonControl() {
-  const [confirmation, setConfirmation] = useState<'day' | 'week' | 'season' | 'rewind' | null>(null);
+  const [confirmation, setConfirmation] = useState<'day' | 'week' | 'season' | 'rewind' | 'me' | null>(null);
+  // On a phone the five sandbox buttons wrapped into two rows and ate a
+  // quarter of the viewport; they collapse behind one ADVANCE control that
+  // opens a sheet, feeding the same confirmations.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const { width } = useWindowDimensions();
+  const compact = width < 900;
   const reducedMotion = useReducedMotion();
   const {
     advanceDay,
@@ -80,6 +86,16 @@ export function SeasonControl() {
     await resetSeasonWorld();
   };
 
+  const confirmResetMe = async () => {
+    setConfirmation(null);
+    await resetSeasonAccount();
+  };
+
+  const pickFromSheet = (action: 'day' | 'week' | 'season' | 'rewind' | 'me') => {
+    setSheetOpen(false);
+    setConfirmation(action);
+  };
+
   return (
     <>
       <View style={styles.container}>
@@ -127,7 +143,23 @@ export function SeasonControl() {
               {isRefreshing ? '…' : '↻'}
             </Text>
           </Pressable>
-          {canSettleNextDay ? (
+          {compact && (canSettleNextDay || canAdvanceSandbox) ? (
+            <Button
+              accessibilityLabel="Open the sandbox controls"
+              compact
+              disabled={disabled}
+              label={
+                isSettling || isSettlingWeek || isSettlingSeason
+                  ? 'SETTLING'
+                  : isRewinding
+                    ? 'REWINDING'
+                    : 'ADVANCE'
+              }
+              onPress={() => setSheetOpen(true)}
+              tone="primary"
+            />
+          ) : null}
+          {!compact && canSettleNextDay ? (
             <View style={styles.advanceActions}>
               <Button
                 accessibilityLabel="Settle the next historical game date"
@@ -157,7 +189,7 @@ export function SeasonControl() {
               />
             </View>
           ) : null}
-          {canAdvanceSandbox ? (
+          {!compact && canAdvanceSandbox ? (
             <View style={styles.advanceActions}>
               {/* "RESET ME" only touches the caller's account, so a second tap
                   confirms it inline; rewinding the whole world goes through the
@@ -205,7 +237,69 @@ export function SeasonControl() {
         ) : null}
       </View>
 
-      {confirmation && (confirmation === 'rewind' || canSettleNextDay) ? (
+      {sheetOpen ? (
+        <Modal
+          animationType={reducedMotion ? 'none' : 'fade'}
+          onRequestClose={() => setSheetOpen(false)}
+          transparent
+          visible
+        >
+          <Pressable
+            accessibilityLabel="Close the sandbox controls"
+            style={styles.modalBackdrop}
+            onPress={() => setSheetOpen(false)}
+          >
+            <Pressable accessibilityViewIsModal style={styles.modal} onPress={() => {}}>
+              <Text style={styles.modalEyebrow}>SHARED REPLAY</Text>
+              <Text accessibilityRole="header" style={styles.modalTitle}>Sandbox controls</Text>
+              <View style={styles.sheetActions}>
+                {canSettleNextDay ? (
+                  <Button
+                    accessibilityLabel="Settle the next historical game date"
+                    label="NEXT DAY"
+                    onPress={() => pickFromSheet('day')}
+                    tone="primary"
+                  />
+                ) : null}
+                {canSettleNextDay && canAdvanceSandbox ? (
+                  <Button
+                    accessibilityLabel="Advance one calendar week"
+                    label="+1 WEEK"
+                    onPress={() => pickFromSheet('week')}
+                    tone="secondary"
+                  />
+                ) : null}
+                {canSettleNextDay ? (
+                  <Button
+                    accessibilityLabel="Settle every remaining historical game date"
+                    label="SIMULATE SEASON"
+                    onPress={() => pickFromSheet('season')}
+                    tone="secondary"
+                  />
+                ) : null}
+                {canAdvanceSandbox ? (
+                  <Button
+                    accessibilityLabel="Reset your account to the opening bankroll"
+                    label="RESET ME"
+                    onPress={() => pickFromSheet('me')}
+                    tone="ghost"
+                  />
+                ) : null}
+                {canAdvanceSandbox ? (
+                  <Button
+                    accessibilityLabel="Rewind the whole season to opening night"
+                    label="RESET SEASON"
+                    onPress={() => pickFromSheet('rewind')}
+                    tone="danger"
+                  />
+                ) : null}
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
+
+      {confirmation && (confirmation === 'rewind' || confirmation === 'me' || canSettleNextDay) ? (
         <Modal
           animationType={reducedMotion ? 'none' : 'fade'}
           onRequestClose={() => setConfirmation(null)}
@@ -222,7 +316,9 @@ export function SeasonControl() {
                     ? 'Advance one calendar week?'
                     : confirmation === 'rewind'
                       ? 'Rewind to opening night?'
-                      : 'Simulate the rest of the season?'}
+                      : confirmation === 'me'
+                        ? 'Reset your account?'
+                        : 'Simulate the rest of the season?'}
               </Text>
               <Text style={styles.modalBody}>
                 {confirmation === 'day'
@@ -231,7 +327,9 @@ export function SeasonControl() {
                     ? 'This settles every game date in the next 7 calendar days for every play-tester. It cannot be undone.'
                     : confirmation === 'rewind'
                       ? 'This erases every settlement, trade, and play on this server, returns all bankrolls to $140M, restores opening prices, and moves the clock back to October 21. It cannot be undone.'
-                      : 'This settles every remaining 2025-26 game date for every play-tester. Completed dates are saved, so an interrupted run can be resumed. It cannot be undone.'}
+                      : confirmation === 'me'
+                        ? 'This returns your own account to the $140M opening bankroll and clears your holdings. Everyone else is untouched. It cannot be undone.'
+                        : 'This settles every remaining 2025-26 game date for every play-tester. Completed dates are saved, so an interrupted run can be resumed. It cannot be undone.'}
               </Text>
               <View style={styles.modalActions}>
                 <Button
@@ -247,14 +345,18 @@ export function SeasonControl() {
                       ? 'Confirm week advancement'
                       : confirmation === 'rewind'
                         ? 'Confirm rewinding the season to opening night'
-                        : 'Confirm full season simulation'}
+                        : confirmation === 'me'
+                          ? 'Confirm resetting your account to the opening bankroll'
+                          : 'Confirm full season simulation'}
                   label={confirmation === 'day'
                     ? 'SETTLE NEXT DAY'
                     : confirmation === 'week'
                       ? 'SETTLE THE WEEK'
                       : confirmation === 'rewind'
                         ? 'REWIND SEASON'
-                        : 'SIMULATE SEASON'}
+                        : confirmation === 'me'
+                          ? 'RESET MY ACCOUNT'
+                          : 'SIMULATE SEASON'}
                   onPress={() => {
                     confirmation === 'day'
                       ? confirmAdvance()
@@ -262,9 +364,11 @@ export function SeasonControl() {
                         ? confirmWeek()
                         : confirmation === 'rewind'
                           ? confirmRewind()
-                          : confirmSeason();
+                          : confirmation === 'me'
+                            ? confirmResetMe()
+                            : confirmSeason();
                   }}
-                  tone={confirmation === 'rewind' ? 'danger' : 'primary'}
+                  tone={confirmation === 'rewind' || confirmation === 'me' ? 'danger' : 'primary'}
                 />
               </View>
             </View>
@@ -367,6 +471,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
+    gap: space.sm,
+    marginTop: space.lg,
+  },
+  sheetActions: {
     gap: space.sm,
     marginTop: space.lg,
   },

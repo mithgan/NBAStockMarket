@@ -6,6 +6,7 @@ import {
   selectHighLowPoints,
   selectSettledTrendPoints,
   selectTrendRange,
+  surpriseLabel,
 } from './trendPresentation';
 
 test('trend range selects the most recent 5, 15, or full-season points without mutating the series', () => {
@@ -38,4 +39,19 @@ test('cumulative chart values and high/low points are deterministic', () => {
     low: { index: 1, value: -150 },
   });
   assert.deepEqual(selectHighLowPoints([]), { high: null, low: null });
+});
+
+test('surpriseLabel leads with the surprise and keeps the box score', () => {
+  assert.equal(
+    surpriseLabel({ np: 26.6, expected_np: 15.6 }),
+    '+11.0 over projection · 26.6 vs 15.6 NP',
+  );
+  assert.equal(
+    surpriseLabel({ np: 5.8, expected_np: 23.9 }),
+    '-18.1 under projection · 5.8 vs 23.9 NP',
+  );
+  assert.equal(
+    surpriseLabel({ np: 20, expected_np: 20 }),
+    '+0.0 over projection · 20.0 vs 20.0 NP',
+  );
 });

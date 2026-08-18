@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Polygon, Stop, Text as SvgText } from 'react-native-svg';
 
@@ -44,11 +44,15 @@ export function PortfolioHistoryChart({
   height = DEFAULT_CHART_HEIGHT,
   totalValue,
   footnote,
+  beforePlot,
 }: {
   points: PortfolioPoint[];
   height?: number;
   totalValue?: number;
   footnote?: string;
+  /** Rendered between the hero number and the plot — the "what happened last
+      night" strip lives here so the daily update is read before the chart. */
+  beforePlot?: ReactNode;
 }) {
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   const [range, setRange] = useState<PortfolioRange>('1M');
@@ -102,14 +106,21 @@ export function PortfolioHistoryChart({
     const span = high - low;
     const yFor = (value: number) =>
       span === 0 ? height / 2 : 12 + ((high - value) / span) * (height - 24);
+    // A compact plot drops the midline: two figures orient a short chart,
+    // three crowd it.
     const gridLines: { value: number; y: number }[] =
       span === 0
         ? [{ value: high, y: height / 2 }]
-        : [
-            { value: high, y: 12 },
-            { value: (high + low) / 2, y: height / 2 },
-            { value: low, y: height - 12 },
-          ];
+        : height < 140
+          ? [
+              { value: high, y: 12 },
+              { value: low, y: height - 12 },
+            ]
+          : [
+              { value: high, y: 12 },
+              { value: (high + low) / 2, y: height / 2 },
+              { value: low, y: height - 12 },
+            ];
     // The range's baseline earns a rule only when it crosses the plot; when
     // every settled value sits above it, the low rule already tells that story.
     const baselineY = low < baseline && baseline < high ? yFor(baseline) : null;
@@ -188,6 +199,7 @@ export function PortfolioHistoryChart({
           </Text>
         </View>
       </View>
+      {beforePlot}
       <View
         nativeID="scrub-plot-portfolio"
         onLayout={onLayout}

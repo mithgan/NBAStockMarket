@@ -1,16 +1,24 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
-import { HoldingCard } from '../components/HoldingCard';
+import { HoldingRow } from '../components/HoldingCard';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PortfolioHistoryChart } from '../components/PortfolioHistoryChart';
 import { SettlementSummary, nightContributions } from '../components/SettlementSummary';
-import { selectTrendRange } from '../data/trendPresentation';
+import { summarizeDividends } from '../data/dividendMetrics';
+import {
+  selectSettledTrendPoints,
+  selectTrendRange,
+  surpriseLabel,
+  type TrendPoint,
+} from '../data/trendPresentation';
+import type { Player } from '../data/types';
 import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
 import { STARTING_CASH, type ActivityEvent } from '../state/game';
 import { useDesignVariant } from '../theme/ThemeProvider';
-import { colors, fonts, headingStyle, numeric, radius, space, type, weight } from '../theme';
+import { colors, fonts, headingStyle, labelStyle, numeric, radius, space, type, weight } from '../theme';
+import { rowMarker } from '../ui/domMarkers';
 import { PlayerDetail } from './MarketScreen';
 
 /**
@@ -40,6 +48,137 @@ function groupActivity(entries: ActivityEvent[]): ActivityNight[] {
   return nights;
 }
 
+/**
+ * One settlement night: date head with the night's net, then a row per entry —
+ * surprise-led box line and a payout meter scaled against `meterScale`
+ * (the largest absolute payout in whatever batch the caller is showing).
+ */
+function ActivityNightGroup({ night, playerById, playerTrends, meterScale }: {
+  night: ActivityNight;
+  playerById: Map<string, Player>;
+  playerTrends: Record<string, TrendPoint[]>;
+  meterScale: number;
+}) {
+  return (
+    <View>
+      <View style={styles.nightHead}>
+        <Text style={styles.nightDate}>{night.label}</Text>
+        {night.items.length > 1 ? (
+          <Text
+            accessibilityLabel={`${night.label} settled ${formatSignedMoney(night.net)} across ${night.items.length} entries`}
+            style={[styles.nightNet, night.net >= 0 ? styles.positive : styles.negative]}
+          >
+            {formatCompactSignedMoney(night.net)}
+          </Text>
+        ) : null}
+      </View>
+      {night.items.map((entry) => {
+        const up = entry.cashDelta >= 0;
+        const point = entry.date
+          ? (playerTrends[entry.playerId] ?? []).find((trendPoint) => trendPoint.date === entry.date)
+          : undefined;
+        const meter =
+          entry.date === null || meterScale === 0 ? 0 : Math.abs(entry.cashDelta) / meterScale;
+        const player = playerById.get(entry.playerId);
+        return (
+          <View key={entry.id} style={styles.activityRow}>
+            {player ? (
+              <PlayerAvatar player={player} size={30} />
+            ) : (
+              <View style={[styles.activityTick, up ? styles.tickUp : styles.tickDown]} />
+            )}
+            <View style={styles.rowCopy}>
+              <Text numberOfLines={1} style={styles.activityName}>
+                {entry.message.replace(/ daily dividend$/, '')}
+              </Text>
+              {point ? (
+                <Text numberOfLines={1} style={styles.activityWhy}>
+                  {surpriseLabel(point)}
+                </Text>
+              ) : null}
+              {meter > 0 ? (
+                <View style={styles.meterTrack}>
+                  <View
+                    style={[
+                      styles.meterFill,
+                      up ? styles.meterUp : styles.meterDown,
+                      { width: `${Math.max(3, Math.round(100 * meter))}%` },
+                    ]}
+                  />
+                </View>
+              ) : null}
+            </View>
+            <Text
+              accessibilityLabel={formatSignedMoney(entry.cashDelta)}
+              maxFontSizeMultiplier={1.6}
+              numberOfLines={1}
+              style={[styles.activityValue, up ? styles.positive : styles.negative]}
+            >
+              {formatCompactSignedMoney(entry.cashDelta)}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Most recent entries the night log will render; keeps a full simulated
+    season from producing an unmanageably long scroll. */
+const NIGHT_LOG_ENTRY_LIMIT = 365;
+
+/**
+ * The dedicated game-log surface: every settled night, newest first, so the
+ * boxscore-to-money correlation is readable as one continuous ledger. Reached
+ * from SEE ALL NIGHTS on the portfolio; same drill-in pattern as a player.
+ */
+function NightLogView({ activity, playerById, playerTrends, onClose }: {
+  activity: ActivityEvent[];
+  playerById: Map<string, Player>;
+  playerTrends: Record<string, TrendPoint[]>;
+  onClose: () => void;
+}) {
+  const settled = activity.filter((entry) => entry.date !== null);
+  const truncated = settled.length > NIGHT_LOG_ENTRY_LIMIT;
+  const nights = groupActivity(settled.slice(0, NIGHT_LOG_ENTRY_LIMIT));
+  return (
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+      <Pressable
+        accessibilityLabel="Close the night log"
+        accessibilityRole="button"
+        onPress={onClose}
+        style={({ pressed }) => [styles.backButton, pressed && styles.backPressed]}
+      >
+        <Text style={styles.backText}>‹  Portfolio</Text>
+      </Pressable>
+      <Text accessibilityRole="header" style={styles.sectionHeading}>Season nights</Text>
+      <Text style={styles.logIntro}>
+        Every settled night, newest first. Beat the projection and the player pays you; miss it and he costs you.
+      </Text>
+      {nights.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.subtle}>Settle a night to start the ledger.</Text>
+        </View>
+      ) : (
+        <View style={styles.list}>
+          {nights.map((night) => (
+            <ActivityNightGroup
+              key={night.key}
+              meterScale={night.items.reduce((largest, entry) => Math.max(largest, Math.abs(entry.cashDelta)), 0)}
+              night={night}
+              playerById={playerById}
+              playerTrends={playerTrends}
+            />
+          ))}
+          {truncated ? (
+            <Text style={styles.logIntro}>Showing the most recent {NIGHT_LOG_ENTRY_LIMIT} entries.</Text>
+          ) : null}
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
 export function PortfolioScreen() {
   const { variant } = useDesignVariant();
   const {
@@ -50,17 +189,11 @@ export function PortfolioScreen() {
     summary,
   } = usePortfolio();
   const [detailPlayerId, setDetailPlayerId] = useState<string | null>(null);
+  const [nightLogOpen, setNightLogOpen] = useState(false);
   const { fontScale, width } = useWindowDimensions();
-  const bigType = fontScale > 1.3;
-  const showCardTrends = width >= 420 && !bigType;
-  // The card grid owns its own column math: available width inside the roster
-  // panel, then 5/4/3/2 columns by breakpoint — or as many 220px columns as
-  // fit when the reader has scaled their type up.
-  const gridWidth = Math.min(width, 1040) - 2 * space.lg - 2 * space.md;
-  const columns = bigType
-    ? Math.max(2, Math.floor(gridWidth / 220))
-    : gridWidth >= 880 ? 5 : gridWidth >= 660 ? 4 : gridWidth >= 460 ? 3 : 2;
-  const cardWidth = Math.floor((gridWidth - space.sm * (columns - 1)) / columns);
+  // The sparkline is the first thing to go when horizontal space gets scarce:
+  // a squeezed trace misleads more than no trace.
+  const showRowTrends = width >= 420 && fontScale <= 1.3;
 
   if (!state || !summary) return null;
 
@@ -88,24 +221,40 @@ export function PortfolioScreen() {
     );
   }
 
+  if (nightLogOpen) {
+    return (
+      <NightLogView
+        activity={[...state.activity].reverse()}
+        onClose={() => setNightLogOpen(false)}
+        playerById={playerById}
+        playerTrends={playerTrends}
+      />
+    );
+  }
+
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <PortfolioHistoryChart
+        // The last-night strip outranks the chart: you open the app to learn
+        // what the night did to your money, so it renders before the plot —
+        // and the plot itself compresses on a phone to keep it above the fold.
+        beforePlot={
+          latestSettledDate ? (
+            <SettlementSummary
+              contributions={nightContributions(state.holdings, playerById, playerTrends, latestSettledDate)}
+              settledDate={latestSettledDate}
+            />
+          ) : null
+        }
         footnote={
           latestPoint
             ? `Settled ${latestPoint.date}. Includes cash payouts and player-price movement.`
             : 'No server settlement has reached this account yet.'
         }
-        height={variant.chartHeight}
+        height={width < 900 ? Math.min(variant.chartHeight, 112) : variant.chartHeight}
         points={state.portfolioHistory}
         totalValue={summary.totalValue}
       />
-      {latestSettledDate ? (
-        <SettlementSummary
-          contributions={nightContributions(state.holdings, playerById, playerTrends, latestSettledDate)}
-          settledDate={latestSettledDate}
-        />
-      ) : null}
       <View style={styles.cashStrip}>
         <View style={styles.cashCell}>
           <Text style={styles.cashLabel}>Free cash</Text>
@@ -180,12 +329,15 @@ export function PortfolioScreen() {
             </Text>
           </View>
         ) : (
-          <View style={styles.cardGrid}>
+          <View>
             {summary.holdings.map((holding) => {
               const player = playerById.get(holding.player_id);
-              return player ? (
-                <HoldingCard
+              if (!player) return null;
+              const settled = selectSettledTrendPoints(playerTrends[player.id] ?? [], latestSettledDate);
+              return (
+                <HoldingRow
                   key={holding.player_id}
+                  dividends={summarizeDividends(settled)}
                   holding={{
                     player,
                     currentPrice: holding.currentPrice,
@@ -193,10 +345,9 @@ export function PortfolioScreen() {
                     unrealizedPnl: holding.unrealizedPnl,
                   }}
                   onPress={() => setDetailPlayerId(player.id)}
-                  trend={showCardTrends ? selectTrendRange(playerTrends[player.id] ?? [], 'L15') : undefined}
-                  width={cardWidth}
+                  trend={showRowTrends ? selectTrendRange(settled, 'L15') : undefined}
                 />
-              ) : null;
+              );
             })}
           </View>
         )}
@@ -208,72 +359,26 @@ export function PortfolioScreen() {
         </View>
       ) : (
         <View style={styles.list}>
+          {/* Meter scale is per-batch: the biggest settled payout in view is
+              the full bar and everything else reads against it. */}
           {groupActivity(recentActivity).map((night) => (
-            <View key={night.key}>
-              <View style={styles.nightHead}>
-                <Text style={styles.nightDate}>{night.label}</Text>
-                {night.items.length > 1 ? (
-                  <Text
-                    accessibilityLabel={`${night.label} settled ${formatSignedMoney(night.net)} across ${night.items.length} entries`}
-                    style={[styles.nightNet, night.net >= 0 ? styles.positive : styles.negative]}
-                  >
-                    {formatCompactSignedMoney(night.net)}
-                  </Text>
-                ) : null}
-              </View>
-              {night.items.map((entry) => {
-                const up = entry.cashDelta >= 0;
-                const point = entry.date
-                  ? (playerTrends[entry.playerId] ?? []).find((trendPoint) => trendPoint.date === entry.date)
-                  : undefined;
-                // Meter scale is per-batch: the biggest settled payout in view
-                // is the full bar and everything else reads against it.
-                const meter =
-                  entry.date === null || largestSettledDelta === 0
-                    ? 0
-                    : Math.abs(entry.cashDelta) / largestSettledDelta;
-                const player = playerById.get(entry.playerId);
-                return (
-                  <View key={entry.id} style={styles.activityRow}>
-                    {player ? (
-                      <PlayerAvatar player={player} size={30} />
-                    ) : (
-                      <View style={[styles.activityTick, up ? styles.tickUp : styles.tickDown]} />
-                    )}
-                    <View style={styles.rowCopy}>
-                      <Text numberOfLines={1} style={styles.activityName}>
-                        {entry.message.replace(/ daily dividend$/, '')}
-                      </Text>
-                      {point ? (
-                        <Text numberOfLines={1} style={styles.activityWhy}>
-                          {`${point.np.toFixed(1)} NP vs ${point.expected_np.toFixed(1)} projected`}
-                        </Text>
-                      ) : null}
-                      {meter > 0 ? (
-                        <View style={styles.meterTrack}>
-                          <View
-                            style={[
-                              styles.meterFill,
-                              up ? styles.meterUp : styles.meterDown,
-                              { width: `${Math.max(3, Math.round(100 * meter))}%` },
-                            ]}
-                          />
-                        </View>
-                      ) : null}
-                    </View>
-                    <Text
-                      accessibilityLabel={formatSignedMoney(entry.cashDelta)}
-                      maxFontSizeMultiplier={1.6}
-                      numberOfLines={1}
-                      style={[styles.activityValue, up ? styles.positive : styles.negative]}
-                    >
-                      {formatCompactSignedMoney(entry.cashDelta)}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
+            <ActivityNightGroup
+              key={night.key}
+              meterScale={largestSettledDelta}
+              night={night}
+              playerById={playerById}
+              playerTrends={playerTrends}
+            />
           ))}
+          <Pressable
+            accessibilityLabel="Open the full season night log"
+            accessibilityRole="button"
+            onPress={() => setNightLogOpen(true)}
+            style={({ pressed }) => [styles.seeAll, pressed && styles.backPressed]}
+            {...rowMarker}
+          >
+            <Text style={styles.seeAllText}>SEE ALL NIGHTS  ›</Text>
+          </Pressable>
         </View>
       )}
     </ScrollView>
@@ -354,13 +459,6 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
   },
   list: {},
-  cardGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: space.sm,
-    padding: space.md,
-    paddingTop: space.sm,
-  },
   rosterPanel: {
     marginHorizontal: space.lg,
     marginTop: space.lg,
@@ -370,6 +468,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     overflow: 'hidden',
   },
+  // No bottom border: each holding row (and the empty state) brings its own
+  // top rule, so the head would otherwise double it.
   rosterHead: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -378,8 +478,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     paddingTop: space.md,
     paddingBottom: space.xs,
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
   },
   rosterTitle: {
     ...headingStyle,
@@ -545,5 +643,40 @@ const styles = StyleSheet.create({
   },
   negative: {
     color: colors.red,
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: space.md,
+    marginTop: space.sm,
+  },
+  backPressed: {
+    opacity: 0.65,
+  },
+  backText: {
+    ...labelStyle,
+    color: colors.goldInk,
+    fontSize: type.body,
+    letterSpacing: 0.6,
+  },
+  logIntro: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.body,
+    lineHeight: 19,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.sm,
+  },
+  seeAll: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  seeAllText: {
+    ...labelStyle,
+    color: colors.goldInk,
   },
 });
