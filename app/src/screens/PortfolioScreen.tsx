@@ -5,7 +5,7 @@ import { HoldingRow } from '../components/HoldingCard';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PortfolioHistoryChart } from '../components/PortfolioHistoryChart';
 import { SettlementSummary, nightContributions } from '../components/SettlementSummary';
-import { summarizeDividends } from '../data/dividendMetrics';
+import { marketAverageRate, summarizeDividends } from '../data/dividendMetrics';
 import {
   selectSettledTrendPoints,
   selectTrendRange,
@@ -205,12 +205,23 @@ export function PortfolioScreen() {
     (largest, entry) => (entry.date === null ? largest : Math.max(largest, Math.abs(entry.cashDelta))),
     0,
   );
+  // What each player has actually paid THIS account: dated ledger entries
+  // only (settlement payouts), so a mid-season buy never claims payouts from
+  // nights the account was not holding him.
+  const receivedByPlayer = new Map<string, number>();
+  for (const entry of state.activity) {
+    if (entry.date === null) continue;
+    receivedByPlayer.set(entry.playerId, (receivedByPlayer.get(entry.playerId) ?? 0) + entry.cashDelta);
+  }
   const rosterPnl = summary.holdings.reduce((total, holding) => total + holding.unrealizedPnl, 0);
   const allTimePercent = ((summary.totalValue - STARTING_CASH) / STARTING_CASH) * 100;
 
   if (detailPlayer) {
     return (
       <PlayerDetail
+        averageRate={marketAverageRate(
+          players.map((entry) => selectSettledTrendPoints(playerTrends[entry.id] ?? [], latestSettledDate)),
+        )}
         backLabel="Portfolio"
         currentPrice={state.prices[detailPlayer.id] ?? detailPlayer.listing_price}
         latestSettledDate={latestSettledDate}
@@ -345,6 +356,7 @@ export function PortfolioScreen() {
                     unrealizedPnl: holding.unrealizedPnl,
                   }}
                   onPress={() => setDetailPlayerId(player.id)}
+                  received={receivedByPlayer.get(holding.player_id) ?? 0}
                   trend={showRowTrends ? selectTrendRange(settled, 'L15') : undefined}
                 />
               );
@@ -570,10 +582,11 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },
+  // The payout is the reason the row exists; it outranks the name.
   activityValue: {
     ...numeric,
-    fontSize: type.value,
-    fontWeight: weight.heavy,
+    fontSize: type.title,
+    fontWeight: weight.black,
     flexShrink: 0,
   },
   nightHead: {

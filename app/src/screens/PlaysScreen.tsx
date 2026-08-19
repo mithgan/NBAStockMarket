@@ -152,6 +152,7 @@ export function PlaysScreen() {
             return (
               <PositionCard
                 clampValue={WEEKLY_TOTAL_CLAMP_NP * DOLLARS_PER_NET_POINT}
+                figureLabel="MARKED"
                 key={position.id}
                 kind="SHORT"
                 markedLabel={`Marked at ${formatSignedMoney(markedPayout)}`}
@@ -166,6 +167,7 @@ export function PlaysScreen() {
             <PositionCard
               // A boost has no clamp; the meter just fills fully when settled.
               clampValue={Math.max(Math.abs(boost.payout), 1)}
+              figureLabel={boost.status === 'armed' ? 'ARMED' : 'PAID'}
               key={boost.id}
               kind="BOOST"
               markedLabel={boost.status === 'armed'
@@ -176,6 +178,7 @@ export function PlaysScreen() {
                 ? `Armed for ${boost.gameDate}`
                 : `${boost.status} · ${boost.gameDate}`}
               player={playerById.get(boost.playerId)}
+              settled={boost.status !== 'armed'}
               width={cardWidth}
             />
           ))}

@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { PlayerAvatar } from '../components/PlayerAvatar';
+import { summarizeDividends } from '../data/dividendMetrics';
 import { useChartSurface } from '../hooks/useChartSurface';
 import { smoothLinePath, windowSurprise } from '../data/marketPresentation';
 import { cumulativeValues, selectTrendRange, type TrendPoint, type TrendRange } from '../data/trendPresentation';
@@ -37,6 +38,8 @@ interface WatchedSeries {
   /** Running dividend total, with a leading 0 so every line shares an origin. */
   cumulative: number[];
   total: number;
+  /** Payout per game over the window — the money rate that leads the row. */
+  rate: number | null;
   perGame: number | null;
   color: string;
 }
@@ -64,6 +67,7 @@ export function WatchlistScreen() {
         points,
         cumulative,
         total: cumulative.at(-1) ?? 0,
+        rate: summarizeDividends(points).perGame,
         perGame: windowSurprise(points, null),
         color: SERIES_COLORS[index % SERIES_COLORS.length],
       },
@@ -120,9 +124,10 @@ export function WatchlistScreen() {
               <View style={styles.rowCopy}>
                 <Text numberOfLines={1} style={styles.rowName}>{entry.player.name}</Text>
                 <Text numberOfLines={1} style={styles.rowMeta}>
-                  {entry.points.length === 0
+                  {/* Money rate first; the box-score explanation after it. */}
+                  {entry.points.length === 0 || entry.rate === null
                     ? 'No settled games in this window'
-                    : `${entry.points.length} games · ${entry.perGame === null ? '0.0' : entry.perGame >= 0 ? `+${entry.perGame.toFixed(1)}` : entry.perGame.toFixed(1)} NP per game vs projection`}
+                    : `${formatCompactSignedMoney(entry.rate)}/nt · ${entry.points.length} gm · ${entry.perGame === null ? '+0.0' : entry.perGame >= 0 ? `+${entry.perGame.toFixed(1)}` : entry.perGame.toFixed(1)} NP`}
                 </Text>
               </View>
               <View style={styles.rowNumbers}>
@@ -304,7 +309,7 @@ const styles = StyleSheet.create({
   },
   rowMeta: { ...numeric, color: colors.faint, fontSize: type.body, fontWeight: weight.medium, marginTop: 2 },
   rowNumbers: { alignItems: 'flex-end', flexShrink: 0 },
-  rowValue: { ...numeric, fontSize: type.value, fontWeight: weight.heavy },
+  rowValue: { ...numeric, fontSize: type.title, fontWeight: weight.black },
   rowNote: { color: colors.faint, fontFamily: fonts.body, fontSize: type.label, marginTop: 1 },
   remove: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.sm, flexShrink: 0 },
   removeText: {

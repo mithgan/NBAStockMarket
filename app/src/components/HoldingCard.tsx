@@ -13,8 +13,9 @@ import { Sparkline } from './Sparkline';
  * One owned player as a ledger row. The money story is split into its two
  * honest halves, each named, because they move for different reasons:
  *
- * - PAID — the dividend stream (with the per-night rate as its caption);
- *   this is what performance controls.
+ * - PAID — what this player has actually paid YOU, summed from your own
+ *   ledger, so a mid-season buy never claims payouts you were not holding
+ *   for. His per-night rate rides as the caption.
  * - VALUE — share price against cost including fee; this only moves when
  *   trading does, so in the demo it mostly reads as the quiet fee line.
  *
@@ -22,7 +23,7 @@ import { Sparkline } from './Sparkline';
  * player printed money into cash — the single most confusing pixel in the
  * play-test feedback.
  */
-export function HoldingRow({ holding, dividends, onPress, trend }: {
+export function HoldingRow({ holding, dividends, received, onPress, trend }: {
   holding: {
     player: Player;
     currentPrice: number;
@@ -31,19 +32,20 @@ export function HoldingRow({ holding, dividends, onPress, trend }: {
   };
   /** Season dividend summary for this player — rate, games, total. */
   dividends: DividendSummary;
+  /** What he has paid THIS account, from the activity ledger. */
+  received: number;
   onPress: () => void;
   /** Recent settled games; the sparkline only draws with two or more. */
   trend?: TrendPoint[];
 }) {
   const { player, currentPrice, costBasis, unrealizedPnl } = holding;
-  const paid = dividends.total;
-  const paidColor = paid >= 0 ? colors.green : colors.red;
+  const paidColor = received >= 0 ? colors.green : colors.red;
   const rateCaption = dividends.perGame === null
     ? 'No settled games yet'
-    : `${formatCompactSignedMoney(dividends.perGame)}/night · ${dividends.gamesPlayed} ${dividends.gamesPlayed === 1 ? 'game' : 'games'}`;
+    : `${formatCompactSignedMoney(dividends.perGame)}/nt · ${dividends.gamesPlayed} gm`;
   return (
     <Pressable
-      accessibilityLabel={`View ${player.name} details. Paid you ${formatSignedMoney(paid)} across ${dividends.gamesPlayed} settled games. Value ${formatMoney(currentPrice)} against ${formatMoney(costBasis)} paid including fee.`}
+      accessibilityLabel={`View ${player.name} details. Has paid you ${formatSignedMoney(received)}. Pays ${dividends.perGame === null ? 'nothing yet' : `${formatSignedMoney(dividends.perGame)} per night across ${dividends.gamesPlayed} settled games`}. Value ${formatMoney(currentPrice)} against ${formatMoney(costBasis)} paid including fee.`}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
@@ -61,13 +63,13 @@ export function HoldingRow({ holding, dividends, onPress, trend }: {
       {trend && trend.length > 1 ? <Sparkline points={trend} /> : null}
       <View style={styles.numbers}>
         <View style={styles.figureLine}>
-          <Text style={styles.figureLabel}>PAID</Text>
+          <Text style={styles.figureLabel}>PAID YOU</Text>
           <Text
             maxFontSizeMultiplier={1.4}
             numberOfLines={1}
             style={[styles.paid, { color: paidColor }]}
           >
-            {formatCompactSignedMoney(paid)}
+            {formatCompactSignedMoney(received)}
           </Text>
         </View>
         <View style={styles.figureLine}>
@@ -120,10 +122,12 @@ const styles = StyleSheet.create({
     fontWeight: weight.black,
     letterSpacing: 0.8,
   },
+  // The stream is the row's loudest figure — louder than the name, because
+  // the row exists to answer "what has he paid me".
   paid: {
     ...numeric,
-    fontSize: type.value,
-    fontWeight: weight.heavy,
+    fontSize: 18,
+    fontWeight: weight.black,
   },
   value: {
     ...numeric,

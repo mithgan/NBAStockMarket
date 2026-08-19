@@ -193,16 +193,23 @@ test('market charts only receive results through the latest settled replay date'
   assert.match(marketSource, /No settled games yet/);
 });
 
-test('player details resolve current server data and price changes name their timeframe', () => {
+test('player details resolve current server data and lead with the stream, not the price', () => {
   assert.match(marketSource, /const \[selectedPlayerId, setSelectedPlayerId\]/);
   assert.match(marketSource, /players\.find\(\(player\) => player\.id === selectedPlayerId\)/);
   assert.match(portfolioSource, /const \[detailPlayerId, setDetailPlayerId\]/);
   assert.match(portfolioSource, /playerById\.get\(detailPlayerId\)/);
-  assert.match(marketSource, /formatSignedPercent\(change\)\} since listing/);
-  assert.match(marketSource, /styles\.detailPrice\}\s*>\s*\{formatCompactMoney\(currentPrice\)\}/);
-  assert.match(marketSource, /Recent form vs expected/);
+  // Money-first: the quote's headline is what he has PAID; the price rides
+  // underneath as the cost of the stream, never as the lead figure.
+  assert.match(marketSource, /styles\.detailPaid, season\.total >= 0/);
+  assert.match(marketSource, /PAID · SEASON/);
+  assert.match(marketSource, /price \$\{formatCompactMoney\(currentPrice\)\}/);
+  // The dead since-listing percentage (always 0.0% while prices cannot move)
+  // must not return to the profile meta.
+  assert.doesNotMatch(marketSource, /since listing/);
+  assert.match(marketSource, /label="Pays per night"/);
+  assert.match(marketSource, /label="Vs avg payer"/);
   assert.match(marketSource, /const rowAccessibilityLabel = \[/);
-  assert.match(marketSource, /`Current price \$\{formatMoney\(currentPrice\)\}`/);
+  assert.match(marketSource, /`Price \$\{formatMoney\(currentPrice\)\}`/);
   assert.match(marketSource, /accessibilityLabel=\{rowAccessibilityLabel\}/);
 });
 
@@ -240,8 +247,10 @@ test('every compacted money Stat on the player detail carries its exact value', 
     );
   }
   assert.match(marketSource, /exact \? `\$\{label\}, \$\{exact\}` : undefined/);
-  // The selected-range dividend headline is compacted too.
-  assert.match(marketSource, /accessibilityLabel=\{`\$\{formatSignedMoney\(rangeTotal\)\}/);
+  // The stream headline and its rate line are compacted too, so both carry
+  // the exact figure for assistive tech.
+  assert.match(marketSource, /accessibilityLabel=\{`Paid holders \$\{formatSignedMoney\(season\.total\)\}/);
+  assert.match(marketSource, /\$\{formatSignedMoney\(season\.perGame \?\? 0\)\} per night/);
 });
 
 test('the reduced-motion listener survives browsers with only the legacy API', () => {

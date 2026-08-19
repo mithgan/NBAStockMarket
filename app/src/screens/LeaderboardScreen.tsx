@@ -79,7 +79,9 @@ export function LeaderboardScreen() {
               <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.rankColumn]}>#</Text>
               <Text style={[styles.columnHeaderText, styles.nameColumn]}>PORTFOLIO</Text>
               <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.valueColumn]}>VALUE</Text>
-              <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.returnColumn]}>RETURN</Text>
+              {/* The baseline is named: every return reads against the $140M
+                  opening bankroll, not against an unstated zero. */}
+              <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.returnColumn]}>VS $140M</Text>
             </View>
             {leaderboard.map((entry, index) => (
               <View

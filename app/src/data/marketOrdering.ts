@@ -1,15 +1,23 @@
 import type { Player } from './types';
+import { dividendYield, summarizeDividends } from './dividendMetrics';
 import type { TrendPoint } from './trendPresentation';
-import { priceChangePercent, recentForm, windowSurprise } from './marketPresentation';
+import { priceChangePercent, recentForm } from './marketPresentation';
 
-export type MarketSort = 'value' | 'move' | 'form' | 'trending' | 'name';
+/**
+ * Money-first ordering (after "From Impact to Winning"): the market ranks by
+ * what players PAY, not by prices that never move in this world. 'pays' is
+ * the rate over the screen's window picker; 'yield' is the season's payout
+ * per dollar of price — the value-hunting sort. 'move' died with the flat
+ * prices it measured: a number that is always 0.0% cannot rank anything.
+ */
+export type MarketSort = 'pays' | 'yield' | 'value' | 'form' | 'name';
 export type MarketFilter = 'all' | 'held' | 'affordable';
 
 export const MARKET_SORTS: { key: MarketSort; label: string; hint: string }[] = [
+  { key: 'pays', label: 'Pays', hint: 'Sort by payout per game over the window' },
+  { key: 'yield', label: 'Yield', hint: 'Sort by season payout per dollar of price' },
   { key: 'value', label: 'Price', hint: 'Sort by highest price' },
-  { key: 'move', label: 'Move', hint: 'Sort by biggest price move since listing' },
   { key: 'form', label: 'Form', hint: 'Sort by best recent form versus expected' },
-  { key: 'trending', label: 'Trending', hint: 'Sort by highest average net points over projection' },
   { key: 'name', label: 'A-Z', hint: 'Sort players alphabetically' },
 ];
 
@@ -24,8 +32,14 @@ export interface MarketRowModel {
   currentPrice: number;
   changePercent: number | null;
   formSurprise: number | null;
-  /** Average surprise across the selected trending window; null with no games. */
-  windowSurprise: number | null;
+  /** Payout per game over the selected window — the rate; null with no games. */
+  windowRate: number | null;
+  /** Games he actually played in the window — the exposure. */
+  windowGames: number;
+  /** What the window banked in total. */
+  windowTotal: number;
+  /** Season payout per dollar of current price — the vs-price baseline. */
+  seasonYield: number | null;
   held: boolean;
   affordable: boolean;
 }
@@ -91,12 +105,21 @@ export function buildMarketRows({
     if (filter === 'affordable' && !affordable) return accumulator;
 
     const form = recentForm(trends[player.id] ?? []);
+    const settled = trends[player.id] ?? [];
+    const windowPoints = trendingGames === null || trendingGames === undefined
+      ? settled
+      : settled.slice(-trendingGames);
+    const window = summarizeDividends(windowPoints);
+    const season = summarizeDividends(settled);
     accumulator.push({
       player,
       currentPrice,
       changePercent: priceChangePercent(currentPrice, player.listing_price),
       formSurprise: form ? form.averageSurprise : null,
-      windowSurprise: windowSurprise(trends[player.id] ?? [], trendingGames ?? null),
+      windowRate: window.perGame,
+      windowGames: window.gamesPlayed,
+      windowTotal: window.total,
+      seasonYield: season.gamesPlayed === 0 ? null : dividendYield(season.total, currentPrice),
       held,
       affordable,
     });
@@ -121,14 +144,14 @@ export function buildMarketRows({
   switch (sort) {
     case 'name':
       return rows.sort(byName);
-    case 'move':
-      return rows.sort(descendingBy((row) => row.changePercent));
+    case 'yield':
+      return rows.sort(descendingBy((row) => row.seasonYield));
     case 'form':
       return rows.sort(descendingBy((row) => row.formSurprise));
-    case 'trending':
-      return rows.sort(descendingBy((row) => row.windowSurprise));
     case 'value':
-    default:
       return rows.sort(descendingBy((row) => row.currentPrice));
+    case 'pays':
+    default:
+      return rows.sort(descendingBy((row) => row.windowRate));
   }
 }

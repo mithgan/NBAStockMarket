@@ -151,7 +151,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   headNumbers: { alignItems: 'flex-end', flexShrink: 0 },
-  net: { ...numeric, fontSize: type.value, fontWeight: weight.heavy },
+  // The night's money is the strip's headline — the one figure the user
+  // opened the app to learn.
+  net: { ...numeric, fontSize: 20, fontWeight: weight.black },
   toggle: {
     color: colors.goldInk,
     fontFamily: fonts.display,
@@ -181,7 +183,7 @@ const styles = StyleSheet.create({
     fontWeight: weight.medium,
     marginTop: 1,
   },
-  rowValue: { ...numeric, fontSize: type.value, fontWeight: weight.heavy, flexShrink: 0 },
+  rowValue: { ...numeric, fontSize: type.title, fontWeight: weight.black, flexShrink: 0 },
   positive: { color: colors.green },
   negative: { color: colors.red },
 });

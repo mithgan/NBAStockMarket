@@ -19,6 +19,8 @@ export function PositionCard({
   meta,
   markedValue,
   markedLabel,
+  figureLabel,
+  settled = true,
   clampValue,
   width,
 }: {
@@ -28,12 +30,16 @@ export function PositionCard({
   meta: string;
   markedValue: number;
   markedLabel: string;
+  /** Visible name for the money: MARKED while live, PAID once settled. */
+  figureLabel: string;
+  /** An armed play has no figure yet; a dash beats a misleading +$0. */
+  settled?: boolean;
   clampValue: number;
   width: number;
 }) {
   const up = markedValue >= 0;
   const color = up ? colors.green : colors.red;
-  const fill = clampValue <= 0 ? 0 : Math.min(50, (Math.abs(markedValue) / clampValue) * 50);
+  const fill = !settled || clampValue <= 0 ? 0 : Math.min(50, (Math.abs(markedValue) / clampValue) * 50);
 
   return (
     <View style={[styles.card, { width }]}>
@@ -46,12 +52,19 @@ export function PositionCard({
       <Text maxFontSizeMultiplier={1.3} numberOfLines={2} style={styles.name}>
         {player?.name ?? 'Unknown player'}
       </Text>
-      <SignedValue
-        accessibilityLabel={markedLabel}
-        color={color}
-        label={formatCompactSignedMoney(markedValue)}
-        style={styles.marked}
-      />
+      {/* The money is what the play is FOR, so it is the card's loudest
+          element — named, so a marked figure never reads as banked cash. */}
+      <Text style={styles.figureLabel}>{figureLabel}</Text>
+      {settled ? (
+        <SignedValue
+          accessibilityLabel={markedLabel}
+          color={color}
+          label={formatCompactSignedMoney(markedValue)}
+          style={styles.marked}
+        />
+      ) : (
+        <Text accessibilityLabel={markedLabel} style={styles.unsettled}>—</Text>
+      )}
       <View style={styles.clampTrack}>
         <View style={styles.clampMidpoint} />
         <View style={[styles.clampFill, up ? styles.clampUp : styles.clampDown, { width: `${fill}%` }]} />
@@ -108,7 +121,23 @@ const styles = StyleSheet.create({
     // Two-line reservation, so one long surname doesn't misalign a row of cards.
     minHeight: 34,
   },
-  marked: { marginTop: 2 },
+  figureLabel: {
+    color: colors.faint,
+    fontFamily: fonts.display,
+    fontSize: 10,
+    fontWeight: weight.black,
+    letterSpacing: 1.1,
+    marginTop: space.sm,
+  },
+  marked: { marginTop: 1, fontSize: 24, lineHeight: 28, fontWeight: weight.black },
+  unsettled: {
+    ...numeric,
+    color: colors.faint,
+    fontSize: 24,
+    lineHeight: 28,
+    fontWeight: weight.black,
+    marginTop: 1,
+  },
   clampTrack: {
     alignSelf: 'stretch',
     height: 4,
