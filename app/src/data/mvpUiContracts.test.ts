@@ -19,6 +19,7 @@ const seasonControlSource = source('../components/SeasonControl.tsx');
 const portfolioChartSource = source('../components/PortfolioHistoryChart.tsx');
 const serverStateSource = source('../state/serverState.ts');
 const authContextSource = source('../auth/AuthContext.tsx');
+const economySource = source('../state/economy.ts');
 
 test('the MVP exposes four stable primary workflows and an always-visible season control', () => {
   assert.match(appSource, /Portfolio/);
@@ -49,6 +50,25 @@ test('manual replay advancement is admin-gated and requires explicit confirmatio
   assert.match(seasonControlSource, /await advanceSeason\(\)/);
   assert.match(portfolioContextSource, /settleRemainingSeason/);
   assert.match(seasonControlSource, /Completed dates are saved/);
+});
+
+test('live screens use the deployed economy and preserve the separate short rate', () => {
+  assert.match(economySource, /STARTING_BANKROLL = 207_824_000/);
+  assert.match(economySource, /BASE_DIVIDEND_DOLLARS_PER_NET_POINT = 80_000/);
+  assert.match(economySource, /WEEKLY_SHORT_DOLLARS_PER_NET_POINT = 40_000/);
+  assert.match(portfolioSource, /STARTING_BANKROLL/);
+  assert.match(playsSource, /WEEKLY_SHORT_DOLLARS_PER_NET_POINT/);
+  assert.doesNotMatch(
+    playsSource,
+    /import \{[^}]*\bDOLLARS_PER_NET_POINT\b[^}]*\} from '\.\.\/state\/game'/s,
+  );
+});
+
+test('a temporarily unavailable next game is not mislabeled as season completion', () => {
+  assert.match(portfolioContextSource, /isSeasonComplete: presentation\?\.isComplete \?\? false/);
+  assert.match(seasonControlSource, /Waiting for schedule/);
+  assert.match(playsSource, /Waiting for the next game date/);
+  assert.match(serverStateSource, /Waiting for the next game date to become available/);
 });
 
 test('market discovery supports search and a clear empty result', () => {

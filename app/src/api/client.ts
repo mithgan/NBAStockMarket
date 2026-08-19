@@ -51,6 +51,8 @@ export class MarketApiError extends Error {
 
 interface ClientOptions {
   baseUrl: string;
+  apiPrefix?: string;
+  adminAuthMode?: 'bearer' | 'settlement-key';
   expectedUserId: string;
   getAccessToken: AccessTokenProvider;
   fetchImpl?: typeof fetch;
@@ -85,6 +87,7 @@ function publicProblem(value: unknown): { code: string; message: string } | null
 
 export class MarketApiClient {
   private readonly baseUrl: string;
+  private readonly apiPrefix: string;
   private readonly expectedUserId: string;
   private readonly getAccessToken: AccessTokenProvider;
   private readonly fetchImpl: typeof fetch;
@@ -92,9 +95,14 @@ export class MarketApiClient {
   private readonly retryTimeoutMs: number;
   private readonly idempotencyKeyFactory: () => string;
   private readonly settlementKey: string | null;
+  private readonly adminAuthMode: 'bearer' | 'settlement-key';
 
   constructor(options: ClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
+    const apiPrefix = options.apiPrefix ?? '/api/v1';
+    this.apiPrefix = apiPrefix === '' || apiPrefix === '/'
+      ? ''
+      : `/${apiPrefix.replace(/^\/+|\/+$/g, '')}`;
     this.expectedUserId = options.expectedUserId;
     this.getAccessToken = options.getAccessToken;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
@@ -102,6 +110,7 @@ export class MarketApiClient {
     this.retryTimeoutMs = Math.max(options.retryTimeoutMs ?? 75_000, this.timeoutMs);
     this.idempotencyKeyFactory = options.idempotencyKeyFactory ?? randomIdempotencyKey;
     this.settlementKey = options.settlementKey ?? null;
+    this.adminAuthMode = options.adminAuthMode ?? 'settlement-key';
   }
 
   get canAdvanceSeason(): boolean {
@@ -109,7 +118,7 @@ export class MarketApiClient {
   }
 
   async market(): Promise<MarketListing[]> {
-    return this.request('/api/v1/market', {
+    return this.request(this.apiPath('/market'), {
       parse: (value) => parseDataEnvelope(value, (data, path) => {
         if (!Array.isArray(data)) throw new ContractError(`${path} must be an array.`);
         return data.map((item, index) => parseMarketListing(item, `${path}[${index}]`));
@@ -118,25 +127,25 @@ export class MarketApiClient {
   }
 
   async portfolio(): Promise<ServerPortfolio> {
-    return this.request('/api/v1/portfolio', {
+    return this.request(this.apiPath('/portfolio'), {
       parse: (value) => parseDataEnvelope(value, parsePortfolio),
     });
   }
 
   async game(): Promise<ServerGameState> {
-    return this.request('/api/v1/game', {
+    return this.request(this.apiPath('/game'), {
       parse: (value) => parseDataEnvelope(value, parseGameState),
     });
   }
 
   async instruments(): Promise<InstrumentSummary> {
-    return this.request('/api/v1/instruments', {
+    return this.request(this.apiPath('/instruments'), {
       parse: (value) => parseDataEnvelope(value, parseInstrumentSummary),
     });
   }
 
   async activity(limit = 100) {
-    return this.request(`/api/v1/activity?limit=${limit}`, {
+    return this.request(this.apiPath(`/activity?limit=${limit}`), {
       parse: (value) => parseDataEnvelope(
         value,
         (data, path) => parseCursorPage(data, path ?? 'response.data', parseActivity),
@@ -145,7 +154,7 @@ export class MarketApiClient {
   }
 
   async portfolioHistory(limit = 100) {
-    return this.request(`/api/v1/portfolio/history?limit=${limit}`, {
+    return this.request(this.apiPath(`/portfolio/history?limit=${limit}`), {
       parse: (value) => parseDataEnvelope(
         value,
         (data, path) => parseCursorPage(data, path ?? 'response.data', parsePortfolioPoint),
@@ -154,7 +163,7 @@ export class MarketApiClient {
   }
 
   async settlements(limit = 30) {
-    return this.request(`/api/v1/settlements?limit=${limit}`, {
+    return this.request(this.apiPath(`/settlements?limit=${limit}`), {
       parse: (value) => parseDataEnvelope(value, (data, path) => {
         if (!Array.isArray(data)) throw new ContractError(`${path} must be an array.`);
         return data.map((item, index) => parseSettlement(item, `${path}[${index}]`));
@@ -163,7 +172,7 @@ export class MarketApiClient {
   }
 
   async leaderboard(limit = 100) {
-    return this.request(`/api/v1/leaderboard?limit=${limit}`, {
+    return this.request(this.apiPath(`/leaderboard?limit=${limit}`), {
       parse: (value) => parseDataEnvelope(value, (data, path) => {
         if (!Array.isArray(data)) throw new ContractError(`${path} must be an array.`);
         return data.map((item, index) => parseLeaderboardRow(item, `${path}[${index}]`));
@@ -175,7 +184,7 @@ export class MarketApiClient {
     const query = settledResultsAfter
       ? `?settled_results_after=${encodeURIComponent(settledResultsAfter)}`
       : '';
-    return this.request(`/api/v1/bootstrap${query}`, {
+    return this.request(this.apiPath(`/bootstrap${query}`), {
       parse: (value) => parseDataEnvelope(value, parseBootstrap),
     });
   }
@@ -186,7 +195,7 @@ export class MarketApiClient {
     expectedPlayerVersion: number,
   ): Promise<ServerTradeMutationResult> {
     return this.mutation(
-      '/api/v1/trades',
+      this.apiPath('/trades'),
       {
         player_id: playerId,
         side,
@@ -202,7 +211,7 @@ export class MarketApiClient {
     expectedPlayerVersion: number,
   ): Promise<ServerWeeklyShortMutationResult> {
     return this.mutation(
-      '/api/v1/instruments/weekly-shorts',
+      this.apiPath('/instruments/weekly-shorts'),
       {
         player_id: playerId,
         expected_game_date: expectedGameDate,
@@ -218,7 +227,7 @@ export class MarketApiClient {
     expectedPlayerVersion: number,
   ): Promise<ServerBoostMutationResult> {
     return this.mutation(
-      '/api/v1/instruments/boosts',
+      this.apiPath('/instruments/boosts'),
       {
         player_id: playerId,
         game_date: gameDate,
@@ -230,7 +239,7 @@ export class MarketApiClient {
 
   async resetAccount(expectedAccountVersion: number): Promise<ServerResetResult> {
     return this.mutation(
-      '/api/v1/account/reset',
+      this.apiPath('/account/reset'),
       { confirmation: 'RESET', expected_account_version: expectedAccountVersion },
       parseResetResult,
     );
@@ -246,7 +255,7 @@ export class MarketApiClient {
         null,
       );
     }
-    await this.request('/api/v1/admin/season/reset', {
+    await this.request(this.apiPath('/admin/season/reset'), {
       method: 'POST',
       body: { confirmation: 'RESET_SEASON' },
       idempotencyKey: this.idempotencyKeyFactory(),
@@ -256,18 +265,22 @@ export class MarketApiClient {
   }
 
   async advanceDay(expectedGameDate: string): Promise<ServerAdvanceResult> {
-    if (!this.settlementKey) {
+    if (this.adminAuthMode === 'settlement-key' && !this.settlementKey) {
       throw new MarketApiError(
         'Season advancement is not configured for this build.',
         'advance_unavailable',
         null,
       );
     }
-    return this.request('/api/v1/admin/settlements/next', {
+    return this.request(this.apiPath('/admin/settlements/next'), {
       method: 'POST',
+      // Flask's bearer-admin route accepts the expected date directly. The
+      // standalone key-authenticated API uses the same request body.
       body: { expected_game_date: expectedGameDate },
       idempotencyKey: this.idempotencyKeyFactory(),
-      headers: { 'X-Settlement-Key': this.settlementKey },
+      headers: this.adminAuthMode === 'settlement-key'
+        ? { 'X-Settlement-Key': this.settlementKey as string }
+        : undefined,
       parse: (value) => parseDataEnvelope(value, parseAdvanceResult),
     });
   }
@@ -284,6 +297,10 @@ export class MarketApiClient {
       idempotencyKey,
       parse: (value) => parseDataEnvelope(value, parser),
     });
+  }
+
+  private apiPath(path: string): string {
+    return `${this.apiPrefix}${path}`;
   }
 
   private async request<T>(path: string, options: RequestOptions<T>): Promise<T> {

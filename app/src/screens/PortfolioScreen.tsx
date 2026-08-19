@@ -15,7 +15,8 @@ import {
 import type { Player } from '../data/types';
 import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
-import { STARTING_CASH, type ActivityEvent } from '../state/game';
+import { STARTING_BANKROLL } from '../state/economy';
+import type { ActivityEvent } from '../state/game';
 import { useDesignVariant } from '../theme/ThemeProvider';
 import { colors, fonts, headingStyle, labelStyle, numeric, radius, space, type, weight } from '../theme';
 import { rowMarker } from '../ui/domMarkers';
@@ -206,7 +207,7 @@ export function PortfolioScreen() {
     0,
   );
   const rosterPnl = summary.holdings.reduce((total, holding) => total + holding.unrealizedPnl, 0);
-  const allTimePercent = ((summary.totalValue - STARTING_CASH) / STARTING_CASH) * 100;
+  const allTimePercent = ((summary.totalValue - STARTING_BANKROLL) / STARTING_BANKROLL) * 100;
 
   if (detailPlayer) {
     return (
@@ -281,7 +282,7 @@ export function PortfolioScreen() {
         <View style={styles.cashCell}>
           <Text style={styles.cashLabel}>All time</Text>
           <Text
-            accessibilityLabel={`${allTimePercent >= 0 ? 'Up' : 'Down'} ${Math.abs(allTimePercent).toFixed(2)} percent from the ${formatMoney(STARTING_CASH)} opening bankroll`}
+            accessibilityLabel={`${allTimePercent >= 0 ? 'Up' : 'Down'} ${Math.abs(allTimePercent).toFixed(2)} percent from the ${formatMoney(STARTING_BANKROLL)} opening bankroll`}
             maxFontSizeMultiplier={1.4}
             numberOfLines={1}
             style={[styles.cashValue, allTimePercent >= 0 ? styles.positive : styles.negative]}

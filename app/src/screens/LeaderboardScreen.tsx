@@ -8,6 +8,7 @@ import {
 } from '../format';
 import { rankBand } from '../data/rankBand';
 import { usePortfolio } from '../state/PortfolioContext';
+import { STARTING_BANKROLL } from '../state/economy';
 import { DisplayValue, SectionHeader, Tag } from '../ui/primitives';
 import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
 
@@ -40,7 +41,7 @@ export function LeaderboardScreen() {
         {you ? (
           <>
             <DisplayValue
-              accessibilityLabel={`Your rank, ${you.rank} of ${leaderboard.length}, ${rankBand(you.rank, leaderboard.length)}. Portfolio ${formatMoney(you.value)}, ${formatReturn(you.returnPct)} from 140 million. ${formatSignedMoney(summary.latestDailyChange)} on the latest replay date.`}
+              accessibilityLabel={`Your rank, ${you.rank} of ${leaderboard.length}, ${rankBand(you.rank, leaderboard.length)}. Portfolio ${formatMoney(you.value)}, ${formatReturn(you.returnPct)} from ${formatMoney(STARTING_BANKROLL)}. ${formatSignedMoney(summary.latestDailyChange)} on the latest replay date.`}
               label={`OF ${leaderboard.length}`}
               tone="gold"
               value={`#${you.rank}`}
@@ -48,7 +49,7 @@ export function LeaderboardScreen() {
             <View style={styles.heroMeta}>
               <Tag label={rankBand(you.rank, leaderboard.length).toUpperCase()} tone="gold" />
               <Text style={styles.heroValue}>{formatCompactMoney(you.value)}</Text>
-              <Tag label={`${formatReturn(you.returnPct)} FROM $140M`} tone={you.returnPct >= 0 ? 'up' : 'down'} />
+              <Tag label={`${formatReturn(you.returnPct)} FROM ${formatCompactMoney(STARTING_BANKROLL)}`} tone={you.returnPct >= 0 ? 'up' : 'down'} />
               <Tag label={`${formatCompactSignedMoney(summary.latestDailyChange)} LAST DAY`} tone={dayPositive ? 'up' : 'down'} />
             </View>
           </>

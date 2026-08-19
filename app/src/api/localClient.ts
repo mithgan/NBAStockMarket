@@ -36,12 +36,12 @@ import type {
   ServerWeeklyShort,
   ServerWeeklyShortMutationResult,
 } from './contracts';
+import { LOCAL_DEMO_STORAGE_KEY } from '../state/persistence';
 
 /**
- * Offline stand-in for MarketApiClient (src/api/client.ts).
- *
- * The public deploy runs without a server: App.tsx hands PortfolioProvider a
- * LocalMarketClient instead, and every screen keeps consuming the exact
+ * Offline stand-in for MarketApiClient (src/api/client.ts), retained for
+ * isolated prototype and fixture work. The production app uses MarketApiClient;
+ * both clients keep every screen consuming the exact
  * response shapes from src/api/contracts.ts. The market is a bundled snapshot
  * (localMarketSeed.json) and each night replays a pre-generated season
  * dataset (localReplaySeed.json), so the demo is fully deterministic: the
@@ -93,8 +93,6 @@ function initialState(): LocalState {
 }
 
 /** Versioned so a breaking save-shape change can move to a fresh key. */
-const STORAGE_KEY = 'nba-stock-market:local-demo:v1';
-
 function priceOf(playerId: string): number {
   return players.find((player) => player.id === playerId)?.current_price_cents ?? 0;
 }
@@ -120,7 +118,7 @@ export class LocalMarketClient {
   private restore(): void {
     if (typeof localStorage === 'undefined') return;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(LOCAL_DEMO_STORAGE_KEY);
       if (raw) {
         this.state = { ...initialState(), ...(JSON.parse(raw) as Partial<LocalState>) };
       }
@@ -133,7 +131,7 @@ export class LocalMarketClient {
   private persist(): void {
     if (typeof localStorage === 'undefined') return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+      localStorage.setItem(LOCAL_DEMO_STORAGE_KEY, JSON.stringify(this.state));
     } catch {}
   }
 

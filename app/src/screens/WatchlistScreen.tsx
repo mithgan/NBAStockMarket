@@ -9,6 +9,7 @@ import { cumulativeValues, selectTrendRange, type TrendPoint, type TrendRange } 
 import type { Player } from '../data/types';
 import { formatCompactSignedMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
+import { STARTING_BANKROLL } from '../state/economy';
 import { useWatchlist, WATCHLIST_LIMIT } from '../state/watchlist';
 import { rowMarker } from '../ui/domMarkers';
 import { colors, fonts, headingStyle, numeric, radius, space, type, weight } from '../theme';
@@ -153,7 +154,7 @@ export function WatchlistScreen() {
         })}
       </View>
       <Text style={styles.footnote}>
-        {`Dividends are what a player paid per holder over the window, from settled games only. Your own portfolio is ${summary ? formatSignedMoney(summary.totalValue - 140_000_000) : 'unchanged'} against the opening bankroll.`}
+        {`Dividends are what a player paid per holder over the window, from settled games only. Your own portfolio is ${summary ? formatSignedMoney(summary.totalValue - STARTING_BANKROLL) : 'unchanged'} against the opening bankroll.`}
       </Text>
     </ScrollView>
   );

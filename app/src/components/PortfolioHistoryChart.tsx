@@ -19,7 +19,8 @@ import {
 } from '../format';
 import { useChartSurface } from '../hooks/useChartSurface';
 import { useCountUp } from '../hooks/useCountUp';
-import { STARTING_CASH, type PortfolioPoint } from '../state/game';
+import { STARTING_BANKROLL } from '../state/economy';
+import type { PortfolioPoint } from '../state/game';
 import { colors, fonts, heroNumber, numeric, space, type, weight } from '../theme';
 
 const DEFAULT_CHART_HEIGHT = 168;
@@ -77,7 +78,7 @@ export function PortfolioHistoryChart({
   // (account reset); fall back to the always-available full season.
   const activeRange = ranges.includes(range) ? range : 'Season';
   const { visible, baseline } = useMemo(
-    () => selectPortfolioRange(points, activeRange, STARTING_CASH),
+    () => selectPortfolioRange(points, activeRange, STARTING_BANKROLL),
     [activeRange, points],
   );
   const { coordinates, linePath, areaPath } = useMemo(() => {
@@ -143,7 +144,7 @@ export function PortfolioHistoryChart({
   );
   const scrubPoint = scrubIndex === null ? null : visible[scrubIndex] ?? null;
   const scrubCoordinate = scrubIndex === null ? null : coordinates[scrubIndex] ?? null;
-  const latestValue = totalValue ?? visible.at(-1)?.totalValue ?? STARTING_CASH;
+  const latestValue = totalValue ?? visible.at(-1)?.totalValue ?? STARTING_BANKROLL;
   const shownValue = scrubPoint ? scrubPoint.totalValue : latestValue;
   const change = scrubPoint
     ? scrubPoint.totalValue - baseline

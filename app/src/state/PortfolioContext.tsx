@@ -59,6 +59,7 @@ interface PortfolioContextValue {
   isRefreshing: boolean;
   isTransitioning: boolean;
   isGameplayReady: boolean;
+  isSeasonComplete: boolean;
   canAdvanceDay: boolean;
   seasonReplayProgress: SeasonReplayProgress | null;
   pendingActions: ReadonlySet<string>;
@@ -313,10 +314,10 @@ export function PortfolioProvider({
     }
   }, [loadSnapshot, updatePendingActions]);
 
-  const runFullRefreshAction = useCallback(async (
+  const runFullRefreshAction = useCallback(async <T,>(
     key: string,
-    action: () => Promise<unknown>,
-    successMessage: string,
+    action: () => Promise<T>,
+    successMessage: string | ((result: T) => string),
   ): Promise<boolean> => {
     if (!reconciliationCoordinator.current.beginMutation(
       () => actionLock.current.acquire('account-mutation'),
@@ -329,7 +330,7 @@ export function PortfolioProvider({
     setMessage(null);
     let reconciliationReason: 'confirmed-global' | 'ambiguous' | null = null;
     try {
-      await action();
+      const result = await action();
       const refreshed = await loadSnapshot({
         checkLocalTransition: false,
         showInitialLoader: false,
@@ -338,7 +339,11 @@ export function PortfolioProvider({
         reconciliationReason = 'confirmed-global';
         return false;
       }
-      if (mounted.current) setMessage(successMessage);
+      if (mounted.current) {
+        setMessage(typeof successMessage === 'function'
+          ? successMessage(result)
+          : successMessage);
+      }
       return true;
     } catch (error) {
       reconciliationReason = mutationOutcomeMayHaveCommitted(error)
@@ -431,9 +436,14 @@ export function PortfolioProvider({
   ), [apiClient, currentQuoteVersion, runReconciledAction]);
 
   const advanceDay = useCallback(async () => {
-    const nextGameDate = bootstrapRef.current?.game.next_game_date;
+    const game = bootstrapRef.current?.game;
+    const nextGameDate = game?.next_game_date;
     if (!nextGameDate) {
-      if (mounted.current) setMessage('The historical replay is complete.');
+      if (mounted.current) {
+        setMessage(game?.is_complete
+          ? 'The historical replay is complete.'
+          : 'No game date is ready to settle yet. Refresh after the schedule updates.');
+      }
       return false;
     }
     return runFullRefreshAction(
@@ -444,9 +454,14 @@ export function PortfolioProvider({
   }, [apiClient, runFullRefreshAction]);
 
   const advanceSeason = useCallback(async () => {
-    const nextGameDate = bootstrapRef.current?.game.next_game_date;
+    const game = bootstrapRef.current?.game;
+    const nextGameDate = game?.next_game_date;
     if (!nextGameDate) {
-      if (mounted.current) setMessage('The historical replay is complete.');
+      if (mounted.current) {
+        setMessage(game?.is_complete
+          ? 'The historical replay is complete.'
+          : 'No game date is ready to settle yet. Refresh after the schedule updates.');
+      }
       return false;
     }
     setSeasonReplayProgress(null);
@@ -460,7 +475,9 @@ export function PortfolioProvider({
             if (mounted.current) setSeasonReplayProgress(progress);
           },
         ),
-        'The historical season is fully settled. Prices and portfolios are updated.',
+        (summary) => summary.isComplete
+          ? 'The historical season is fully settled. Prices and portfolios are updated.'
+          : `${summary.completedDates} game ${summary.completedDates === 1 ? 'date was' : 'dates were'} settled. Waiting for more schedule data.`,
       );
     } finally {
       if (mounted.current) setSeasonReplayProgress(null);
@@ -481,7 +498,11 @@ export function PortfolioProvider({
     try {
       let expected = bootstrapRef.current?.game.next_game_date ?? null;
       if (!expected) {
-        if (mounted.current) setMessage('The season replay is already complete.');
+        if (mounted.current) {
+          setMessage(bootstrapRef.current?.game.is_complete
+            ? 'The season replay is already complete.'
+            : 'No game date is ready to settle yet. Refresh after the schedule updates.');
+        }
         return false;
       }
       // Settle every game date inside the calendar span, so "+1 WEEK" collects
@@ -623,6 +644,7 @@ export function PortfolioProvider({
     isRefreshing,
     isTransitioning,
     isGameplayReady,
+    isSeasonComplete: presentation?.isComplete ?? false,
     canAdvanceDay: (presentation?.canAdvanceDay ?? false) || apiClient.canAdvanceSeason,
     seasonReplayProgress,
     pendingActions,

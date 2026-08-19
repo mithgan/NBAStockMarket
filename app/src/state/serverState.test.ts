@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { ServerBootstrap } from '../api/contracts';
-import { getGameSummary, STARTING_CASH } from './game';
+import { STARTING_BANKROLL } from './economy';
+import { getGameSummary } from './game';
 import {
   applyPortfolioValuationToSummary,
   applyServerPortfolioToPresentation,
@@ -246,14 +247,17 @@ test('activity and history are ordered for the existing UI without inventing unk
     '2025-10-21',
     '2025-10-22',
   ]);
-  assert.equal(mapped.state.portfolioHistory[0].dailyChange, -500_000);
+  assert.equal(
+    mapped.state.portfolioHistory[0].dailyChange,
+    139_500_000 - STARTING_BANKROLL,
+  );
   assert.equal(mapped.state.portfolioHistory[1].dailyChange, 372_500);
 });
 
 test('pristine detection permits only the backend one-time transition shape', () => {
   const fixture = bootstrapFixture();
   fixture.portfolio.version = 0;
-  fixture.portfolio.cash_cents = STARTING_CASH * 100;
+  fixture.portfolio.cash_cents = STARTING_BANKROLL * 100;
   fixture.portfolio.holdings = [];
   fixture.portfolio.recent_trades = [];
   fixture.portfolio.instruments.weekly_shorts = [];
@@ -290,6 +294,12 @@ test('refresh feedback explains that syncing does not advance the shared replay'
   assert.equal(
     serverRefreshNotice(fixture),
     'Server data is up to date. The historical replay is complete.',
+  );
+
+  fixture.game.is_complete = false;
+  assert.equal(
+    serverRefreshNotice(fixture),
+    'Server data is up to date. Waiting for the next game date to become available.',
   );
 });
 

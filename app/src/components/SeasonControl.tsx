@@ -3,17 +3,30 @@ import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'r
 
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePortfolio } from '../state/PortfolioContext';
-import { SEASON_TOTAL_DAYS, seasonDayNumber, seasonProgress } from '../state/simDates';
+import { STARTING_BANKROLL } from '../state/economy';
+import {
+  addIsoDays,
+  SEASON_TOTAL_DAYS,
+  SIM_START,
+  seasonDayNumber,
+  seasonProgress,
+} from '../state/simDates';
+import { formatCompactMoney } from '../format';
 import { Button } from '../ui/primitives';
 import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
 
 function displayDate(value: string | null): string {
-  if (!value) return 'Season complete';
+  if (!value) return 'Unavailable';
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(`${value}T00:00:00Z`));
+}
+
+function nextDateStatus(value: string | null, isComplete: boolean): string {
+  if (value) return displayDate(value);
+  return isComplete ? 'Season complete' : 'Waiting for schedule';
 }
 
 /**
@@ -39,6 +52,7 @@ export function SeasonControl() {
     canAdvanceSandbox,
     isGameplayReady,
     isRefreshing,
+    isSeasonComplete,
     latestSettledDate,
     nextGameDate,
     pendingActions,
@@ -63,8 +77,11 @@ export function SeasonControl() {
   const isSettlingWeek = pendingActions.has('season-advance');
   const isSettlingSeason = pendingActions.has('advance-season');
   const isRewinding = pendingActions.has('season-world-reset');
-  const day = seasonDayNumber(nextGameDate);
-  const progress = seasonProgress(nextGameDate);
+  const progressDate = nextGameDate
+    ?? (latestSettledDate ? addIsoDays(latestSettledDate, 1) : SIM_START);
+  const day = isSeasonComplete ? SEASON_TOTAL_DAYS : seasonDayNumber(progressDate);
+  const progress = isSeasonComplete ? 1 : seasonProgress(progressDate);
+  const nextLabel = nextDateStatus(nextGameDate, isSeasonComplete);
 
   const confirmAdvance = async () => {
     setConfirmation(null);
@@ -101,7 +118,7 @@ export function SeasonControl() {
       <View style={styles.container}>
         <View
           accessible
-          accessibilityLabel={`Replay status. Last settled ${latestSettledDate ? displayDate(latestSettledDate) : 'not started'}. Next ${displayDate(nextGameDate)}. Day ${day} of ${SEASON_TOTAL_DAYS}. ${settledGameDateCount} game dates settled.`}
+          accessibilityLabel={`Replay status. Last settled ${latestSettledDate ? displayDate(latestSettledDate) : 'not started'}. Next ${nextLabel}. Day ${day} of ${SEASON_TOTAL_DAYS}. ${settledGameDateCount} game dates settled.`}
           style={styles.copy}
         >
           <View style={styles.field}>
@@ -113,7 +130,7 @@ export function SeasonControl() {
           <View style={styles.fieldDivider} />
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>NEXT ·</Text>
-            <Text numberOfLines={1} style={styles.fieldValueMuted}>{displayDate(nextGameDate)}</Text>
+            <Text numberOfLines={1} style={styles.fieldValueMuted}>{nextLabel}</Text>
           </View>
           <View style={styles.fieldDivider} />
           <View style={styles.field}>
@@ -326,9 +343,9 @@ export function SeasonControl() {
                   : confirmation === 'week'
                     ? 'This settles every game date in the next 7 calendar days for every play-tester. It cannot be undone.'
                     : confirmation === 'rewind'
-                      ? 'This erases every settlement, trade, and play on this server, returns all bankrolls to $140M, restores opening prices, and moves the clock back to October 21. It cannot be undone.'
+                      ? `This erases every settlement, trade, and play on this server, returns all bankrolls to ${formatCompactMoney(STARTING_BANKROLL)}, restores opening prices, and moves the clock back to October 21. It cannot be undone.`
                       : confirmation === 'me'
-                        ? 'This returns your own account to the $140M opening bankroll and clears your holdings. Everyone else is untouched. It cannot be undone.'
+                        ? `This returns your own account to the ${formatCompactMoney(STARTING_BANKROLL)} opening bankroll and clears your holdings. Everyone else is untouched. It cannot be undone.`
                         : 'This settles every remaining 2025-26 game date for every play-tester. Completed dates are saved, so an interrupted run can be resumed. It cannot be undone.'}
               </Text>
               <View style={styles.modalActions}>

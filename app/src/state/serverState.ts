@@ -9,13 +9,13 @@ import type { TrendPoint } from '../data/trendPresentation';
 import type { Player } from '../data/types';
 import {
   GAME_STATE_VERSION,
-  STARTING_CASH,
   type ActivityEvent,
   type ActivityKind,
   type GameLeaderboardEntry,
   type GameSummary,
   type GameState,
 } from './game';
+import { STARTING_BANKROLL } from './economy';
 
 const CENTS_PER_DOLLAR = 100;
 const MICROS_PER_POINT = 1_000_000;
@@ -268,7 +268,7 @@ export function isServerAccountPristine(bootstrap: ServerBootstrap): boolean {
   const { portfolio } = bootstrap;
   return (
     portfolio.version === 0
-    && portfolio.cash_cents === STARTING_CASH * CENTS_PER_DOLLAR
+    && portfolio.cash_cents === STARTING_BANKROLL * CENTS_PER_DOLLAR
     && portfolio.holdings.length === 0
     && portfolio.recent_trades.length === 0
     && portfolio.instruments.weekly_shorts.length === 0
@@ -279,7 +279,9 @@ export function isServerAccountPristine(bootstrap: ServerBootstrap): boolean {
 
 export function serverRefreshNotice(bootstrap: ServerBootstrap): string {
   if (bootstrap.game.next_game_date === null) {
-    return 'Server data is up to date. The historical replay is complete.';
+    return bootstrap.game.is_complete
+      ? 'Server data is up to date. The historical replay is complete.'
+      : 'Server data is up to date. Waiting for the next game date to become available.';
   }
   const nextDate = new Intl.DateTimeFormat('en-US', {
     month: 'short',
@@ -366,7 +368,7 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
     .map((point, index, rows) => {
       const totalValue = dollars(point.total_value_cents);
       const previousValue = index === 0
-        ? STARTING_CASH
+        ? STARTING_BANKROLL
         : dollars(rows[index - 1].total_value_cents);
       return {
         id: `portfolio:${point.game_date}`,
