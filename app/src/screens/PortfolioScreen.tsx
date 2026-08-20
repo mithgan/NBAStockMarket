@@ -132,7 +132,7 @@ const NIGHT_LOG_ENTRY_LIMIT = 365;
 /**
  * The dedicated game-log surface: every settled night, newest first, so the
  * boxscore-to-money correlation is readable as one continuous ledger. Reached
- * from SEE ALL NIGHTS on the portfolio; same drill-in pattern as a player.
+ * from the last-night strip or FULL GAME LOG; same drill-in as a player.
  */
 function NightLogView({ activity, playerById, playerTrends, onClose }: {
   activity: ActivityEvent[];
@@ -146,14 +146,14 @@ function NightLogView({ activity, playerById, playerTrends, onClose }: {
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <Pressable
-        accessibilityLabel="Close the night log"
+        accessibilityLabel="Close the game log"
         accessibilityRole="button"
         onPress={onClose}
         style={({ pressed }) => [styles.backButton, pressed && styles.backPressed]}
       >
         <Text style={styles.backText}>‹  Portfolio</Text>
       </Pressable>
-      <Text accessibilityRole="header" style={styles.sectionHeading}>Season nights</Text>
+      <Text accessibilityRole="header" style={styles.sectionHeading}>Game log</Text>
       <Text style={styles.logIntro}>
         Every settled night, newest first. Beat the projection and the player pays you; miss it and he costs you.
       </Text>
@@ -256,6 +256,7 @@ export function PortfolioScreen() {
           latestSettledDate ? (
             <SettlementSummary
               contributions={nightContributions(state.holdings, playerById, playerTrends, latestSettledDate)}
+              onOpenLog={() => setNightLogOpen(true)}
               settledDate={latestSettledDate}
             />
           ) : null
@@ -386,13 +387,13 @@ export function PortfolioScreen() {
             />
           ))}
           <Pressable
-            accessibilityLabel="Open the full season night log"
+            accessibilityLabel="Open the full game log"
             accessibilityRole="button"
             onPress={() => setNightLogOpen(true)}
             style={({ pressed }) => [styles.seeAll, pressed && styles.backPressed]}
             {...rowMarker}
           >
-            <Text style={styles.seeAllText}>SEE ALL NIGHTS  ›</Text>
+            <Text style={styles.seeAllText}>FULL GAME LOG  ›</Text>
           </Pressable>
         </View>
       )}

@@ -1,13 +1,11 @@
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { surpriseLabel, type TrendPoint } from '../data/trendPresentation';
+import type { TrendPoint } from '../data/trendPresentation';
 import type { Player } from '../data/types';
 import { formatCompactSignedMoney, formatSignedMoney } from '../format';
 import type { GameHolding } from '../state/game';
 import { colors, fonts, numeric, space, type, weight } from '../theme';
 import { rowMarker } from '../ui/domMarkers';
-import { PlayerAvatar } from './PlayerAvatar';
 
 export interface NightContribution {
   player: Player;
@@ -47,15 +45,18 @@ export function nightContributions(
 }
 
 /**
- * A one-row recap of the last settled night — headline giver plus the net —
- * that expands into the per-player breakdown on press.
+ * The last settled night as one loud line — the money is the sentence — and
+ * the doorway to the game log. Tapping goes straight there: the log's top
+ * night IS this night's breakdown, so the strip never expands in place.
  */
-export function SettlementSummary({ contributions, settledDate }: {
+export function SettlementSummary({ contributions, settledDate, onOpenLog }: {
   contributions: NightContribution[];
   settledDate: string;
+  onOpenLog: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  if (contributions.length === 0) return null;
+  // A night none of your players played still renders the strip: it is the
+  // doorway to the game log, and a doorway that disappears cannot be found.
+  const quiet = contributions.length === 0;
   const net = contributions.reduce((total, contribution) => total + contribution.dividend, 0);
   const positive = net >= 0;
   // The list arrives sorted by absolute payout, so the first positive
@@ -64,56 +65,34 @@ export function SettlementSummary({ contributions, settledDate }: {
   return (
     <View style={styles.block}>
       <Pressable
-        accessibilityHint="Shows what each of your players paid on this date"
-        accessibilityLabel={`Settled ${settledDate}. Your players paid ${formatSignedMoney(net)} across ${contributions.length} games.`}
+        accessibilityHint="Opens the game log, every settled night in order"
+        accessibilityLabel={quiet
+          ? `Settled ${settledDate}. None of your players played. Opens the game log.`
+          : `Settled ${settledDate}. Your players paid ${formatSignedMoney(net)} across ${contributions.length} games. Opens the game log.`}
         accessibilityRole="button"
-        accessibilityState={{ expanded }}
         {...rowMarker}
-        onPress={() => setExpanded((current) => !current)}
+        onPress={onOpenLog}
         style={({ pressed }) => [styles.head, pressed && styles.pressed]}
       >
         <View style={styles.headCopy}>
-          <Text style={styles.label}>Last settled night</Text>
+          <Text style={styles.label}>{`Last settled night · ${settledDate}`}</Text>
           <Text numberOfLines={1} style={styles.headline}>
-            {highlight
-              ? `${highlight.player.name} gave you ${formatCompactSignedMoney(highlight.dividend)}`
-              : `${contributions.length} of your players played`}
+            {quiet
+              ? 'None of your players played'
+              : highlight
+                ? `${highlight.player.name} gave you ${formatCompactSignedMoney(highlight.dividend)}`
+                : `${contributions.length} of your players played`}
           </Text>
         </View>
         <View style={styles.headNumbers}>
-          <Text numberOfLines={1} style={[styles.net, positive ? styles.positive : styles.negative]}>
-            {formatCompactSignedMoney(net)}
-          </Text>
-          <Text style={styles.toggle}>{expanded ? 'Hide' : 'Breakdown'}</Text>
+          {quiet ? null : (
+            <Text numberOfLines={1} style={[styles.net, positive ? styles.positive : styles.negative]}>
+              {formatCompactSignedMoney(net)}
+            </Text>
+          )}
+          <Text style={styles.toggle}>Game log  ›</Text>
         </View>
       </Pressable>
-      {expanded ? (
-        <View>
-          {contributions.map((contribution) => {
-            const beat = contribution.netPoints >= contribution.expectedNetPoints;
-            return (
-              <View key={contribution.player.id} style={styles.row}>
-                <PlayerAvatar player={contribution.player} size={30} />
-                <View style={styles.rowCopy}>
-                  <Text numberOfLines={1} style={styles.rowName}>
-                    {contribution.player.name}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.rowMeta}>
-                    {surpriseLabel({ np: contribution.netPoints, expected_np: contribution.expectedNetPoints })}
-                  </Text>
-                </View>
-                <Text
-                  accessibilityLabel={`${contribution.player.name} ${beat ? 'beat' : 'missed'} projection, paying ${formatSignedMoney(contribution.dividend)}`}
-                  numberOfLines={1}
-                  style={[styles.rowValue, contribution.dividend >= 0 ? styles.positive : styles.negative]}
-                >
-                  {formatCompactSignedMoney(contribution.dividend)}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -161,29 +140,6 @@ const styles = StyleSheet.create({
     fontWeight: weight.bold,
     marginTop: 2,
   },
-  row: {
-    minHeight: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingBottom: space.sm,
-  },
-  rowCopy: { flex: 1, minWidth: 0 },
-  rowName: {
-    color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: type.body,
-    fontWeight: weight.bold,
-  },
-  rowMeta: {
-    ...numeric,
-    color: colors.faint,
-    fontSize: type.body,
-    fontWeight: weight.medium,
-    marginTop: 1,
-  },
-  rowValue: { ...numeric, fontSize: type.title, fontWeight: weight.black, flexShrink: 0 },
   positive: { color: colors.green },
   negative: { color: colors.red },
 });

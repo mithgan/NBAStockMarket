@@ -116,7 +116,8 @@ const styles = StyleSheet.create({
   // the row exists to answer "what has he paid me".
   paid: {
     ...numeric,
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: weight.black,
+    letterSpacing: -0.4,
   },
 });

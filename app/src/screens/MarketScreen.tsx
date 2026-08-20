@@ -517,6 +517,9 @@ function WatchStar({ on }: { on: boolean }) {
   );
 }
 
+/** A market list entry: a player row, or the average-payer anchor rule. */
+type MarketListItem = MarketRowModel | { anchor: true; rate: number };
+
 interface MarketRowProps {
   row: MarketRowModel;
   freeCash: number;
@@ -799,8 +802,45 @@ export function MarketScreen() {
     sort,
   ]);
 
+  // The anchor teaches the scale (an average payer is X a night, "by
+  // construction"): a rule pinned at the whole market's average rate for the
+  // active window, so every figure above and below it can be felt. Whole-
+  // market, not filtered — the label says market, so the math must too.
+  const marketWindowAverage = useMemo(() => {
+    const games = TRENDING_WINDOWS.find((window) => window.key === trendingWindow)?.games ?? null;
+    return marketAverageRate(players.map((player) => {
+      const settled = settledTrends[player.id] ?? [];
+      return games === null ? settled : settled.slice(-games);
+    }));
+  }, [players, settledTrends, trendingWindow]);
+
+  const listData: MarketListItem[] = useMemo(() => {
+    if (sort !== 'pays' || marketWindowAverage === null || rows.length < 3) return rows;
+    const index = rows.findIndex(
+      (row) => (row.windowRate ?? Number.NEGATIVE_INFINITY) < marketWindowAverage,
+    );
+    // The rule only reads between rows: nothing above or below it says nothing.
+    if (index <= 0 || index >= rows.length) return rows;
+    const withAnchor: MarketListItem[] = [...rows];
+    withAnchor.splice(index, 0, { anchor: true, rate: marketWindowAverage });
+    return withAnchor;
+  }, [marketWindowAverage, rows, sort]);
+
   const renderItem = useCallback(
-    ({ item }: { item: MarketRowModel }) => (
+    ({ item }: { item: MarketListItem }) => (
+      'anchor' in item ? (
+        <View
+          accessible
+          accessibilityLabel={`Market average: pays ${formatSignedMoney(item.rate)} a night over this window`}
+          style={styles.anchorRow}
+        >
+          <View style={styles.anchorRule} />
+          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} style={styles.anchorText}>
+            {`MARKET AVERAGE · ${formatCompactSignedMoney(item.rate)} A NIGHT`}
+          </Text>
+          <View style={styles.anchorRule} />
+        </View>
+      ) : (
       <MarketRow
         actionWidth={actionWidth}
         boosted={activeBoostPlayerIds.has(item.player.id)}
@@ -818,6 +858,7 @@ export function MarketScreen() {
         trendPoints={settledTrends[item.player.id] ?? []}
         watching={watchlist.isWatched(item.player.id)}
       />
+      )
     ),
     [
       accountMutationPending,
@@ -971,11 +1012,11 @@ export function MarketScreen() {
     <View style={styles.marketScreen}>
       <FlatList
         contentContainerStyle={styles.listContent}
-        data={rows}
+        data={listData}
         initialNumToRender={14}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
-        keyExtractor={(item) => item.player.id}
+        keyExtractor={(item) => ('anchor' in item ? 'market-average-anchor' : item.player.id)}
         ListEmptyComponent={emptyState}
         ListHeaderComponent={listHeader}
         maxToRenderPerBatch={12}
@@ -1083,6 +1124,16 @@ const styles = StyleSheet.create({
   },
   sparkline: { width: 52, height: 26, flexShrink: 0 },
 
+  anchorRow: {
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    backgroundColor: colors.chromeSoft,
+  },
+  anchorRule: { flex: 1, height: 1, backgroundColor: colors.borderStrong },
+  anchorText: { ...labelStyle, color: colors.muted },
   quote: { alignItems: 'flex-end', minWidth: 84, flexShrink: 0, gap: 2 },
   quoteRate: { ...numeric, fontSize: 16, fontWeight: weight.heavy },
   quoteIdle: { ...numeric, color: colors.faint, fontSize: type.body, fontWeight: weight.medium },

@@ -118,7 +118,7 @@ test('the buyable filter excludes players an active instrument blocks', () => {
 
 test('the market virtualizes its ~300 listings instead of mounting every row', () => {
   assert.match(marketSource, /<FlatList/);
-  assert.match(marketSource, /keyExtractor=\{\(item\) => item\.player\.id\}/);
+  assert.match(marketSource, /keyExtractor=\{\(item\) => \('anchor' in item \? 'market-average-anchor' : item\.player\.id\)\}/);
   assert.match(marketSource, /windowSize=/);
   assert.doesNotMatch(marketSource, /visiblePlayers\.map\(/);
   // A variable-height ListHeaderComponent makes fixed getItemLayout offsets wrong.
