@@ -608,14 +608,15 @@ function MarketRow({
       >
         <PlayerAvatar player={player} size={36} />
         <View style={styles.playerCopy}>
-          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.playerName}>
-            {first ? <Text style={styles.playerFirst}>{first} </Text> : null}
-            {last}
+          {/* Broadcast lower-third: quiet given-name kicker over the loud
+              surname on its own full-width line, so 'Antetokounmpo' and
+              'Cunningham' stop truncating behind their own first names. Tier
+              lives in the profile and the row's accessibility label. */}
+          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.playerKicker}>
+            {first ? first.toUpperCase() : player.tier.toUpperCase()}
           </Text>
-          {/* Tier only. The list answers one question — who pays what — and
-              every explanation (games, form, yield) waits inside the profile. */}
-          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.playerMeta}>
-            {player.tier.toUpperCase()}
+          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.playerName}>
+            {last}
           </Text>
         </View>
         {showOwnership ? (
@@ -1100,19 +1101,17 @@ const styles = StyleSheet.create({
   playerDetails: { flex: 1, minWidth: 0, height: '100%', flexDirection: 'row', alignItems: 'center', gap: space.sm },
 
   playerCopy: { flex: 1, minWidth: 0 },
+  playerKicker: {
+    ...labelStyle,
+    color: colors.faint,
+    letterSpacing: 0.8,
+  },
   playerName: {
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: 15,
     fontWeight: weight.heavy,
-    },
-  playerFirst: { color: colors.muted, fontWeight: weight.medium },
-  playerMeta: {
-    ...numeric,
-    color: colors.faint,
-    fontSize: type.body,
-    fontWeight: weight.medium,
-    marginTop: 2,
+    marginTop: 1,
   },
 
   ownership: {
