@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import Svg, { Circle, Line, Path } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { summarizeDividends } from '../data/dividendMetrics';
@@ -14,6 +14,9 @@ import { useWatchlist, WATCHLIST_LIMIT } from '../state/watchlist';
 import { rowMarker } from '../ui/domMarkers';
 import { colors, fonts, headingStyle, labelStyle, numeric, radius, space, type, weight } from '../theme';
 import { Segmented } from '../ui/primitives';
+
+/** Right gutter reserved for the value axis, so figures never ride the lines. */
+const VALUE_GUTTER = 52;
 
 /** One line per watched player; assignment order keeps a player's colour stable. */
 const SERIES_COLORS = [
@@ -146,6 +149,10 @@ export function WatchlistScreen() {
         <Segmented groupLabel="Comparison window" onChange={setRange} options={WINDOWS} value={range} />
       </View>
       <ComparisonChart activeIndex={activeIndex} onScrubIndex={setActiveIndex} series={series} />
+      <View style={styles.chartAxis}>
+        <Text style={styles.chartAxisText}>WINDOW START</Text>
+        <Text style={styles.chartAxisText}>LATEST GAME</Text>
+      </View>
       <View style={styles.list}>
         {ranked.map((entry) => {
           const owned = owns(entry.player.id);
@@ -223,8 +230,9 @@ function ComparisonChart({
     (offsetX: number) => {
       const { width, count } = scrubGeometry.current;
       if (width <= 0 || count <= 1) return;
-      const clamped = Math.max(0, Math.min(width - 20, offsetX - 10));
-      const index = Math.round((clamped / (width - 20)) * (count - 1));
+      const plotSpan = Math.max(width - VALUE_GUTTER - 20, 1);
+      const clamped = Math.max(0, Math.min(plotSpan, offsetX - 10));
+      const index = Math.round((clamped / plotSpan) * (count - 1));
       onScrubIndex(Math.max(0, Math.min(count - 1, index)));
     },
     [onScrubIndex],
@@ -243,13 +251,27 @@ function ComparisonChart({
   const high = Math.max(0, ...values);
   const low = Math.min(0, ...values);
   const span = high - low || 1;
+  // The lines stop before a right gutter, so the axis figures never sit on
+  // top of the curves they describe.
+  const plotRight = Math.max(width - VALUE_GUTTER, 0);
   const yAt = (value: number) => 10 + ((high - value) / span) * (height - 20);
-  const xAt = (index: number) => (count <= 1 ? width / 2 : 10 + (index / (count - 1)) * (width - 20));
+  const xAt = (index: number) => (count <= 1 ? plotRight / 2 : 10 + (index / (count - 1)) * (plotRight - 20));
+  const zeroApartFromHigh = Math.abs(yAt(0) - yAt(high)) > 16;
 
   return (
     <View nativeID="scrub-plot-watchlist" onLayout={onLayout} ref={ref} style={[styles.chart, { height }]}>
       {width > 0 && series.length > 0 ? (
         <Svg height={height} width={width}>
+          {high > 0 ? (
+            <Line
+              stroke={colors.border}
+              strokeWidth={1}
+              x1={0}
+              x2={width}
+              y1={yAt(high)}
+              y2={yAt(high)}
+            />
+          ) : null}
           <Line
             stroke={colors.borderStrong}
             strokeDasharray="3 5"
@@ -259,6 +281,32 @@ function ComparisonChart({
             y1={yAt(0)}
             y2={yAt(0)}
           />
+          {high > 0 ? (
+            <SvgText
+              fill={colors.faint}
+              fontFamily={fonts.display}
+              fontSize={11}
+              fontWeight="700"
+              textAnchor="end"
+              x={width - 4}
+              y={yAt(high) + 4}
+            >
+              {formatCompactSignedMoney(high)}
+            </SvgText>
+          ) : null}
+          {zeroApartFromHigh ? (
+            <SvgText
+              fill={colors.faint}
+              fontFamily={fonts.display}
+              fontSize={11}
+              fontWeight="700"
+              textAnchor="end"
+              x={width - 4}
+              y={yAt(0) + 4}
+            >
+              $0
+            </SvgText>
+          ) : null}
           {activeIndex !== null ? (
             <Line
               stroke={colors.borderStrong}
@@ -334,7 +382,21 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   controls: { alignItems: 'flex-start', paddingHorizontal: space.lg, paddingTop: space.md },
-  chart: { marginTop: space.md, marginHorizontal: space.lg },
+  chart: {
+    marginTop: space.md,
+    marginHorizontal: space.lg,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  chartAxis: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: space.lg + 10,
+    paddingTop: space.xs,
+  },
+  chartAxisText: { ...labelStyle, color: colors.faint },
 
   list: { paddingTop: space.md },
   row: {
