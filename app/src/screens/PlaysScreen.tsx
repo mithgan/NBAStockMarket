@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PositionCard } from '../components/PositionCard';
@@ -33,6 +34,7 @@ function SlotCard({ label, used, total }: { label: string; used: number; total: 
 }
 
 export function PlaysScreen() {
+  const [rulesOpen, setRulesOpen] = useState(false);
   const {
     armPlayerBoost,
     armShort,
@@ -126,15 +128,31 @@ export function PlaysScreen() {
         <Tag label={currentWeek ?? 'SEASON COMPLETE'} tone="gold" />
       </View>
 
-      <View style={styles.slotRow}>
-        <SlotCard label="Weekly shorts" total={shortSlots.total} used={shortSlots.used} />
-        <SlotCard label="Boosts" total={boostSlots.total} used={boostSlots.used} />
-      </View>
-      <Text style={styles.rulesCopy}>
+      <Text
+        accessibilityLabel={`Weekly shorts, ${shortSlots.used} of ${shortSlots.total} used. Boosts, ${boostSlots.used} of ${boostSlots.total} used. Slots reset each Monday.`}
+        numberOfLines={1}
+        style={styles.slotLine}
+      >
+        <Text style={styles.slotStrong}>{`SHORTS ${shortSlots.used}/${shortSlots.total}`}</Text>
+        {'   ·   '}
+        <Text style={styles.slotStrong}>{`BOOSTS ${boostSlots.used}/${boostSlots.total}`}</Text>
+      </Text>
+      <Pressable
+        accessibilityLabel={rulesOpen ? 'Collapse how plays work' : 'Expand how plays work'}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: rulesOpen }}
+        onPress={() => setRulesOpen((current) => !current)}
+        style={({ pressed }: { pressed: boolean }) => [styles.rulesToggle, pressed && styles.pressed]}
+      >
+        <Text style={styles.rulesToggleText}>{`How plays work  ${rulesOpen ? '▾' : '▸'}`}</Text>
+      </Pressable>
+      {rulesOpen ? (
+        <Text style={styles.rulesCopy}>
         Shorts reserve {formatCompactMoney(2_000_000)} collateral and settle at up to
         {' '}+/-{formatCompactMoney(WEEKLY_TOTAL_CLAMP_NP * DOLLARS_PER_NET_POINT)}. Boosts cost 0.25% and
         add one extra signed dividend, including losses. Slots reset each Monday.
-      </Text>
+        </Text>
+      ) : null}
 
       <SectionHeader label="OPEN POSITIONS" />
       {activeShorts.length === 0 && usedBoosts.length === 0 ? (
@@ -143,7 +161,7 @@ export function PlaysScreen() {
           <Text style={styles.subtle}>Use one only when you have a real conviction.</Text>
         </View>
       ) : (
-        <View style={styles.cardGrid}>
+        <View>
           {activeShorts.map((position) => {
             const markedPayout = Math.max(
               -WEEKLY_TOTAL_CLAMP_NP,
@@ -243,6 +261,27 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
   },
 
+  slotLine: {
+    ...numeric,
+    color: colors.faint,
+    fontSize: type.body,
+    fontWeight: weight.medium,
+    paddingHorizontal: space.md,
+    paddingBottom: space.sm,
+  },
+  slotStrong: { ...labelStyle, color: colors.text },
+  rulesToggle: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: space.md,
+  },
+  rulesToggleText: {
+    color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.bold,
+    letterSpacing: 0.6,
+  },
   slotRow: {
     paddingHorizontal: space.md,
     flexDirection: 'row',

@@ -57,7 +57,7 @@ interface WatchedSeries {
  * night across everyone at once.
  */
 export function WatchlistScreen() {
-  const { players, playerTrends, owns, summary } = usePortfolio();
+  const { players, playerTrends, owns, summary, nextGameDate, nextGamePlayerIds, nextGameProjections } = usePortfolio();
   const { watched, toggle, clear } = useWatchlist();
   const [range, setRange] = useState<TrendRange>('L15');
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -82,6 +82,21 @@ export function WatchlistScreen() {
   });
   // The chart keeps watch order (stable colours); the list ranks by payout.
   const ranked = [...series].sort((a, b) => b.total - a.total);
+  // Positive payouts from watched players you do NOT own: money that went by.
+  const unclaimed = series
+    .filter((entry) => !owns(entry.player.id) && entry.total > 0)
+    .reduce((sum, entry) => sum + entry.total, 0);
+  // Watched players on the next slate, each with the number to beat.
+  const watchedNext = series
+    .filter((entry) => nextGamePlayerIds.includes(entry.player.id))
+    .map((entry) => {
+      const surname = splitName(entry.player.name).last;
+      const needs = nextGameProjections[entry.player.id];
+      return needs === undefined ? surname : `${surname} needs ${needs.toFixed(1)}`;
+    });
+  const upcomingLine = nextGameDate && watchedNext.length > 0
+    ? `Next: ${watchedNext.slice(0, 2).join(' · ')}${watchedNext.length > 2 ? ` · +${watchedNext.length - 2} more` : ''}`
+    : null;
 
   if (watched.length === 0) {
     return (
@@ -112,7 +127,21 @@ export function WatchlistScreen() {
           <Text style={styles.clearText}>Clear</Text>
         </Pressable>
       </View>
-      <Text style={styles.intro}>Who has been paying, and how fast.</Text>
+      {unclaimed > 0 ? (
+        <Text
+          accessibilityLabel={`${formatSignedMoney(unclaimed)} paid out by watched players you do not own, over this window`}
+          numberOfLines={1}
+          style={styles.intro}
+        >
+          <Text style={styles.unclaimedFigure}>{formatCompactSignedMoney(unclaimed)}</Text>
+          {' paid out unowned — the cost of watching'}
+        </Text>
+      ) : (
+        <Text style={styles.intro}>Who has been paying, and how fast.</Text>
+      )}
+      {upcomingLine ? (
+        <Text numberOfLines={1} style={styles.upcoming}>{upcomingLine}</Text>
+      ) : null}
       <View style={styles.controls}>
         <Segmented groupLabel="Comparison window" onChange={setRange} options={WINDOWS} value={range} />
       </View>
@@ -141,13 +170,15 @@ export function WatchlistScreen() {
                 <Text
                   accessibilityLabel={`${entry.player.name} paid ${formatSignedMoney(entry.total)} across this window${owned ? ', and you own him' : ', which you did not receive because you do not own him'}`}
                   numberOfLines={1}
-                  style={[styles.rowValue, shown >= 0 ? styles.positive : styles.negative]}
+                  // Green and red are reserved for YOUR money; an unowned
+                  // player's payout is information, so it reads in gold ink.
+                  style={[styles.rowValue, owned ? (shown >= 0 ? styles.positive : styles.negative) : styles.unclaimedValue]}
                 >
                   {formatCompactSignedMoney(shown)}
                 </Text>
                 <Text numberOfLines={1} style={styles.rowNote}>
                   {activeIndex === null
-                    ? owned ? 'you own him' : 'had you owned him'
+                    ? owned ? 'yours' : 'unclaimed'
                     : atIndex === undefined ? 'no game yet' : `after ${activeIndex} games`}
                 </Text>
               </View>
@@ -158,7 +189,7 @@ export function WatchlistScreen() {
                 style={({ pressed }) => [styles.remove, pressed && styles.pressed]}
                 {...rowMarker}
               >
-                <Text style={styles.removeText}>Remove</Text>
+                <Text style={styles.removeText}>×</Text>
               </Pressable>
             </View>
           );
@@ -292,6 +323,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.xs,
   },
+  // goldInk, not green: this is information about money you did NOT collect.
+  unclaimedFigure: { ...numeric, color: colors.goldInk, fontSize: 17, fontWeight: weight.black },
+  upcoming: {
+    color: colors.faint,
+    fontFamily: fonts.body,
+    fontSize: type.label,
+    fontWeight: weight.medium,
+    paddingHorizontal: space.lg,
+    paddingTop: 2,
+  },
   controls: { alignItems: 'flex-start', paddingHorizontal: space.lg, paddingTop: space.md },
   chart: { marginTop: space.md, marginHorizontal: space.lg },
 
@@ -323,8 +364,8 @@ const styles = StyleSheet.create({
   removeText: {
     color: colors.muted,
     fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.heavy,
+    fontSize: 18,
+    fontWeight: weight.medium,
   },
 
   empty: { paddingHorizontal: space.lg, paddingVertical: space.lg, gap: space.xs },
@@ -345,6 +386,7 @@ const styles = StyleSheet.create({
   },
 
   pressed: { opacity: 0.65 },
+  unclaimedValue: { color: colors.goldInk },
   positive: { color: colors.green },
   negative: { color: colors.red },
 });
