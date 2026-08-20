@@ -50,10 +50,12 @@ export function nightContributions(
  * the doorway to the game log. Tapping goes straight there: the log's top
  * night IS this night's breakdown, so the strip never expands in place.
  */
-export function SettlementSummary({ contributions, settledDate, onOpenLog }: {
+export function SettlementSummary({ contributions, settledDate, onOpenLog, upcoming }: {
   contributions: NightContribution[];
   settledDate: string;
   onOpenLog: () => void;
+  /** Preformatted "who plays next" line — anticipation from the public schedule. */
+  upcoming?: string | null;
 }) {
   // A night none of your players played still renders the strip: it is the
   // doorway to the game log, and a doorway that disappears cannot be found.
@@ -97,6 +99,9 @@ export function SettlementSummary({ contributions, settledDate, onOpenLog }: {
         )}
         <Text style={styles.toggle}>Game log  ›</Text>
       </Pressable>
+      {upcoming ? (
+        <Text numberOfLines={1} style={styles.upcoming}>{upcoming}</Text>
+      ) : null}
     </View>
   );
 }
@@ -151,6 +156,15 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: type.body,
     fontWeight: weight.bold,
+  },
+  upcoming: {
+    color: colors.faint,
+    fontFamily: fonts.body,
+    fontSize: type.label,
+    fontWeight: weight.medium,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.sm,
+    marginTop: -2,
   },
   positive: { color: colors.green },
   negative: { color: colors.red },

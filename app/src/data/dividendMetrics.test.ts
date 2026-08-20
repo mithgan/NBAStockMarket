@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { dividendYield, earningsWindows, marketAverageRate, summarizeDividends } from './dividendMetrics';
+import { dividendYield, earningsWindows, marketAverageRate, settlementRecapSince, summarizeDividends } from './dividendMetrics';
 import type { TrendPoint } from './trendPresentation';
 
 function night(date: string, dividend: number): TrendPoint {
@@ -81,4 +81,16 @@ test('earningsWindows spans month boundaries correctly', () => {
     { date: '2025-10-25', cashDelta: 7_000 }, // 8 days before Nov 1 — outside
   ];
   assert.deepEqual(earningsWindows(activity, '2025-11-01'), { tonight: 100_000, week: 150_000 });
+});
+
+test('settlementRecapSince counts only dated entries after the cutoff', () => {
+  const activity = [
+    { game_date: null, amount_cents: -5_180_000_000 }, // a trade — never counted
+    { game_date: '2026-01-14', amount_cents: 35_100_000 },
+    { game_date: '2026-01-14', amount_cents: -2_000_000 },
+    { game_date: '2026-01-12', amount_cents: 16_100_000 },
+  ];
+  assert.deepEqual(settlementRecapSince(activity, '2026-01-12'), { paid: 331_000, nights: 1 });
+  assert.deepEqual(settlementRecapSince(activity, null), { paid: 492_000, nights: 2 });
+  assert.deepEqual(settlementRecapSince(activity, '2026-01-14'), { paid: 0, nights: 0 });
 });

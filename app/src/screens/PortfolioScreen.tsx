@@ -33,6 +33,12 @@ type ActivityNight = {
   items: ActivityEvent[];
 };
 
+/** "2026-01-15" → "Jan 15", matching the season strip's date voice. */
+function formatUpcomingDate(date: string): string {
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+    .format(new Date(`${date}T00:00:00Z`));
+}
+
 function groupActivity(entries: ActivityEvent[]): ActivityNight[] {
   const nights: ActivityNight[] = [];
   for (const entry of entries) {
@@ -171,6 +177,8 @@ export function PortfolioScreen() {
   const { variant } = useDesignVariant();
   const {
     latestSettledDate,
+    nextGameDate,
+    nextGamePlayerIds,
     players,
     playerTrends,
     state,
@@ -197,6 +205,16 @@ export function PortfolioScreen() {
     if (entry.date === null) continue;
     receivedByPlayer.set(entry.playerId, (receivedByPlayer.get(entry.playerId) ?? 0) + entry.cashDelta);
   }
+
+  // Anticipation from the public schedule: which of YOUR players play next.
+  const heldIds = new Set(state.holdings.map((holding) => holding.player_id));
+  const upcomingSurnames = nextGamePlayerIds
+    .filter((id) => heldIds.has(id))
+    .map((id) => playerById.get(id)?.name.split(' ').at(-1) ?? '')
+    .filter(Boolean);
+  const upcomingLine = nextGameDate && upcomingSurnames.length > 0
+    ? `Next ${formatUpcomingDate(nextGameDate)}: ${upcomingSurnames.slice(0, 3).join(', ')}${upcomingSurnames.length > 3 ? ` +${upcomingSurnames.length - 3} more` : ''} ${upcomingSurnames.length === 1 ? 'plays' : 'play'} for you`
+    : null;
 
   if (detailPlayer) {
     return (
@@ -237,6 +255,7 @@ export function PortfolioScreen() {
               contributions={nightContributions(state.holdings, playerById, playerTrends, latestSettledDate)}
               onOpenLog={() => setNightLogOpen(true)}
               settledDate={latestSettledDate}
+              upcoming={upcomingLine}
             />
           ) : null
         }

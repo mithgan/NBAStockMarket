@@ -27,6 +27,8 @@ export interface ServerPresentationState {
   leaderboard: GameLeaderboardEntry[];
   playerTrends: Record<string, TrendPoint[]>;
   nextGameDate: string | null;
+  /** Held-or-not, every player scheduled on nextGameDate. */
+  nextGamePlayerIds: string[];
   settledGameDateCount: number;
   latestSettledDate: string | null;
   currentWeek: string | null;
@@ -407,6 +409,7 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
     leaderboard: mapLeaderboard(bootstrap.leaderboard),
     playerTrends,
     nextGameDate: nextDate,
+    nextGamePlayerIds: bootstrap.game.next_game_player_ids ?? [],
     settledGameDateCount: bootstrap.game.version,
     latestSettledDate,
     currentWeek: nextDate === null ? null : weekKey(nextDate),

@@ -39,6 +39,32 @@ export function dividendYield(total: number, price: number): number | null {
   return total / price;
 }
 
+export interface SettlementRecap {
+  /** Net dollars the settlements paid this account since the cutoff. */
+  paid: number;
+  /** Distinct settled dates in that span. */
+  nights: number;
+}
+
+/**
+ * What settled after `sinceDate` did to this account — the while-you-were-away
+ * greeting's arithmetic, straight from the server activity ledger.
+ */
+export function settlementRecapSince(
+  activity: readonly { game_date: string | null; amount_cents: number }[],
+  sinceDate: string | null,
+): SettlementRecap {
+  const dates = new Set<string>();
+  let cents = 0;
+  for (const entry of activity) {
+    if (entry.game_date === null) continue;
+    if (sinceDate !== null && entry.game_date <= sinceDate) continue;
+    dates.add(entry.game_date);
+    cents += entry.amount_cents;
+  }
+  return { paid: cents / 100, nights: dates.size };
+}
+
 export interface EarningsWindows {
   /** Net dividends on the latest settled date. */
   tonight: number;

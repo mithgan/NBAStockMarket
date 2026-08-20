@@ -12,9 +12,11 @@ import {
 
 import { MarketApiClient, MarketApiError } from '../api/client';
 import type { ServerBootstrap, ServerPortfolio } from '../api/contracts';
+import { settlementRecapSince } from '../data/dividendMetrics';
 import type { TrendPoint } from '../data/trendPresentation';
 import type { Player } from '../data/types';
 import { ActionLock } from './actionLock';
+import { formatCompactMoney, formatCompactSignedMoney, formatSignedMoney } from '../format';
 import { type GameLeaderboardEntry, type GameState, getGameSummary, type TradeSide } from './game';
 import {
   finalizeLocalTransition,
@@ -68,6 +70,7 @@ interface PortfolioContextValue {
   boostTargets: ServerPresentationState['boostTargets'];
   playerTrends: Record<string, TrendPoint[]>;
   nextGameDate: string | null;
+  nextGamePlayerIds: string[];
   settledGameDateCount: number;
   latestSettledDate: string | null;
   currentWeek: string | null;
@@ -169,6 +172,12 @@ export function PortfolioProvider({
       if (!mounted.current || !snapshotGeneration.current.isCurrent(generation)) return null;
       setServerError(null);
       installBootstrap(bootstrap);
+      if (bootstrap.game.last_settled_date) {
+        void AsyncStorage.setItem(
+          `nbsm:lastSeenSettled:${userId}`,
+          bootstrap.game.last_settled_date,
+        ).catch(() => {});
+      }
       if (checkLocalTransition) {
         const inspection = await inspectLocalTransition(AsyncStorage, userId);
         if (!mounted.current || !snapshotGeneration.current.isCurrent(generation)) return null;
@@ -202,7 +211,32 @@ export function PortfolioProvider({
   }, [apiClient, installBootstrap, userId]);
 
   useEffect(() => {
-    void loadSnapshot({ checkLocalTransition: true, showInitialLoader: true });
+    void (async () => {
+      const bootstrap = await loadSnapshot({ checkLocalTransition: true, showInitialLoader: true });
+      if (!bootstrap || !mounted.current) return;
+      // While you were away: nights that settled since this device last saw
+      // the clock. The demo settles only by your own hand, so this speaks
+      // mostly in the shared-server world — but it is correct in both.
+      const seenKey = `nbsm:lastSeenSettled:${userId}`;
+      const latest = bootstrap.game.last_settled_date;
+      try {
+        const lastSeen = await AsyncStorage.getItem(seenKey);
+        if (latest && lastSeen && latest > lastSeen) {
+          const recap = settlementRecapSince(bootstrap.activity.items, lastSeen);
+          if (recap.nights > 0 && mounted.current) {
+            const span = `${recap.nights} ${recap.nights === 1 ? 'night' : 'nights'}`;
+            setMessage(recap.paid === 0
+              ? `While you were away: ${span} settled.`
+              : recap.paid > 0
+                ? `While you were away: your players paid you ${formatCompactSignedMoney(recap.paid)} across ${span}.`
+                : `While you were away: your players cost you ${formatCompactMoney(Math.abs(recap.paid))} across ${span}.`);
+          }
+        }
+        if (latest) await AsyncStorage.setItem(seenKey, latest);
+      } catch {
+        // Storage is best-effort; the greeting is never worth an error state.
+      }
+    })();
   }, [loadSnapshot]);
 
   const updatePendingActions = useCallback(() => {
@@ -636,6 +670,7 @@ export function PortfolioProvider({
     boostTargets: presentation?.boostTargets ?? [],
     playerTrends: presentation?.playerTrends ?? {},
     nextGameDate: presentation?.nextGameDate ?? null,
+    nextGamePlayerIds: presentation?.nextGamePlayerIds ?? [],
     settledGameDateCount: presentation?.settledGameDateCount ?? 0,
     latestSettledDate: presentation?.latestSettledDate ?? null,
     currentWeek: presentation?.currentWeek ?? null,
