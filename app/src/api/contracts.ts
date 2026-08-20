@@ -111,6 +111,8 @@ export interface ServerGameState {
   season_id: string;
   last_settled_date: string | null;
   next_game_date: string | null;
+  /** Players scheduled on next_game_date — public schedule, not lookahead. */
+  next_game_player_ids?: string[];
   is_complete: boolean;
   version: number;
 }
@@ -474,6 +476,9 @@ export function parseGameState(value: unknown, path = 'game'): ServerGameState {
     season_id: text(row.season_id, `${path}.season_id`),
     last_settled_date: nullableIsoDate(row.last_settled_date, `${path}.last_settled_date`),
     next_game_date: nullableIsoDate(row.next_game_date, `${path}.next_game_date`),
+    ...(Array.isArray(row.next_game_player_ids)
+      ? { next_game_player_ids: row.next_game_player_ids.map((id, index) => text(id, `${path}.next_game_player_ids[${index}]`)) }
+      : {}),
     is_complete: flag(row.is_complete, `${path}.is_complete`),
     version: nonNegativeInteger(row.version, `${path}.version`),
   };

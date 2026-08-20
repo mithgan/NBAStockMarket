@@ -324,10 +324,15 @@ export class LocalMarketClient {
   }
 
   private game(): ServerGameState {
+    const next = this.nextGameDate();
     return {
       season_id: SEASON_ID,
       last_settled_date: this.lastSettledDate(),
-      next_game_date: this.nextGameDate(),
+      next_game_date: next,
+      // The night's schedule is public before it settles.
+      next_game_player_ids: next === null
+        ? []
+        : (eventsByDate.get(next) ?? []).map((event) => event.player_id),
       is_complete: this.state.settledDateCount >= replayDays.length,
       version: this.state.settledDateCount,
     };

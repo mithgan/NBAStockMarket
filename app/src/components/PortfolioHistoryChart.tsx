@@ -25,13 +25,6 @@ import { colors, fonts, heroNumber, labelStyle, numeric, space, type, weight } f
 const DEFAULT_CHART_HEIGHT = 168;
 
 /**
- * Right-hand gutter reserved for the value axis. The plot stops before it, so
- * the line and end dot never run underneath their own figures — on a phone
- * the full-width plot used to collide with the labels.
- */
-const VALUE_GUTTER = 56;
-
-/**
  * The portfolio hero: an animated total, a scrubbable area chart of settled
  * portfolio value, and range tabs that only appear once the history is long
  * enough for a shorter window to mean anything.
@@ -82,7 +75,7 @@ export function PortfolioHistoryChart({
     [activeRange, points],
   );
   const { coordinates, linePath, areaPath } = useMemo(() => {
-    const coords = chartCoordinates(visible.map((point) => point.totalValue), Math.max(width - VALUE_GUTTER, 0), height);
+    const coords = chartCoordinates(visible.map((point) => point.totalValue), width, height);
     const line = coords
       .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
       .join(' ');
@@ -265,26 +258,11 @@ export function PortfolioHistoryChart({
             ) : lastCoordinate ? (
               <Circle cx={lastCoordinate.x} cy={lastCoordinate.y} fill={changeColor} r={4.5} />
             ) : null}
-            {/* One figure in the gutter: where the line ends. Sparkline
-                discipline — context is the start rule and the end value. */}
-            {lastCoordinate ? (
-              <SvgText
-                fill={colors.faint}
-                fontFamily={fonts.display}
-                fontSize={10}
-                fontWeight="700"
-                textAnchor="end"
-                x={width - 4}
-                y={Math.max(10, Math.min(height - 3, lastCoordinate.y + 3.5))}
-              >
-                {formatCompactMoney(visible.at(-1)?.totalValue ?? latestValue)}
-              </SvgText>
-            ) : null}
           </Svg>
         ) : null}
       </View>
       {firstDate && lastDate ? (
-        <View style={[styles.dateAxis, { paddingRight: VALUE_GUTTER + 10 }]}>
+        <View style={styles.dateAxis}>
           <Text numberOfLines={1} style={styles.dateAxisText}>{shortDate(firstDate)}</Text>
           {lastDate !== firstDate ? (
             <Text numberOfLines={1} style={styles.dateAxisText}>{shortDate(lastDate)}</Text>
