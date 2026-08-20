@@ -29,6 +29,8 @@ export interface ServerPresentationState {
   nextGameDate: string | null;
   /** Held-or-not, every player scheduled on nextGameDate. */
   nextGamePlayerIds: string[];
+  /** The number each scheduled player must beat, keyed by player id. */
+  nextGameProjections: Record<string, number>;
   settledGameDateCount: number;
   latestSettledDate: string | null;
   currentWeek: string | null;
@@ -410,6 +412,9 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
     playerTrends,
     nextGameDate: nextDate,
     nextGamePlayerIds: bootstrap.game.next_game_player_ids ?? [],
+    nextGameProjections: Object.fromEntries(
+      (bootstrap.game.next_game_projections ?? []).map((entry) => [entry.player_id, entry.expected_net_points_micros / 1e6]),
+    ),
     settledGameDateCount: bootstrap.game.version,
     latestSettledDate,
     currentWeek: nextDate === null ? null : weekKey(nextDate),

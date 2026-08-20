@@ -71,6 +71,7 @@ interface PortfolioContextValue {
   playerTrends: Record<string, TrendPoint[]>;
   nextGameDate: string | null;
   nextGamePlayerIds: string[];
+  nextGameProjections: Record<string, number>;
   settledGameDateCount: number;
   latestSettledDate: string | null;
   currentWeek: string | null;
@@ -676,6 +677,7 @@ export function PortfolioProvider({
     playerTrends: presentation?.playerTrends ?? {},
     nextGameDate: presentation?.nextGameDate ?? null,
     nextGamePlayerIds: presentation?.nextGamePlayerIds ?? [],
+    nextGameProjections: presentation?.nextGameProjections ?? {},
     settledGameDateCount: presentation?.settledGameDateCount ?? 0,
     latestSettledDate: presentation?.latestSettledDate ?? null,
     currentWeek: presentation?.currentWeek ?? null,

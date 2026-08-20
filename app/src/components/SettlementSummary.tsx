@@ -45,10 +45,13 @@ export function nightContributions(
   return contributions.sort((a, b) => Math.abs(b.dividend) - Math.abs(a.dividend));
 }
 
+const LEDGER_ROWS_SHOWN = 3;
+
 /**
- * The last settled night as one loud line — the money is the sentence — and
- * the doorway to the game log. Tapping goes straight there: the log's top
- * night IS this night's breakdown, so the strip never expands in place.
+ * The night ledger — the settlement as the page's centrepiece. Every held
+ * player who played, each row carrying its cause: np vs projection, then the
+ * money it became. Misses render in red with the exact same structure as
+ * hits; the whole block is the doorway to the game log.
  */
 export function SettlementSummary({ contributions, settledDate, onOpenLog, upcoming }: {
   contributions: NightContribution[];
@@ -57,14 +60,10 @@ export function SettlementSummary({ contributions, settledDate, onOpenLog, upcom
   /** Preformatted "who plays next" line — anticipation from the public schedule. */
   upcoming?: string | null;
 }) {
-  // A night none of your players played still renders the strip: it is the
-  // doorway to the game log, and a doorway that disappears cannot be found.
   const quiet = contributions.length === 0;
+  const shown = contributions.slice(0, LEDGER_ROWS_SHOWN);
+  const overflow = contributions.length - shown.length;
   const net = contributions.reduce((total, contribution) => total + contribution.dividend, 0);
-  const positive = net >= 0;
-  // The list arrives sorted by absolute payout, so the first positive
-  // dividend is the night's best giver.
-  const highlight = contributions.find((contribution) => contribution.dividend > 0);
   return (
     <View style={styles.block}>
       <Pressable
@@ -75,29 +74,43 @@ export function SettlementSummary({ contributions, settledDate, onOpenLog, upcom
         accessibilityRole="button"
         {...rowMarker}
         onPress={onOpenLog}
-        style={({ pressed }) => [styles.head, pressed && styles.pressed]}
+        style={({ pressed }) => [pressed && styles.pressed]}
       >
-        {/* The night's headline as the app's own row grammar — the payer's
-            face anchors the sentence and the money is the loud word in it —
-            rather than a bare line of text. */}
-        {highlight ? (
-          <View style={styles.headlineRow}>
-            <PlayerAvatar player={highlight.player} size={28} />
-            <Text numberOfLines={1} style={styles.headline}>
-              {`${highlight.player.name} gave you `}
-              <Text style={[styles.headlineMoney, highlight.dividend >= 0 ? styles.positive : styles.negative]}>
-                {formatCompactSignedMoney(highlight.dividend)}
-              </Text>
+        {quiet ? (
+          <View style={styles.head}>
+            <Text numberOfLines={1} style={[styles.headline, styles.headlineQuiet]}>
+              None of your players played last night
             </Text>
+            <Text style={styles.toggle}>Game log  ›</Text>
           </View>
         ) : (
-          <Text numberOfLines={1} style={[styles.headline, styles.headlineQuiet]}>
-            {quiet
-              ? 'None of your players played last night'
-              : `${contributions.length} of your players played last night`}
-          </Text>
+          <>
+            {shown.map((contribution, index) => (
+              <View key={contribution.player.id} style={styles.ledgerRow}>
+                <PlayerAvatar player={contribution.player} size={24} />
+                <Text numberOfLines={1} style={styles.ledgerName}>
+                  {contribution.player.name}
+                </Text>
+                {/* The cause, then its money: beat the projection, get paid. */}
+                <Text numberOfLines={1} style={styles.ledgerCause}>
+                  {`${contribution.netPoints.toFixed(1)} vs ${contribution.expectedNetPoints.toFixed(1)} proj`}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={[styles.ledgerMoney, contribution.dividend >= 0 ? styles.positive : styles.negative]}
+                >
+                  {formatCompactSignedMoney(contribution.dividend)}
+                </Text>
+                {index === 0 ? <Text style={styles.toggle}>›</Text> : <Text style={styles.togglePlaceholder}>›</Text>}
+              </View>
+            ))}
+            {overflow > 0 ? (
+              <Text numberOfLines={1} style={styles.overflowLine}>
+                {`+${overflow} more in the game log  ›`}
+              </Text>
+            ) : null}
+          </>
         )}
-        <Text style={styles.toggle}>Game log  ›</Text>
       </Pressable>
       {upcoming ? (
         <Text numberOfLines={1} style={styles.upcoming}>{upcoming}</Text>
@@ -111,30 +124,16 @@ const styles = StyleSheet.create({
   block: {
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
+    paddingVertical: space.xs,
   },
+  pressed: { backgroundColor: colors.surface },
   head: {
-    minHeight: 44,
+    minHeight: 40,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: space.md,
     paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  pressed: { backgroundColor: colors.surface },
-  headCopy: { flex: 1, minWidth: 0 },
-  label: {
-    color: colors.faint,
-    fontFamily: fonts.body,
-    fontSize: type.body,
-    fontWeight: weight.medium,
-  },
-  headlineRow: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
   },
   headline: {
     flex: 1,
@@ -144,15 +143,57 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     fontWeight: weight.heavy,
   },
-  headlineMoney: { ...numeric, fontSize: type.value, fontWeight: weight.black },
   headlineQuiet: { color: colors.muted, fontWeight: weight.medium },
-  headNumbers: { alignItems: 'flex-end', flexShrink: 0 },
-  // The night's money is the strip's headline — the one figure the user
-  // opened the app to learn.
-  net: { ...numeric, fontSize: 20, fontWeight: weight.black },
+  ledgerRow: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+  },
+  ledgerName: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.bold,
+  },
+  ledgerCause: {
+    ...numeric,
+    flexShrink: 0,
+    color: colors.faint,
+    fontSize: type.label,
+    fontWeight: weight.medium,
+  },
+  ledgerMoney: {
+    ...numeric,
+    flexShrink: 0,
+    minWidth: 64,
+    textAlign: 'right',
+    fontSize: type.value,
+    fontWeight: weight.black,
+  },
+  overflowLine: {
+    color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.bold,
+    paddingHorizontal: space.lg,
+    paddingTop: 2,
+    paddingBottom: space.xs,
+    textAlign: 'right',
+  },
   toggle: {
     flexShrink: 0,
     color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.bold,
+  },
+  togglePlaceholder: {
+    flexShrink: 0,
+    color: 'transparent',
     fontFamily: fonts.display,
     fontSize: type.body,
     fontWeight: weight.bold,
@@ -163,8 +204,8 @@ const styles = StyleSheet.create({
     fontSize: type.label,
     fontWeight: weight.medium,
     paddingHorizontal: space.lg,
-    paddingBottom: space.sm,
-    marginTop: -2,
+    paddingTop: 2,
+    paddingBottom: space.xs,
   },
   positive: { color: colors.green },
   negative: { color: colors.red },

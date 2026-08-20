@@ -329,10 +329,16 @@ export class LocalMarketClient {
       season_id: SEASON_ID,
       last_settled_date: this.lastSettledDate(),
       next_game_date: next,
-      // The night's schedule is public before it settles.
+      // The night's schedule and projections are public before it settles.
       next_game_player_ids: next === null
         ? []
         : (eventsByDate.get(next) ?? []).map((event) => event.player_id),
+      next_game_projections: next === null
+        ? []
+        : (eventsByDate.get(next) ?? []).map((event) => ({
+          player_id: event.player_id,
+          expected_net_points_micros: event.expected_net_points_micros,
+        })),
       is_complete: this.state.settledDateCount >= replayDays.length,
       version: this.state.settledDateCount,
     };

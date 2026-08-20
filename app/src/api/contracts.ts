@@ -113,6 +113,8 @@ export interface ServerGameState {
   next_game_date: string | null;
   /** Players scheduled on next_game_date — public schedule, not lookahead. */
   next_game_player_ids?: string[];
+  /** Pregame projections for that date — the number each player must beat. */
+  next_game_projections?: { player_id: string; expected_net_points_micros: number }[];
   is_complete: boolean;
   version: number;
 }
@@ -478,6 +480,17 @@ export function parseGameState(value: unknown, path = 'game'): ServerGameState {
     next_game_date: nullableIsoDate(row.next_game_date, `${path}.next_game_date`),
     ...(Array.isArray(row.next_game_player_ids)
       ? { next_game_player_ids: row.next_game_player_ids.map((id, index) => text(id, `${path}.next_game_player_ids[${index}]`)) }
+      : {}),
+    ...(Array.isArray(row.next_game_projections)
+      ? {
+        next_game_projections: row.next_game_projections.map((entry, index) => {
+          const projection = record(entry, `${path}.next_game_projections[${index}]`);
+          return {
+            player_id: text(projection.player_id, `${path}.next_game_projections[${index}].player_id`),
+            expected_net_points_micros: integer(projection.expected_net_points_micros, `${path}.next_game_projections[${index}].expected_net_points_micros`),
+          };
+        }),
+      }
       : {}),
     is_complete: flag(row.is_complete, `${path}.is_complete`),
     version: nonNegativeInteger(row.version, `${path}.version`),

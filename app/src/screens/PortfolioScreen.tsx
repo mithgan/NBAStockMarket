@@ -179,6 +179,7 @@ export function PortfolioScreen() {
     latestSettledDate,
     nextGameDate,
     nextGamePlayerIds,
+    nextGameProjections,
     players,
     playerTrends,
     state,
@@ -206,14 +207,20 @@ export function PortfolioScreen() {
     receivedByPlayer.set(entry.playerId, (receivedByPlayer.get(entry.playerId) ?? 0) + entry.cashDelta);
   }
 
-  // Anticipation from the public schedule: which of YOUR players play next.
+  // Anticipation from the public schedule, with the stakes attached: the
+  // projection each of YOUR players must beat to pay you.
   const heldIds = new Set(state.holdings.map((holding) => holding.player_id));
-  const upcomingSurnames = nextGamePlayerIds
+  const upcomingStakes = nextGamePlayerIds
     .filter((id) => heldIds.has(id))
-    .map((id) => playerById.get(id)?.name.split(' ').at(-1) ?? '')
-    .filter(Boolean);
-  const upcomingLine = nextGameDate && upcomingSurnames.length > 0
-    ? `Next ${formatUpcomingDate(nextGameDate)}: ${upcomingSurnames.slice(0, 3).join(', ')}${upcomingSurnames.length > 3 ? ` +${upcomingSurnames.length - 3} more` : ''} ${upcomingSurnames.length === 1 ? 'plays' : 'play'} for you`
+    .map((id) => {
+      const surname = playerById.get(id)?.name.split(' ').at(-1);
+      if (!surname) return null;
+      const needs = nextGameProjections[id];
+      return needs === undefined ? surname : `${surname} needs ${needs.toFixed(1)}`;
+    })
+    .filter((entry): entry is string => entry !== null);
+  const upcomingLine = nextGameDate && upcomingStakes.length > 0
+    ? `Next ${formatUpcomingDate(nextGameDate)}: ${upcomingStakes.slice(0, 2).join(' · ')}${upcomingStakes.length > 2 ? ` · +${upcomingStakes.length - 2} more` : ''} to pay you`
     : null;
 
   if (detailPlayer) {
@@ -260,20 +267,11 @@ export function PortfolioScreen() {
           ) : null
         }
         earnings={latestSettledDate ? earningsWindows(state.activity, latestSettledDate) : null}
+        freeCash={summary.freeCash}
         height={width < 900 ? Math.min(variant.chartHeight, 112) : variant.chartHeight}
         points={state.portfolioHistory}
         totalValue={summary.totalValue}
       />
-      <Text
-        accessibilityLabel={`Free cash ${formatMoney(summary.freeCash)}, available to spend. ${formatMoney(summary.marketValue)} in players.${summary.reservedCollateral > 0 ? ` ${formatMoney(summary.reservedCollateral)} reserved as short collateral.` : ''}`}
-        maxFontSizeMultiplier={1.4}
-        numberOfLines={1}
-        style={styles.cashLine}
-      >
-        <Text style={styles.cashLineStrong}>{`${formatCompactMoney(summary.freeCash)} cash`}</Text>
-        {`  ·  ${formatCompactMoney(summary.marketValue)} in players`}
-        {summary.reservedCollateral > 0 ? `  ·  ${formatCompactMoney(summary.reservedCollateral)} reserved` : ''}
-      </Text>
       <View style={styles.rosterRegion}>
         <View style={styles.rosterHead}>
           <Text accessibilityRole="header" style={styles.sectionHeading}>

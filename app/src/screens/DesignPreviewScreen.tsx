@@ -77,6 +77,7 @@ export function DesignPreviewScreen() {
       </View>
       <PortfolioHistoryChart
         earnings={{ tonight: 529_000, week: 2_150_000 }}
+        freeCash={52_700_000}
         height={variant.chartHeight}
         points={SAMPLE_POINTS}
         totalValue={sampleTotal}
