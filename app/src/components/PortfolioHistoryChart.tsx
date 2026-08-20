@@ -165,7 +165,7 @@ export function PortfolioHistoryChart({
           accessibilityLabel={`Tonight ${formatSignedMoney(tonight)}`}
           maxFontSizeMultiplier={1.4}
           numberOfLines={1}
-          style={[styles.heroValue, { color: heroColor }]}
+          style={[styles.heroTonight, { color: heroColor }]}
         >
           {formatCompactSignedMoney(animatedTonight)}
         </Text>
@@ -336,6 +336,15 @@ const styles = StyleSheet.create({
   },
   heroKicker: { ...labelStyle, color: colors.faint, marginBottom: 2 },
   heroValue: { ...heroNumber },
+  // Display tier, not the hero's full 46: tonight leads without shouting —
+  // a giant red figure as the app's opening line read as an alarm.
+  heroTonight: {
+    ...numeric,
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: weight.black,
+    letterSpacing: -1,
+  },
   statRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
@@ -354,7 +363,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.md,
   },
-  balanceStrong: { color: colors.text, fontWeight: weight.heavy },
+  balanceStrong: { color: colors.text, fontSize: 21, fontWeight: weight.black, letterSpacing: -0.4 },
   statDivider: {
     width: 1,
     alignSelf: 'stretch',
