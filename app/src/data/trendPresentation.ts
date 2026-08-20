@@ -26,15 +26,21 @@ export function selectSettledTrendPoints<T extends { date: string }>(
 }
 
 /**
- * The night's story told in the unit that pays: surprise first, box score
- * second. "+11.0 over projection · 26.6 vs 15.6 NP" — the surprise is what
- * the dividend multiplies, so it leads.
+ * The night's story in the unit that pays: the surprise is what the dividend
+ * multiplies, so it is the whole label — "+11.0 over projection". The raw
+ * box-score pair is detail, so only the dedicated night log asks for it;
+ * everywhere else one clause explains the money and stops.
  */
-export function surpriseLabel(point: Pick<TrendPoint, 'np' | 'expected_np'>): string {
+export function surpriseLabel(
+  point: Pick<TrendPoint, 'np' | 'expected_np'>,
+  options?: { boxScore?: boolean },
+): string {
   const surprise = point.np - point.expected_np;
   const signed = `${surprise >= 0 ? '+' : ''}${surprise.toFixed(1)}`;
   const direction = surprise >= 0 ? 'over' : 'under';
-  return `${signed} ${direction} projection · ${point.np.toFixed(1)} vs ${point.expected_np.toFixed(1)} NP`;
+  const lead = `${signed} ${direction} projection`;
+  if (!options?.boxScore) return lead;
+  return `${lead} · ${point.np.toFixed(1)} vs ${point.expected_np.toFixed(1)} NP`;
 }
 
 export function cumulativeValues(values: readonly number[]): number[] {

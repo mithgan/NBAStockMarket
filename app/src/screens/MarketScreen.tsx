@@ -38,10 +38,7 @@ import { dividendYield, marketAverageRate, summarizeDividends } from '../data/di
 import {
   formatOwnership,
   formatOwnershipShort,
-  formatSignedMetric,
   formatTradeVolume,
-  metricDirection,
-  recentForm,
   smoothLinePath,
 } from '../data/marketPresentation';
 import {
@@ -398,8 +395,7 @@ export function PlayerDetail({
               numberOfLines={1}
               style={styles.detailRateLine}
             >
-              {`${formatCompactSignedMoney(season.perGame ?? 0)}/night · ${season.gamesPlayed} gm`}
-              {vsAverage === null ? '' : ` · ${formatCompactSignedMoney(vsAverage)} vs avg payer`}
+              {`${formatCompactSignedMoney(season.perGame ?? 0)} a night, over ${season.gamesPlayed} ${season.gamesPlayed === 1 ? 'game' : 'games'}`}
             </Text>
           </>
         ) : (
@@ -455,7 +451,7 @@ export function PlayerDetail({
         <Stat
           exact={season.perGame === null ? 'No settled games' : `${formatSignedMoney(season.perGame)} per night he plays`}
           label="Pays per night"
-          value={season.perGame === null ? '—' : `${formatCompactSignedMoney(season.perGame)}/night`}
+          value={season.perGame === null ? '—' : formatCompactSignedMoney(season.perGame)}
         />
         <Stat label="Games settled" value={String(season.gamesPlayed)} />
         <Stat
@@ -467,8 +463,8 @@ export function PlayerDetail({
           exact={vsAverage === null
             ? 'Needs a settled game and a market average'
             : `${formatSignedMoney(vsAverage)} per night versus the average payer`}
-          label="Vs avg payer"
-          value={vsAverage === null ? '—' : `${formatCompactSignedMoney(vsAverage)}/night`}
+          label="Vs the average payer"
+          value={vsAverage === null ? '—' : formatCompactSignedMoney(vsAverage)}
         />
         <Stat
           exact={seasonYield === null
@@ -556,15 +552,13 @@ function MarketRow({
   watching,
   onToggleWatch,
 }: MarketRowProps) {
-  const { player, currentPrice, held, windowRate, windowGames, seasonYield } = row;
+  const { player, currentPrice, held, windowRate, windowGames } = row;
   const { first, last } = splitName(player.name);
   const buyTotal = currentPrice + (player.buy_fee ?? 0);
   const shortfall = held ? 0 : Math.max(0, buyTotal - freeCash);
   const soldOut = !held && player.available_shares === 0;
   const unaffordable = !held && !soldOut && shortfall > 0;
   const disabled = shorted || boosted || soldOut || unaffordable || locked;
-  const form = recentForm(trendPoints);
-  const formDirection = form ? metricDirection(form.averageSurprise) : 0;
   const chartPoints = selectTrendRange(trendPoints, 'L15');
   const rowAccessibilityLabel = [
     `View ${player.name} details`,
@@ -572,15 +566,11 @@ function MarketRow({
       ? 'No settled games in this window'
       : `Pays ${formatSignedMoney(windowRate)} per night across ${windowGames} settled ${windowGames === 1 ? 'game' : 'games'}`,
     `Price ${formatMoney(currentPrice)}`,
-    seasonYield === null ? null : `Season yield ${(seasonYield * 100).toFixed(1)} percent of price`,
     held ? 'You own this player' : null,
     // An explicit label replaces the descendant text, so anything the row shows
     // visibly has to be repeated here or assistive tech simply loses it.
     player.tier.toUpperCase(),
     showOwnership ? formatOwnership(player.ownership_bps) : null,
-    form
-      ? `Recent form, last ${form.games} games ${formatSignedMetric(form.averageSurprise)} net points versus expected`
-      : null,
   ].filter((label): label is string => label !== null).join('. ');
 
   const handleTrade = () => {
@@ -619,25 +609,10 @@ function MarketRow({
             {first ? <Text style={styles.playerFirst}>{first} </Text> : null}
             {last}
           </Text>
+          {/* Tier only. The list answers one question — who pays what — and
+              every explanation (games, form, yield) waits inside the profile. */}
           <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.playerMeta}>
             {player.tier.toUpperCase()}
-            {/* Exposure first (how many nights the rate covers), the box-score
-                explanation after it. */}
-            {windowGames > 0 ? ` · ${windowGames} gm` : ''}
-            {form ? ' · ' : ''}
-            {form ? (
-              <Text
-                style={
-                  formDirection > 0
-                    ? styles.positive
-                    : formDirection < 0
-                      ? styles.negative
-                      : styles.neutral
-                }
-              >
-                L{form.games} {formatSignedMetric(form.averageSurprise)} NP
-              </Text>
-            ) : null}
           </Text>
         </View>
         {showOwnership ? (
@@ -659,12 +634,16 @@ function MarketRow({
               numberOfLines={1}
               style={[styles.quoteRate, windowRate >= 0 ? styles.positive : styles.negative]}
             >
-              {`${formatCompactSignedMoney(windowRate)}/nt`}
+              {formatCompactSignedMoney(windowRate)}
             </Text>
           )}
+          {/* The unit and the quiet price ride the caption, so the figure
+              stays narrow and the name keeps its room. The full chain
+              (yield, baselines, box score) lives one tap in. */}
           <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.quoteCaption}>
-            {formatCompactMoney(currentPrice)}
-            {seasonYield === null ? '' : ` · ${(seasonYield * 100).toFixed(1)}% yld`}
+            {windowRate === null
+              ? formatCompactMoney(currentPrice)
+              : `a night · ${formatCompactMoney(currentPrice)}`}
           </Text>
         </View>
       </Pressable>

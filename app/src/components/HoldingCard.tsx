@@ -38,11 +38,11 @@ export function HoldingRow({ holding, dividends, received, onPress, trend }: {
   /** Recent settled games; the sparkline only draws with two or more. */
   trend?: TrendPoint[];
 }) {
-  const { player, currentPrice, costBasis, unrealizedPnl } = holding;
+  const { player, currentPrice, costBasis } = holding;
   const paidColor = received >= 0 ? colors.green : colors.red;
   const rateCaption = dividends.perGame === null
     ? 'No settled games yet'
-    : `${formatCompactSignedMoney(dividends.perGame)}/nt · ${dividends.gamesPlayed} gm`;
+    : `${formatCompactSignedMoney(dividends.perGame)} a night`;
   return (
     <Pressable
       accessibilityLabel={`View ${player.name} details. Has paid you ${formatSignedMoney(received)}. Pays ${dividends.perGame === null ? 'nothing yet' : `${formatSignedMoney(dividends.perGame)} per night across ${dividends.gamesPlayed} settled games`}. Value ${formatMoney(currentPrice)} against ${formatMoney(costBasis)} paid including fee.`}
@@ -61,23 +61,18 @@ export function HoldingRow({ holding, dividends, received, onPress, trend }: {
         </Text>
       </View>
       {trend && trend.length > 1 ? <Sparkline points={trend} /> : null}
+      {/* One figure per row: what he has paid you. Share value and cost live
+          in the roster header's total and in the profile — putting a second
+          money story on every row is what made dividends and price blur. */}
       <View style={styles.numbers}>
-        <View style={styles.figureLine}>
-          <Text style={styles.figureLabel}>PAID YOU</Text>
-          <Text
-            maxFontSizeMultiplier={1.4}
-            numberOfLines={1}
-            style={[styles.paid, { color: paidColor }]}
-          >
-            {formatCompactSignedMoney(received)}
-          </Text>
-        </View>
-        <View style={styles.figureLine}>
-          <Text style={styles.figureLabel}>VALUE</Text>
-          <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.value}>
-            {`${formatCompactMoney(currentPrice)} · ${formatCompactSignedMoney(unrealizedPnl)}`}
-          </Text>
-        </View>
+        <Text style={styles.figureLabel}>PAID YOU</Text>
+        <Text
+          maxFontSizeMultiplier={1.4}
+          numberOfLines={1}
+          style={[styles.paid, { color: paidColor }]}
+        >
+          {formatCompactSignedMoney(received)}
+        </Text>
       </View>
     </Pressable>
   );
@@ -110,11 +105,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   numbers: { alignItems: 'flex-end', flexShrink: 0, gap: 2 },
-  figureLine: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: space.xs,
-  },
   figureLabel: {
     color: colors.faint,
     fontFamily: fonts.display,
@@ -128,11 +118,5 @@ const styles = StyleSheet.create({
     ...numeric,
     fontSize: 18,
     fontWeight: weight.black,
-  },
-  value: {
-    ...numeric,
-    color: colors.muted,
-    fontSize: type.label,
-    fontWeight: weight.bold,
   },
 });

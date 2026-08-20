@@ -66,8 +66,11 @@ test('the market removes nonessential sparklines from narrow phone rows', () => 
   assert.match(marketSource, /maxFontSizeMultiplier=\{MAX_ROW_FONT_SCALE\}/);
   assert.match(marketSource, /showSparkline && chartPoints\.length > 0 \? <Sparkline points=\{chartPoints\}/);
   assert.match(marketSource, /const chartPoints = selectTrendRange\(trendPoints, 'L15'\)/);
-  // Recent form still reaches narrow rows as text even without the sparkline.
-  assert.match(marketSource, /L\{form\.games\} \{formatSignedMetric\(form\.averageSurprise\)\} NP/);
+  // The row keeps exactly one figure and one caption: the nightly rate over
+  // "a night · price". Box score and form wait inside the profile.
+  assert.match(marketSource, /formatCompactSignedMoney\(windowRate\)/);
+  assert.match(marketSource, /a night · \$\{formatCompactMoney\(currentPrice\)\}/);
+  assert.doesNotMatch(marketSource, /formatSignedMetric\(form\.averageSurprise\)\} NP/);
 });
 
 test('the market only widens into extra columns when the table has room', () => {
@@ -207,7 +210,7 @@ test('player details resolve current server data and lead with the stream, not t
   // must not return to the profile meta.
   assert.doesNotMatch(marketSource, /since listing/);
   assert.match(marketSource, /label="Pays per night"/);
-  assert.match(marketSource, /label="Vs avg payer"/);
+  assert.match(marketSource, /label="Vs the average payer"/);
   assert.match(marketSource, /const rowAccessibilityLabel = \[/);
   assert.match(marketSource, /`Price \$\{formatMoney\(currentPrice\)\}`/);
   assert.match(marketSource, /accessibilityLabel=\{rowAccessibilityLabel\}/);

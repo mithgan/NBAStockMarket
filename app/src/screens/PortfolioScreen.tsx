@@ -53,11 +53,13 @@ function groupActivity(entries: ActivityEvent[]): ActivityNight[] {
  * surprise-led box line and a payout meter scaled against `meterScale`
  * (the largest absolute payout in whatever batch the caller is showing).
  */
-function ActivityNightGroup({ night, playerById, playerTrends, meterScale }: {
+function ActivityNightGroup({ night, playerById, playerTrends, meterScale, boxScore = false }: {
   night: ActivityNight;
   playerById: Map<string, Player>;
   playerTrends: Record<string, TrendPoint[]>;
   meterScale: number;
+  /** The dedicated night log shows the raw box score; the strips do not. */
+  boxScore?: boolean;
 }) {
   return (
     <View>
@@ -93,7 +95,7 @@ function ActivityNightGroup({ night, playerById, playerTrends, meterScale }: {
               </Text>
               {point ? (
                 <Text numberOfLines={1} style={styles.activityWhy}>
-                  {surpriseLabel(point)}
+                  {surpriseLabel(point, { boxScore })}
                 </Text>
               ) : null}
               {meter > 0 ? (
@@ -163,6 +165,7 @@ function NightLogView({ activity, playerById, playerTrends, onClose }: {
         <View style={styles.list}>
           {nights.map((night) => (
             <ActivityNightGroup
+              boxScore
               key={night.key}
               meterScale={night.items.reduce((largest, entry) => Math.max(largest, Math.abs(entry.cashDelta)), 0)}
               night={night}

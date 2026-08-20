@@ -124,10 +124,11 @@ export function WatchlistScreen() {
               <View style={styles.rowCopy}>
                 <Text numberOfLines={1} style={styles.rowName}>{entry.player.name}</Text>
                 <Text numberOfLines={1} style={styles.rowMeta}>
-                  {/* Money rate first; the box-score explanation after it. */}
+                  {/* One quiet explainer in words; the chart above already
+                      carries the shape and the profile carries the box score. */}
                   {entry.points.length === 0 || entry.rate === null
                     ? 'No settled games in this window'
-                    : `${formatCompactSignedMoney(entry.rate)}/nt · ${entry.points.length} gm · ${entry.perGame === null ? '+0.0' : entry.perGame >= 0 ? `+${entry.perGame.toFixed(1)}` : entry.perGame.toFixed(1)} NP`}
+                    : `${formatCompactSignedMoney(entry.rate)} a night, over ${entry.points.length} ${entry.points.length === 1 ? 'game' : 'games'}`}
                 </Text>
               </View>
               <View style={styles.rowNumbers}>
