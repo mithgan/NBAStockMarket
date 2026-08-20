@@ -41,12 +41,13 @@ export function HoldingRow({ holding, dividends, received, onPress, trend }: {
 }) {
   const { player, currentPrice, costBasis } = holding;
   const paidColor = received >= 0 ? colors.green : colors.red;
+  // Rate, then reliability: how much when he plays, and how often he pays.
   const rateCaption = dividends.perGame === null
     ? 'No settled games yet'
-    : `${formatCompactSignedMoney(dividends.perGame)} a night`;
+    : `${formatCompactSignedMoney(dividends.perGame)} a night · paid ${dividends.paidNights} of ${dividends.gamesPlayed}`;
   return (
     <Pressable
-      accessibilityLabel={`View ${player.name} details. Dividends ${formatSignedMoney(received)} to you. Pays ${dividends.perGame === null ? 'nothing yet' : `${formatSignedMoney(dividends.perGame)} per night across ${dividends.gamesPlayed} settled games`}. Value ${formatMoney(currentPrice)} against ${formatMoney(costBasis)} paid including fee.`}
+      accessibilityLabel={`View ${player.name} details. Dividends ${formatSignedMoney(received)} to you. Pays ${dividends.perGame === null ? 'nothing yet' : `${formatSignedMoney(dividends.perGame)} per night, and paid on ${dividends.paidNights} of ${dividends.gamesPlayed} settled nights`}. Value ${formatMoney(currentPrice)} against ${formatMoney(costBasis)} paid including fee.`}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}

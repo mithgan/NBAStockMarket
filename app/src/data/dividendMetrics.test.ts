@@ -15,6 +15,7 @@ test('summarizeDividends reads rate, exposure, and total from settled rows', () 
     night('2025-11-05', 300_000),
   ]);
   assert.equal(summary.gamesPlayed, 3);
+  assert.equal(summary.paidNights, 2);
   assert.equal(summary.total, 600_000);
   assert.equal(summary.perGame, 200_000);
 });
@@ -22,6 +23,7 @@ test('summarizeDividends reads rate, exposure, and total from settled rows', () 
 test('summarizeDividends has no rate before the first game', () => {
   const summary = summarizeDividends([]);
   assert.equal(summary.gamesPlayed, 0);
+  assert.equal(summary.paidNights, 0);
   assert.equal(summary.total, 0);
   assert.equal(summary.perGame, null);
 });

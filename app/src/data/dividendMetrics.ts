@@ -14,6 +14,8 @@ import type { TrendPoint } from './trendPresentation';
 export interface DividendSummary {
   /** Settled games the player actually appeared in over the window. */
   gamesPlayed: number;
+  /** Nights he beat projection — the ones that actually paid. */
+  paidNights: number;
   /** Sum of dividends per holder across the window. */
   total: number;
   /** Average payout per game played — null until he has played one. */
@@ -24,6 +26,7 @@ export function summarizeDividends(points: readonly TrendPoint[]): DividendSumma
   const total = points.reduce((sum, point) => sum + point.dividend_per_holder, 0);
   return {
     gamesPlayed: points.length,
+    paidNights: points.filter((point) => point.dividend_per_holder > 0).length,
     total,
     perGame: points.length === 0 ? null : total / points.length,
   };
