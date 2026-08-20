@@ -6,6 +6,7 @@ import { formatCompactSignedMoney, formatSignedMoney } from '../format';
 import type { GameHolding } from '../state/game';
 import { colors, fonts, numeric, space, type, weight } from '../theme';
 import { rowMarker } from '../ui/domMarkers';
+import { PlayerAvatar } from './PlayerAvatar';
 
 export interface NightContribution {
   player: Player;
@@ -74,15 +75,26 @@ export function SettlementSummary({ contributions, settledDate, onOpenLog }: {
         onPress={onOpenLog}
         style={({ pressed }) => [styles.head, pressed && styles.pressed]}
       >
-        {/* One line, label-free: the sentence carries the night, and the
-            hero's earnings line above already carries tonight's net. */}
-        <Text numberOfLines={1} style={styles.headline}>
-          {quiet
-            ? 'None of your players played last night'
-            : highlight
-              ? `${highlight.player.name} gave you ${formatCompactSignedMoney(highlight.dividend)}`
+        {/* The night's headline as the app's own row grammar — the payer's
+            face anchors the sentence and the money is the loud word in it —
+            rather than a bare line of text. */}
+        {highlight ? (
+          <View style={styles.headlineRow}>
+            <PlayerAvatar player={highlight.player} size={28} />
+            <Text numberOfLines={1} style={styles.headline}>
+              {`${highlight.player.name} gave you `}
+              <Text style={[styles.headlineMoney, highlight.dividend >= 0 ? styles.positive : styles.negative]}>
+                {formatCompactSignedMoney(highlight.dividend)}
+              </Text>
+            </Text>
+          </View>
+        ) : (
+          <Text numberOfLines={1} style={[styles.headline, styles.headlineQuiet]}>
+            {quiet
+              ? 'None of your players played last night'
               : `${contributions.length} of your players played last night`}
-        </Text>
+          </Text>
+        )}
         <Text style={styles.toggle}>Game log  ›</Text>
       </Pressable>
     </View>
@@ -112,6 +124,13 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     fontWeight: weight.medium,
   },
+  headlineRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
   headline: {
     flex: 1,
     minWidth: 0,
@@ -120,6 +139,8 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     fontWeight: weight.heavy,
   },
+  headlineMoney: { ...numeric, fontSize: type.value, fontWeight: weight.black },
+  headlineQuiet: { color: colors.muted, fontWeight: weight.medium },
   headNumbers: { alignItems: 'flex-end', flexShrink: 0 },
   // The night's money is the strip's headline — the one figure the user
   // opened the app to learn.

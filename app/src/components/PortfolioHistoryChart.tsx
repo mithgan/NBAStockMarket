@@ -170,10 +170,10 @@ export function PortfolioHistoryChart({
                 accessibilityLabel={`Tonight ${formatSignedMoney(earnings.tonight)}`}
                 style={styles.statCell}
               >
-                <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={[styles.statValue, toneStyle(earnings.tonight)]}>
+                <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={[styles.statValue, toneStyle(earnings.tonight)]}>
                   {formatCompactSignedMoney(earnings.tonight)}
                 </Text>
-                <Text maxFontSizeMultiplier={1.4} style={styles.statLabel}>TONIGHT</Text>
+                <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>TONIGHT</Text>
               </View>
               <View style={styles.statDivider} />
               <View
@@ -181,10 +181,10 @@ export function PortfolioHistoryChart({
                 accessibilityLabel={`Past seven nights ${formatSignedMoney(earnings.week)}`}
                 style={styles.statCell}
               >
-                <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={[styles.statValue, toneStyle(earnings.week)]}>
+                <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={[styles.statValue, toneStyle(earnings.week)]}>
                   {formatCompactSignedMoney(earnings.week)}
                 </Text>
-                <Text maxFontSizeMultiplier={1.4} style={styles.statLabel}>THIS WEEK</Text>
+                <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>THIS WEEK</Text>
               </View>
               <View style={styles.statDivider} />
             </>
@@ -194,13 +194,11 @@ export function PortfolioHistoryChart({
             accessibilityLabel={`${formatSignedMoney(change)}, ${changePct >= 0 ? 'up' : 'down'} ${Math.abs(changePct).toFixed(2)} percent, ${scrubPoint ? scrubPoint.date : rangeLabel(activeRange)}`}
             style={styles.statCell}
           >
-            <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={[styles.statValue, { color: changeColor }]}>
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={[styles.statValue, { color: changeColor }]}>
               {formatCompactSignedMoney(change)}
             </Text>
-            <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.statLabel}>
-              {scrubPoint
-                ? scrubPoint.date
-                : `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}% · ${rangeLabel(activeRange).toUpperCase()}`}
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>
+              {scrubPoint ? scrubPoint.date : rangeLabel(activeRange).toUpperCase()}
             </Text>
           </View>
         </View>
@@ -355,14 +353,16 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     marginTop: space.md,
   },
-  statCell: { gap: 3, minWidth: 0, flexShrink: 1 },
-  statValue: { ...numeric, fontSize: 17, fontWeight: weight.black },
+  // Equal thirds: a long label in one cell can never starve a value in
+  // another, so figures render whole at every width.
+  statCell: { flex: 1, gap: 3, minWidth: 0 },
+  statValue: { ...numeric, fontSize: 20, fontWeight: weight.black, letterSpacing: -0.3 },
   statLabel: { ...labelStyle, color: colors.faint },
   statDivider: {
     width: 1,
     alignSelf: 'stretch',
     backgroundColor: colors.borderStrong,
-    marginHorizontal: space.lg,
+    marginHorizontal: space.md,
   },
   plot: {},
   // Date labels line up with the plot's 10px horizontal insets.
