@@ -178,6 +178,7 @@ export function PortfolioScreen() {
   } = usePortfolio();
   const [detailPlayerId, setDetailPlayerId] = useState<string | null>(null);
   const [nightLogOpen, setNightLogOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const { fontScale, width } = useWindowDimensions();
   // The sparkline is the first thing to go when horizontal space gets scarce:
   // a squeezed trace misleads more than no trace.
@@ -254,7 +255,7 @@ export function PortfolioScreen() {
         {`  ·  ${formatCompactMoney(summary.marketValue)} in players`}
         {summary.reservedCollateral > 0 ? `  ·  ${formatCompactMoney(summary.reservedCollateral)} reserved` : ''}
       </Text>
-      <View>
+      <View style={styles.rosterRegion}>
         <View style={styles.rosterHead}>
           <Text accessibilityRole="header" style={styles.sectionHeading}>
             Your players
@@ -295,15 +296,24 @@ export function PortfolioScreen() {
           </View>
         )}
       </View>
-      <Text accessibilityRole="header" style={styles.sectionHeading}>Recent activity</Text>
-      {recentActivity.length === 0 ? (
+      {/* Progressive disclosure: the ledger waits behind its heading. */}
+      <Pressable
+        accessibilityLabel={activityOpen ? 'Collapse recent activity' : 'Expand recent activity'}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: activityOpen }}
+        onPress={() => setActivityOpen((current) => !current)}
+        style={({ pressed }) => [styles.activityToggle, pressed && styles.backPressed]}
+        {...rowMarker}
+      >
+        <Text accessibilityRole="header" style={styles.sectionHeading}>Recent activity</Text>
+        <Text style={styles.activityChevron}>{activityOpen ? '▾' : '▸'}</Text>
+      </Pressable>
+      {!activityOpen ? null : recentActivity.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.subtle}>Trades and settlements will appear here.</Text>
         </View>
       ) : (
         <View style={styles.list}>
-          {/* Meter scale is per-batch: the biggest settled payout in view is
-              the full bar and everything else reads against it. */}
           {groupActivity(recentActivity).map((night) => (
             <ActivityNightGroup
               key={night.key}
@@ -344,6 +354,26 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
   },
   cashLineStrong: { color: colors.text, fontWeight: weight.heavy },
+  rosterRegion: {
+    backgroundColor: colors.surface,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    paddingBottom: space.xs,
+  },
+  activityToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: space.lg,
+  },
+  activityChevron: {
+    color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.black,
+  },
   sectionHeading: {
     ...headingStyle,
     paddingHorizontal: space.lg,

@@ -12,7 +12,7 @@ import { formatCompactSignedMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
 import { useWatchlist, WATCHLIST_LIMIT } from '../state/watchlist';
 import { rowMarker } from '../ui/domMarkers';
-import { colors, fonts, headingStyle, numeric, radius, space, type, weight } from '../theme';
+import { colors, fonts, headingStyle, labelStyle, numeric, radius, space, type, weight } from '../theme';
 import { Segmented } from '../ui/primitives';
 
 /** One line per watched player; assignment order keeps a player's colour stable. */
@@ -31,6 +31,13 @@ const WINDOWS: readonly { key: TrendRange; label: string; hint: string }[] = [
   { key: 'L30', label: 'L30', hint: 'Compare the last thirty settled games' },
   { key: 'Season', label: 'Season', hint: 'Compare the settled season' },
 ];
+
+/** Broadcast convention: quiet given name, loud surname. */
+function splitName(name: string): { first: string; last: string } {
+  const parts = name.trim().split(' ');
+  if (parts.length === 1) return { first: '', last: parts[0] };
+  return { first: parts[0], last: parts.slice(1).join(' ') };
+}
 
 interface WatchedSeries {
   player: Player;
@@ -105,9 +112,7 @@ export function WatchlistScreen() {
           <Text style={styles.clearText}>Clear</Text>
         </Pressable>
       </View>
-      <Text style={styles.intro}>
-        Who has been paying, and how fast. Hover the chart to read one night across everyone.
-      </Text>
+      <Text style={styles.intro}>Who has been paying, and how fast.</Text>
       <View style={styles.controls}>
         <Segmented groupLabel="Comparison window" onChange={setRange} options={WINDOWS} value={range} />
       </View>
@@ -122,13 +127,14 @@ export function WatchlistScreen() {
               <View style={[styles.swatch, { backgroundColor: entry.color }]} />
               <PlayerAvatar player={entry.player} size={34} />
               <View style={styles.rowCopy}>
-                <Text numberOfLines={1} style={styles.rowName}>{entry.player.name}</Text>
+                <Text numberOfLines={1} style={styles.rowKicker}>
+                  {splitName(entry.player.name).first.toUpperCase() || entry.player.tier.toUpperCase()}
+                </Text>
+                <Text numberOfLines={1} style={styles.rowName}>{splitName(entry.player.name).last}</Text>
                 <Text numberOfLines={1} style={styles.rowMeta}>
-                  {/* One quiet explainer in words; the chart above already
-                      carries the shape and the profile carries the box score. */}
                   {entry.points.length === 0 || entry.rate === null
-                    ? 'No settled games in this window'
-                    : `${formatCompactSignedMoney(entry.rate)} a night, over ${entry.points.length} ${entry.points.length === 1 ? 'game' : 'games'}`}
+                    ? 'No games in this window'
+                    : `${formatCompactSignedMoney(entry.rate)} a night`}
                 </Text>
               </View>
               <View style={styles.rowNumbers}>
@@ -159,7 +165,7 @@ export function WatchlistScreen() {
         })}
       </View>
       <Text style={styles.footnote}>
-        {`Dividends are what a player paid per holder over the window, from settled games only. Your own portfolio is ${summary ? formatSignedMoney(summary.totalValue - 140_000_000) : 'unchanged'} against the opening bankroll.`}
+        {`Dividends per holder, settled games only. Your portfolio: ${summary ? formatCompactSignedMoney(summary.totalValue - 140_000_000) : '+$0'} all time.`}
       </Text>
     </ScrollView>
   );
@@ -171,7 +177,7 @@ export function WatchlistScreen() {
  */
 function ComparisonChart({
   series,
-  height = 200,
+  height = 168,
   onScrubIndex,
   activeIndex,
 }: {
@@ -302,6 +308,7 @@ const styles = StyleSheet.create({
   },
   swatch: { width: 4, height: 30, borderRadius: radius.xs, flexShrink: 0 },
   rowCopy: { flex: 1, minWidth: 0 },
+  rowKicker: { ...labelStyle, color: colors.faint, fontSize: 11, letterSpacing: 0.8 },
   rowName: {
     color: colors.text,
     fontFamily: fonts.display,

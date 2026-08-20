@@ -134,6 +134,9 @@ export function PortfolioHistoryChart({
   const changeColor = up ? colors.green : colors.red;
   // Count up when the number moves on its own; scrubbing tracks instantly.
   const animatedValue = useCountUp(shownValue, scrubPoint !== null);
+  const animatedTonight = useCountUp(earnings?.tonight ?? 0);
+  const animatedWeek = useCountUp(earnings?.week ?? 0);
+  const animatedChange = useCountUp(change, scrubPoint !== null);
 
   if (visible.length === 0) {
     return (
@@ -171,7 +174,7 @@ export function PortfolioHistoryChart({
                 style={styles.statCell}
               >
                 <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={[styles.statValue, toneStyle(earnings.tonight)]}>
-                  {formatCompactSignedMoney(earnings.tonight)}
+                  {formatCompactSignedMoney(animatedTonight)}
                 </Text>
                 <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>TONIGHT</Text>
               </View>
@@ -182,7 +185,7 @@ export function PortfolioHistoryChart({
                 style={styles.statCell}
               >
                 <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={[styles.statValue, toneStyle(earnings.week)]}>
-                  {formatCompactSignedMoney(earnings.week)}
+                  {formatCompactSignedMoney(animatedWeek)}
                 </Text>
                 <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>THIS WEEK</Text>
               </View>
@@ -195,7 +198,7 @@ export function PortfolioHistoryChart({
             style={styles.statCell}
           >
             <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={[styles.statValue, { color: changeColor }]}>
-              {formatCompactSignedMoney(change)}
+              {formatCompactSignedMoney(animatedChange)}
             </Text>
             <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>
               {scrubPoint ? scrubPoint.date : rangeLabel(activeRange).toUpperCase()}
