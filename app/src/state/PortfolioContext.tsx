@@ -12,10 +12,8 @@ import {
 
 import { MarketApiClient, MarketApiError } from '../api/client';
 import type { ServerBootstrap, ServerPortfolio } from '../api/contracts';
-import { settlementRecapSince } from '../data/dividendMetrics';
 import type { TrendPoint } from '../data/trendPresentation';
 import type { Player } from '../data/types';
-import { formatCompactMoney, formatCompactSignedMoney } from '../format';
 import { ActionLock } from './actionLock';
 import { type GameLeaderboardEntry, type GameState, getGameSummary, type TradeSide } from './game';
 import {
@@ -318,10 +316,7 @@ export function PortfolioProvider({
   const runFullRefreshAction = useCallback(async (
     key: string,
     action: () => Promise<unknown>,
-    // A function defers composition until after the refresh, so the message
-    // can read the new ledger — "Paid you +$1.2M across 7 nights" needs the
-    // nights to exist before it can count them.
-    successMessage: string | (() => string),
+    successMessage: string,
   ): Promise<boolean> => {
     if (!reconciliationCoordinator.current.beginMutation(
       () => actionLock.current.acquire('account-mutation'),
@@ -343,9 +338,7 @@ export function PortfolioProvider({
         reconciliationReason = 'confirmed-global';
         return false;
       }
-      if (mounted.current) {
-        setMessage(typeof successMessage === 'function' ? successMessage() : successMessage);
-      }
+      if (mounted.current) setMessage(successMessage);
       return true;
     } catch (error) {
       reconciliationReason = mutationOutcomeMayHaveCommitted(error)
@@ -437,34 +430,18 @@ export function PortfolioProvider({
       `${player.name} boosted for ${gameDate}.`,
   ), [apiClient, currentQuoteVersion, runReconciledAction]);
 
-  /**
-   * The settle notice leads with the money — that is the update the banner
-   * exists to deliver. The mechanical fallback only speaks when the new
-   * nights did not touch this account (no holdings, or a perfect wash).
-   */
-  const settleNotice = useCallback((sinceDate: string | null, fallback: string) => {
-    const recap = settlementRecapSince(bootstrapRef.current?.activity.items ?? [], sinceDate);
-    if (recap.nights === 0 || recap.paid === 0) return fallback;
-    const money = recap.paid > 0
-      ? `Paid you ${formatCompactSignedMoney(recap.paid)}`
-      : `Cost you ${formatCompactMoney(Math.abs(recap.paid))}`;
-    const span = recap.nights === 1 ? 'last night' : `across ${recap.nights} nights`;
-    return `${money} ${span}. ${fallback}`;
-  }, []);
-
   const advanceDay = useCallback(async () => {
     const nextGameDate = bootstrapRef.current?.game.next_game_date;
     if (!nextGameDate) {
       if (mounted.current) setMessage('The historical replay is complete.');
       return false;
     }
-    const sinceDate = bootstrapRef.current?.game.last_settled_date ?? null;
     return runFullRefreshAction(
       'advance',
       () => apiClient.advanceDay(nextGameDate),
-      () => settleNotice(sinceDate, `${nextGameDate} settled. Prices and portfolios are updated.`),
+      `${nextGameDate} settled. Prices and portfolios are updated.`,
     );
-  }, [apiClient, runFullRefreshAction, settleNotice]);
+  }, [apiClient, runFullRefreshAction]);
 
   const advanceSeason = useCallback(async () => {
     const nextGameDate = bootstrapRef.current?.game.next_game_date;
@@ -473,7 +450,6 @@ export function PortfolioProvider({
       return false;
     }
     setSeasonReplayProgress(null);
-    const sinceDate = bootstrapRef.current?.game.last_settled_date ?? null;
     try {
       return await runFullRefreshAction(
         'advance-season',
@@ -484,12 +460,12 @@ export function PortfolioProvider({
             if (mounted.current) setSeasonReplayProgress(progress);
           },
         ),
-        () => settleNotice(sinceDate, 'The historical season is fully settled. Prices and portfolios are updated.'),
+        'The historical season is fully settled. Prices and portfolios are updated.',
       );
     } finally {
       if (mounted.current) setSeasonReplayProgress(null);
     }
-  }, [apiClient, runFullRefreshAction, settleNotice]);
+  }, [apiClient, runFullRefreshAction]);
 
   const advanceSandboxDays = useCallback(async (calendarDays: 1 | 7) => {
     if (!apiClient.canAdvanceSeason) return false;
@@ -502,7 +478,6 @@ export function PortfolioProvider({
     updatePendingActions();
     setMessage(null);
     let anySettled = false;
-    const sinceDate = bootstrapRef.current?.game.last_settled_date ?? null;
     try {
       let expected = bootstrapRef.current?.game.next_game_date ?? null;
       if (!expected) {
@@ -527,12 +502,9 @@ export function PortfolioProvider({
       if (!refreshed) return false;
       if (mounted.current) {
         const label = `${settled} game ${settled === 1 ? 'date' : 'dates'}`;
-        setMessage(settleNotice(
-          sinceDate,
-          expected === null
-            ? `Settled ${label}. The season replay is complete.`
-            : `Settled ${label}.`,
-        ));
+        setMessage(expected === null
+          ? `Settled ${label}. The season replay is complete.`
+          : `Settled ${label}.`);
       }
       return true;
     } catch (error) {
@@ -546,7 +518,7 @@ export function PortfolioProvider({
       actionLock.current.release('account-mutation');
       updatePendingActions();
     }
-  }, [apiClient, loadSnapshot, settleNotice, updatePendingActions]);
+  }, [apiClient, loadSnapshot, updatePendingActions]);
 
   // Sandbox-only: rewinds the shared season clock itself, so every account —
   // not just this one — starts the replay over from opening night.

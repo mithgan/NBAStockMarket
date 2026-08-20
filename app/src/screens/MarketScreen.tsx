@@ -383,12 +383,12 @@ export function PlayerDetail({
         {season.gamesPlayed > 0 ? (
           <>
             <Text
-              accessibilityLabel={`Paid holders ${formatSignedMoney(season.total)} across the settled season`}
+              accessibilityLabel={`Dividends ${formatSignedMoney(season.total)} per holder across the settled season`}
               numberOfLines={1}
               style={[styles.detailPaid, season.total >= 0 ? styles.positive : styles.negative]}
             >
               {formatCompactSignedMoney(season.total)}
-              <Text style={styles.detailPaidLabel}>  PAID · SEASON</Text>
+              <Text style={styles.detailPaidLabel}>  DIVIDENDS · SEASON</Text>
             </Text>
             <Text
               accessibilityLabel={`${formatSignedMoney(season.perGame ?? 0)} per night across ${season.gamesPlayed} games`}
@@ -450,13 +450,13 @@ export function PlayerDetail({
       <View style={styles.statsGrid}>
         <Stat
           exact={season.perGame === null ? 'No settled games' : `${formatSignedMoney(season.perGame)} per night he plays`}
-          label="Pays per night"
+          label="Per night"
           value={season.perGame === null ? '—' : formatCompactSignedMoney(season.perGame)}
         />
         <Stat label="Games settled" value={String(season.gamesPlayed)} />
         <Stat
           exact={`${formatSignedMoney(season.total)} across the settled season`}
-          label="Season paid"
+          label="Season dividends"
           value={formatCompactSignedMoney(season.total)}
         />
         <Stat

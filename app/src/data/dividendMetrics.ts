@@ -39,32 +39,38 @@ export function dividendYield(total: number, price: number): number | null {
   return total / price;
 }
 
-export interface SettlementRecap {
-  /** Net dollars the settlements paid this account since the cutoff. */
-  paid: number;
-  /** Distinct settled dates in that span. */
-  nights: number;
+export interface EarningsWindows {
+  /** Net dividends on the latest settled date. */
+  tonight: number;
+  /** Net dividends across the seven calendar days ending on that date. */
+  week: number;
+}
+
+function isoDaysBefore(date: string, days: number): string {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() - days);
+  return parsed.toISOString().slice(0, 10);
 }
 
 /**
- * What the newly settled nights did to this account, straight from the
- * activity ledger: every dated entry after `sinceDate`, summed. This is the
- * figure the notice banner leads with — the money is the message; the
- * mechanical "N game dates settled" is only the fallback.
+ * The account's standing daily and weekly result, from the activity ledger —
+ * the two numbers the top-of-screen readout carries. Dated entries only;
+ * trades are dateless and never counted.
  */
-export function settlementRecapSince(
-  activity: readonly { game_date: string | null; amount_cents: number }[],
-  sinceDate: string | null,
-): SettlementRecap {
-  const dates = new Set<string>();
-  let cents = 0;
+export function earningsWindows(
+  activity: readonly { date: string | null; cashDelta: number }[],
+  latestSettledDate: string | null,
+): EarningsWindows {
+  if (latestSettledDate === null) return { tonight: 0, week: 0 };
+  const weekStart = isoDaysBefore(latestSettledDate, 6);
+  let tonight = 0;
+  let week = 0;
   for (const entry of activity) {
-    if (entry.game_date === null) continue;
-    if (sinceDate !== null && entry.game_date <= sinceDate) continue;
-    dates.add(entry.game_date);
-    cents += entry.amount_cents;
+    if (entry.date === null || entry.date > latestSettledDate) continue;
+    if (entry.date === latestSettledDate) tonight += entry.cashDelta;
+    if (entry.date >= weekStart) week += entry.cashDelta;
   }
-  return { paid: cents / 100, nights: dates.size };
+  return { tonight, week };
 }
 
 /**

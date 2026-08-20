@@ -13,9 +13,10 @@ import { Sparkline } from './Sparkline';
  * One owned player as a ledger row. The money story is split into its two
  * honest halves, each named, because they move for different reasons:
  *
- * - PAID — what this player has actually paid YOU, summed from your own
- *   ledger, so a mid-season buy never claims payouts you were not holding
- *   for. His per-night rate rides as the caption.
+ * - DIVIDENDS — what this player's nights have done to YOUR cash, summed
+ *   from your own ledger, so a mid-season buy never claims payouts you were
+ *   not holding for. Signed both ways: the word, unlike "paid", survives a
+ *   negative night. His per-night rate rides as the caption.
  * - VALUE — share price against cost including fee; this only moves when
  *   trading does, so in the demo it mostly reads as the quiet fee line.
  *
@@ -45,7 +46,7 @@ export function HoldingRow({ holding, dividends, received, onPress, trend }: {
     : `${formatCompactSignedMoney(dividends.perGame)} a night`;
   return (
     <Pressable
-      accessibilityLabel={`View ${player.name} details. Has paid you ${formatSignedMoney(received)}. Pays ${dividends.perGame === null ? 'nothing yet' : `${formatSignedMoney(dividends.perGame)} per night across ${dividends.gamesPlayed} settled games`}. Value ${formatMoney(currentPrice)} against ${formatMoney(costBasis)} paid including fee.`}
+      accessibilityLabel={`View ${player.name} details. Dividends ${formatSignedMoney(received)} to you. Pays ${dividends.perGame === null ? 'nothing yet' : `${formatSignedMoney(dividends.perGame)} per night across ${dividends.gamesPlayed} settled games`}. Value ${formatMoney(currentPrice)} against ${formatMoney(costBasis)} paid including fee.`}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
@@ -65,7 +66,7 @@ export function HoldingRow({ holding, dividends, received, onPress, trend }: {
           in the roster header's total and in the profile — putting a second
           money story on every row is what made dividends and price blur. */}
       <View style={styles.numbers}>
-        <Text style={styles.figureLabel}>PAID YOU</Text>
+        <Text style={styles.figureLabel}>DIVIDENDS</Text>
         <Text
           maxFontSizeMultiplier={1.4}
           numberOfLines={1}

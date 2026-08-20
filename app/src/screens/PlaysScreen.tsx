@@ -167,7 +167,7 @@ export function PlaysScreen() {
             <PositionCard
               // A boost has no clamp; the meter just fills fully when settled.
               clampValue={Math.max(Math.abs(boost.payout), 1)}
-              figureLabel={boost.status === 'armed' ? 'ARMED' : 'PAID'}
+              figureLabel={boost.status === 'armed' ? 'ARMED' : 'SETTLED'}
               key={boost.id}
               kind="BOOST"
               markedLabel={boost.status === 'armed'

@@ -201,15 +201,15 @@ test('player details resolve current server data and lead with the stream, not t
   assert.match(marketSource, /players\.find\(\(player\) => player\.id === selectedPlayerId\)/);
   assert.match(portfolioSource, /const \[detailPlayerId, setDetailPlayerId\]/);
   assert.match(portfolioSource, /playerById\.get\(detailPlayerId\)/);
-  // Money-first: the quote's headline is what he has PAID; the price rides
+  // Money-first: the quote's headline is the dividend stream; the price rides
   // underneath as the cost of the stream, never as the lead figure.
   assert.match(marketSource, /styles\.detailPaid, season\.total >= 0/);
-  assert.match(marketSource, /PAID · SEASON/);
+  assert.match(marketSource, /DIVIDENDS · SEASON/);
   assert.match(marketSource, /price \$\{formatCompactMoney\(currentPrice\)\}/);
   // The dead since-listing percentage (always 0.0% while prices cannot move)
   // must not return to the profile meta.
   assert.doesNotMatch(marketSource, /since listing/);
-  assert.match(marketSource, /label="Pays per night"/);
+  assert.match(marketSource, /label="Per night"/);
   assert.match(marketSource, /label="Vs the average payer"/);
   assert.match(marketSource, /const rowAccessibilityLabel = \[/);
   assert.match(marketSource, /`Price \$\{formatMoney\(currentPrice\)\}`/);
@@ -252,7 +252,7 @@ test('every compacted money Stat on the player detail carries its exact value', 
   assert.match(marketSource, /exact \? `\$\{label\}, \$\{exact\}` : undefined/);
   // The stream headline and its rate line are compacted too, so both carry
   // the exact figure for assistive tech.
-  assert.match(marketSource, /accessibilityLabel=\{`Paid holders \$\{formatSignedMoney\(season\.total\)\}/);
+  assert.match(marketSource, /accessibilityLabel=\{`Dividends \$\{formatSignedMoney\(season\.total\)\} per holder/);
   assert.match(marketSource, /\$\{formatSignedMoney\(season\.perGame \?\? 0\)\} per night/);
 });
 

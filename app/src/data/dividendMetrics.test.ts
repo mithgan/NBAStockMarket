@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { dividendYield, marketAverageRate, settlementRecapSince, summarizeDividends } from './dividendMetrics';
+import { dividendYield, earningsWindows, marketAverageRate, summarizeDividends } from './dividendMetrics';
 import type { TrendPoint } from './trendPresentation';
 
 function night(date: string, dividend: number): TrendPoint {
@@ -57,23 +57,28 @@ test('marketAverageRate is null when nobody has played', () => {
   assert.equal(marketAverageRate([]), null);
 });
 
-test('settlementRecapSince sums only dated entries after the cutoff', () => {
+test('earningsWindows reads tonight and the trailing week from the ledger', () => {
   const activity = [
-    { game_date: null, amount_cents: -5_180_000_000 }, // a trade — never counted
-    { game_date: '2025-11-08', amount_cents: 35_100_000 },
-    { game_date: '2025-11-08', amount_cents: -2_000_000 },
-    { game_date: '2025-11-07', amount_cents: 16_100_000 },
-    { game_date: '2025-11-05', amount_cents: 67_200_000 },
+    { date: null, cashDelta: -51_800_000 }, // a trade — never counted
+    { date: '2025-11-17', cashDelta: 323_000 },
+    { date: '2025-11-15', cashDelta: -99_000 },
+    { date: '2025-11-11', cashDelta: 500_000 },
+    { date: '2025-11-10', cashDelta: 900_000 }, // 8 days back — outside the week
   ];
-  assert.deepEqual(settlementRecapSince(activity, '2025-11-07'), { paid: 331_000, nights: 1 });
-  assert.deepEqual(settlementRecapSince(activity, '2025-11-05'), { paid: 492_000, nights: 2 });
-  assert.deepEqual(settlementRecapSince(activity, null), { paid: 1_164_000, nights: 3 });
+  assert.deepEqual(earningsWindows(activity, '2025-11-17'), { tonight: 323_000, week: 724_000 });
 });
 
-test('settlementRecapSince reports quiet spans as zero nights', () => {
-  assert.deepEqual(settlementRecapSince([], null), { paid: 0, nights: 0 });
-  assert.deepEqual(
-    settlementRecapSince([{ game_date: '2025-11-01', amount_cents: 100 }], '2025-11-01'),
-    { paid: 0, nights: 0 },
-  );
+test('earningsWindows ignores dates after the settled clock and empty worlds', () => {
+  assert.deepEqual(earningsWindows([{ date: '2025-11-20', cashDelta: 1 }], '2025-11-17'), { tonight: 0, week: 0 });
+  assert.deepEqual(earningsWindows([], '2025-11-17'), { tonight: 0, week: 0 });
+  assert.deepEqual(earningsWindows([{ date: '2025-11-17', cashDelta: 5 }], null), { tonight: 0, week: 0 });
+});
+
+test('earningsWindows spans month boundaries correctly', () => {
+  const activity = [
+    { date: '2025-11-01', cashDelta: 100_000 },
+    { date: '2025-10-27', cashDelta: 50_000 },
+    { date: '2025-10-25', cashDelta: 7_000 }, // 8 days before Nov 1 — outside
+  ];
+  assert.deepEqual(earningsWindows(activity, '2025-11-01'), { tonight: 100_000, week: 150_000 });
 });

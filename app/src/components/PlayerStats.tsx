@@ -84,7 +84,7 @@ export function PlayerStats({ points }: { points: TrendPoint[] }) {
         <Text style={[styles.logCol, styles.colNum]}>NP</Text>
         <Text style={[styles.logCol, styles.colNum]}>PROJ</Text>
         <Text style={[styles.logCol, styles.colNum]}>+/-</Text>
-        <Text style={[styles.logCol, styles.colPay]}>PAID</Text>
+        <Text style={[styles.logCol, styles.colPay]}>DIVIDEND</Text>
       </View>
       {recent.map((point) => {
         const surprise = point.np - point.expected_np;

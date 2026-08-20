@@ -8,6 +8,8 @@ import { resolvePublicAppConfig } from './src/api/config';
 import { useOptionalAuth } from './src/auth/AuthContext';
 import './src/auth/AuthScreen';
 import { seasonLabelFor } from './src/data/calendar';
+import { earningsWindows } from './src/data/dividendMetrics';
+import { formatCompactSignedMoney, formatSignedMoney } from './src/format';
 import { SeasonControl } from './src/components/SeasonControl';
 import { SettingsButton, SettingsSheet } from './src/components/SettingsSheet';
 import { useReducedMotion } from './src/hooks/useReducedMotion';
@@ -126,6 +128,38 @@ function CenteredState({
           <Text style={styles.stateButtonText}>{actionLabel}</Text>
         </Pressable>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * The standing daily and weekly result, pinned to the app chrome on every
+ * tab: what the latest night and the trailing seven did to your money. This
+ * replaced the transient settle toast — a recurring number deserves a fixed
+ * address, not an announcement you can miss.
+ */
+function EarningsStrip() {
+  const { latestSettledDate, state } = usePortfolio();
+  const activity = state?.activity ?? [];
+  if (!latestSettledDate || !activity.some((entry) => entry.date !== null)) return null;
+  const earnings = earningsWindows(activity, latestSettledDate);
+  const tone = (value: number) =>
+    value > 0 ? styles.earningsUp : value < 0 ? styles.earningsDown : styles.earningsFlat;
+  return (
+    <View
+      accessible
+      accessibilityLabel={`Tonight ${formatSignedMoney(earnings.tonight)}. Past seven nights ${formatSignedMoney(earnings.week)}.`}
+      style={styles.earningsStrip}
+    >
+      <Text maxFontSizeMultiplier={1.4} style={styles.earningsLabel}>TONIGHT</Text>
+      <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={[styles.earningsValue, tone(earnings.tonight)]}>
+        {formatCompactSignedMoney(earnings.tonight)}
+      </Text>
+      <View style={styles.earningsDivider} />
+      <Text maxFontSizeMultiplier={1.4} style={styles.earningsLabel}>7 NIGHTS</Text>
+      <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={[styles.earningsValue, tone(earnings.week)]}>
+        {formatCompactSignedMoney(earnings.week)}
+      </Text>
     </View>
   );
 }
@@ -283,6 +317,7 @@ function AppBody() {
       </View>
       {ready && wide ? renderTabBar('top') : null}
       {ready ? <SeasonControl /> : null}
+      {ready ? <EarningsStrip /> : null}
       {authError && clearAuthMessage ? (
         <NoticeBanner message={authError} onDismiss={clearAuthMessage} />
       ) : message ? (
@@ -452,6 +487,37 @@ const styles = StyleSheet.create({
   product: {
     ...labelStyle,
     color: colors.muted,
+  },
+  // The chromeSoft step, like the season strip above it: the readout is part
+  // of the frame, not a card floating in the page.
+  earningsStrip: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    backgroundColor: colors.chromeSoft,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  earningsLabel: {
+    ...labelStyle,
+    color: colors.faint,
+  },
+  earningsValue: {
+    fontVariant: ['tabular-nums'],
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: '800',
+  },
+  earningsUp: { color: colors.green },
+  earningsDown: { color: colors.red },
+  earningsFlat: { color: colors.muted },
+  earningsDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: colors.borderStrong,
+    marginHorizontal: space.xs,
   },
   notice: {
     minHeight: 44,
