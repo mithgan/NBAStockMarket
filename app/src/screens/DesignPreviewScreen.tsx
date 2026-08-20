@@ -76,7 +76,7 @@ export function DesignPreviewScreen() {
         </Text>
       </View>
       <PortfolioHistoryChart
-        footnote="Settled 2025-12-14. Includes cash payouts and player-price movement."
+        earnings={{ tonight: 529_000, week: 2_150_000 }}
         height={variant.chartHeight}
         points={SAMPLE_POINTS}
         totalValue={sampleTotal}

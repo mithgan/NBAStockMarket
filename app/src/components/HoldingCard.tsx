@@ -62,19 +62,16 @@ export function HoldingRow({ holding, dividends, received, onPress, trend }: {
         </Text>
       </View>
       {trend && trend.length > 1 ? <Sparkline points={trend} /> : null}
-      {/* One figure per row: what he has paid you. Share value and cost live
-          in the roster header's total and in the profile — putting a second
-          money story on every row is what made dividends and price blur. */}
-      <View style={styles.numbers}>
-        <Text style={styles.figureLabel}>DIVIDENDS</Text>
-        <Text
-          maxFontSizeMultiplier={1.4}
-          numberOfLines={1}
-          style={[styles.paid, { color: paidColor }]}
-        >
-          {formatCompactSignedMoney(received)}
-        </Text>
-      </View>
+      {/* One figure per row, unlabeled: the section header says SEASON
+          DIVIDENDS once, and a money figure on a player's row reads as his
+          by proximity. It is the row's only loud element. */}
+      <Text
+        maxFontSizeMultiplier={1.4}
+        numberOfLines={1}
+        style={[styles.paid, { color: paidColor }]}
+      >
+        {formatCompactSignedMoney(received)}
+      </Text>
     </Pressable>
   );
 }
@@ -105,20 +102,12 @@ const styles = StyleSheet.create({
     fontWeight: weight.medium,
     marginTop: 2,
   },
-  numbers: { alignItems: 'flex-end', flexShrink: 0, gap: 2 },
-  figureLabel: {
-    color: colors.faint,
-    fontFamily: fonts.display,
-    fontSize: 10,
-    fontWeight: weight.black,
-    letterSpacing: 0.8,
-  },
-  // The stream is the row's loudest figure — louder than the name, because
-  // the row exists to answer "what has he paid me".
+  // The money tier (three-size discipline): loud through weight and colour
+  // against a quiet row, not through a fourth type size.
   paid: {
     ...numeric,
-    fontSize: 22,
+    flexShrink: 0,
+    fontSize: 17,
     fontWeight: weight.black,
-    letterSpacing: -0.4,
   },
 });

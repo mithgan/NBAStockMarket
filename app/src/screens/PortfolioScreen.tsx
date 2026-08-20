@@ -5,7 +5,7 @@ import { HoldingRow } from '../components/HoldingCard';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PortfolioHistoryChart } from '../components/PortfolioHistoryChart';
 import { SettlementSummary, nightContributions } from '../components/SettlementSummary';
-import { marketAverageRate, summarizeDividends } from '../data/dividendMetrics';
+import { earningsWindows, marketAverageRate, summarizeDividends } from '../data/dividendMetrics';
 import {
   selectSettledTrendPoints,
   selectTrendRange,
@@ -53,11 +53,10 @@ function groupActivity(entries: ActivityEvent[]): ActivityNight[] {
  * surprise-led box line and a payout meter scaled against `meterScale`
  * (the largest absolute payout in whatever batch the caller is showing).
  */
-function ActivityNightGroup({ night, playerById, playerTrends, meterScale, boxScore = false }: {
+function ActivityNightGroup({ night, playerById, playerTrends, boxScore = false }: {
   night: ActivityNight;
   playerById: Map<string, Player>;
   playerTrends: Record<string, TrendPoint[]>;
-  meterScale: number;
   /** The dedicated night log shows the raw box score; the strips do not. */
   boxScore?: boolean;
 }) {
@@ -79,8 +78,6 @@ function ActivityNightGroup({ night, playerById, playerTrends, meterScale, boxSc
         const point = entry.date
           ? (playerTrends[entry.playerId] ?? []).find((trendPoint) => trendPoint.date === entry.date)
           : undefined;
-        const meter =
-          entry.date === null || meterScale === 0 ? 0 : Math.abs(entry.cashDelta) / meterScale;
         const player = playerById.get(entry.playerId);
         return (
           <View key={entry.id} style={styles.activityRow}>
@@ -97,17 +94,6 @@ function ActivityNightGroup({ night, playerById, playerTrends, meterScale, boxSc
                 <Text numberOfLines={1} style={styles.activityWhy}>
                   {surpriseLabel(point, { boxScore })}
                 </Text>
-              ) : null}
-              {meter > 0 ? (
-                <View style={styles.meterTrack}>
-                  <View
-                    style={[
-                      styles.meterFill,
-                      up ? styles.meterUp : styles.meterDown,
-                      { width: `${Math.max(3, Math.round(100 * meter))}%` },
-                    ]}
-                  />
-                </View>
               ) : null}
             </View>
             <Text
@@ -167,7 +153,6 @@ function NightLogView({ activity, playerById, playerTrends, onClose }: {
             <ActivityNightGroup
               boxScore
               key={night.key}
-              meterScale={night.items.reduce((largest, entry) => Math.max(largest, Math.abs(entry.cashDelta)), 0)}
               night={night}
               playerById={playerById}
               playerTrends={playerTrends}
@@ -202,12 +187,7 @@ export function PortfolioScreen() {
 
   const playerById = new Map(players.map((player) => [player.id, player]));
   const detailPlayer = detailPlayerId ? playerById.get(detailPlayerId) ?? null : null;
-  const latestPoint = state.portfolioHistory.at(-1) ?? null;
   const recentActivity = [...state.activity].reverse().slice(0, 10);
-  const largestSettledDelta = recentActivity.reduce(
-    (largest, entry) => (entry.date === null ? largest : Math.max(largest, Math.abs(entry.cashDelta))),
-    0,
-  );
   // What each player has actually paid THIS account: dated ledger entries
   // only (settlement payouts), so a mid-season buy never claims payouts from
   // nights the account was not holding him.
@@ -216,8 +196,6 @@ export function PortfolioScreen() {
     if (entry.date === null) continue;
     receivedByPlayer.set(entry.playerId, (receivedByPlayer.get(entry.playerId) ?? 0) + entry.cashDelta);
   }
-  const rosterPnl = summary.holdings.reduce((total, holding) => total + holding.unrealizedPnl, 0);
-  const allTimePercent = ((summary.totalValue - STARTING_CASH) / STARTING_CASH) * 100;
 
   if (detailPlayer) {
     return (
@@ -261,79 +239,28 @@ export function PortfolioScreen() {
             />
           ) : null
         }
-        footnote={
-          latestPoint
-            ? `Settled ${latestPoint.date}. Includes cash payouts and player-price movement.`
-            : 'No server settlement has reached this account yet.'
-        }
+        earnings={latestSettledDate ? earningsWindows(state.activity, latestSettledDate) : null}
         height={width < 900 ? Math.min(variant.chartHeight, 112) : variant.chartHeight}
         points={state.portfolioHistory}
         totalValue={summary.totalValue}
       />
-      <View style={styles.cashStrip}>
-        <View style={styles.cashCell}>
-          <Text style={styles.cashLabel}>Free cash</Text>
-          <Text
-            accessibilityLabel={`Free cash ${formatMoney(summary.freeCash)}, available to spend`}
-            maxFontSizeMultiplier={1.4}
-            numberOfLines={1}
-            style={styles.cashValue}
-          >
-            {formatCompactMoney(summary.freeCash)}
-          </Text>
-        </View>
-        <View style={styles.cashCell}>
-          <Text style={styles.cashLabel}>Holdings</Text>
-          <Text
-            accessibilityLabel={`Holdings ${formatMoney(summary.marketValue)}, ${summary.holdings.length} of ${players.length} listed players`}
-            maxFontSizeMultiplier={1.4}
-            numberOfLines={1}
-            style={styles.cashValue}
-          >
-            {formatCompactMoney(summary.marketValue)}
-          </Text>
-        </View>
-        <View style={styles.cashCell}>
-          <Text style={styles.cashLabel}>All time</Text>
-          <Text
-            accessibilityLabel={`${allTimePercent >= 0 ? 'Up' : 'Down'} ${Math.abs(allTimePercent).toFixed(2)} percent from the ${formatMoney(STARTING_CASH)} opening bankroll`}
-            maxFontSizeMultiplier={1.4}
-            numberOfLines={1}
-            style={[styles.cashValue, allTimePercent >= 0 ? styles.positive : styles.negative]}
-          >
-            {`${allTimePercent >= 0 ? '+' : ''}${allTimePercent.toFixed(2)}%`}
-          </Text>
-        </View>
-        {summary.reservedCollateral > 0 ? (
-          <View style={styles.cashCell}>
-            <Text style={styles.cashLabel}>Reserved</Text>
-            <Text
-              accessibilityLabel={`Reserved ${formatMoney(summary.reservedCollateral)}, short collateral held from your ${formatMoney(summary.cash)} cash balance`}
-              maxFontSizeMultiplier={1.4}
-              numberOfLines={1}
-              style={styles.cashValue}
-            >
-              {formatCompactMoney(summary.reservedCollateral)}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-      <View style={styles.rosterPanel}>
+      <Text
+        accessibilityLabel={`Free cash ${formatMoney(summary.freeCash)}, available to spend. ${formatMoney(summary.marketValue)} in players.${summary.reservedCollateral > 0 ? ` ${formatMoney(summary.reservedCollateral)} reserved as short collateral.` : ''}`}
+        maxFontSizeMultiplier={1.4}
+        numberOfLines={1}
+        style={styles.cashLine}
+      >
+        <Text style={styles.cashLineStrong}>{`${formatCompactMoney(summary.freeCash)} cash`}</Text>
+        {`  ·  ${formatCompactMoney(summary.marketValue)} in players`}
+        {summary.reservedCollateral > 0 ? `  ·  ${formatCompactMoney(summary.reservedCollateral)} reserved` : ''}
+      </Text>
+      <View>
         <View style={styles.rosterHead}>
-          <Text accessibilityRole="header" style={styles.rosterTitle}>
-            {state.holdings.length > 0 ? `Your players (${state.holdings.length})` : 'Your players'}
+          <Text accessibilityRole="header" style={styles.sectionHeading}>
+            Your players
           </Text>
           {state.holdings.length > 0 ? (
-            <Text
-              accessibilityLabel={`Roster worth ${formatMoney(summary.marketValue)}, ${rosterPnl >= 0 ? 'up' : 'down'} ${formatMoney(Math.abs(rosterPnl))} against what you paid`}
-              numberOfLines={1}
-              style={styles.rosterMeta}
-            >
-              {formatCompactMoney(summary.marketValue)}
-              <Text style={rosterPnl >= 0 ? styles.positive : styles.negative}>
-                {`  ${formatCompactSignedMoney(rosterPnl)}`}
-              </Text>
-            </Text>
+            <Text numberOfLines={1} style={styles.rosterMeta}>SEASON DIVIDENDS</Text>
           ) : null}
         </View>
         {state.holdings.length === 0 ? (
@@ -380,7 +307,6 @@ export function PortfolioScreen() {
           {groupActivity(recentActivity).map((night) => (
             <ActivityNightGroup
               key={night.key}
-              meterScale={largestSettledDelta}
               night={night}
               playerById={playerById}
               playerTrends={playerTrends}
@@ -409,35 +335,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: space.xxl,
   },
-  cashStrip: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: space.xl,
-    paddingHorizontal: space.lg,
-    paddingTop: space.lg,
-    paddingBottom: space.lg,
-    marginTop: space.sm,
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
-  },
-  cashCell: {
-    minWidth: 92,
-  },
-  cashLabel: {
+  cashLine: {
+    ...numeric,
     color: colors.faint,
-    fontFamily: fonts.body,
     fontSize: type.body,
     fontWeight: weight.medium,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
   },
-  cashValue: {
-    ...numeric,
-    color: colors.text,
-    fontSize: type.title,
-    fontWeight: weight.heavy,
-    marginTop: 3,
-  },
+  cashLineStrong: { color: colors.text, fontWeight: weight.heavy },
   sectionHeading: {
     ...headingStyle,
     paddingHorizontal: space.lg,
@@ -475,16 +381,7 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
   },
   list: {},
-  rosterPanel: {
-    marginHorizontal: space.lg,
-    marginTop: space.lg,
-    borderRadius: radius.lg,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.background,
-    overflow: 'hidden',
-  },
-  // No bottom border: each holding row (and the empty state) brings its own
+// No bottom border: each holding row (and the empty state) brings its own
   // top rule, so the head would otherwise double it.
   rosterHead: {
     flexDirection: 'row',
@@ -495,10 +392,7 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
     paddingBottom: space.xs,
   },
-  rosterTitle: {
-    ...headingStyle,
-  },
-  rosterMeta: {
+rosterMeta: {
     ...numeric,
     color: colors.muted,
     fontSize: type.body,
@@ -631,23 +525,6 @@ const styles = StyleSheet.create({
     fontSize: type.label,
     fontWeight: weight.medium,
     marginTop: 1,
-  },
-  meterTrack: {
-    height: 3,
-    marginTop: 5,
-    borderRadius: radius.xs,
-    backgroundColor: colors.border,
-    overflow: 'hidden',
-  },
-  meterFill: {
-    height: 3,
-    borderRadius: radius.xs,
-  },
-  meterUp: {
-    backgroundColor: colors.green,
-  },
-  meterDown: {
-    backgroundColor: colors.red,
   },
   activityName: {
     color: colors.text,

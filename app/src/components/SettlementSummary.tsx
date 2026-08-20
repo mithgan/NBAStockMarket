@@ -74,42 +74,32 @@ export function SettlementSummary({ contributions, settledDate, onOpenLog }: {
         onPress={onOpenLog}
         style={({ pressed }) => [styles.head, pressed && styles.pressed]}
       >
-        <View style={styles.headCopy}>
-          <Text style={styles.label}>{`Last settled night · ${settledDate}`}</Text>
-          <Text numberOfLines={1} style={styles.headline}>
-            {quiet
-              ? 'None of your players played'
-              : highlight
-                ? `${highlight.player.name} gave you ${formatCompactSignedMoney(highlight.dividend)}`
-                : `${contributions.length} of your players played`}
-          </Text>
-        </View>
-        <View style={styles.headNumbers}>
-          {quiet ? null : (
-            <Text numberOfLines={1} style={[styles.net, positive ? styles.positive : styles.negative]}>
-              {formatCompactSignedMoney(net)}
-            </Text>
-          )}
-          <Text style={styles.toggle}>Game log  ›</Text>
-        </View>
+        {/* One line, label-free: the sentence carries the night, and the
+            hero's earnings line above already carries tonight's net. */}
+        <Text numberOfLines={1} style={styles.headline}>
+          {quiet
+            ? 'None of your players played last night'
+            : highlight
+              ? `${highlight.player.name} gave you ${formatCompactSignedMoney(highlight.dividend)}`
+              : `${contributions.length} of your players played last night`}
+        </Text>
+        <Text style={styles.toggle}>Game log  ›</Text>
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // Bordered on both edges: the block now rides between the hero number and
-  // the plot, so it must read as its own strip.
+  // One hairline below; the hero above flows straight into it.
   block: {
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },
   head: {
-    minHeight: 56,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: space.md,
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
@@ -123,22 +113,23 @@ const styles = StyleSheet.create({
     fontWeight: weight.medium,
   },
   headline: {
+    flex: 1,
+    minWidth: 0,
     color: colors.text,
     fontFamily: fonts.display,
-    fontSize: type.value,
+    fontSize: type.body,
     fontWeight: weight.heavy,
-    marginTop: 2,
   },
   headNumbers: { alignItems: 'flex-end', flexShrink: 0 },
   // The night's money is the strip's headline — the one figure the user
   // opened the app to learn.
   net: { ...numeric, fontSize: 20, fontWeight: weight.black },
   toggle: {
+    flexShrink: 0,
     color: colors.goldInk,
     fontFamily: fonts.display,
     fontSize: type.body,
     fontWeight: weight.bold,
-    marginTop: 2,
   },
   positive: { color: colors.green },
   negative: { color: colors.red },

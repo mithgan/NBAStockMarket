@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
+  Modal,
   PanResponder,
   Pressable,
   ScrollView,
@@ -57,6 +58,7 @@ import {
   formatSignedMoney,
 } from '../format';
 import { useChartSurface } from '../hooks/useChartSurface';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePortfolio } from '../state/PortfolioContext';
 import { useWatchlist } from '../state/watchlist';
 import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
@@ -730,8 +732,10 @@ export function MarketScreen() {
   // Money-first default: the market opens ranked by what players pay, not by
   // prices that never move in this world.
   const [sort, setSort] = useState<MarketSort>('pays');
+  const [sortSheetOpen, setSortSheetOpen] = useState(false);
   const [filter, setFilter] = useState<MarketFilter>('all');
   const [trendingWindow, setTrendingWindow] = useState<TrendRange>('L15');
+  const reducedMotion = useReducedMotion();
   const watchlist = useWatchlist();
 
   const compact = width < 420;
@@ -940,38 +944,22 @@ export function MarketScreen() {
         value={query}
       />
 
-      <ScrollView
-        contentContainerStyle={styles.chipBar}
-        horizontal
-        keyboardShouldPersistTaps="handled"
-        showsHorizontalScrollIndicator={false}
-        style={styles.chipScroll}
-      >
-        <Segmented groupLabel="Sort players" onChange={setSort} options={MARKET_SORTS} value={sort} />
+      {/* One visible choice (Hick's law): the active sort as a disclosure
+          chip; the full sort list and its window picker live in the sheet.
+          Filters stay visible — they gate the task itself. */}
+      <View style={styles.chipBar}>
+        <Pressable
+          accessibilityHint="Opens the sort options"
+          accessibilityLabel={`Sorted by ${MARKET_SORTS.find((option) => option.key === sort)?.label ?? sort}. Change sort`}
+          accessibilityRole="button"
+          onPress={() => setSortSheetOpen(true)}
+          style={({ pressed }) => [styles.sortChip, pressed && styles.pressed]}
+        >
+          <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.sortChipText}>
+            {`${(MARKET_SORTS.find((option) => option.key === sort)?.label ?? sort).toUpperCase()}${sort === 'pays' ? ` · ${trendingWindow.toUpperCase()}` : ''}  ▾`}
+          </Text>
+        </Pressable>
         <Segmented groupLabel="Filter players" onChange={setFilter} options={MARKET_FILTERS} value={filter} />
-        {/* The window picker only earns its row space while the pays sort is
-            active — it has no effect on any other ordering. */}
-        {sort === 'pays' ? (
-          <Segmented
-            groupLabel="Payout window"
-            onChange={setTrendingWindow}
-            options={TRENDING_WINDOWS}
-            value={trendingWindow}
-          />
-        ) : null}
-      </ScrollView>
-
-      {/* Column strip doubles as the live result count. */}
-      <View style={styles.columnHeader}>
-        <Text accessibilityLiveRegion="polite" style={styles.columnHeaderText}>
-          {rows.length === players.length
-            ? `${players.length} PLAYERS`
-            : `${rows.length} OF ${players.length}`}
-        </Text>
-        <View style={styles.columnHeaderRule} />
-        <Text style={styles.columnHeaderText}>
-          {roomy ? 'OWNED · ' : ''}PAYS · PRICE
-        </Text>
       </View>
     </View>
   );
@@ -1025,6 +1013,60 @@ export function MarketScreen() {
         style={styles.list}
         windowSize={9}
       />
+      {sortSheetOpen ? (
+        <Modal
+          animationType={reducedMotion ? 'none' : 'fade'}
+          onRequestClose={() => setSortSheetOpen(false)}
+          transparent
+          visible
+        >
+          <Pressable
+            accessibilityLabel="Close the sort options"
+            onPress={() => setSortSheetOpen(false)}
+            style={styles.sheetBackdrop}
+          >
+            <Pressable accessibilityViewIsModal onPress={() => {}} style={styles.sheet}>
+              <Text accessibilityRole="header" style={styles.sheetTitle}>SORT THE MARKET</Text>
+              {MARKET_SORTS.map((option) => {
+                const selected = option.key === sort;
+                return (
+                  <Pressable
+                    accessibilityLabel={option.hint}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    key={option.key}
+                    onPress={() => {
+                      setSort(option.key);
+                      // Pays keeps the sheet open so its window can be picked
+                      // in the same visit; every other sort is a single choice.
+                      if (option.key !== 'pays') setSortSheetOpen(false);
+                    }}
+                    style={({ pressed }) => [styles.sheetOption, pressed && styles.pressed]}
+                  >
+                    <Text style={[styles.sheetOptionLabel, selected && styles.sheetOptionLabelActive]}>
+                      {option.label.toUpperCase()}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.sheetOptionHint}>{option.hint}</Text>
+                  </Pressable>
+                );
+              })}
+              {sort === 'pays' ? (
+                <View style={styles.sheetWindowRow}>
+                  <Segmented
+                    groupLabel="Payout window"
+                    onChange={(next) => {
+                      setTrendingWindow(next);
+                      setSortSheetOpen(false);
+                    }}
+                    options={TRENDING_WINDOWS}
+                    value={trendingWindow}
+                  />
+                </View>
+              ) : null}
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -1066,22 +1108,60 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
-  chipScroll: { flexGrow: 0, flexShrink: 0, marginHorizontal: -space.md },
   chipBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    paddingHorizontal: space.md,
-  },
-
-  columnHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
     paddingBottom: space.sm,
   },
-  columnHeaderText: { ...labelStyle, flexShrink: 0 },
-  columnHeaderRule: { flex: 1, height: 1, backgroundColor: colors.border, minWidth: space.sm },
+  sortChip: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space.md,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+  },
+  sortChipText: { ...labelStyle, color: colors.goldInk },
+  sheetBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopColor: colors.borderStrong,
+    borderTopWidth: 1,
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.xl,
+  },
+  sheetTitle: { ...labelStyle, color: colors.muted, marginBottom: space.sm },
+  sheetOption: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  sheetOptionLabel: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.bold,
+  },
+  sheetOptionLabelActive: { color: colors.goldInk },
+  sheetOptionHint: {
+    flex: 1,
+    color: colors.faint,
+    fontFamily: fonts.body,
+    fontSize: type.label,
+    textAlign: 'right',
+  },
+  sheetWindowRow: { marginTop: space.lg, alignItems: 'flex-start', gap: space.sm },
 
   list: { flex: 1 },
   listContent: { paddingBottom: space.xxl },
@@ -1154,7 +1234,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xs,
     borderWidth: 1,
   },
-  buyButton: { borderColor: colors.green, backgroundColor: colors.greenSoft },
+  // Gold is the action colour; green stays reserved for money movement.
+  buyButton: { borderColor: colors.gold, backgroundColor: colors.goldSoft },
   sellButton: { borderColor: colors.red, backgroundColor: colors.redSoft },
   unaffordableButton: { borderColor: colors.border, backgroundColor: 'transparent' },
   tradeLockedButton: { borderColor: colors.border, backgroundColor: colors.surfaceRaised },
@@ -1165,7 +1246,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     textAlign: 'center',
   },
-  buyText: { color: colors.green },
+  buyText: { color: colors.goldInk },
   sellText: { color: colors.red },
   unaffordableText: { color: colors.faint },
   tradeLockedText: { color: colors.faint },

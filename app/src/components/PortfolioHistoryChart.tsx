@@ -43,13 +43,14 @@ export function PortfolioHistoryChart({
   points,
   height = DEFAULT_CHART_HEIGHT,
   totalValue,
-  footnote,
+  earnings,
   beforePlot,
 }: {
   points: PortfolioPoint[];
   height?: number;
   totalValue?: number;
-  footnote?: string;
+  /** Tonight and trailing-week dividends — the hero's one companion line. */
+  earnings?: { tonight: number; week: number } | null;
   /** Rendered between the hero number and the plot — the "what happened last
       night" strip lives here so the daily update is read before the chart. */
   beforePlot?: ReactNode;
@@ -95,40 +96,20 @@ export function PortfolioHistoryChart({
   }, [height, visible, width]);
   const lastCoordinate = coordinates.at(-1) ?? null;
   scrubGeometry.current = { coordinates, width };
-  // The value grid mirrors chartCoordinates' mapping (12px insets): rules at
-  // the window's high, midpoint, and low so the curve reads against real
-  // figures instead of floating free.
-  const { gridLines, baselineY } = useMemo(() => {
+  // Sparkline discipline (after the declutter research): the plot keeps only
+  // the line, its fill, the dashed start-of-range rule, and the end value.
+  const baselineY = useMemo(() => {
     const values = visible.map((point) => point.totalValue);
-    if (values.length === 0) return { gridLines: [], baselineY: null };
+    if (values.length === 0) return null;
     const high = Math.max(...values);
     const low = Math.min(...values);
     const span = high - low;
-    const yFor = (value: number) =>
-      span === 0 ? height / 2 : 12 + ((high - value) / span) * (height - 24);
-    // A compact plot drops the midline: two figures orient a short chart,
-    // three crowd it.
-    const gridLines: { value: number; y: number }[] =
-      span === 0
-        ? [{ value: high, y: height / 2 }]
-        : height < 140
-          ? [
-              { value: high, y: 12 },
-              { value: low, y: height - 12 },
-            ]
-          : [
-              { value: high, y: 12 },
-              { value: (high + low) / 2, y: height / 2 },
-              { value: low, y: height - 12 },
-            ];
-    // The range's baseline earns a rule only when it crosses the plot; when
-    // every settled value sits above it, the low rule already tells that story.
-    const baselineY = low < baseline && baseline < high ? yFor(baseline) : null;
-    return { gridLines, baselineY };
+    if (span === 0) return height / 2;
+    if (baseline <= low || baseline >= high) return null;
+    return 12 + ((high - baseline) / span) * (height - 24);
   }, [baseline, height, visible]);
   const firstDate = visible[0]?.date ?? null;
   const lastDate = visible.at(-1)?.date ?? null;
-  const midDate = visible.length >= 5 ? visible[Math.floor((visible.length - 1) / 2)]?.date ?? null : null;
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -178,6 +159,24 @@ export function PortfolioHistoryChart({
         <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.heroValue}>
           {formatCompactMoney(animatedValue)}
         </Text>
+        {/* The hero's one companion: what the nights are doing to your money.
+            Label-free — the unit rides inside the phrase. */}
+        {earnings ? (
+          <Text
+            accessibilityLabel={`Tonight ${formatSignedMoney(earnings.tonight)}. Past seven nights ${formatSignedMoney(earnings.week)}.`}
+            maxFontSizeMultiplier={1.4}
+            numberOfLines={1}
+            style={styles.earningsLine}
+          >
+            <Text style={{ color: earnings.tonight > 0 ? colors.green : earnings.tonight < 0 ? colors.red : colors.muted }}>
+              {`${formatCompactSignedMoney(earnings.tonight)} tonight`}
+            </Text>
+            <Text style={styles.earningsJoin}>{'  ·  '}</Text>
+            <Text style={{ color: earnings.week > 0 ? colors.green : earnings.week < 0 ? colors.red : colors.muted }}>
+              {`${formatCompactSignedMoney(earnings.week)} this week`}
+            </Text>
+          </Text>
+        ) : null}
         <View style={styles.changeRow}>
           <ChangeArrow color={changeColor} up={up} />
           <Text
@@ -215,17 +214,6 @@ export function PortfolioHistoryChart({
                 <Stop offset="1" stopColor={changeColor} stopOpacity={0} />
               </LinearGradient>
             </Defs>
-            {gridLines.map((line) => (
-              <Line
-                key={`rule-${line.y}`}
-                stroke={colors.border}
-                strokeWidth={1}
-                x1={0}
-                x2={width}
-                y1={line.y}
-                y2={line.y}
-              />
-            ))}
             {baselineY !== null ? (
               <Line
                 stroke={colors.borderStrong}
@@ -269,33 +257,19 @@ export function PortfolioHistoryChart({
             ) : lastCoordinate ? (
               <Circle cx={lastCoordinate.x} cy={lastCoordinate.y} fill={changeColor} r={4.5} />
             ) : null}
-            {/* Figures live in the reserved gutter, vertically centred on
-                their rules, the way a price axis reads. */}
-            {gridLines.map((line) => (
+            {/* One figure in the gutter: where the line ends. Sparkline
+                discipline — context is the start rule and the end value. */}
+            {lastCoordinate ? (
               <SvgText
                 fill={colors.faint}
                 fontFamily={fonts.display}
                 fontSize={10}
                 fontWeight="700"
-                key={`figure-${line.y}`}
                 textAnchor="end"
                 x={width - 4}
-                y={line.y + 3.5}
+                y={Math.max(10, Math.min(height - 3, lastCoordinate.y + 3.5))}
               >
-                {formatCompactMoney(line.value)}
-              </SvgText>
-            ))}
-            {baselineY !== null ? (
-              <SvgText
-                fill={colors.faint}
-                fontFamily={fonts.display}
-                fontSize={10}
-                fontWeight="700"
-                textAnchor="start"
-                x={10}
-                y={baselineY - 5}
-              >
-                {`START ${formatCompactMoney(baseline)}`}
+                {formatCompactMoney(visible.at(-1)?.totalValue ?? latestValue)}
               </SvgText>
             ) : null}
           </Svg>
@@ -304,7 +278,6 @@ export function PortfolioHistoryChart({
       {firstDate && lastDate ? (
         <View style={[styles.dateAxis, { paddingRight: VALUE_GUTTER + 10 }]}>
           <Text numberOfLines={1} style={styles.dateAxisText}>{shortDate(firstDate)}</Text>
-          {midDate ? <Text numberOfLines={1} style={styles.dateAxisText}>{shortDate(midDate)}</Text> : null}
           {lastDate !== firstDate ? (
             <Text numberOfLines={1} style={styles.dateAxisText}>{shortDate(lastDate)}</Text>
           ) : null}
@@ -337,7 +310,6 @@ export function PortfolioHistoryChart({
           })}
         </View>
       ) : null}
-      {footnote ? <Text style={styles.footnote}>{footnote}</Text> : null}
     </View>
   );
 }
@@ -374,6 +346,13 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
   },
   heroValue: { ...heroNumber },
+  earningsLine: {
+    ...numeric,
+    fontSize: 17,
+    fontWeight: weight.black,
+    marginTop: space.xs,
+  },
+  earningsJoin: { color: colors.faint, fontWeight: weight.medium },
   changeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -381,8 +360,10 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
     flexWrap: 'wrap',
   },
-  change: { ...numeric, fontSize: type.value, fontWeight: weight.heavy },
-  changePercent: { ...numeric, fontSize: type.value, fontWeight: weight.medium, opacity: 0.85 },
+  // Demoted to the caption tier: the earnings line above is the hero's one
+  // loud companion; this row is chart furniture that answers the scrub.
+  change: { ...numeric, fontSize: type.body, fontWeight: weight.heavy },
+  changePercent: { ...numeric, fontSize: type.body, fontWeight: weight.medium, opacity: 0.85 },
   changeMeta: {
     ...numeric,
     color: colors.faint,
@@ -425,14 +406,6 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginTop: 6,
     backgroundColor: 'transparent',
-  },
-  footnote: {
-    color: colors.faint,
-    fontFamily: fonts.body,
-    fontSize: type.body,
-    lineHeight: 18,
-    paddingHorizontal: space.lg,
-    paddingTop: space.sm,
   },
   emptyBlock: {
     justifyContent: 'center',
