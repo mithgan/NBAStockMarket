@@ -128,19 +128,18 @@ export function PortfolioHistoryChart({
   const changePct = baseline === 0 ? 0 : (change / baseline) * 100;
   const up = change >= 0;
   const changeColor = up ? colors.green : colors.red;
-  // The hero counts up on tonight's result — the thing that changed.
-  const tonight = earnings?.tonight ?? 0;
-  const animatedTonight = useCountUp(tonight);
+  // The hero is the portfolio number — big, unsigned, and alive: it counts
+  // up on settles and tracks the finger during a scrub, exactly the old way.
+  const animatedValue = useCountUp(shownValue, scrubPoint !== null);
+  const animatedTonight = useCountUp(earnings?.tonight ?? 0);
   const animatedWeek = useCountUp(earnings?.week ?? 0);
   const animatedChange = useCountUp(change, scrubPoint !== null);
-  const emptyHero = useCountUp(latestValue);
-  const heroColor = tonight > 0 ? colors.green : tonight < 0 ? colors.red : colors.muted;
 
   if (visible.length === 0) {
     return (
       <View onLayout={onLayout} ref={ref} style={[styles.emptyBlock, { minHeight: height }]}>
         <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.heroValue}>
-          {formatCompactMoney(emptyHero)}
+          {formatCompactMoney(animatedValue)}
         </Text>
         <Text style={styles.emptyTitle}>Your chart starts after the first replay day.</Text>
         <Text style={styles.emptyText}>
@@ -157,19 +156,26 @@ export function PortfolioHistoryChart({
       style={styles.block}
     >
       <View style={styles.hero}>
-        {/* The inversion the council ordered: with flat prices net worth
-            cannot move, so the thing that CAN — tonight's result — takes the
-            hero slot, and the balance sheet demotes to a line over its graph. */}
-        <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.heroKicker}>TONIGHT</Text>
         <Text
-          accessibilityLabel={`Tonight ${formatSignedMoney(tonight)}`}
+          accessibilityLabel={`Portfolio value ${formatMoney(shownValue)}`}
           maxFontSizeMultiplier={1.4}
           numberOfLines={1}
-          style={[styles.heroTonight, { color: heroColor }]}
+          style={styles.heroValue}
         >
-          {formatCompactSignedMoney(animatedTonight)}
+          {formatCompactMoney(animatedValue)}
         </Text>
         <View style={styles.statRow}>
+          <View
+            accessible
+            accessibilityLabel={`Tonight ${formatSignedMoney(earnings?.tonight ?? 0)}`}
+            style={styles.statCell}
+          >
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={[styles.statValue, toneStyle(earnings?.tonight ?? 0)]}>
+              {formatCompactSignedMoney(animatedTonight)}
+            </Text>
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>TONIGHT</Text>
+          </View>
+          <View style={styles.statDivider} />
           <View
             accessible
             accessibilityLabel={`Past seven nights ${formatSignedMoney(earnings?.week ?? 0)}`}
@@ -196,16 +202,17 @@ export function PortfolioHistoryChart({
         </View>
       </View>
       {beforePlot}
-      {/* The demoted balance sheet, naming the graph beneath it. */}
-      <Text
-        accessibilityLabel={`Net worth ${formatMoney(latestValue)}${freeCash === undefined ? '' : `. ${formatMoney(freeCash)} cash available`}`}
-        maxFontSizeMultiplier={1.4}
-        numberOfLines={1}
-        style={styles.balanceLine}
-      >
-        <Text style={styles.balanceStrong}>{`${formatCompactMoney(latestValue)} net worth`}</Text>
-        {freeCash === undefined ? '' : `  ·  ${formatCompactMoney(freeCash)} cash`}
-      </Text>
+      {freeCash === undefined ? null : (
+        <Text
+          accessibilityLabel={`${formatMoney(freeCash)} cash available to spend`}
+          maxFontSizeMultiplier={1.4}
+          numberOfLines={1}
+          style={styles.balanceLine}
+        >
+          <Text style={styles.balanceStrong}>{formatCompactMoney(freeCash)}</Text>
+          {' cash available'}
+        </Text>
+      )}
       <View
         nativeID="scrub-plot-portfolio"
         onLayout={onLayout}
@@ -334,17 +341,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingBottom: space.md,
   },
-  heroKicker: { ...labelStyle, color: colors.faint, marginBottom: 2 },
   heroValue: { ...heroNumber },
-  // Display tier, not the hero's full 46: tonight leads without shouting —
-  // a giant red figure as the app's opening line read as an alarm.
-  heroTonight: {
-    ...numeric,
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: weight.black,
-    letterSpacing: -1,
-  },
   statRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
@@ -363,7 +360,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.md,
   },
-  balanceStrong: { color: colors.text, fontSize: 21, fontWeight: weight.black, letterSpacing: -0.4 },
+  balanceStrong: { color: colors.text, fontWeight: weight.heavy },
   statDivider: {
     width: 1,
     alignSelf: 'stretch',

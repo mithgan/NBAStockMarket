@@ -324,8 +324,17 @@ export function PortfolioScreen() {
         style={({ pressed }) => [styles.activityToggle, pressed && styles.backPressed]}
         {...rowMarker}
       >
-        <Text accessibilityRole="header" style={styles.sectionHeading}>Recent activity</Text>
-        <Text style={styles.activityChevron}>{activityOpen ? '▾' : '▸'}</Text>
+        {/* The chevron rides the title, not the far edge, so the control
+            reads as one object; the right side quietly says what opens. */}
+        <View style={styles.activityTitleGroup}>
+          <Text accessibilityRole="header" style={styles.sectionHeading}>Recent activity</Text>
+          <Text style={styles.activityChevron}>{activityOpen ? '▾' : '▸'}</Text>
+        </View>
+        {activityOpen ? null : (
+          <Text style={styles.activityHint}>
+            {recentActivity.length === 0 ? '' : `LAST ${Math.min(recentActivity.length, 10)}`}
+          </Text>
+        )}
       </Pressable>
       {!activityOpen ? null : recentActivity.length === 0 ? (
         <View style={styles.empty}>
@@ -383,15 +392,26 @@ const styles = StyleSheet.create({
   },
   activityToggle: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
+    gap: space.md,
     paddingRight: space.lg,
+  },
+  activityTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: space.sm,
   },
   activityChevron: {
     color: colors.goldInk,
     fontFamily: fonts.display,
     fontSize: type.value,
     fontWeight: weight.black,
+  },
+  activityHint: {
+    ...labelStyle,
+    color: colors.faint,
+    flexShrink: 0,
   },
   sectionHeading: {
     ...headingStyle,
