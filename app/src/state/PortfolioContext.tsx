@@ -212,15 +212,20 @@ export function PortfolioProvider({
 
   useEffect(() => {
     void (async () => {
+      // While you were away: nights that settled since this device last saw
+      // the clock. Read the marker BEFORE the load — loadSnapshot refreshes
+      // it, so reading afterwards would always compare the clock to itself.
+      const seenKey = `nbsm:lastSeenSettled:${userId}`;
+      let lastSeen: string | null = null;
+      try {
+        lastSeen = await AsyncStorage.getItem(seenKey);
+      } catch {
+        lastSeen = null;
+      }
       const bootstrap = await loadSnapshot({ checkLocalTransition: true, showInitialLoader: true });
       if (!bootstrap || !mounted.current) return;
-      // While you were away: nights that settled since this device last saw
-      // the clock. The demo settles only by your own hand, so this speaks
-      // mostly in the shared-server world — but it is correct in both.
-      const seenKey = `nbsm:lastSeenSettled:${userId}`;
       const latest = bootstrap.game.last_settled_date;
       try {
-        const lastSeen = await AsyncStorage.getItem(seenKey);
         if (latest && lastSeen && latest > lastSeen) {
           const recap = settlementRecapSince(bootstrap.activity.items, lastSeen);
           if (recap.nights > 0 && mounted.current) {
