@@ -39,6 +39,34 @@ export function dividendYield(total: number, price: number): number | null {
   return total / price;
 }
 
+export interface SettlementRecap {
+  /** Net dollars the settlements paid this account since the cutoff. */
+  paid: number;
+  /** Distinct settled dates in that span. */
+  nights: number;
+}
+
+/**
+ * What the newly settled nights did to this account, straight from the
+ * activity ledger: every dated entry after `sinceDate`, summed. This is the
+ * figure the notice banner leads with — the money is the message; the
+ * mechanical "N game dates settled" is only the fallback.
+ */
+export function settlementRecapSince(
+  activity: readonly { game_date: string | null; amount_cents: number }[],
+  sinceDate: string | null,
+): SettlementRecap {
+  const dates = new Set<string>();
+  let cents = 0;
+  for (const entry of activity) {
+    if (entry.game_date === null) continue;
+    if (sinceDate !== null && entry.game_date <= sinceDate) continue;
+    dates.add(entry.game_date);
+    cents += entry.amount_cents;
+  }
+  return { paid: cents / 100, nights: dates.size };
+}
+
 /**
  * The average-payer baseline: mean per-game payout across every listed player
  * who has played at least once in the window. The 50%-line of this market —

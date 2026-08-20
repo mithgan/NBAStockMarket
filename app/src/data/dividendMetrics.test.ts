@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { dividendYield, marketAverageRate, summarizeDividends } from './dividendMetrics';
+import { dividendYield, marketAverageRate, settlementRecapSince, summarizeDividends } from './dividendMetrics';
 import type { TrendPoint } from './trendPresentation';
 
 function night(date: string, dividend: number): TrendPoint {
@@ -55,4 +55,25 @@ test('marketAverageRate averages per-game rates, skipping unplayed players', () 
 test('marketAverageRate is null when nobody has played', () => {
   assert.equal(marketAverageRate([[], []]), null);
   assert.equal(marketAverageRate([]), null);
+});
+
+test('settlementRecapSince sums only dated entries after the cutoff', () => {
+  const activity = [
+    { game_date: null, amount_cents: -5_180_000_000 }, // a trade — never counted
+    { game_date: '2025-11-08', amount_cents: 35_100_000 },
+    { game_date: '2025-11-08', amount_cents: -2_000_000 },
+    { game_date: '2025-11-07', amount_cents: 16_100_000 },
+    { game_date: '2025-11-05', amount_cents: 67_200_000 },
+  ];
+  assert.deepEqual(settlementRecapSince(activity, '2025-11-07'), { paid: 331_000, nights: 1 });
+  assert.deepEqual(settlementRecapSince(activity, '2025-11-05'), { paid: 492_000, nights: 2 });
+  assert.deepEqual(settlementRecapSince(activity, null), { paid: 1_164_000, nights: 3 });
+});
+
+test('settlementRecapSince reports quiet spans as zero nights', () => {
+  assert.deepEqual(settlementRecapSince([], null), { paid: 0, nights: 0 });
+  assert.deepEqual(
+    settlementRecapSince([{ game_date: '2025-11-01', amount_cents: 100 }], '2025-11-01'),
+    { paid: 0, nights: 0 },
+  );
 });
