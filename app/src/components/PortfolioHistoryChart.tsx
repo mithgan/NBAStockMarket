@@ -20,7 +20,7 @@ import {
 import { useChartSurface } from '../hooks/useChartSurface';
 import { useCountUp } from '../hooks/useCountUp';
 import { STARTING_CASH, type PortfolioPoint } from '../state/game';
-import { colors, fonts, heroNumber, numeric, space, type, weight } from '../theme';
+import { colors, fonts, heroNumber, labelStyle, numeric, space, type, weight } from '../theme';
 
 const DEFAULT_CHART_HEIGHT = 168;
 
@@ -159,43 +159,50 @@ export function PortfolioHistoryChart({
         <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.heroValue}>
           {formatCompactMoney(animatedValue)}
         </Text>
-        {/* The hero's one companion: what the nights are doing to your money.
-            Label-free — the unit rides inside the phrase. */}
-        {earnings ? (
-          <Text
-            accessibilityLabel={`Tonight ${formatSignedMoney(earnings.tonight)}. Past seven nights ${formatSignedMoney(earnings.week)}.`}
-            maxFontSizeMultiplier={1.4}
-            numberOfLines={1}
-            style={styles.earningsLine}
+        {/* The hero's three figures as one bar: each in its own cell over a
+            quiet label, split by hairline rules — separation without boxes.
+            The last cell doubles as the scrub readout. */}
+        <View style={styles.statRow}>
+          {earnings ? (
+            <>
+              <View
+                accessible
+                accessibilityLabel={`Tonight ${formatSignedMoney(earnings.tonight)}`}
+                style={styles.statCell}
+              >
+                <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={[styles.statValue, toneStyle(earnings.tonight)]}>
+                  {formatCompactSignedMoney(earnings.tonight)}
+                </Text>
+                <Text maxFontSizeMultiplier={1.4} style={styles.statLabel}>TONIGHT</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View
+                accessible
+                accessibilityLabel={`Past seven nights ${formatSignedMoney(earnings.week)}`}
+                style={styles.statCell}
+              >
+                <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={[styles.statValue, toneStyle(earnings.week)]}>
+                  {formatCompactSignedMoney(earnings.week)}
+                </Text>
+                <Text maxFontSizeMultiplier={1.4} style={styles.statLabel}>THIS WEEK</Text>
+              </View>
+              <View style={styles.statDivider} />
+            </>
+          ) : null}
+          <View
+            accessible
+            accessibilityLabel={`${formatSignedMoney(change)}, ${changePct >= 0 ? 'up' : 'down'} ${Math.abs(changePct).toFixed(2)} percent, ${scrubPoint ? scrubPoint.date : rangeLabel(activeRange)}`}
+            style={styles.statCell}
           >
-            <Text style={{ color: earnings.tonight > 0 ? colors.green : earnings.tonight < 0 ? colors.red : colors.muted }}>
-              {`${formatCompactSignedMoney(earnings.tonight)} tonight`}
+            <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={[styles.statValue, { color: changeColor }]}>
+              {formatCompactSignedMoney(change)}
             </Text>
-            <Text style={styles.earningsJoin}>{'  ·  '}</Text>
-            <Text style={{ color: earnings.week > 0 ? colors.green : earnings.week < 0 ? colors.red : colors.muted }}>
-              {`${formatCompactSignedMoney(earnings.week)} this week`}
+            <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.statLabel}>
+              {scrubPoint
+                ? scrubPoint.date
+                : `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}% · ${rangeLabel(activeRange).toUpperCase()}`}
             </Text>
-          </Text>
-        ) : null}
-        <View style={styles.changeRow}>
-          <ChangeArrow color={changeColor} up={up} />
-          <Text
-            maxFontSizeMultiplier={1.6}
-            numberOfLines={1}
-            style={[styles.change, { color: changeColor }]}
-          >
-            {formatCompactSignedMoney(change)}
-          </Text>
-          <Text
-            maxFontSizeMultiplier={1.6}
-            numberOfLines={1}
-            style={[styles.changePercent, { color: changeColor }]}
-          >
-            {`${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`}
-          </Text>
-          <Text numberOfLines={1} style={styles.changeMeta}>
-            {scrubPoint ? scrubPoint.date : rangeLabel(activeRange)}
-          </Text>
+          </View>
         </View>
       </View>
       {beforePlot}
@@ -314,13 +321,6 @@ export function PortfolioHistoryChart({
   );
 }
 
-function ChangeArrow({ up, color }: { up: boolean; color: string }) {
-  return (
-    <Svg height={9} width={9} viewBox="0 0 10 10">
-      <Polygon fill={color} points={up ? '5,1 9.5,8.5 0.5,8.5' : '5,9 9.5,1.5 0.5,1.5'} />
-    </Svg>
-  );
-}
 
 const MONTH_ABBREVIATIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -330,6 +330,10 @@ function shortDate(date: string): string {
   const day = Number(date.slice(8, 10));
   if (!Number.isFinite(month) || !Number.isFinite(day) || month < 1 || month > 12) return date;
   return `${MONTH_ABBREVIATIONS[month - 1]} ${day}`;
+}
+
+function toneStyle(value: number) {
+  return { color: value > 0 ? colors.green : value < 0 ? colors.red : colors.muted };
 }
 
 function rangeLabel(range: PortfolioRange): string {
@@ -346,30 +350,19 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
   },
   heroValue: { ...heroNumber },
-  earningsLine: {
-    ...numeric,
-    fontSize: 17,
-    fontWeight: weight.black,
-    marginTop: space.xs,
-  },
-  earningsJoin: { color: colors.faint, fontWeight: weight.medium },
-  changeRow: {
+  statRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs,
-    marginTop: space.xs,
-    flexWrap: 'wrap',
+    alignItems: 'stretch',
+    marginTop: space.md,
   },
-  // Demoted to the caption tier: the earnings line above is the hero's one
-  // loud companion; this row is chart furniture that answers the scrub.
-  change: { ...numeric, fontSize: type.body, fontWeight: weight.heavy },
-  changePercent: { ...numeric, fontSize: type.body, fontWeight: weight.medium, opacity: 0.85 },
-  changeMeta: {
-    ...numeric,
-    color: colors.faint,
-    fontSize: type.body,
-    fontWeight: weight.medium,
-    marginLeft: space.xs,
+  statCell: { gap: 3, minWidth: 0, flexShrink: 1 },
+  statValue: { ...numeric, fontSize: 17, fontWeight: weight.black },
+  statLabel: { ...labelStyle, color: colors.faint },
+  statDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: colors.borderStrong,
+    marginHorizontal: space.lg,
   },
   plot: {},
   // Date labels line up with the plot's 10px horizontal insets.
