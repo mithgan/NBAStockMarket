@@ -57,9 +57,9 @@ export function HoldingRow({ holding, dividends, received, onPress, trend }: {
         <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.name}>
           {player.name}
         </Text>
-        <Text numberOfLines={1} style={styles.meta}>
-          {`${player.tier.toUpperCase()} · ${rateCaption}`}
-        </Text>
+        {/* Rate alone: the shopping band (tier) matters in the market, not
+            on a roster you already own. */}
+        <Text numberOfLines={1} style={styles.meta}>{rateCaption}</Text>
       </View>
       {trend && trend.length > 1 ? <Sparkline points={trend} /> : null}
       {/* One figure per row, unlabeled: the section header says SEASON

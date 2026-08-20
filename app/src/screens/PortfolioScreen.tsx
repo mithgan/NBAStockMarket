@@ -273,7 +273,9 @@ export function PortfolioScreen() {
           </View>
         ) : (
           <View>
-            {summary.holdings.map((holding) => {
+            {[...summary.holdings]
+              .sort((a, b) => (receivedByPlayer.get(b.player_id) ?? 0) - (receivedByPlayer.get(a.player_id) ?? 0))
+              .map((holding) => {
               const player = playerById.get(holding.player_id);
               if (!player) return null;
               const settled = selectSettledTrendPoints(playerTrends[player.id] ?? [], latestSettledDate);

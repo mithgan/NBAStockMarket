@@ -144,8 +144,12 @@ export function SettingsSheet({
               <Text style={styles.factLabel}>Dividend rate</Text>
               <Text style={styles.factValue}>$40K per net point</Text>
             </View>
+            <View style={styles.factRow}>
+              <Text style={styles.factLabel}>Listing tiers</Text>
+              <Text style={styles.factValue}>STAR · MID</Text>
+            </View>
             <Text style={styles.note}>
-              Dividends pay the difference between what a player actually did and what he was projected to do. Matching the projection pays nothing; missing it costs you. Prices move on trading, never on performance.
+              Dividends pay the difference between what a player actually did and what he was projected to do. Matching the projection pays nothing; missing it costs you. Prices move on trading, never on performance. Tiers band players by opening price — stars list dearest.
             </Text>
           </Section>
 

@@ -367,7 +367,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderStrong,
     marginHorizontal: space.md,
   },
-  plot: {},
+  // Air between the night strip and the curve; the plot's own 12px inset
+  // was carrying all of it.
+  plot: { marginTop: space.md },
   // Date labels line up with the plot's 10px horizontal insets.
   dateAxis: {
     flexDirection: 'row',
