@@ -41,17 +41,12 @@ test('cumulative chart values and high/low points are deterministic', () => {
   assert.deepEqual(selectHighLowPoints([]), { high: null, low: null });
 });
 
-test('surpriseLabel leads with the surprise and keeps the box score', () => {
+test('surpriseLabel is one clause, with the box score only on request', () => {
+  assert.equal(surpriseLabel({ np: 26.6, expected_np: 15.6 }), '+11.0 over projection');
+  assert.equal(surpriseLabel({ np: 5.8, expected_np: 23.9 }), '-18.1 under projection');
+  assert.equal(surpriseLabel({ np: 20, expected_np: 20 }), '+0.0 over projection');
   assert.equal(
-    surpriseLabel({ np: 26.6, expected_np: 15.6 }),
+    surpriseLabel({ np: 26.6, expected_np: 15.6 }, { boxScore: true }),
     '+11.0 over projection · 26.6 vs 15.6 NP',
-  );
-  assert.equal(
-    surpriseLabel({ np: 5.8, expected_np: 23.9 }),
-    '-18.1 under projection · 5.8 vs 23.9 NP',
-  );
-  assert.equal(
-    surpriseLabel({ np: 20, expected_np: 20 }),
-    '+0.0 over projection · 20.0 vs 20.0 NP',
   );
 });

@@ -28,6 +28,8 @@ export interface ServerHolding {
   current_price_cents: number;
   market_value_cents: number;
   unrealized_pnl_cents: number;
+  /** Account-specific dividends received from this player in the active season. */
+  season_dividend_cents: number | null;
 }
 
 export interface ServerTrade {
@@ -111,6 +113,10 @@ export interface ServerGameState {
   season_id: string;
   last_settled_date: string | null;
   next_game_date: string | null;
+  /** Players scheduled on next_game_date — public schedule, not lookahead. */
+  next_game_player_ids?: string[];
+  /** Pregame projections for that date — the number each player must beat. */
+  next_game_projections?: { player_id: string; expected_net_points_micros: number }[];
   is_complete: boolean;
   version: number;
 }
@@ -359,6 +365,11 @@ function parseHolding(value: unknown, path = 'holding'): ServerHolding {
     current_price_cents: nonNegativeInteger(row.current_price_cents, `${path}.current_price_cents`),
     market_value_cents: nonNegativeInteger(row.market_value_cents, `${path}.market_value_cents`),
     unrealized_pnl_cents: integer(row.unrealized_pnl_cents, `${path}.unrealized_pnl_cents`),
+    // Null keeps an older backend from being presented as a real $0 result
+    // while frontend and backend deployments roll independently.
+    season_dividend_cents: row.season_dividend_cents === undefined
+      ? null
+      : nullableInteger(row.season_dividend_cents, `${path}.season_dividend_cents`),
   };
 }
 
@@ -474,6 +485,20 @@ export function parseGameState(value: unknown, path = 'game'): ServerGameState {
     season_id: text(row.season_id, `${path}.season_id`),
     last_settled_date: nullableIsoDate(row.last_settled_date, `${path}.last_settled_date`),
     next_game_date: nullableIsoDate(row.next_game_date, `${path}.next_game_date`),
+    ...(Array.isArray(row.next_game_player_ids)
+      ? { next_game_player_ids: row.next_game_player_ids.map((id, index) => text(id, `${path}.next_game_player_ids[${index}]`)) }
+      : {}),
+    ...(Array.isArray(row.next_game_projections)
+      ? {
+        next_game_projections: row.next_game_projections.map((entry, index) => {
+          const projection = record(entry, `${path}.next_game_projections[${index}]`);
+          return {
+            player_id: text(projection.player_id, `${path}.next_game_projections[${index}].player_id`),
+            expected_net_points_micros: integer(projection.expected_net_points_micros, `${path}.next_game_projections[${index}].expected_net_points_micros`),
+          };
+        }),
+      }
+      : {}),
     is_complete: flag(row.is_complete, `${path}.is_complete`),
     version: nonNegativeInteger(row.version, `${path}.version`),
   };

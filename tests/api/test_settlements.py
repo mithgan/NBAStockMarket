@@ -17,6 +17,7 @@ from nba_stock_market.api.database import (
     Database,
     DividendRow,
     GameStateRow,
+    ReplayEventRow,
     SeedPlayer,
     SeedReplayEvent,
     SettlementRow,
@@ -148,11 +149,63 @@ def test_game_state_and_history_require_player_authentication(
         "season_id": "2025-26",
         "last_settled_date": None,
         "next_game_date": "2025-10-21",
+        "next_game_player_ids": ["jokic", "sga"],
+        "next_game_projections": [
+            {
+                "player_id": "jokic",
+                "expected_net_points_micros": 25_000_000,
+            },
+            {
+                "player_id": "sga",
+                "expected_net_points_micros": 20_000_000,
+            },
+        ],
         "is_complete": False,
         "version": 0,
     }
     assert history.status_code == 200
     assert history.json() == {"data": []}
+
+
+def test_game_state_hides_players_without_a_published_pregame_projection(
+    settlement_client: TestClient,
+    settlement_database: Database,
+) -> None:
+    settlement_database.seed_players(
+        [
+            SeedPlayer(
+                id="unprojected",
+                name="Unprojected Player",
+                tier="bench",
+                current_price_cents=1_000_000_000,
+                opening_price_cents=1_000_000_000,
+                actual_salary_cents=900_000_000,
+            )
+        ]
+    )
+    with settlement_database.session() as session, session.begin():
+        session.add(
+            ReplayEventRow(
+                game_date=date(2025, 10, 21),
+                player_id="unprojected",
+                actual_net_points_micros=10_000_000,
+                expected_net_points_micros=8_000_000,
+                dividend_cents=8_000_000,
+                actual_minutes_micros=12_000_000,
+                projected_minutes_micros=None,
+                qualifies_for_instruments=False,
+            )
+        )
+
+    response = settlement_client.get("/api/v1/game", headers=auth())
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert "unprojected" not in payload["next_game_player_ids"]
+    assert all(
+        row["player_id"] != "unprojected"
+        for row in payload["next_game_projections"]
+    )
 
 
 def test_local_replay_seed_is_idempotent_but_rejects_conflicting_events(
@@ -332,6 +385,7 @@ def test_daily_settlement_pays_holders_once_and_reconciles_history(
 
     after = settlement_client.get("/api/v1/portfolio", headers=auth()).json()["data"]
     assert after["cash_cents"] - before["cash_cents"] == 80_000_000
+    assert after["holdings"][0]["season_dividend_cents"] == 80_000_000
     history = settlement_client.get("/api/v1/settlements", headers=auth()).json()["data"]
     assert history == [
         {

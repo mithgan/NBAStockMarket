@@ -37,8 +37,10 @@ test('leaderboard rows use stable account identities instead of display names', 
 });
 
 test('detail dividend chart follows the selected range and renders labeled extrema', () => {
-  assert.match(marketSource, /const rangeTotal = visiblePoints\.reduce/);
-  assert.match(marketSource, /range === 'Season' \? 'Settled season'/);
+  assert.match(marketSource, /const visiblePoints = selectTrendRange\(points, range\)/);
+  // The idle readout pairs the window total with its exposure, so the two
+  // zoom levels of the same stream sit on one line.
+  assert.match(marketSource, /across \$\{points\.length\} \$\{points\.length === 1 \? 'game' : 'games'\}/);
   assert.match(marketSource, /\['L5', 'L15', 'L30', 'Season'\]/);
   assert.match(marketSource, /<Path d=\{linePath\}/);
   assert.match(marketSource, /\['HIGH', extrema\.high\]/);

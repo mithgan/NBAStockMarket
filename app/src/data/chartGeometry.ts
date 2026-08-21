@@ -26,3 +26,24 @@ export function nearestPointIndex(
   });
   return nearest;
 }
+
+/**
+ * Vertical position for a comparison baseline within a chart's plotted range.
+ * A baseline outside that range is omitted rather than drawn over unrelated
+ * data. Flat series are the important edge case: only the same value belongs
+ * on the line.
+ */
+export function baselineYPosition(
+  values: readonly number[],
+  baseline: number,
+  height: number,
+): number | null {
+  if (values.length === 0 || height <= 0) return null;
+
+  const high = Math.max(...values);
+  const low = Math.min(...values);
+  const span = high - low;
+  if (span === 0) return baseline === high ? height / 2 : null;
+  if (baseline <= low || baseline >= high) return null;
+  return 12 + ((high - baseline) / span) * (height - 24);
+}

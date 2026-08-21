@@ -48,10 +48,54 @@ test('value sort ranks by live price, not the opening listing', () => {
   assert.equal(rows[0].currentPrice, 27_000_000);
 });
 
-test('move sort ranks by percentage change since listing', () => {
+test('move sort ranks by trade-driven change from opening price', () => {
   const rows = buildMarketRows({ ...baseInput, sort: 'move' });
-  // a is +20%, c is flat, b is -10%.
   assert.deepEqual(rows.map((row) => row.player.id), ['a', 'c', 'b']);
+  assert.equal(rows[0].changePercent, 20);
+});
+
+test('pays sort ranks by payout per game and pushes unplayed players last', () => {
+  const rows = buildMarketRows({ ...baseInput, sort: 'pays' });
+  // a pays +$200K per game, b pays -$120K, c has never played.
+  assert.deepEqual(rows.map((row) => row.player.id), ['a', 'b', 'c']);
+  assert.equal(rows[0].windowRate, 200_000);
+  assert.equal(rows[0].windowGames, 1);
+  assert.equal(rows.at(-1)!.windowRate, null);
+});
+
+test('pays sort reads the rate over the trending window, not the whole season', () => {
+  const twoGames: TrendPoint[] = [
+    { date: '2025-11-01', np: 30, expected_np: 20, dividend_per_holder: 400_000 },
+    { date: '2025-11-03', np: 21, expected_np: 20, dividend_per_holder: 40_000 },
+  ];
+  const rows = buildMarketRows({
+    ...baseInput,
+    trends: { a: twoGames },
+    sort: 'pays',
+    trendingGames: 1,
+  });
+  // Window of 1: only the newest game counts toward the rate.
+  assert.equal(rows[0].player.id, 'a');
+  assert.equal(rows[0].windowRate, 40_000);
+  assert.equal(rows[0].windowTotal, 40_000);
+});
+
+test('yield sort ranks by season payout per dollar, which can invert the pays order', () => {
+  // b banks more per game (+$120K vs +$80K), but a's cheaper share pays more
+  // per dollar: 80K/12M beats 120K/27M.
+  const rows = buildMarketRows({
+    ...baseInput,
+    trends: { a: trend(2), b: trend(3) },
+    sort: 'yield',
+  });
+  assert.deepEqual(rows.slice(0, 2).map((row) => row.player.id), ['a', 'b']);
+
+  const byPays = buildMarketRows({
+    ...baseInput,
+    trends: { a: trend(2), b: trend(3) },
+    sort: 'pays',
+  });
+  assert.deepEqual(byPays.slice(0, 2).map((row) => row.player.id), ['b', 'a']);
 });
 
 test('form sort ranks by recent surprise and pushes players without games last', () => {

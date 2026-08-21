@@ -56,7 +56,7 @@ test('live screens use the deployed economy and preserve the separate short rate
   assert.match(economySource, /STARTING_BANKROLL = 207_824_000/);
   assert.match(economySource, /BASE_DIVIDEND_DOLLARS_PER_NET_POINT = 80_000/);
   assert.match(economySource, /WEEKLY_SHORT_DOLLARS_PER_NET_POINT = 40_000/);
-  assert.match(portfolioSource, /STARTING_BANKROLL/);
+  assert.match(portfolioChartSource, /STARTING_BANKROLL/);
   assert.match(playsSource, /WEEKLY_SHORT_DOLLARS_PER_NET_POINT/);
   assert.doesNotMatch(
     playsSource,
@@ -77,6 +77,24 @@ test('market discovery supports search and a clear empty result', () => {
   assert.match(marketSource, /No players match/);
 });
 
+test('an empty portfolio sends the user directly to the market', () => {
+  assert.match(appSource, /<PortfolioScreen onOpenMarket=\{\(\) => setActiveTab\('market'\)\} \/>/);
+  assert.match(portfolioSource, /Your cap sheet is clean/);
+  assert.match(portfolioSource, /accessibilityLabel="Open the player market"/);
+  assert.match(portfolioSource, /label="OPEN MARKET"/);
+  assert.match(portfolioSource, /onPress=\{onOpenMarket\}/);
+});
+
+test('the while-away recap refreshes after the app returns to the foreground', () => {
+  assert.match(portfolioContextSource, /if \(isLoading \|\| bootstrapRef\.current === null\) return undefined/);
+  assert.match(portfolioContextSource, /AppState\.addEventListener\('change'/);
+  assert.match(portfolioContextSource, /isAppResume\(previousState, nextState\)/);
+  assert.match(portfolioContextSource, /loadSnapshotWithRecap/);
+  assert.match(portfolioContextSource, /void refreshData\(\)/);
+  assert.match(portfolioContextSource, /updateSettlementMarker: false/);
+  assert.match(portfolioContextSource, /result\?\.recapMessage \?\? serverRefreshNotice\(refreshed\)/);
+});
+
 test('the market removes nonessential sparklines from narrow phone rows', () => {
   assert.match(marketSource, /useWindowDimensions/);
   assert.match(marketSource, /const compact = width < 420/);
@@ -86,8 +104,11 @@ test('the market removes nonessential sparklines from narrow phone rows', () => 
   assert.match(marketSource, /maxFontSizeMultiplier=\{MAX_ROW_FONT_SCALE\}/);
   assert.match(marketSource, /showSparkline && chartPoints\.length > 0 \? <Sparkline points=\{chartPoints\}/);
   assert.match(marketSource, /const chartPoints = selectTrendRange\(trendPoints, 'L15'\)/);
-  // Recent form still reaches narrow rows as text even without the sparkline.
-  assert.match(marketSource, /L\{form\.games\} \{formatSignedMetric\(form\.averageSurprise\)\} NP/);
+  // The row keeps exactly one figure and one caption: the nightly rate over
+  // "a night · price". Box score and form wait inside the profile.
+  assert.match(marketSource, /formatCompactSignedMoney\(windowRate\)/);
+  assert.match(marketSource, /a night · \$\{formatCompactMoney\(currentPrice\)\}/);
+  assert.doesNotMatch(marketSource, /formatSignedMetric\(form\.averageSurprise\)\} NP/);
 });
 
 test('the market only widens into extra columns when the table has room', () => {
@@ -135,7 +156,7 @@ test('the buyable filter excludes players an active instrument blocks', () => {
 
 test('the market virtualizes its ~300 listings instead of mounting every row', () => {
   assert.match(marketSource, /<FlatList/);
-  assert.match(marketSource, /keyExtractor=\{\(item\) => item\.player\.id\}/);
+  assert.match(marketSource, /keyExtractor=\{\(item\) => \('anchor' in item \? 'market-average-anchor' : item\.player\.id\)\}/);
   assert.match(marketSource, /windowSize=/);
   assert.doesNotMatch(marketSource, /visiblePlayers\.map\(/);
   // A variable-height ListHeaderComponent makes fixed getItemLayout offsets wrong.
@@ -200,9 +221,31 @@ test('the market exposes explicit sort and filter controls with tab semantics', 
   assert.match(source('../ui/primitives.tsx'), /aria-label=\{groupLabel\}/);
   assert.match(marketSource, /accessibilityRole="tab"/);
   assert.match(orderingSource, /export function buildMarketRows/);
+  assert.match(orderingSource, /case 'move':/);
   // Rows missing a metric must sort last rather than masquerading as zero.
   assert.match(orderingSource, /if \(left === null\) return 1/);
   assert.match(orderingSource, /if \(right === null\) return -1/);
+  assert.match(marketSource, /settledTrends,\s*sort,\s*trendingWindow,\s*\]\);/);
+  assert.match(marketSource, /<View style=\{styles\.sheetBackdrop\}>/);
+  assert.match(marketSource, /accessibilityRole="button"\s*onPress=\{\(\) => setSortSheetOpen\(false\)\}\s*style=\{styles\.sheetDismiss\}/);
+  assert.match(marketSource, /contentContainerStyle=\{styles\.chipBar\}\s*horizontal/);
+  // Payout figures keep their timeframe visible under every sort, and the full
+  // sheet remains reachable on landscape phones and with enlarged text.
+  assert.match(marketSource, /\.toUpperCase\(\)\} · \$\{trendingWindow\.toUpperCase\(\)\}/);
+  assert.match(marketSource, /<ScrollView\s+accessibilityViewIsModal[\s\S]*maxHeight:/);
+  assert.match(marketSource, /PAYOUT WINDOW/);
+});
+
+test('account payout copy uses authoritative history without current-ownership claims', () => {
+  const watchlistSource = source('../screens/WatchlistScreen.tsx');
+  assert.match(portfolioSource, /received=\{holding\.seasonDividends\}/);
+  assert.doesNotMatch(portfolioSource, /receivedByPlayer/);
+  assert.match(watchlistSource, /per holder across this window/);
+  assert.doesNotMatch(watchlistSource, /unclaimed/);
+  assert.doesNotMatch(watchlistSource, /owns\(/);
+  assert.match(watchlistSource, /alignedAxisIndex\(index, entry\.cumulative\.length, count\)/);
+  assert.match(watchlistSource, /localSeriesIndex\(activeIndex, entry\.cumulative\.length, comparisonCount\)/);
+  assert.match(watchlistSource, /activeIndex === null \? entry\.total : atIndex \?\? 0/);
 });
 
 test('market charts only receive results through the latest settled replay date', () => {
@@ -213,16 +256,23 @@ test('market charts only receive results through the latest settled replay date'
   assert.match(marketSource, /No settled games yet/);
 });
 
-test('player details resolve current server data and price changes name their timeframe', () => {
+test('player details resolve current server data and lead with the stream, not the price', () => {
   assert.match(marketSource, /const \[selectedPlayerId, setSelectedPlayerId\]/);
   assert.match(marketSource, /players\.find\(\(player\) => player\.id === selectedPlayerId\)/);
   assert.match(portfolioSource, /const \[detailPlayerId, setDetailPlayerId\]/);
   assert.match(portfolioSource, /playerById\.get\(detailPlayerId\)/);
-  assert.match(marketSource, /formatSignedPercent\(change\)\} since listing/);
-  assert.match(marketSource, /styles\.detailPrice\}\s*>\s*\{formatCompactMoney\(currentPrice\)\}/);
-  assert.match(marketSource, /Recent form vs expected/);
+  // Money-first: the quote's headline is the dividend stream; the price rides
+  // underneath as the cost of the stream, never as the lead figure.
+  assert.match(marketSource, /styles\.detailPaid, season\.total >= 0/);
+  assert.match(marketSource, /DIVIDENDS · SEASON/);
+  assert.match(marketSource, /price \$\{formatCompactMoney\(currentPrice\)\}/);
+  // The dead since-listing percentage (always 0.0% while prices cannot move)
+  // must not return to the profile meta.
+  assert.doesNotMatch(marketSource, /since listing/);
+  assert.match(marketSource, /label="Per night"/);
+  assert.match(marketSource, /label="Vs the average payer"/);
   assert.match(marketSource, /const rowAccessibilityLabel = \[/);
-  assert.match(marketSource, /`Current price \$\{formatMoney\(currentPrice\)\}`/);
+  assert.match(marketSource, /`Price \$\{formatMoney\(currentPrice\)\}`/);
   assert.match(marketSource, /accessibilityLabel=\{rowAccessibilityLabel\}/);
 });
 
@@ -260,8 +310,10 @@ test('every compacted money Stat on the player detail carries its exact value', 
     );
   }
   assert.match(marketSource, /exact \? `\$\{label\}, \$\{exact\}` : undefined/);
-  // The selected-range dividend headline is compacted too.
-  assert.match(marketSource, /accessibilityLabel=\{`\$\{formatSignedMoney\(rangeTotal\)\}/);
+  // The stream headline and its rate line are compacted too, so both carry
+  // the exact figure for assistive tech.
+  assert.match(marketSource, /accessibilityLabel=\{`Dividends \$\{formatSignedMoney\(season\.total\)\} per holder/);
+  assert.match(marketSource, /\$\{formatSignedMoney\(season\.perGame \?\? 0\)\} per night/);
 });
 
 test('the reduced-motion listener survives browsers with only the legacy API', () => {
@@ -353,11 +405,18 @@ test('portfolio provides server-backed activity, history, and exact cost basis',
   assert.match(portfolioSource, />Recent activity</);
   assert.match(portfolioSource, /holding\.costBasis/);
   assert.match(portfolioSource, /holding\.unrealizedPnl/);
-  assert.match(portfolioSource, /No server settlement has reached this account yet/);
-  assert.match(
-    portfolioSource,
-    /Settled \$\{latestPoint\.date\}\. Includes cash payouts and player-price movement\./,
-  );
+  assert.match(portfolioChartSource, /if \(visible\.length === 0\)[\s\S]*style=\{styles\.emptyBalanceLine\}/);
+  assert.match(portfolioChartSource, /if \(visible\.length === 0\)[\s\S]*\{beforePlot\}/);
+  assert.match(portfolioChartSource, /<View\s+accessible\s+accessibilityLabel=\{`Portfolio value[\s\S]*nativeID="scrub-plot-portfolio"/);
+  assert.match(portfolioSource, /latestSettlement \? \(\s*<SettlementSummary/);
+  assert.match(portfolioSource, /settledDate=\{latestSettlement\.game_date\}/);
+  assert.match(portfolioSource, /\) : upcomingLine \? \(\s*<Text numberOfLines=\{1\} style=\{styles\.upcomingOnly\}>/);
+  assert.match(portfolioSource, /earningsWindows\(settlements, latestSettlement\.game_date\)/);
+  assert.match(portfolioSource, /nightContributions\(\s*state\.activity,/);
+  assert.doesNotMatch(portfolioSource, /nightContributions\(state\.holdings,/);
+  assert.match(portfolioSource, /Math\.abs\(contributionNet - latestAccountDividend\)/);
+  assert.match(portfolioSource, /must beat \$\{needs\.toFixed\(1\)\}/);
+  assert.match(source('../screens/WatchlistScreen.tsx'), /must beat \$\{needs\.toFixed\(1\)\}/);
   assert.doesNotMatch(portfolioSource, /Cash dividends, boosts, short settlements, and refunds/);
   assert.doesNotMatch(portfolioSource, /Reset progress|Alert\.alert/);
 });

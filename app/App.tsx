@@ -223,7 +223,7 @@ function AppBody() {
     }
     return (
       <>
-        {activeTab === 'portfolio' && <PortfolioScreen />}
+        {activeTab === 'portfolio' && <PortfolioScreen onOpenMarket={() => setActiveTab('market')} />}
         {activeTab === 'market' && <MarketScreen />}
         {activeTab === 'watchlist' && <WatchlistScreen />}
         {activeTab === 'plays' && <PlaysScreen />}
@@ -493,11 +493,13 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.gold,
     borderBottomWidth: 1,
   },
+  // The banner is where "Paid you +$1.2M across 7 nights" lands — body size,
+  // not fine print: it is the update the user opened the app for.
   noticeText: {
     flex: 1,
     color: colors.text,
-    fontSize: type.label,
-    lineHeight: 17,
+    fontSize: type.body,
+    lineHeight: 18,
     fontWeight: '700',
   },
   noticeClose: {

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
+  Modal,
   PanResponder,
   Pressable,
   ScrollView,
@@ -21,6 +22,7 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PlayerStats } from '../components/PlayerStats';
@@ -34,15 +36,11 @@ import {
   type MarketRowModel,
   type MarketSort,
 } from '../data/marketOrdering';
+import { dividendYield, marketAverageRate, summarizeDividends } from '../data/dividendMetrics';
 import {
   formatOwnership,
   formatOwnershipShort,
-  formatSignedMetric,
-  formatSignedPercent,
   formatTradeVolume,
-  metricDirection,
-  priceChangePercent,
-  recentForm,
   smoothLinePath,
 } from '../data/marketPresentation';
 import {
@@ -61,6 +59,7 @@ import {
   formatSignedMoney,
 } from '../format';
 import { useChartSurface } from '../hooks/useChartSurface';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePortfolio } from '../state/PortfolioContext';
 import { useWatchlist } from '../state/watchlist';
 import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
@@ -79,10 +78,10 @@ export const TRENDING_WINDOWS: {
   hint: string;
   games: number | null;
 }[] = [
-  { key: 'L5', label: 'L5', hint: 'Trending over the last five settled games', games: 5 },
-  { key: 'L15', label: 'L15', hint: 'Trending over the last fifteen settled games', games: 15 },
-  { key: 'L30', label: 'L30', hint: 'Trending over the last thirty settled games', games: 30 },
-  { key: 'Season', label: 'Season', hint: 'Trending across the settled season', games: null },
+  { key: 'L5', label: 'L5', hint: 'Payout rate over the last five settled games', games: 5 },
+  { key: 'L15', label: 'L15', hint: 'Payout rate over the last fifteen settled games', games: 15 },
+  { key: 'L30', label: 'L30', hint: 'Payout rate over the last thirty settled games', games: 30 },
+  { key: 'Season', label: 'Season', hint: 'Payout rate across the settled season', games: null },
 ];
 
 /**
@@ -102,11 +101,6 @@ function splitName(name: string): { first: string; last: string } {
   const parts = name.trim().split(' ');
   if (parts.length === 1) return { first: '', last: parts[0] };
   return { first: parts[0], last: parts.slice(1).join(' ') };
-}
-
-function average(points: TrendPoint[], key: 'np' | 'expected_np') {
-  if (points.length === 0) return 0;
-  return points.reduce((sum, point) => sum + point[key], 0) / points.length;
 }
 
 function DetailChart({
@@ -225,7 +219,7 @@ function DetailChart({
           <Text style={styles.detailReadoutMeta}>
             {metric === 'price'
               ? 'Prices move on trading, never on performance — flat until volume exists.'
-              : 'Hover the chart to read a night exactly.'}
+              : `${formatCompactSignedMoney(values.at(-1) ?? 0)} across ${points.length} ${points.length === 1 ? 'game' : 'games'} — hover to read a night.`}
           </Text>
         )}
       </View>
@@ -318,6 +312,7 @@ export function PlayerDetail({
   trendPoints,
   onClose,
   backLabel = 'Market',
+  averageRate = null,
 }: {
   player: Player;
   currentPrice?: number;
@@ -325,20 +320,25 @@ export function PlayerDetail({
   trendPoints: TrendPoint[];
   onClose: () => void;
   backLabel?: string;
+  /** League-average per-night payout — the named baseline the stream reads against. */
+  averageRate?: number | null;
 }) {
   const [range, setRange] = useState<TrendRange>('L15');
   const [metric, setMetric] = useState<ChartMetric>('dividends');
   const points = selectSettledTrendPoints(trendPoints, latestSettledDate);
   const visiblePoints = selectTrendRange(points, range);
-  const rangeTotal = visiblePoints.reduce((sum, point) => sum + point.dividend_per_holder, 0);
+  // The chain: rate × exposure = total, then the total against its baselines.
+  const season = summarizeDividends(points);
+  const seasonYield = season.gamesPlayed === 0 ? null : dividendYield(season.total, currentPrice);
+  const vsAverage = season.perGame === null || averageRate === null
+    ? null
+    : season.perGame - averageRate;
   const bestPoint = points.reduce<TrendPoint | null>(
     (best, point) =>
       best === null || point.dividend_per_holder > best.dividend_per_holder ? point : best,
     null,
   );
   const bestPayout = bestPoint?.dividend_per_holder ?? 0;
-  const form = recentForm(points);
-  const change = priceChangePercent(currentPrice, player.listing_price);
   const watchlist = useWatchlist();
   const watching = watchlist.isWatched(player.id);
 
@@ -376,29 +376,42 @@ export function PlayerDetail({
           <Text accessibilityRole="header" numberOfLines={2} style={styles.detailName}>{player.name}</Text>
           <Text numberOfLines={1} style={styles.detailMeta}>
             {player.tier.toUpperCase()}
-            {change === null ? '' : ` · ${formatSignedPercent(change)} since listing`}
+            {season.gamesPlayed > 0 ? ` · ${season.gamesPlayed} SETTLED ${season.gamesPlayed === 1 ? 'GAME' : 'GAMES'}` : ''}
           </Text>
         </View>
       </View>
+      {/* The quote leads with the stream, because that is what a share buys
+          here; the price is what the stream costs. */}
       <View style={styles.detailQuote}>
-        <Text
-          accessibilityLabel={`Current price ${formatMoney(currentPrice)}`}
-          numberOfLines={1}
-          style={styles.detailPrice}
-        >
-          {formatCompactMoney(currentPrice)}
-        </Text>
-        {points.length > 0 ? (
-          <Text
-            accessibilityLabel={`${formatSignedMoney(rangeTotal)} ${range === 'Season' ? 'settled season' : `last ${visiblePoints.length} games`}`}
-            numberOfLines={1}
-            style={[styles.detailDividend, rangeTotal >= 0 ? styles.positive : styles.negative]}
-          >
-            {formatCompactSignedMoney(rangeTotal)} {range === 'Season' ? 'Settled season' : `Last ${visiblePoints.length} games`}
-          </Text>
+        {season.gamesPlayed > 0 ? (
+          <>
+            <Text
+              accessibilityLabel={`Dividends ${formatSignedMoney(season.total)} per holder across the settled season`}
+              numberOfLines={1}
+              style={[styles.detailPaid, season.total >= 0 ? styles.positive : styles.negative]}
+            >
+              {formatCompactSignedMoney(season.total)}
+              <Text style={styles.detailPaidLabel}>  DIVIDENDS · SEASON</Text>
+            </Text>
+            <Text
+              accessibilityLabel={`${formatSignedMoney(season.perGame ?? 0)} per night across ${season.gamesPlayed} games`}
+              numberOfLines={1}
+              style={styles.detailRateLine}
+            >
+              {`${formatCompactSignedMoney(season.perGame ?? 0)} a night, over ${season.gamesPlayed} ${season.gamesPlayed === 1 ? 'game' : 'games'}`}
+            </Text>
+          </>
         ) : (
-          <Text style={styles.detailDividend}>No settled games yet</Text>
+          <Text style={styles.detailPaid}>No settled games yet</Text>
         )}
+        <Text
+          accessibilityLabel={`Price ${formatMoney(currentPrice)}${seasonYield === null ? '' : `, season yield ${(seasonYield * 100).toFixed(1)} percent of price`}`}
+          numberOfLines={1}
+          style={styles.detailPriceLine}
+        >
+          {`price ${formatCompactMoney(currentPrice)}`}
+          {seasonYield === null ? '' : ` · ${(seasonYield * 100).toFixed(1)}% paid back`}
+        </Text>
       </View>
 
       <View style={styles.chartHeading}>
@@ -434,28 +447,53 @@ export function PlayerDetail({
         <Text style={styles.emptyChart}>No game data</Text>
       )}
 
-      <SectionHeader label="SEASON SNAPSHOT" />
+      {/* The chain, in reading order: the stream (rate × exposure = total),
+          the total against its named baselines, then what the share itself is. */}
+      <SectionHeader label="THE STREAM" meta="RATE · GAMES · TOTAL" />
       <View style={styles.statsGrid}>
-        <Stat exact={formatMoney(currentPrice)} label="Current price" value={formatCompactMoney(currentPrice)} />
-        <Stat exact={formatMoney(player.listing_price)} label="Opening price" value={formatCompactMoney(player.listing_price)} />
-        <Stat exact={formatMoney(player.actual_salary)} label="Actual salary" value={formatCompactMoney(player.actual_salary)} />
-        <Stat label="Settled games" value={String(points.length)} />
-        <Stat label="Avg NP / expected" value={`${average(points, 'np').toFixed(1)} / ${average(points, 'expected_np').toFixed(1)}`} />
+        <Stat
+          exact={season.perGame === null ? 'No settled games' : `${formatSignedMoney(season.perGame)} per night he plays`}
+          label="Per night"
+          value={season.perGame === null ? '—' : formatCompactSignedMoney(season.perGame)}
+        />
+        <Stat label="Games settled" value={String(season.gamesPlayed)} />
+        <Stat
+          exact={`${formatSignedMoney(season.total)} across the settled season`}
+          label="Season dividends"
+          value={formatCompactSignedMoney(season.total)}
+        />
+        <Stat
+          exact={vsAverage === null
+            ? 'Needs a settled game and a market average'
+            : `${formatSignedMoney(vsAverage)} per night versus the average payer`}
+          label="Vs the average payer"
+          value={vsAverage === null ? '—' : formatCompactSignedMoney(vsAverage)}
+        />
+        <Stat
+          exact={seasonYield === null
+            ? 'Needs a settled game'
+            : `The season has paid back ${(seasonYield * 100).toFixed(1)} percent of his price`}
+          label="Yield on price"
+          value={seasonYield === null ? '—' : `${(seasonYield * 100).toFixed(1)}%`}
+        />
         <Stat
           exact={bestPoint ? `${formatSignedMoney(bestPayout)} on ${bestPoint.date}` : formatSignedMoney(bestPayout)}
           label="Best settled payout"
           value={bestPoint ? `${formatCompactSignedMoney(bestPayout)} · ${bestPoint.date}` : formatCompactSignedMoney(bestPayout)}
         />
+      </View>
+
+      <SectionHeader label="THE SHARE" />
+      <View style={styles.statsGrid}>
+        <Stat exact={formatMoney(currentPrice)} label="Current price" value={formatCompactMoney(currentPrice)} />
+        <Stat exact={formatMoney(player.listing_price)} label="Opening price" value={formatCompactMoney(player.listing_price)} />
+        <Stat exact={formatMoney(player.actual_salary)} label="Actual salary" value={formatCompactMoney(player.actual_salary)} />
         <Stat label="Market ownership" value={formatOwnership(player.ownership_bps)} />
         <Stat
           label="Shares available"
           value={Number.isFinite(player.available_shares) ? String(player.available_shares) : 'Unavailable'}
         />
         <Stat label="30-day activity" value={formatTradeVolume(player.volume_30d)} />
-        <Stat
-          label="Recent form vs expected"
-          value={form ? `L${form.games} ${formatSignedMetric(form.averageSurprise)} NP` : 'No settled games'}
-        />
       </View>
 
       <SectionHeader
@@ -481,6 +519,9 @@ function WatchStar({ on }: { on: boolean }) {
     </Svg>
   );
 }
+
+/** A market list entry: a player row, or the average-payer anchor rule. */
+type MarketListItem = MarketRowModel | { anchor: true; rate: number };
 
 interface MarketRowProps {
   row: MarketRowModel;
@@ -517,36 +558,25 @@ function MarketRow({
   watching,
   onToggleWatch,
 }: MarketRowProps) {
-  const { player, currentPrice, changePercent, held } = row;
+  const { player, currentPrice, held, windowRate, windowGames } = row;
   const { first, last } = splitName(player.name);
   const buyTotal = currentPrice + (player.buy_fee ?? 0);
   const shortfall = held ? 0 : Math.max(0, buyTotal - freeCash);
   const soldOut = !held && player.available_shares === 0;
   const unaffordable = !held && !soldOut && shortfall > 0;
   const disabled = shorted || boosted || soldOut || unaffordable || locked;
-  const form = recentForm(trendPoints);
-  const changeDirection = changePercent === null ? 0 : metricDirection(changePercent);
-  const formDirection = form ? metricDirection(form.averageSurprise) : 0;
   const chartPoints = selectTrendRange(trendPoints, 'L15');
-  const cumulativeDividend = chartPoints.reduce(
-    (sum, point) => sum + point.dividend_per_holder,
-    0,
-  );
   const rowAccessibilityLabel = [
     `View ${player.name} details`,
-    `Current price ${formatMoney(currentPrice)}`,
-    changePercent === null ? null : `${formatSignedPercent(changePercent)} since listing`,
+    windowRate === null
+      ? 'No settled games in this window'
+      : `Pays ${formatSignedMoney(windowRate)} per night across ${windowGames} settled ${windowGames === 1 ? 'game' : 'games'}`,
+    `Price ${formatMoney(currentPrice)}`,
     held ? 'You own this player' : null,
     // An explicit label replaces the descendant text, so anything the row shows
     // visibly has to be repeated here or assistive tech simply loses it.
     player.tier.toUpperCase(),
     showOwnership ? formatOwnership(player.ownership_bps) : null,
-    form
-      ? `Recent form, last ${form.games} games ${formatSignedMetric(form.averageSurprise)} net points versus expected`
-      : null,
-    chartPoints.length > 0
-      ? `Last ${chartPoints.length} settled games cumulative dividends ${formatCompactSignedMoney(cumulativeDividend)}`
-      : null,
   ].filter((label): label is string => label !== null).join('. ');
 
   const handleTrade = () => {
@@ -581,26 +611,15 @@ function MarketRow({
       >
         <PlayerAvatar player={player} size={36} />
         <View style={styles.playerCopy}>
-          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.playerName}>
-            {first ? <Text style={styles.playerFirst}>{first} </Text> : null}
-            {last}
+          {/* Broadcast lower-third: quiet given-name kicker over the loud
+              surname on its own full-width line, so 'Antetokounmpo' and
+              'Cunningham' stop truncating behind their own first names. Tier
+              lives in the profile and the row's accessibility label. */}
+          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.playerKicker}>
+            {first ? first.toUpperCase() : player.tier.toUpperCase()}
           </Text>
-          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.playerMeta}>
-            {player.tier.toUpperCase()}
-            {form ? '  ' : ''}
-            {form ? (
-              <Text
-                style={
-                  formDirection > 0
-                    ? styles.positive
-                    : formDirection < 0
-                      ? styles.negative
-                      : styles.neutral
-                }
-              >
-                L{form.games} {formatSignedMetric(form.averageSurprise)} NP
-              </Text>
-            ) : null}
+          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.playerName}>
+            {last}
           </Text>
         </View>
         {showOwnership ? (
@@ -610,34 +629,29 @@ function MarketRow({
         ) : null}
         {showSparkline && chartPoints.length > 0 ? <Sparkline points={chartPoints} /> : null}
         <View style={styles.quote}>
-          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.price}>{formatCompactMoney(currentPrice)}</Text>
-          {changePercent === null ? null : (
-            <View
-              style={[
-                styles.changeChip,
-                changeDirection > 0
-                  ? styles.chipUp
-                  : changeDirection < 0
-                    ? styles.chipDown
-                    : styles.chipFlat,
-              ]}
+          {/* Money leads: what he pays per night. The price is real but inert
+              in this world, so it rides underneath as the cost of the stream. */}
+          {windowRate === null ? (
+            <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.quoteIdle}>
+              no games
+            </Text>
+          ) : (
+            <Text
+              maxFontSizeMultiplier={MAX_ROW_FONT_SCALE}
+              numberOfLines={1}
+              style={[styles.quoteRate, windowRate >= 0 ? styles.positive : styles.negative]}
             >
-              <Text
-                maxFontSizeMultiplier={MAX_ROW_FONT_SCALE}
-                numberOfLines={1}
-                style={[
-                  styles.changeChipText,
-                  changeDirection > 0
-                    ? styles.positive
-                    : changeDirection < 0
-                      ? styles.negative
-                      : styles.neutral,
-                ]}
-              >
-                {formatSignedPercent(changePercent)}
-              </Text>
-            </View>
+              {formatCompactSignedMoney(windowRate)}
+            </Text>
           )}
+          {/* The unit and the quiet price ride the caption, so the figure
+              stays narrow and the name keeps its room. The full chain
+              (yield, baselines, box score) lives one tap in. */}
+          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} numberOfLines={1} style={styles.quoteCaption}>
+            {windowRate === null
+              ? formatCompactMoney(currentPrice)
+              : `a night · ${formatCompactMoney(currentPrice)}`}
+          </Text>
         </View>
       </Pressable>
       <Pressable
@@ -709,6 +723,7 @@ export function MarketScreen() {
     trade,
   } = usePortfolio();
   const { fontScale, height, width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   // Landscape phones have almost no vertical room, so the header sheds the
   // title (the active tab already says MARKET) and tightens its padding.
   const shortViewport = height < 520;
@@ -716,9 +731,13 @@ export function MarketScreen() {
   const actionWidth = marketActionWidth(fontScale, width);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<MarketSort>('value');
+  // Money-first default: the market opens ranked by what players pay, not by
+  // prices that never move in this world.
+  const [sort, setSort] = useState<MarketSort>('pays');
+  const [sortSheetOpen, setSortSheetOpen] = useState(false);
   const [filter, setFilter] = useState<MarketFilter>('all');
   const [trendingWindow, setTrendingWindow] = useState<TrendRange>('L15');
+  const reducedMotion = useReducedMotion();
   const watchlist = useWatchlist();
 
   const compact = width < 420;
@@ -788,10 +807,48 @@ export function MarketScreen() {
     query,
     settledTrends,
     sort,
+    trendingWindow,
   ]);
 
+  // The anchor teaches the scale (an average payer is X a night, "by
+  // construction"): a rule pinned at the whole market's average rate for the
+  // active window, so every figure above and below it can be felt. Whole-
+  // market, not filtered — the label says market, so the math must too.
+  const marketWindowAverage = useMemo(() => {
+    const games = TRENDING_WINDOWS.find((window) => window.key === trendingWindow)?.games ?? null;
+    return marketAverageRate(players.map((player) => {
+      const settled = settledTrends[player.id] ?? [];
+      return games === null ? settled : settled.slice(-games);
+    }));
+  }, [players, settledTrends, trendingWindow]);
+
+  const listData: MarketListItem[] = useMemo(() => {
+    if (sort !== 'pays' || marketWindowAverage === null || rows.length < 3) return rows;
+    const index = rows.findIndex(
+      (row) => (row.windowRate ?? Number.NEGATIVE_INFINITY) < marketWindowAverage,
+    );
+    // The rule only reads between rows: nothing above or below it says nothing.
+    if (index <= 0 || index >= rows.length) return rows;
+    const withAnchor: MarketListItem[] = [...rows];
+    withAnchor.splice(index, 0, { anchor: true, rate: marketWindowAverage });
+    return withAnchor;
+  }, [marketWindowAverage, rows, sort]);
+
   const renderItem = useCallback(
-    ({ item }: { item: MarketRowModel }) => (
+    ({ item }: { item: MarketListItem }) => (
+      'anchor' in item ? (
+        <View
+          accessible
+          accessibilityLabel={`Market average: pays ${formatSignedMoney(item.rate)} a night over this window`}
+          style={styles.anchorRow}
+        >
+          <View style={styles.anchorRule} />
+          <Text maxFontSizeMultiplier={MAX_ROW_FONT_SCALE} style={styles.anchorText}>
+            {`MARKET AVERAGE · ${formatCompactSignedMoney(item.rate)} A NIGHT`}
+          </Text>
+          <View style={styles.anchorRule} />
+        </View>
+      ) : (
       <MarketRow
         actionWidth={actionWidth}
         boosted={activeBoostPlayerIds.has(item.player.id)}
@@ -809,6 +866,7 @@ export function MarketScreen() {
         trendPoints={settledTrends[item.player.id] ?? []}
         watching={watchlist.isWatched(item.player.id)}
       />
+      )
     ),
     [
       accountMutationPending,
@@ -836,6 +894,7 @@ export function MarketScreen() {
   if (selectedPlayer) {
     return (
       <PlayerDetail
+        averageRate={marketAverageRate(Object.values(settledTrends))}
         currentPrice={state.prices[selectedPlayer.id] ?? selectedPlayer.listing_price}
         latestSettledDate={latestSettledDate}
         onClose={() => setSelectedPlayerId(null)}
@@ -888,39 +947,29 @@ export function MarketScreen() {
         value={query}
       />
 
+      {/* One visible choice (Hick's law): the active sort as a disclosure
+          chip; the full sort list and its window picker live in the sheet.
+          Filters stay visible — they gate the task itself. */}
       <ScrollView
         contentContainerStyle={styles.chipBar}
         horizontal
         keyboardShouldPersistTaps="handled"
         showsHorizontalScrollIndicator={false}
-        style={styles.chipScroll}
+        style={styles.chipScroller}
       >
-        <Segmented groupLabel="Sort players" onChange={setSort} options={MARKET_SORTS} value={sort} />
+        <Pressable
+          accessibilityHint="Opens the sort options"
+          accessibilityLabel={`Sorted by ${MARKET_SORTS.find((option) => option.key === sort)?.label ?? sort}. Change sort`}
+          accessibilityRole="button"
+          onPress={() => setSortSheetOpen(true)}
+          style={({ pressed }) => [styles.sortChip, pressed && styles.pressed]}
+        >
+          <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.sortChipText}>
+            {`${(MARKET_SORTS.find((option) => option.key === sort)?.label ?? sort).toUpperCase()} · ${trendingWindow.toUpperCase()}  ▾`}
+          </Text>
+        </Pressable>
         <Segmented groupLabel="Filter players" onChange={setFilter} options={MARKET_FILTERS} value={filter} />
-        {/* The window picker only earns its row space while trending is the
-            active sort — it has no effect on any other ordering. */}
-        {sort === 'trending' ? (
-          <Segmented
-            groupLabel="Trending window"
-            onChange={setTrendingWindow}
-            options={TRENDING_WINDOWS}
-            value={trendingWindow}
-          />
-        ) : null}
       </ScrollView>
-
-      {/* Column strip doubles as the live result count. */}
-      <View style={styles.columnHeader}>
-        <Text accessibilityLiveRegion="polite" style={styles.columnHeaderText}>
-          {rows.length === players.length
-            ? `${players.length} PLAYERS`
-            : `${rows.length} OF ${players.length}`}
-        </Text>
-        <View style={styles.columnHeaderRule} />
-        <Text style={styles.columnHeaderText}>
-          {roomy ? 'OWNED · ' : ''}PRICE · MOVE
-        </Text>
-      </View>
     </View>
   );
 
@@ -961,11 +1010,11 @@ export function MarketScreen() {
     <View style={styles.marketScreen}>
       <FlatList
         contentContainerStyle={styles.listContent}
-        data={rows}
+        data={listData}
         initialNumToRender={14}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
-        keyExtractor={(item) => item.player.id}
+        keyExtractor={(item) => ('anchor' in item ? 'market-average-anchor' : item.player.id)}
         ListEmptyComponent={emptyState}
         ListHeaderComponent={listHeader}
         maxToRenderPerBatch={12}
@@ -973,6 +1022,71 @@ export function MarketScreen() {
         style={styles.list}
         windowSize={9}
       />
+      {sortSheetOpen ? (
+        <Modal
+          animationType={reducedMotion ? 'none' : 'fade'}
+          onRequestClose={() => setSortSheetOpen(false)}
+          transparent
+          visible
+        >
+          <View style={styles.sheetBackdrop}>
+            <Pressable
+              accessibilityLabel="Close the sort options"
+              accessibilityRole="button"
+              onPress={() => setSortSheetOpen(false)}
+              style={styles.sheetDismiss}
+            />
+            <ScrollView
+              accessibilityViewIsModal
+              contentContainerStyle={[
+                styles.sheetContent,
+                { paddingBottom: Math.max(space.xl, insets.bottom + space.md) },
+              ]}
+              style={[
+                styles.sheet,
+                { maxHeight: Math.max(120, height - insets.top - insets.bottom - space.md) },
+              ]}
+            >
+              <Text accessibilityRole="header" style={styles.sheetTitle}>SORT THE MARKET</Text>
+              {MARKET_SORTS.map((option) => {
+                const selected = option.key === sort;
+                return (
+                  <Pressable
+                    accessibilityLabel={option.hint}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    key={option.key}
+                    onPress={() => {
+                      setSort(option.key);
+                      // Pays keeps the sheet open so its window can be picked
+                      // in the same visit; every other sort is a single choice.
+                      if (option.key !== 'pays') setSortSheetOpen(false);
+                    }}
+                    style={({ pressed }) => [styles.sheetOption, pressed && styles.pressed]}
+                  >
+                    <Text style={[styles.sheetOptionLabel, selected && styles.sheetOptionLabelActive]}>
+                      {option.label.toUpperCase()}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.sheetOptionHint}>{option.hint}</Text>
+                  </Pressable>
+                );
+              })}
+              <View style={styles.sheetWindowRow}>
+                <Text style={styles.sheetSectionLabel}>PAYOUT WINDOW</Text>
+                <Segmented
+                  groupLabel="Payout window"
+                  onChange={(next) => {
+                    setTrendingWindow(next);
+                    setSortSheetOpen(false);
+                  }}
+                  options={TRENDING_WINDOWS}
+                  value={trendingWindow}
+                />
+              </View>
+            </ScrollView>
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -1014,22 +1128,67 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
-  chipScroll: { flexGrow: 0, flexShrink: 0, marginHorizontal: -space.md },
   chipBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
-    paddingHorizontal: space.md,
+    paddingBottom: space.sm,
+    paddingRight: space.md,
   },
-
-  columnHeader: {
+  chipScroller: { flexGrow: 0 },
+  sortChip: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
-    paddingBottom: space.sm,
+    paddingHorizontal: space.md,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
   },
-  columnHeaderText: { ...labelStyle, flexShrink: 0 },
-  columnHeaderRule: { flex: 1, height: 1, backgroundColor: colors.border, minWidth: space.sm },
+  sortChipText: { ...labelStyle, color: colors.goldInk },
+  sheetBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  sheetDismiss: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopColor: colors.borderStrong,
+    borderTopWidth: 1,
+  },
+  sheetContent: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+  },
+  sheetTitle: { ...labelStyle, color: colors.muted, marginBottom: space.sm },
+  sheetSectionLabel: { ...labelStyle, color: colors.muted },
+  sheetOption: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  sheetOptionLabel: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.bold,
+  },
+  sheetOptionLabelActive: { color: colors.goldInk },
+  sheetOptionHint: {
+    flex: 1,
+    color: colors.faint,
+    fontFamily: fonts.body,
+    fontSize: type.label,
+    textAlign: 'right',
+  },
+  sheetWindowRow: { marginTop: space.lg, alignItems: 'flex-start', gap: space.sm },
 
   list: { flex: 1 },
   listContent: { paddingBottom: space.xxl },
@@ -1049,19 +1208,17 @@ const styles = StyleSheet.create({
   playerDetails: { flex: 1, minWidth: 0, height: '100%', flexDirection: 'row', alignItems: 'center', gap: space.sm },
 
   playerCopy: { flex: 1, minWidth: 0 },
+  playerKicker: {
+    ...labelStyle,
+    color: colors.faint,
+    letterSpacing: 0.8,
+  },
   playerName: {
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: 15,
     fontWeight: weight.heavy,
-    },
-  playerFirst: { color: colors.muted, fontWeight: weight.medium },
-  playerMeta: {
-    ...numeric,
-    color: colors.faint,
-    fontSize: type.body,
-    fontWeight: weight.medium,
-    marginTop: 2,
+    marginTop: 1,
   },
 
   ownership: {
@@ -1073,19 +1230,20 @@ const styles = StyleSheet.create({
   },
   sparkline: { width: 52, height: 26, flexShrink: 0 },
 
-  quote: { alignItems: 'flex-end', minWidth: 72, flexShrink: 0, gap: 4 },
-  price: { ...numeric, color: colors.text, fontSize: 16, fontWeight: weight.heavy },
-  changeChip: {
-    borderRadius: radius.sm,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    minWidth: 54,
+  anchorRow: {
+    minHeight: 30,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    backgroundColor: colors.chromeSoft,
   },
-  chipUp: { backgroundColor: colors.greenSoft },
-  chipDown: { backgroundColor: colors.redSoft },
-  chipFlat: { backgroundColor: colors.surfaceRaised },
-  changeChipText: { ...numeric, fontSize: type.label, fontWeight: weight.heavy },
+  anchorRule: { flex: 1, height: 1, backgroundColor: colors.borderStrong },
+  anchorText: { ...labelStyle, color: colors.muted },
+  quote: { alignItems: 'flex-end', minWidth: 84, flexShrink: 0, gap: 2 },
+  quoteRate: { ...numeric, fontSize: 16, fontWeight: weight.heavy },
+  quoteIdle: { ...numeric, color: colors.faint, fontSize: type.body, fontWeight: weight.medium },
+  quoteCaption: { ...numeric, color: colors.faint, fontSize: type.label, fontWeight: weight.medium },
   watchDot: {
     width: 34,
     minHeight: 44,
@@ -1103,7 +1261,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xs,
     borderWidth: 1,
   },
-  buyButton: { borderColor: colors.green, backgroundColor: colors.greenSoft },
+  // Gold is the action colour; green stays reserved for money movement.
+  buyButton: { borderColor: colors.gold, backgroundColor: colors.goldSoft },
   sellButton: { borderColor: colors.red, backgroundColor: colors.redSoft },
   unaffordableButton: { borderColor: colors.border, backgroundColor: 'transparent' },
   tradeLockedButton: { borderColor: colors.border, backgroundColor: colors.surfaceRaised },
@@ -1114,7 +1273,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     textAlign: 'center',
   },
-  buyText: { color: colors.green },
+  buyText: { color: colors.goldInk },
   sellText: { color: colors.red },
   unaffordableText: { color: colors.faint },
   tradeLockedText: { color: colors.faint },
@@ -1193,18 +1352,18 @@ const styles = StyleSheet.create({
     fontWeight: weight.black,
     },
   detailMeta: { ...labelStyle, color: colors.faint, letterSpacing: 0.5 },
+  // The quote stacks: stream headline, its rate line, then what it costs.
   detailQuote: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    flexWrap: 'wrap',
-    gap: space.sm,
+    gap: space.xs,
     paddingHorizontal: space.md,
     paddingBottom: space.md,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },
-  detailPrice: { ...numeric, color: colors.text, fontSize: 32, fontWeight: weight.black, letterSpacing: 0 },
-  detailDividend: { ...numeric, color: colors.muted, fontSize: type.body, fontWeight: weight.heavy },
+  detailPaid: { ...numeric, color: colors.text, fontSize: 32, fontWeight: weight.black, letterSpacing: 0 },
+  detailPaidLabel: { ...labelStyle, color: colors.faint, letterSpacing: 1.1 },
+  detailRateLine: { ...numeric, color: colors.muted, fontSize: type.body, fontWeight: weight.heavy },
+  detailPriceLine: { ...numeric, color: colors.faint, fontSize: type.body, fontWeight: weight.medium },
 
   chartHeading: {
     flexDirection: 'row',

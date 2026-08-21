@@ -40,6 +40,7 @@ function bootstrapFixture(): ServerBootstrap {
         player_id: 'sga', player_name: 'Shai Gilgeous-Alexander', shares: 1,
         average_cost_cents: 5_012_500_000, current_price_cents: 5_100_000_000,
         market_value_cents: 5_100_000_000, unrealized_pnl_cents: 87_500_000,
+        season_dividend_cents: 80_000_000,
       }],
       recent_trades: [],
       instruments: {
@@ -159,6 +160,7 @@ test('mapServerBootstrap converts exact server cents and state into screen data'
   }]);
   assert.equal(mapped.leaderboard[0].returnPct, -0.09);
   assert.equal(mapped.leaderboard[0].id, 'current-user');
+  assert.deepEqual(mapped.settlements, bootstrapFixture().settlements);
   assert.equal(mapped.canAdvanceDay, true);
 });
 

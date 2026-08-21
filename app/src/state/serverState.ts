@@ -25,8 +25,13 @@ export interface ServerPresentationState {
   portfolioValuation: PortfolioValuation;
   players: Player[];
   leaderboard: GameLeaderboardEntry[];
+  settlements: ServerBootstrap['settlements'];
   playerTrends: Record<string, TrendPoint[]>;
   nextGameDate: string | null;
+  /** Held-or-not, every player scheduled on nextGameDate. */
+  nextGamePlayerIds: string[];
+  /** The number each scheduled player must beat, keyed by player id. */
+  nextGameProjections: Record<string, number>;
   settledGameDateCount: number;
   latestSettledDate: string | null;
   currentWeek: string | null;
@@ -55,6 +60,7 @@ export interface PortfolioValuation {
     currentPrice: number;
     marketValue: number;
     unrealizedPnl: number;
+    seasonDividends: number | null;
   }>;
 }
 
@@ -162,6 +168,9 @@ function mapPortfolioValuation(portfolio: ServerPortfolio): PortfolioValuation {
         currentPrice: dollars(holding.current_price_cents),
         marketValue: dollars(holding.market_value_cents),
         unrealizedPnl: dollars(holding.unrealized_pnl_cents),
+        seasonDividends: holding.season_dividend_cents === null
+          ? null
+          : dollars(holding.season_dividend_cents),
       },
     ])),
   };
@@ -407,8 +416,13 @@ export function mapServerBootstrap(bootstrap: ServerBootstrap): ServerPresentati
     portfolioValuation: mapPortfolioValuation(bootstrap.portfolio),
     players,
     leaderboard: mapLeaderboard(bootstrap.leaderboard),
+    settlements: bootstrap.settlements,
     playerTrends,
     nextGameDate: nextDate,
+    nextGamePlayerIds: bootstrap.game.next_game_player_ids ?? [],
+    nextGameProjections: Object.fromEntries(
+      (bootstrap.game.next_game_projections ?? []).map((entry) => [entry.player_id, entry.expected_net_points_micros / 1e6]),
+    ),
     settledGameDateCount: bootstrap.game.version,
     latestSettledDate,
     currentWeek: nextDate === null ? null : weekKey(nextDate),

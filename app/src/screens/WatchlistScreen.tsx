@@ -1,19 +1,24 @@
 import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import Svg, { Circle, Line, Path } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import { PlayerAvatar } from '../components/PlayerAvatar';
+import { summarizeDividends } from '../data/dividendMetrics';
 import { useChartSurface } from '../hooks/useChartSurface';
 import { smoothLinePath, windowSurprise } from '../data/marketPresentation';
 import { cumulativeValues, selectTrendRange, type TrendPoint, type TrendRange } from '../data/trendPresentation';
 import type { Player } from '../data/types';
+import { alignedAxisIndex, localSeriesIndex } from '../data/watchlistAlignment';
 import { formatCompactSignedMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
 import { STARTING_BANKROLL } from '../state/economy';
 import { useWatchlist, WATCHLIST_LIMIT } from '../state/watchlist';
 import { rowMarker } from '../ui/domMarkers';
-import { colors, fonts, headingStyle, numeric, radius, space, type, weight } from '../theme';
+import { colors, fonts, headingStyle, labelStyle, numeric, radius, space, type, weight } from '../theme';
 import { Segmented } from '../ui/primitives';
+
+/** Right gutter reserved for the value axis, so figures never ride the lines. */
+const VALUE_GUTTER = 52;
 
 /** One line per watched player; assignment order keeps a player's colour stable. */
 const SERIES_COLORS = [
@@ -32,12 +37,21 @@ const WINDOWS: readonly { key: TrendRange; label: string; hint: string }[] = [
   { key: 'Season', label: 'Season', hint: 'Compare the settled season' },
 ];
 
+/** Broadcast convention: quiet given name, loud surname. */
+function splitName(name: string): { first: string; last: string } {
+  const parts = name.trim().split(' ');
+  if (parts.length === 1) return { first: '', last: parts[0] };
+  return { first: parts[0], last: parts.slice(1).join(' ') };
+}
+
 interface WatchedSeries {
   player: Player;
   points: TrendPoint[];
   /** Running dividend total, with a leading 0 so every line shares an origin. */
   cumulative: number[];
   total: number;
+  /** Payout per game over the window — the money rate that leads the row. */
+  rate: number | null;
   perGame: number | null;
   color: string;
 }
@@ -48,7 +62,7 @@ interface WatchedSeries {
  * night across everyone at once.
  */
 export function WatchlistScreen() {
-  const { players, playerTrends, owns, summary } = usePortfolio();
+  const { players, playerTrends, summary, nextGameDate, nextGamePlayerIds, nextGameProjections } = usePortfolio();
   const { watched, toggle, clear } = useWatchlist();
   const [range, setRange] = useState<TrendRange>('L15');
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -65,13 +79,26 @@ export function WatchlistScreen() {
         points,
         cumulative,
         total: cumulative.at(-1) ?? 0,
+        rate: summarizeDividends(points).perGame,
         perGame: windowSurprise(points, null),
         color: SERIES_COLORS[index % SERIES_COLORS.length],
       },
     ];
   });
+  const comparisonCount = series.reduce((max, entry) => Math.max(max, entry.cumulative.length), 0);
   // The chart keeps watch order (stable colours); the list ranks by payout.
   const ranked = [...series].sort((a, b) => b.total - a.total);
+  // Watched players on the next slate, each with the number to beat.
+  const watchedNext = series
+    .filter((entry) => nextGamePlayerIds.includes(entry.player.id))
+    .map((entry) => {
+      const surname = splitName(entry.player.name).last;
+      const needs = nextGameProjections[entry.player.id];
+      return needs === undefined ? surname : `${surname} must beat ${needs.toFixed(1)}`;
+    });
+  const upcomingLine = nextGameDate && watchedNext.length > 0
+    ? `Next: ${watchedNext.slice(0, 2).join(' · ')}${watchedNext.length > 2 ? ` · +${watchedNext.length - 2} more` : ''}`
+    : null;
 
   if (watched.length === 0) {
     return (
@@ -102,42 +129,52 @@ export function WatchlistScreen() {
           <Text style={styles.clearText}>Clear</Text>
         </Pressable>
       </View>
-      <Text style={styles.intro}>
-        Who has been paying, and how fast. Hover the chart to read one night across everyone.
-      </Text>
+      <Text style={styles.intro}>Who has been paying, and how fast.</Text>
+      {upcomingLine ? (
+        <Text numberOfLines={1} style={styles.upcoming}>{upcomingLine}</Text>
+      ) : null}
       <View style={styles.controls}>
         <Segmented groupLabel="Comparison window" onChange={setRange} options={WINDOWS} value={range} />
       </View>
       <ComparisonChart activeIndex={activeIndex} onScrubIndex={setActiveIndex} series={series} />
+      <View style={styles.chartAxis}>
+        <Text style={styles.chartAxisText}>WINDOW START</Text>
+        <Text style={styles.chartAxisText}>LATEST GAME</Text>
+      </View>
       <View style={styles.list}>
         {ranked.map((entry) => {
-          const owned = owns(entry.player.id);
-          const atIndex = activeIndex === null ? undefined : entry.cumulative[activeIndex];
-          const shown = atIndex ?? entry.total;
+          const localIndex = activeIndex === null
+            ? null
+            : localSeriesIndex(activeIndex, entry.cumulative.length, comparisonCount);
+          const atIndex = localIndex === null ? undefined : entry.cumulative[localIndex];
+          const shown = activeIndex === null ? entry.total : atIndex ?? 0;
           return (
             <View key={entry.player.id} style={styles.row}>
               <View style={[styles.swatch, { backgroundColor: entry.color }]} />
               <PlayerAvatar player={entry.player} size={34} />
               <View style={styles.rowCopy}>
-                <Text numberOfLines={1} style={styles.rowName}>{entry.player.name}</Text>
+                <Text numberOfLines={1} style={styles.rowKicker}>
+                  {splitName(entry.player.name).first.toUpperCase() || entry.player.tier.toUpperCase()}
+                </Text>
+                <Text numberOfLines={1} style={styles.rowName}>{splitName(entry.player.name).last}</Text>
                 <Text numberOfLines={1} style={styles.rowMeta}>
-                  {entry.points.length === 0
-                    ? 'No settled games in this window'
-                    : `${entry.points.length} games · ${entry.perGame === null ? '0.0' : entry.perGame >= 0 ? `+${entry.perGame.toFixed(1)}` : entry.perGame.toFixed(1)} NP per game vs projection`}
+                  {entry.points.length === 0 || entry.rate === null
+                    ? 'No games in this window'
+                    : `${formatCompactSignedMoney(entry.rate)} a night`}
                 </Text>
               </View>
               <View style={styles.rowNumbers}>
                 <Text
-                  accessibilityLabel={`${entry.player.name} paid ${formatSignedMoney(entry.total)} across this window${owned ? ', and you own him' : ', which you did not receive because you do not own him'}`}
+                  accessibilityLabel={`${entry.player.name} paid ${formatSignedMoney(entry.total)} per holder across this window`}
                   numberOfLines={1}
-                  style={[styles.rowValue, shown >= 0 ? styles.positive : styles.negative]}
+                  style={[styles.rowValue, styles.hypotheticalValue]}
                 >
                   {formatCompactSignedMoney(shown)}
                 </Text>
                 <Text numberOfLines={1} style={styles.rowNote}>
                   {activeIndex === null
-                    ? owned ? 'you own him' : 'had you owned him'
-                    : atIndex === undefined ? 'no game yet' : `after ${activeIndex} games`}
+                    ? 'per holder'
+                    : atIndex === undefined ? 'no game yet' : `after ${localIndex} games`}
                 </Text>
               </View>
               <Pressable
@@ -147,14 +184,14 @@ export function WatchlistScreen() {
                 style={({ pressed }) => [styles.remove, pressed && styles.pressed]}
                 {...rowMarker}
               >
-                <Text style={styles.removeText}>Remove</Text>
+                <Text style={styles.removeText}>×</Text>
               </Pressable>
             </View>
           );
         })}
       </View>
       <Text style={styles.footnote}>
-        {`Dividends are what a player paid per holder over the window, from settled games only. Your own portfolio is ${summary ? formatSignedMoney(summary.totalValue - STARTING_BANKROLL) : 'unchanged'} against the opening bankroll.`}
+        {`Dividends per holder, settled games only. Your portfolio: ${summary ? formatCompactSignedMoney(summary.totalValue - STARTING_BANKROLL) : '+$0'} all time.`}
       </Text>
     </ScrollView>
   );
@@ -166,7 +203,7 @@ export function WatchlistScreen() {
  */
 function ComparisonChart({
   series,
-  height = 200,
+  height = 168,
   onScrubIndex,
   activeIndex,
 }: {
@@ -181,8 +218,9 @@ function ComparisonChart({
     (offsetX: number) => {
       const { width, count } = scrubGeometry.current;
       if (width <= 0 || count <= 1) return;
-      const clamped = Math.max(0, Math.min(width - 20, offsetX - 10));
-      const index = Math.round((clamped / (width - 20)) * (count - 1));
+      const plotSpan = Math.max(width - VALUE_GUTTER - 20, 1);
+      const clamped = Math.max(0, Math.min(plotSpan, offsetX - 10));
+      const index = Math.round((clamped / plotSpan) * (count - 1));
       onScrubIndex(Math.max(0, Math.min(count - 1, index)));
     },
     [onScrubIndex],
@@ -201,13 +239,27 @@ function ComparisonChart({
   const high = Math.max(0, ...values);
   const low = Math.min(0, ...values);
   const span = high - low || 1;
+  // The lines stop before a right gutter, so the axis figures never sit on
+  // top of the curves they describe.
+  const plotRight = Math.max(width - VALUE_GUTTER, 0);
   const yAt = (value: number) => 10 + ((high - value) / span) * (height - 20);
-  const xAt = (index: number) => (count <= 1 ? width / 2 : 10 + (index / (count - 1)) * (width - 20));
+  const xAt = (index: number) => (count <= 1 ? plotRight / 2 : 10 + (index / (count - 1)) * (plotRight - 20));
+  const zeroApartFromHigh = Math.abs(yAt(0) - yAt(high)) > 16;
 
   return (
     <View nativeID="scrub-plot-watchlist" onLayout={onLayout} ref={ref} style={[styles.chart, { height }]}>
       {width > 0 && series.length > 0 ? (
         <Svg height={height} width={width}>
+          {high > 0 ? (
+            <Line
+              stroke={colors.border}
+              strokeWidth={1}
+              x1={0}
+              x2={width}
+              y1={yAt(high)}
+              y2={yAt(high)}
+            />
+          ) : null}
           <Line
             stroke={colors.borderStrong}
             strokeDasharray="3 5"
@@ -217,6 +269,32 @@ function ComparisonChart({
             y1={yAt(0)}
             y2={yAt(0)}
           />
+          {high > 0 ? (
+            <SvgText
+              fill={colors.faint}
+              fontFamily={fonts.display}
+              fontSize={11}
+              fontWeight="700"
+              textAnchor="end"
+              x={width - 4}
+              y={yAt(high) + 4}
+            >
+              {formatCompactSignedMoney(high)}
+            </SvgText>
+          ) : null}
+          {zeroApartFromHigh ? (
+            <SvgText
+              fill={colors.faint}
+              fontFamily={fonts.display}
+              fontSize={11}
+              fontWeight="700"
+              textAnchor="end"
+              x={width - 4}
+              y={yAt(0) + 4}
+            >
+              $0
+            </SvgText>
+          ) : null}
           {activeIndex !== null ? (
             <Line
               stroke={colors.borderStrong}
@@ -230,7 +308,10 @@ function ComparisonChart({
           ) : null}
           {series.map((entry) => (
             <Path
-              d={smoothLinePath(entry.cumulative.map((value, index) => ({ x: xAt(index), y: yAt(value) })))}
+              d={smoothLinePath(entry.cumulative.map((value, index) => ({
+                x: xAt(alignedAxisIndex(index, entry.cumulative.length, count)),
+                y: yAt(value),
+              })))}
               fill="none"
               key={entry.player.id}
               stroke={entry.color}
@@ -241,8 +322,9 @@ function ComparisonChart({
           ))}
           {activeIndex !== null
             ? series.map((entry) => {
-                const value = entry.cumulative[activeIndex];
-                if (value === undefined) return null;
+                const localIndex = localSeriesIndex(activeIndex, entry.cumulative.length, count);
+                if (localIndex === null) return null;
+                const value = entry.cumulative[localIndex];
                 return <Circle cx={xAt(activeIndex)} cy={yAt(value)} fill={entry.color} key={entry.player.id} r={4} />;
               })
             : null}
@@ -281,8 +363,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.xs,
   },
+  // goldInk, not green: this is information about money you did NOT collect.
+  upcoming: {
+    color: colors.faint,
+    fontFamily: fonts.body,
+    fontSize: type.label,
+    fontWeight: weight.medium,
+    paddingHorizontal: space.lg,
+    paddingTop: 2,
+  },
   controls: { alignItems: 'flex-start', paddingHorizontal: space.lg, paddingTop: space.md },
-  chart: { marginTop: space.md, marginHorizontal: space.lg },
+  chart: {
+    marginTop: space.md,
+    marginHorizontal: space.lg,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  chartAxis: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: space.lg + 10,
+    paddingTop: space.xs,
+  },
+  chartAxisText: { ...labelStyle, color: colors.faint },
 
   list: { paddingTop: space.md },
   row: {
@@ -297,6 +402,7 @@ const styles = StyleSheet.create({
   },
   swatch: { width: 4, height: 30, borderRadius: radius.xs, flexShrink: 0 },
   rowCopy: { flex: 1, minWidth: 0 },
+  rowKicker: { ...labelStyle, color: colors.faint, fontSize: 11, letterSpacing: 0.8 },
   rowName: {
     color: colors.text,
     fontFamily: fonts.display,
@@ -305,14 +411,14 @@ const styles = StyleSheet.create({
   },
   rowMeta: { ...numeric, color: colors.faint, fontSize: type.body, fontWeight: weight.medium, marginTop: 2 },
   rowNumbers: { alignItems: 'flex-end', flexShrink: 0 },
-  rowValue: { ...numeric, fontSize: type.value, fontWeight: weight.heavy },
+  rowValue: { ...numeric, fontSize: type.title, fontWeight: weight.black },
   rowNote: { color: colors.faint, fontFamily: fonts.body, fontSize: type.label, marginTop: 1 },
   remove: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.sm, flexShrink: 0 },
   removeText: {
     color: colors.muted,
     fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.heavy,
+    fontSize: 18,
+    fontWeight: weight.medium,
   },
 
   empty: { paddingHorizontal: space.lg, paddingVertical: space.lg, gap: space.xs },
@@ -333,6 +439,5 @@ const styles = StyleSheet.create({
   },
 
   pressed: { opacity: 0.65 },
-  positive: { color: colors.green },
-  negative: { color: colors.red },
+  hypotheticalValue: { color: colors.goldInk },
 });

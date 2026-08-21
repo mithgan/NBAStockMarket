@@ -255,6 +255,8 @@ export class LocalMarketClient {
         current_price_cents: price,
         market_value_cents: price,
         unrealized_pnl_cents: price - holding.averageCostCents,
+        // The local simulator does not retain a complete account dividend ledger.
+        season_dividend_cents: null,
       };
     });
   }
@@ -322,10 +324,21 @@ export class LocalMarketClient {
   }
 
   private game(): ServerGameState {
+    const next = this.nextGameDate();
     return {
       season_id: SEASON_ID,
       last_settled_date: this.lastSettledDate(),
-      next_game_date: this.nextGameDate(),
+      next_game_date: next,
+      // The night's schedule and projections are public before it settles.
+      next_game_player_ids: next === null
+        ? []
+        : (eventsByDate.get(next) ?? []).map((event) => event.player_id),
+      next_game_projections: next === null
+        ? []
+        : (eventsByDate.get(next) ?? []).map((event) => ({
+          player_id: event.player_id,
+          expected_net_points_micros: event.expected_net_points_micros,
+        })),
       is_complete: this.state.settledDateCount >= replayDays.length,
       version: this.state.settledDateCount,
     };

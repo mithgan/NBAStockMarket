@@ -5,7 +5,7 @@ import { HoldingRow } from '../components/HoldingCard';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PortfolioHistoryChart } from '../components/PortfolioHistoryChart';
 import { SettlementSummary, nightContributions } from '../components/SettlementSummary';
-import { summarizeDividends } from '../data/dividendMetrics';
+import { earningsWindows, marketAverageRate, summarizeDividends } from '../data/dividendMetrics';
 import {
   selectSettledTrendPoints,
   selectTrendRange,
@@ -15,11 +15,11 @@ import {
 import type { Player } from '../data/types';
 import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
-import { STARTING_BANKROLL } from '../state/economy';
 import type { ActivityEvent } from '../state/game';
 import { useDesignVariant } from '../theme/ThemeProvider';
 import { colors, fonts, headingStyle, labelStyle, numeric, radius, space, type, weight } from '../theme';
 import { rowMarker } from '../ui/domMarkers';
+import { Button } from '../ui/primitives';
 import { PlayerDetail } from './MarketScreen';
 
 /**
@@ -33,6 +33,12 @@ type ActivityNight = {
   net: number;
   items: ActivityEvent[];
 };
+
+/** "2026-01-15" → "Jan 15", matching the season strip's date voice. */
+function formatUpcomingDate(date: string): string {
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+    .format(new Date(`${date}T00:00:00Z`));
+}
 
 function groupActivity(entries: ActivityEvent[]): ActivityNight[] {
   const nights: ActivityNight[] = [];
@@ -54,11 +60,12 @@ function groupActivity(entries: ActivityEvent[]): ActivityNight[] {
  * surprise-led box line and a payout meter scaled against `meterScale`
  * (the largest absolute payout in whatever batch the caller is showing).
  */
-function ActivityNightGroup({ night, playerById, playerTrends, meterScale }: {
+function ActivityNightGroup({ night, playerById, playerTrends, boxScore = false }: {
   night: ActivityNight;
   playerById: Map<string, Player>;
   playerTrends: Record<string, TrendPoint[]>;
-  meterScale: number;
+  /** The dedicated night log shows the raw box score; the strips do not. */
+  boxScore?: boolean;
 }) {
   return (
     <View>
@@ -78,8 +85,6 @@ function ActivityNightGroup({ night, playerById, playerTrends, meterScale }: {
         const point = entry.date
           ? (playerTrends[entry.playerId] ?? []).find((trendPoint) => trendPoint.date === entry.date)
           : undefined;
-        const meter =
-          entry.date === null || meterScale === 0 ? 0 : Math.abs(entry.cashDelta) / meterScale;
         const player = playerById.get(entry.playerId);
         return (
           <View key={entry.id} style={styles.activityRow}>
@@ -94,19 +99,8 @@ function ActivityNightGroup({ night, playerById, playerTrends, meterScale }: {
               </Text>
               {point ? (
                 <Text numberOfLines={1} style={styles.activityWhy}>
-                  {surpriseLabel(point)}
+                  {surpriseLabel(point, { boxScore })}
                 </Text>
-              ) : null}
-              {meter > 0 ? (
-                <View style={styles.meterTrack}>
-                  <View
-                    style={[
-                      styles.meterFill,
-                      up ? styles.meterUp : styles.meterDown,
-                      { width: `${Math.max(3, Math.round(100 * meter))}%` },
-                    ]}
-                  />
-                </View>
               ) : null}
             </View>
             <Text
@@ -131,7 +125,7 @@ const NIGHT_LOG_ENTRY_LIMIT = 365;
 /**
  * The dedicated game-log surface: every settled night, newest first, so the
  * boxscore-to-money correlation is readable as one continuous ledger. Reached
- * from SEE ALL NIGHTS on the portfolio; same drill-in pattern as a player.
+ * from the last-night strip or FULL GAME LOG; same drill-in as a player.
  */
 function NightLogView({ activity, playerById, playerTrends, onClose }: {
   activity: ActivityEvent[];
@@ -145,14 +139,14 @@ function NightLogView({ activity, playerById, playerTrends, onClose }: {
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <Pressable
-        accessibilityLabel="Close the night log"
+        accessibilityLabel="Close the game log"
         accessibilityRole="button"
         onPress={onClose}
         style={({ pressed }) => [styles.backButton, pressed && styles.backPressed]}
       >
         <Text style={styles.backText}>‹  Portfolio</Text>
       </Pressable>
-      <Text accessibilityRole="header" style={styles.sectionHeading}>Season nights</Text>
+      <Text accessibilityRole="header" style={styles.sectionHeading}>Game log</Text>
       <Text style={styles.logIntro}>
         Every settled night, newest first. Beat the projection and the player pays you; miss it and he costs you.
       </Text>
@@ -164,8 +158,8 @@ function NightLogView({ activity, playerById, playerTrends, onClose }: {
         <View style={styles.list}>
           {nights.map((night) => (
             <ActivityNightGroup
+              boxScore
               key={night.key}
-              meterScale={night.items.reduce((largest, entry) => Math.max(largest, Math.abs(entry.cashDelta)), 0)}
               night={night}
               playerById={playerById}
               playerTrends={playerTrends}
@@ -180,17 +174,22 @@ function NightLogView({ activity, playerById, playerTrends, onClose }: {
   );
 }
 
-export function PortfolioScreen() {
+export function PortfolioScreen({ onOpenMarket }: { onOpenMarket: () => void }) {
   const { variant } = useDesignVariant();
   const {
     latestSettledDate,
+    nextGameDate,
+    nextGamePlayerIds,
+    nextGameProjections,
     players,
     playerTrends,
+    settlements,
     state,
     summary,
   } = usePortfolio();
   const [detailPlayerId, setDetailPlayerId] = useState<string | null>(null);
   const [nightLogOpen, setNightLogOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const { fontScale, width } = useWindowDimensions();
   // The sparkline is the first thing to go when horizontal space gets scarce:
   // a squeezed trace misleads more than no trace.
@@ -200,18 +199,52 @@ export function PortfolioScreen() {
 
   const playerById = new Map(players.map((player) => [player.id, player]));
   const detailPlayer = detailPlayerId ? playerById.get(detailPlayerId) ?? null : null;
-  const latestPoint = state.portfolioHistory.at(-1) ?? null;
   const recentActivity = [...state.activity].reverse().slice(0, 10);
-  const largestSettledDelta = recentActivity.reduce(
-    (largest, entry) => (entry.date === null ? largest : Math.max(largest, Math.abs(entry.cashDelta))),
+  const latestSettlement = settlements.find(
+    (settlement) => settlement.game_date === latestSettledDate,
+  );
+  const latestContributions = nightContributions(
+    state.activity,
+    playerById,
+    playerTrends,
+    latestSettledDate,
+  );
+  const contributionNet = latestContributions.reduce(
+    (total, contribution) => total + contribution.dividend,
     0,
   );
-  const rosterPnl = summary.holdings.reduce((total, holding) => total + holding.unrealizedPnl, 0);
-  const allTimePercent = ((summary.totalValue - STARTING_BANKROLL) / STARTING_BANKROLL) * 100;
+  const latestAccountDividend = latestSettlement
+    ? latestSettlement.current_user_dividend_cents / 100
+    : contributionNet;
+  // Activity is paginated. If the visible detail does not reconcile to the
+  // authoritative settlement total, keep the correct total and omit partial
+  // player attribution rather than presenting an incomplete ledger as exact.
+  const reconciledContributions = latestSettlement
+    && Math.abs(contributionNet - latestAccountDividend) >= 0.005
+    ? []
+    : latestContributions;
+  // Anticipation from the public schedule, with the stakes attached: the
+  // projection each of YOUR players must beat to pay you.
+  const heldIds = new Set(state.holdings.map((holding) => holding.player_id));
+  const upcomingStakes = nextGamePlayerIds
+    .filter((id) => heldIds.has(id))
+    .map((id) => {
+      const surname = playerById.get(id)?.name.split(' ').at(-1);
+      if (!surname) return null;
+      const needs = nextGameProjections[id];
+      return needs === undefined ? surname : `${surname} must beat ${needs.toFixed(1)}`;
+    })
+    .filter((entry): entry is string => entry !== null);
+  const upcomingLine = nextGameDate && upcomingStakes.length > 0
+    ? `Next ${formatUpcomingDate(nextGameDate)}: ${upcomingStakes.slice(0, 2).join(' · ')}${upcomingStakes.length > 2 ? ` · +${upcomingStakes.length - 2} more` : ''} to pay you`
+    : null;
 
   if (detailPlayer) {
     return (
       <PlayerDetail
+        averageRate={marketAverageRate(
+          players.map((entry) => selectSettledTrendPoints(playerTrends[entry.id] ?? [], latestSettledDate)),
+        )}
         backLabel="Portfolio"
         currentPrice={state.prices[detailPlayer.id] ?? detailPlayer.listing_price}
         latestSettledDate={latestSettledDate}
@@ -240,86 +273,33 @@ export function PortfolioScreen() {
         // what the night did to your money, so it renders before the plot —
         // and the plot itself compresses on a phone to keep it above the fold.
         beforePlot={
-          latestSettledDate ? (
+          latestSettlement ? (
             <SettlementSummary
-              contributions={nightContributions(state.holdings, playerById, playerTrends, latestSettledDate)}
-              settledDate={latestSettledDate}
+              accountNet={latestAccountDividend}
+              contributions={reconciledContributions}
+              onOpenLog={() => setNightLogOpen(true)}
+              settledDate={latestSettlement.game_date}
+              upcoming={upcomingLine}
             />
+          ) : upcomingLine ? (
+            <Text numberOfLines={1} style={styles.upcomingOnly}>{upcomingLine}</Text>
           ) : null
         }
-        footnote={
-          latestPoint
-            ? `Settled ${latestPoint.date}. Includes cash payouts and player-price movement.`
-            : 'No server settlement has reached this account yet.'
-        }
+        earnings={latestSettlement
+          ? earningsWindows(settlements, latestSettlement.game_date)
+          : null}
+        freeCash={summary.freeCash}
         height={width < 900 ? Math.min(variant.chartHeight, 112) : variant.chartHeight}
         points={state.portfolioHistory}
         totalValue={summary.totalValue}
       />
-      <View style={styles.cashStrip}>
-        <View style={styles.cashCell}>
-          <Text style={styles.cashLabel}>Free cash</Text>
-          <Text
-            accessibilityLabel={`Free cash ${formatMoney(summary.freeCash)}, available to spend`}
-            maxFontSizeMultiplier={1.4}
-            numberOfLines={1}
-            style={styles.cashValue}
-          >
-            {formatCompactMoney(summary.freeCash)}
-          </Text>
-        </View>
-        <View style={styles.cashCell}>
-          <Text style={styles.cashLabel}>Holdings</Text>
-          <Text
-            accessibilityLabel={`Holdings ${formatMoney(summary.marketValue)}, ${summary.holdings.length} of ${players.length} listed players`}
-            maxFontSizeMultiplier={1.4}
-            numberOfLines={1}
-            style={styles.cashValue}
-          >
-            {formatCompactMoney(summary.marketValue)}
-          </Text>
-        </View>
-        <View style={styles.cashCell}>
-          <Text style={styles.cashLabel}>All time</Text>
-          <Text
-            accessibilityLabel={`${allTimePercent >= 0 ? 'Up' : 'Down'} ${Math.abs(allTimePercent).toFixed(2)} percent from the ${formatMoney(STARTING_BANKROLL)} opening bankroll`}
-            maxFontSizeMultiplier={1.4}
-            numberOfLines={1}
-            style={[styles.cashValue, allTimePercent >= 0 ? styles.positive : styles.negative]}
-          >
-            {`${allTimePercent >= 0 ? '+' : ''}${allTimePercent.toFixed(2)}%`}
-          </Text>
-        </View>
-        {summary.reservedCollateral > 0 ? (
-          <View style={styles.cashCell}>
-            <Text style={styles.cashLabel}>Reserved</Text>
-            <Text
-              accessibilityLabel={`Reserved ${formatMoney(summary.reservedCollateral)}, short collateral held from your ${formatMoney(summary.cash)} cash balance`}
-              maxFontSizeMultiplier={1.4}
-              numberOfLines={1}
-              style={styles.cashValue}
-            >
-              {formatCompactMoney(summary.reservedCollateral)}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-      <View style={styles.rosterPanel}>
+      <View style={styles.rosterRegion}>
         <View style={styles.rosterHead}>
-          <Text accessibilityRole="header" style={styles.rosterTitle}>
-            {state.holdings.length > 0 ? `Your players (${state.holdings.length})` : 'Your players'}
+          <Text accessibilityRole="header" style={styles.sectionHeading}>
+            Your players
           </Text>
           {state.holdings.length > 0 ? (
-            <Text
-              accessibilityLabel={`Roster worth ${formatMoney(summary.marketValue)}, ${rosterPnl >= 0 ? 'up' : 'down'} ${formatMoney(Math.abs(rosterPnl))} against what you paid`}
-              numberOfLines={1}
-              style={styles.rosterMeta}
-            >
-              {formatCompactMoney(summary.marketValue)}
-              <Text style={rosterPnl >= 0 ? styles.positive : styles.negative}>
-                {`  ${formatCompactSignedMoney(rosterPnl)}`}
-              </Text>
-            </Text>
+            <Text numberOfLines={1} style={styles.rosterMeta}>SEASON DIVIDENDS</Text>
           ) : null}
         </View>
         {state.holdings.length === 0 ? (
@@ -328,10 +308,20 @@ export function PortfolioScreen() {
             <Text style={styles.subtle}>
               Open Market to buy one whole-player share. Fees are included at checkout.
             </Text>
+            <Button
+              accessibilityLabel="Open the player market"
+              label="OPEN MARKET"
+              onPress={onOpenMarket}
+            />
           </View>
         ) : (
           <View>
-            {summary.holdings.map((holding) => {
+            {[...summary.holdings]
+              .sort((a, b) => (
+                (b.seasonDividends ?? Number.NEGATIVE_INFINITY)
+                - (a.seasonDividends ?? Number.NEGATIVE_INFINITY)
+              ))
+              .map((holding) => {
               const player = playerById.get(holding.player_id);
               if (!player) return null;
               const settled = selectSettledTrendPoints(playerTrends[player.id] ?? [], latestSettledDate);
@@ -346,6 +336,7 @@ export function PortfolioScreen() {
                     unrealizedPnl: holding.unrealizedPnl,
                   }}
                   onPress={() => setDetailPlayerId(player.id)}
+                  received={holding.seasonDividends}
                   trend={showRowTrends ? selectTrendRange(settled, 'L15') : undefined}
                 />
               );
@@ -353,32 +344,49 @@ export function PortfolioScreen() {
           </View>
         )}
       </View>
-      <Text accessibilityRole="header" style={styles.sectionHeading}>Recent activity</Text>
-      {recentActivity.length === 0 ? (
+      {/* Progressive disclosure: the ledger waits behind its heading. */}
+      <Pressable
+        accessibilityLabel={activityOpen ? 'Collapse recent activity' : 'Expand recent activity'}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: activityOpen }}
+        onPress={() => setActivityOpen((current) => !current)}
+        style={({ pressed }) => [styles.activityToggle, pressed && styles.backPressed]}
+        {...rowMarker}
+      >
+        {/* The chevron rides the title, not the far edge, so the control
+            reads as one object; the right side quietly says what opens. */}
+        <View style={styles.activityTitleGroup}>
+          <Text accessibilityRole="header" style={styles.sectionHeading}>Recent activity</Text>
+          <Text style={styles.activityChevron}>{activityOpen ? '▾' : '▸'}</Text>
+        </View>
+        {activityOpen ? null : (
+          <Text style={styles.activityHint}>
+            {recentActivity.length === 0 ? '' : `LAST ${Math.min(recentActivity.length, 10)}`}
+          </Text>
+        )}
+      </Pressable>
+      {!activityOpen ? null : recentActivity.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.subtle}>Trades and settlements will appear here.</Text>
         </View>
       ) : (
         <View style={styles.list}>
-          {/* Meter scale is per-batch: the biggest settled payout in view is
-              the full bar and everything else reads against it. */}
           {groupActivity(recentActivity).map((night) => (
             <ActivityNightGroup
               key={night.key}
-              meterScale={largestSettledDelta}
               night={night}
               playerById={playerById}
               playerTrends={playerTrends}
             />
           ))}
           <Pressable
-            accessibilityLabel="Open the full season night log"
+            accessibilityLabel="Open the full game log"
             accessibilityRole="button"
             onPress={() => setNightLogOpen(true)}
             style={({ pressed }) => [styles.seeAll, pressed && styles.backPressed]}
             {...rowMarker}
           >
-            <Text style={styles.seeAllText}>SEE ALL NIGHTS  ›</Text>
+            <Text style={styles.seeAllText}>FULL GAME LOG  ›</Text>
           </Pressable>
         </View>
       )}
@@ -394,34 +402,53 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: space.xxl,
   },
-  cashStrip: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: space.xl,
+  cashLine: {
+    ...numeric,
+    color: colors.faint,
+    fontSize: type.body,
+    fontWeight: weight.medium,
     paddingHorizontal: space.lg,
-    paddingTop: space.lg,
-    paddingBottom: space.lg,
-    marginTop: space.sm,
+    paddingVertical: space.md,
+  },
+  cashLineStrong: { color: colors.text, fontWeight: weight.heavy },
+  upcomingOnly: {
+    color: colors.faint,
+    fontFamily: fonts.body,
+    fontSize: type.label,
+    fontWeight: weight.medium,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+  },
+  rosterRegion: {
+    backgroundColor: colors.surface,
     borderTopColor: colors.border,
     borderTopWidth: 1,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
+    paddingBottom: space.xs,
   },
-  cashCell: {
-    minWidth: 92,
+  activityToggle: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: space.md,
+    paddingRight: space.lg,
   },
-  cashLabel: {
+  activityTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: space.sm,
+  },
+  activityChevron: {
+    color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.black,
+  },
+  activityHint: {
+    ...labelStyle,
     color: colors.faint,
-    fontFamily: fonts.body,
-    fontSize: type.body,
-    fontWeight: weight.medium,
-  },
-  cashValue: {
-    ...numeric,
-    color: colors.text,
-    fontSize: type.title,
-    fontWeight: weight.heavy,
-    marginTop: 3,
+    flexShrink: 0,
   },
   sectionHeading: {
     ...headingStyle,
@@ -460,16 +487,7 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
   },
   list: {},
-  rosterPanel: {
-    marginHorizontal: space.lg,
-    marginTop: space.lg,
-    borderRadius: radius.lg,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.background,
-    overflow: 'hidden',
-  },
-  // No bottom border: each holding row (and the empty state) brings its own
+// No bottom border: each holding row (and the empty state) brings its own
   // top rule, so the head would otherwise double it.
   rosterHead: {
     flexDirection: 'row',
@@ -480,10 +498,7 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
     paddingBottom: space.xs,
   },
-  rosterTitle: {
-    ...headingStyle,
-  },
-  rosterMeta: {
+rosterMeta: {
     ...numeric,
     color: colors.muted,
     fontSize: type.body,
@@ -571,10 +586,11 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },
+  // The payout is the reason the row exists; it outranks the name.
   activityValue: {
     ...numeric,
-    fontSize: type.value,
-    fontWeight: weight.heavy,
+    fontSize: type.title,
+    fontWeight: weight.black,
     flexShrink: 0,
   },
   nightHead: {
@@ -615,23 +631,6 @@ const styles = StyleSheet.create({
     fontSize: type.label,
     fontWeight: weight.medium,
     marginTop: 1,
-  },
-  meterTrack: {
-    height: 3,
-    marginTop: 5,
-    borderRadius: radius.xs,
-    backgroundColor: colors.border,
-    overflow: 'hidden',
-  },
-  meterFill: {
-    height: 3,
-    borderRadius: radius.xs,
-  },
-  meterUp: {
-    backgroundColor: colors.green,
-  },
-  meterDown: {
-    backgroundColor: colors.red,
   },
   activityName: {
     color: colors.text,

@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Polygon, Stop, Text as SvgText } from 'react-native-svg';
 
-import { nearestPointIndex } from '../data/chartGeometry';
+import { baselineYPosition, nearestPointIndex } from '../data/chartGeometry';
 import type { ChartCoordinate } from '../data/marketPresentation';
 import {
   availablePortfolioRanges,
@@ -21,16 +21,9 @@ import { useChartSurface } from '../hooks/useChartSurface';
 import { useCountUp } from '../hooks/useCountUp';
 import { STARTING_BANKROLL } from '../state/economy';
 import type { PortfolioPoint } from '../state/game';
-import { colors, fonts, heroNumber, numeric, space, type, weight } from '../theme';
+import { colors, fonts, heroNumber, labelStyle, numeric, space, type, weight } from '../theme';
 
 const DEFAULT_CHART_HEIGHT = 168;
-
-/**
- * Right-hand gutter reserved for the value axis. The plot stops before it, so
- * the line and end dot never run underneath their own figures — on a phone
- * the full-width plot used to collide with the labels.
- */
-const VALUE_GUTTER = 56;
 
 /**
  * The portfolio hero: an animated total, a scrubbable area chart of settled
@@ -44,13 +37,17 @@ export function PortfolioHistoryChart({
   points,
   height = DEFAULT_CHART_HEIGHT,
   totalValue,
-  footnote,
+  earnings,
+  freeCash,
   beforePlot,
 }: {
   points: PortfolioPoint[];
   height?: number;
   totalValue?: number;
-  footnote?: string;
+  /** Tonight and trailing-week dividends — tonight IS the hero now. */
+  earnings?: { tonight: number; week: number } | null;
+  /** Spendable cash, for the demoted balance line above the plot. */
+  freeCash?: number;
   /** Rendered between the hero number and the plot — the "what happened last
       night" strip lives here so the daily update is read before the chart. */
   beforePlot?: ReactNode;
@@ -82,7 +79,7 @@ export function PortfolioHistoryChart({
     [activeRange, points],
   );
   const { coordinates, linePath, areaPath } = useMemo(() => {
-    const coords = chartCoordinates(visible.map((point) => point.totalValue), Math.max(width - VALUE_GUTTER, 0), height);
+    const coords = chartCoordinates(visible.map((point) => point.totalValue), width, height);
     const line = coords
       .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
       .join(' ');
@@ -96,40 +93,14 @@ export function PortfolioHistoryChart({
   }, [height, visible, width]);
   const lastCoordinate = coordinates.at(-1) ?? null;
   scrubGeometry.current = { coordinates, width };
-  // The value grid mirrors chartCoordinates' mapping (12px insets): rules at
-  // the window's high, midpoint, and low so the curve reads against real
-  // figures instead of floating free.
-  const { gridLines, baselineY } = useMemo(() => {
-    const values = visible.map((point) => point.totalValue);
-    if (values.length === 0) return { gridLines: [], baselineY: null };
-    const high = Math.max(...values);
-    const low = Math.min(...values);
-    const span = high - low;
-    const yFor = (value: number) =>
-      span === 0 ? height / 2 : 12 + ((high - value) / span) * (height - 24);
-    // A compact plot drops the midline: two figures orient a short chart,
-    // three crowd it.
-    const gridLines: { value: number; y: number }[] =
-      span === 0
-        ? [{ value: high, y: height / 2 }]
-        : height < 140
-          ? [
-              { value: high, y: 12 },
-              { value: low, y: height - 12 },
-            ]
-          : [
-              { value: high, y: 12 },
-              { value: (high + low) / 2, y: height / 2 },
-              { value: low, y: height - 12 },
-            ];
-    // The range's baseline earns a rule only when it crosses the plot; when
-    // every settled value sits above it, the low rule already tells that story.
-    const baselineY = low < baseline && baseline < high ? yFor(baseline) : null;
-    return { gridLines, baselineY };
-  }, [baseline, height, visible]);
+  // Sparkline discipline (after the declutter research): the plot keeps only
+  // the line, its fill, the dashed start-of-range rule, and the end value.
+  const baselineY = useMemo(
+    () => baselineYPosition(visible.map((point) => point.totalValue), baseline, height),
+    [baseline, height, visible],
+  );
   const firstDate = visible[0]?.date ?? null;
   const lastDate = visible.at(-1)?.date ?? null;
-  const midDate = visible.length >= 5 ? visible[Math.floor((visible.length - 1) / 2)]?.date ?? null : null;
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -152,8 +123,12 @@ export function PortfolioHistoryChart({
   const changePct = baseline === 0 ? 0 : (change / baseline) * 100;
   const up = change >= 0;
   const changeColor = up ? colors.green : colors.red;
-  // Count up when the number moves on its own; scrubbing tracks instantly.
+  // The hero is the portfolio number — big, unsigned, and alive: it counts
+  // up on settles and tracks the finger during a scrub, exactly the old way.
   const animatedValue = useCountUp(shownValue, scrubPoint !== null);
+  const animatedTonight = useCountUp(earnings?.tonight ?? 0);
+  const animatedWeek = useCountUp(earnings?.week ?? 0);
+  const animatedChange = useCountUp(change, scrubPoint !== null);
 
   if (visible.length === 0) {
     return (
@@ -161,6 +136,18 @@ export function PortfolioHistoryChart({
         <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.heroValue}>
           {formatCompactMoney(animatedValue)}
         </Text>
+        {freeCash === undefined ? null : (
+          <Text
+            accessibilityLabel={`${formatMoney(freeCash)} cash available to spend`}
+            maxFontSizeMultiplier={1.4}
+            numberOfLines={1}
+            style={styles.emptyBalanceLine}
+          >
+            <Text style={styles.balanceStrong}>{formatCompactMoney(freeCash)}</Text>
+            {' cash available'}
+          </Text>
+        )}
+        {beforePlot}
         <Text style={styles.emptyTitle}>Your chart starts after the first replay day.</Text>
         <Text style={styles.emptyText}>
           Buy a player, then settle the next date to see your portfolio move.
@@ -170,38 +157,68 @@ export function PortfolioHistoryChart({
   }
 
   return (
-    <View
-      accessible
-      accessibilityLabel={`Portfolio value ${formatMoney(latestValue)}. Over the selected range, ${formatSignedMoney(portfolioPeriodChange(visible, baseline))} across ${visible.length} settled dates.`}
-      style={styles.block}
-    >
+    <View style={styles.block}>
       <View style={styles.hero}>
-        <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.heroValue}>
+        <Text
+          accessibilityLabel={`Portfolio value ${formatMoney(shownValue)}`}
+          maxFontSizeMultiplier={1.4}
+          numberOfLines={1}
+          style={styles.heroValue}
+        >
           {formatCompactMoney(animatedValue)}
         </Text>
-        <View style={styles.changeRow}>
-          <ChangeArrow color={changeColor} up={up} />
-          <Text
-            maxFontSizeMultiplier={1.6}
-            numberOfLines={1}
-            style={[styles.change, { color: changeColor }]}
+        <View style={styles.statRow}>
+          <View
+            accessible
+            accessibilityLabel={`Tonight ${formatSignedMoney(earnings?.tonight ?? 0)}`}
+            style={styles.statCell}
           >
-            {formatCompactSignedMoney(change)}
-          </Text>
-          <Text
-            maxFontSizeMultiplier={1.6}
-            numberOfLines={1}
-            style={[styles.changePercent, { color: changeColor }]}
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={[styles.statValue, toneStyle(earnings?.tonight ?? 0)]}>
+              {formatCompactSignedMoney(animatedTonight)}
+            </Text>
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>TONIGHT</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View
+            accessible
+            accessibilityLabel={`Past seven nights ${formatSignedMoney(earnings?.week ?? 0)}`}
+            style={styles.statCell}
           >
-            {`${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`}
-          </Text>
-          <Text numberOfLines={1} style={styles.changeMeta}>
-            {scrubPoint ? scrubPoint.date : rangeLabel(activeRange)}
-          </Text>
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={[styles.statValue, toneStyle(earnings?.week ?? 0)]}>
+              {formatCompactSignedMoney(animatedWeek)}
+            </Text>
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>THIS WEEK</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View
+            accessible
+            accessibilityLabel={`${formatSignedMoney(change)}, ${changePct >= 0 ? 'up' : 'down'} ${Math.abs(changePct).toFixed(2)} percent, ${scrubPoint ? scrubPoint.date : rangeLabel(activeRange)}`}
+            style={styles.statCell}
+          >
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={[styles.statValue, { color: changeColor }]}>
+              {formatCompactSignedMoney(animatedChange)}
+            </Text>
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>
+              {scrubPoint ? scrubPoint.date : rangeLabel(activeRange).toUpperCase()}
+            </Text>
+          </View>
         </View>
       </View>
       {beforePlot}
+      {freeCash === undefined ? null : (
+        <Text
+          accessibilityLabel={`${formatMoney(freeCash)} cash available to spend`}
+          maxFontSizeMultiplier={1.4}
+          numberOfLines={1}
+          style={styles.balanceLine}
+        >
+          <Text style={styles.balanceStrong}>{formatCompactMoney(freeCash)}</Text>
+          {' cash available'}
+        </Text>
+      )}
       <View
+        accessible
+        accessibilityLabel={`Portfolio value ${formatMoney(latestValue)}. Over the selected range, ${formatSignedMoney(portfolioPeriodChange(visible, baseline))} across ${visible.length} settled dates.`}
         nativeID="scrub-plot-portfolio"
         onLayout={onLayout}
         ref={ref}
@@ -216,17 +233,6 @@ export function PortfolioHistoryChart({
                 <Stop offset="1" stopColor={changeColor} stopOpacity={0} />
               </LinearGradient>
             </Defs>
-            {gridLines.map((line) => (
-              <Line
-                key={`rule-${line.y}`}
-                stroke={colors.border}
-                strokeWidth={1}
-                x1={0}
-                x2={width}
-                y1={line.y}
-                y2={line.y}
-              />
-            ))}
             {baselineY !== null ? (
               <Line
                 stroke={colors.borderStrong}
@@ -270,42 +276,12 @@ export function PortfolioHistoryChart({
             ) : lastCoordinate ? (
               <Circle cx={lastCoordinate.x} cy={lastCoordinate.y} fill={changeColor} r={4.5} />
             ) : null}
-            {/* Figures live in the reserved gutter, vertically centred on
-                their rules, the way a price axis reads. */}
-            {gridLines.map((line) => (
-              <SvgText
-                fill={colors.faint}
-                fontFamily={fonts.display}
-                fontSize={10}
-                fontWeight="700"
-                key={`figure-${line.y}`}
-                textAnchor="end"
-                x={width - 4}
-                y={line.y + 3.5}
-              >
-                {formatCompactMoney(line.value)}
-              </SvgText>
-            ))}
-            {baselineY !== null ? (
-              <SvgText
-                fill={colors.faint}
-                fontFamily={fonts.display}
-                fontSize={10}
-                fontWeight="700"
-                textAnchor="start"
-                x={10}
-                y={baselineY - 5}
-              >
-                {`START ${formatCompactMoney(baseline)}`}
-              </SvgText>
-            ) : null}
           </Svg>
         ) : null}
       </View>
       {firstDate && lastDate ? (
-        <View style={[styles.dateAxis, { paddingRight: VALUE_GUTTER + 10 }]}>
+        <View style={styles.dateAxis}>
           <Text numberOfLines={1} style={styles.dateAxisText}>{shortDate(firstDate)}</Text>
-          {midDate ? <Text numberOfLines={1} style={styles.dateAxisText}>{shortDate(midDate)}</Text> : null}
           {lastDate !== firstDate ? (
             <Text numberOfLines={1} style={styles.dateAxisText}>{shortDate(lastDate)}</Text>
           ) : null}
@@ -338,18 +314,10 @@ export function PortfolioHistoryChart({
           })}
         </View>
       ) : null}
-      {footnote ? <Text style={styles.footnote}>{footnote}</Text> : null}
     </View>
   );
 }
 
-function ChangeArrow({ up, color }: { up: boolean; color: string }) {
-  return (
-    <Svg height={9} width={9} viewBox="0 0 10 10">
-      <Polygon fill={color} points={up ? '5,1 9.5,8.5 0.5,8.5' : '5,9 9.5,1.5 0.5,1.5'} />
-    </Svg>
-  );
-}
 
 const MONTH_ABBREVIATIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -359,6 +327,10 @@ function shortDate(date: string): string {
   const day = Number(date.slice(8, 10));
   if (!Number.isFinite(month) || !Number.isFinite(day) || month < 1 || month > 12) return date;
   return `${MONTH_ABBREVIATIONS[month - 1]} ${day}`;
+}
+
+function toneStyle(value: number) {
+  return { color: value > 0 ? colors.green : value < 0 ? colors.red : colors.muted };
 }
 
 function rangeLabel(range: PortfolioRange): string {
@@ -375,23 +347,40 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
   },
   heroValue: { ...heroNumber },
-  changeRow: {
+  statRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs,
-    marginTop: space.xs,
-    flexWrap: 'wrap',
+    alignItems: 'stretch',
+    marginTop: space.md,
   },
-  change: { ...numeric, fontSize: type.value, fontWeight: weight.heavy },
-  changePercent: { ...numeric, fontSize: type.value, fontWeight: weight.medium, opacity: 0.85 },
-  changeMeta: {
+  // Equal thirds: a long label in one cell can never starve a value in
+  // another, so figures render whole at every width.
+  statCell: { flex: 1, gap: 3, minWidth: 0 },
+  statValue: { ...numeric, fontSize: 20, fontWeight: weight.black, letterSpacing: -0.3 },
+  statLabel: { ...labelStyle, color: colors.faint },
+  balanceLine: {
     ...numeric,
     color: colors.faint,
     fontSize: type.body,
     fontWeight: weight.medium,
-    marginLeft: space.xs,
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
   },
-  plot: {},
+  balanceStrong: { color: colors.text, fontWeight: weight.heavy },
+  emptyBalanceLine: {
+    ...numeric,
+    color: colors.faint,
+    fontSize: type.body,
+    fontWeight: weight.medium,
+  },
+  statDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: colors.borderStrong,
+    marginHorizontal: space.md,
+  },
+  // Air between the night strip and the curve; the plot's own 12px inset
+  // was carrying all of it.
+  plot: { marginTop: space.md },
   // Date labels line up with the plot's 10px horizontal insets.
   dateAxis: {
     flexDirection: 'row',
@@ -426,14 +415,6 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginTop: 6,
     backgroundColor: 'transparent',
-  },
-  footnote: {
-    color: colors.faint,
-    fontFamily: fonts.body,
-    fontSize: type.body,
-    lineHeight: 18,
-    paddingHorizontal: space.lg,
-    paddingTop: space.sm,
   },
   emptyBlock: {
     justifyContent: 'center',

@@ -52,10 +52,13 @@ def test_local_bootstrap_creates_schema_and_loads_seed_file(tmp_path) -> None:
                             {
                                 "game_date": "2025-10-21",
                                 "player_id": "sga",
-                                "actual_net_points_micros": 40_000_000,
-                                "expected_net_points_micros": 20_000_000,
-                                "dividend_cents": 80_000_000,
-                            }
+                                    "actual_net_points_micros": 40_000_000,
+                                    "expected_net_points_micros": 20_000_000,
+                                    "dividend_cents": 80_000_000,
+                                        "actual_minutes_micros": 32_000_000,
+                                        "projected_minutes_micros": 30_000_000,
+                                        "qualifies_for_instruments": True,
+                                }
                         ],
                     }
                 ],
@@ -90,7 +93,15 @@ def test_local_bootstrap_creates_schema_and_loads_seed_file(tmp_path) -> None:
     assert response.status_code == 200
     assert response.json()["data"][0]["id"] == "sga"
     assert game.status_code == 200
-    assert game.json()["data"]["next_game_date"] == "2025-10-21"
+    game_data = game.json()["data"]
+    assert game_data["next_game_date"] == "2025-10-21"
+    assert game_data["next_game_player_ids"] == ["sga"]
+    assert game_data["next_game_projections"] == [
+        {
+            "player_id": "sga",
+            "expected_net_points_micros": 20_000_000,
+        }
+    ]
 
 
 def test_sqlite_snapshot_session_is_repeatable(tmp_path) -> None:

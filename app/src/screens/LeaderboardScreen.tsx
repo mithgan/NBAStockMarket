@@ -8,7 +8,6 @@ import {
 } from '../format';
 import { rankBand } from '../data/rankBand';
 import { usePortfolio } from '../state/PortfolioContext';
-import { STARTING_BANKROLL } from '../state/economy';
 import { DisplayValue, SectionHeader, Tag } from '../ui/primitives';
 import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
 
@@ -41,17 +40,54 @@ export function LeaderboardScreen() {
         {you ? (
           <>
             <DisplayValue
-              accessibilityLabel={`Your rank, ${you.rank} of ${leaderboard.length}, ${rankBand(you.rank, leaderboard.length)}. Portfolio ${formatMoney(you.value)}, ${formatReturn(you.returnPct)} from ${formatMoney(STARTING_BANKROLL)}. ${formatSignedMoney(summary.latestDailyChange)} on the latest replay date.`}
+              accessibilityLabel={`Your rank, ${you.rank} of ${leaderboard.length}, ${rankBand(you.rank, leaderboard.length)}. Portfolio ${formatMoney(you.value)}, ${formatReturn(you.returnPct)} return. ${formatSignedMoney(summary.latestDailyChange)} on the latest replay date.`}
               label={`OF ${leaderboard.length}`}
               tone="gold"
               value={`#${you.rank}`}
             />
-            <View style={styles.heroMeta}>
-              <Tag label={rankBand(you.rank, leaderboard.length).toUpperCase()} tone="gold" />
-              <Text style={styles.heroValue}>{formatCompactMoney(you.value)}</Text>
-              <Tag label={`${formatReturn(you.returnPct)} FROM ${formatCompactMoney(STARTING_BANKROLL)}`} tone={you.returnPct >= 0 ? 'up' : 'down'} />
-              <Tag label={`${formatCompactSignedMoney(summary.latestDailyChange)} LAST DAY`} tone={dayPositive ? 'up' : 'down'} />
+            {/* The portfolio's stat-bar grammar: each figure in its own cell
+                over a quiet label, split by hairline rules — not a chip pile. */}
+            <View style={styles.statRow}>
+              <View accessible accessibilityLabel={`Portfolio ${formatMoney(you.value)}`} style={styles.statCell}>
+                <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statValue}>
+                  {formatCompactMoney(you.value)}
+                </Text>
+                <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>PORTFOLIO</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View
+                accessible
+                accessibilityLabel={`${formatReturn(you.returnPct)} portfolio return`}
+                style={styles.statCell}
+              >
+                <Text
+                  maxFontSizeMultiplier={1.2}
+                  numberOfLines={1}
+                  style={[styles.statValue, you.returnPct >= 0 ? styles.positive : styles.negative]}
+                >
+                  {formatReturn(you.returnPct)}
+                </Text>
+                <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>
+                  RETURN
+                </Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View
+                accessible
+                accessibilityLabel={`${formatSignedMoney(summary.latestDailyChange)} on the latest settled night`}
+                style={styles.statCell}
+              >
+                <Text
+                  maxFontSizeMultiplier={1.2}
+                  numberOfLines={1}
+                  style={[styles.statValue, dayPositive ? styles.positive : styles.negative]}
+                >
+                  {formatCompactSignedMoney(summary.latestDailyChange)}
+                </Text>
+                <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>LAST NIGHT</Text>
+              </View>
             </View>
+            <Tag label={rankBand(you.rank, leaderboard.length).toUpperCase()} tone="gold" />
           </>
         ) : leaderboard.length > 0 ? (
           // Ranked below the returned page: say so instead of showing nothing.
@@ -80,7 +116,9 @@ export function LeaderboardScreen() {
               <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.rankColumn]}>#</Text>
               <Text style={[styles.columnHeaderText, styles.nameColumn]}>PORTFOLIO</Text>
               <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.valueColumn]}>VALUE</Text>
-              <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.returnColumn]}>RETURN</Text>
+              <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.returnColumn]}>
+                RETURN
+              </Text>
             </View>
             {leaderboard.map((entry, index) => (
               <View
@@ -154,6 +192,21 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   heroLabel: { ...labelStyle, color: colors.goldInk, marginBottom: space.xs },
+  statRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginTop: space.md,
+    marginBottom: space.sm,
+  },
+  statCell: { flex: 1, gap: 3, minWidth: 0 },
+  statValue: { ...numeric, color: colors.text, fontSize: 17, fontWeight: weight.black },
+  statLabel: { ...labelStyle, color: colors.faint },
+  statDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: colors.borderStrong,
+    marginHorizontal: space.md,
+  },
   heroMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm, marginTop: space.sm },
   heroValue: { ...numeric, color: colors.text, fontSize: type.title, fontWeight: weight.black },
   subtle: { color: colors.muted, fontFamily: fonts.body, fontSize: type.label, lineHeight: 17 },

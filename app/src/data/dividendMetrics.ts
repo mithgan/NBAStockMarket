@@ -14,6 +14,8 @@ import type { TrendPoint } from './trendPresentation';
 export interface DividendSummary {
   /** Settled games the player actually appeared in over the window. */
   gamesPlayed: number;
+  /** Nights he beat projection — the ones that actually paid. */
+  paidNights: number;
   /** Sum of dividends per holder across the window. */
   total: number;
   /** Average payout per game played — null until he has played one. */
@@ -24,6 +26,7 @@ export function summarizeDividends(points: readonly TrendPoint[]): DividendSumma
   const total = points.reduce((sum, point) => sum + point.dividend_per_holder, 0);
   return {
     gamesPlayed: points.length,
+    paidNights: points.filter((point) => point.dividend_per_holder > 0).length,
     total,
     perGame: points.length === 0 ? null : total / points.length,
   };
@@ -37,6 +40,67 @@ export function summarizeDividends(points: readonly TrendPoint[]): DividendSumma
 export function dividendYield(total: number, price: number): number | null {
   if (!Number.isFinite(price) || price <= 0) return null;
   return total / price;
+}
+
+export interface SettlementRecap {
+  /** Net dollars the settlements paid this account since the cutoff. */
+  paid: number;
+  /** Distinct settled dates in that span. */
+  nights: number;
+}
+
+/**
+ * What settled after `sinceDate` did to this account — the while-you-were-away
+ * greeting's arithmetic, straight from authoritative settlement summaries.
+ */
+export function settlementRecapSince(
+  settlements: readonly { game_date: string; current_user_dividend_cents: number }[],
+  sinceDate: string | null,
+  throughDate: string,
+): SettlementRecap {
+  const dates = new Set<string>();
+  let cents = 0;
+  for (const entry of settlements) {
+    if (sinceDate !== null && entry.game_date <= sinceDate) continue;
+    if (entry.game_date > throughDate) continue;
+    dates.add(entry.game_date);
+    cents += entry.current_user_dividend_cents;
+  }
+  return { paid: cents / 100, nights: dates.size };
+}
+
+export interface EarningsWindows {
+  /** Net dividends on the latest settled date. */
+  tonight: number;
+  /** Net dividends across the seven calendar days ending on that date. */
+  week: number;
+}
+
+function isoDaysBefore(date: string, days: number): string {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() - days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+/**
+ * The account's standing daily and weekly dividend result, from authoritative
+ * settlement summaries. Boosts, shorts, fees, refunds, and trades are excluded.
+ */
+export function earningsWindows(
+  settlements: readonly { game_date: string; current_user_dividend_cents: number }[],
+  latestSettledDate: string | null,
+): EarningsWindows {
+  if (latestSettledDate === null) return { tonight: 0, week: 0 };
+  const weekStart = isoDaysBefore(latestSettledDate, 6);
+  let tonight = 0;
+  let week = 0;
+  for (const settlement of settlements) {
+    if (settlement.game_date > latestSettledDate) continue;
+    const dividend = settlement.current_user_dividend_cents / 100;
+    if (settlement.game_date === latestSettledDate) tonight += dividend;
+    if (settlement.game_date >= weekStart) week += dividend;
+  }
+  return { tonight, week };
 }
 
 /**
