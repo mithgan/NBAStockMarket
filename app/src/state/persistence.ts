@@ -1,4 +1,5 @@
 export const GAME_STORAGE_KEY = '@nba-stock-market/game-state';
+export const LOCAL_DEMO_STORAGE_KEY = 'nba-stock-market:local-demo:v1';
 export const GAME_STORAGE_VERSION = 1;
 
 export interface StorageAdapter {

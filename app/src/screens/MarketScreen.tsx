@@ -22,6 +22,7 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PlayerStats } from '../components/PlayerStats';
@@ -722,6 +723,7 @@ export function MarketScreen() {
     trade,
   } = usePortfolio();
   const { fontScale, height, width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   // Landscape phones have almost no vertical room, so the header sheds the
   // title (the active tab already says MARKET) and tightens its padding.
   const shortViewport = height < 520;
@@ -805,6 +807,7 @@ export function MarketScreen() {
     query,
     settledTrends,
     sort,
+    trendingWindow,
   ]);
 
   // The anchor teaches the scale (an average payer is X a night, "by
@@ -947,7 +950,13 @@ export function MarketScreen() {
       {/* One visible choice (Hick's law): the active sort as a disclosure
           chip; the full sort list and its window picker live in the sheet.
           Filters stay visible — they gate the task itself. */}
-      <View style={styles.chipBar}>
+      <ScrollView
+        contentContainerStyle={styles.chipBar}
+        horizontal
+        keyboardShouldPersistTaps="handled"
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipScroller}
+      >
         <Pressable
           accessibilityHint="Opens the sort options"
           accessibilityLabel={`Sorted by ${MARKET_SORTS.find((option) => option.key === sort)?.label ?? sort}. Change sort`}
@@ -956,11 +965,11 @@ export function MarketScreen() {
           style={({ pressed }) => [styles.sortChip, pressed && styles.pressed]}
         >
           <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.sortChipText}>
-            {`${(MARKET_SORTS.find((option) => option.key === sort)?.label ?? sort).toUpperCase()}${sort === 'pays' ? ` · ${trendingWindow.toUpperCase()}` : ''}  ▾`}
+            {`${(MARKET_SORTS.find((option) => option.key === sort)?.label ?? sort).toUpperCase()} · ${trendingWindow.toUpperCase()}  ▾`}
           </Text>
         </Pressable>
         <Segmented groupLabel="Filter players" onChange={setFilter} options={MARKET_FILTERS} value={filter} />
-      </View>
+      </ScrollView>
     </View>
   );
 
@@ -1020,12 +1029,24 @@ export function MarketScreen() {
           transparent
           visible
         >
-          <Pressable
-            accessibilityLabel="Close the sort options"
-            onPress={() => setSortSheetOpen(false)}
-            style={styles.sheetBackdrop}
-          >
-            <Pressable accessibilityViewIsModal onPress={() => {}} style={styles.sheet}>
+          <View style={styles.sheetBackdrop}>
+            <Pressable
+              accessibilityLabel="Close the sort options"
+              accessibilityRole="button"
+              onPress={() => setSortSheetOpen(false)}
+              style={styles.sheetDismiss}
+            />
+            <ScrollView
+              accessibilityViewIsModal
+              contentContainerStyle={[
+                styles.sheetContent,
+                { paddingBottom: Math.max(space.xl, insets.bottom + space.md) },
+              ]}
+              style={[
+                styles.sheet,
+                { maxHeight: Math.max(120, height - insets.top - insets.bottom - space.md) },
+              ]}
+            >
               <Text accessibilityRole="header" style={styles.sheetTitle}>SORT THE MARKET</Text>
               {MARKET_SORTS.map((option) => {
                 const selected = option.key === sort;
@@ -1050,21 +1071,20 @@ export function MarketScreen() {
                   </Pressable>
                 );
               })}
-              {sort === 'pays' ? (
-                <View style={styles.sheetWindowRow}>
-                  <Segmented
-                    groupLabel="Payout window"
-                    onChange={(next) => {
-                      setTrendingWindow(next);
-                      setSortSheetOpen(false);
-                    }}
-                    options={TRENDING_WINDOWS}
-                    value={trendingWindow}
-                  />
-                </View>
-              ) : null}
-            </Pressable>
-          </Pressable>
+              <View style={styles.sheetWindowRow}>
+                <Text style={styles.sheetSectionLabel}>PAYOUT WINDOW</Text>
+                <Segmented
+                  groupLabel="Payout window"
+                  onChange={(next) => {
+                    setTrendingWindow(next);
+                    setSortSheetOpen(false);
+                  }}
+                  options={TRENDING_WINDOWS}
+                  value={trendingWindow}
+                />
+              </View>
+            </ScrollView>
+          </View>
         </Modal>
       ) : null}
     </View>
@@ -1113,7 +1133,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.sm,
     paddingBottom: space.sm,
+    paddingRight: space.md,
   },
+  chipScroller: { flexGrow: 0 },
   sortChip: {
     minHeight: 44,
     flexDirection: 'row',
@@ -1129,15 +1151,20 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
+  sheetDismiss: {
+    ...StyleSheet.absoluteFillObject,
+  },
   sheet: {
     backgroundColor: colors.surface,
     borderTopColor: colors.borderStrong,
     borderTopWidth: 1,
+  },
+  sheetContent: {
     paddingHorizontal: space.lg,
     paddingTop: space.lg,
-    paddingBottom: space.xl,
   },
   sheetTitle: { ...labelStyle, color: colors.muted, marginBottom: space.sm },
+  sheetSectionLabel: { ...labelStyle, color: colors.muted },
   sheetOption: {
     minHeight: 48,
     flexDirection: 'row',

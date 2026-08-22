@@ -40,7 +40,20 @@ test('season replay follows authoritative dates through completion', async () =>
   assert.equal(summary.completedDates, 3);
   assert.equal(summary.lastSettledDate, '2025-10-23');
   assert.equal(summary.nextGameDate, null);
+  assert.equal(summary.isComplete, true);
   assert.equal(progress.at(-1)?.completedDates, 3);
+});
+
+test('season replay stops cleanly when the server is waiting for more schedule data', async () => {
+  const summary = await settleRemainingSeason('2025-10-20', async (date) => ({
+    ...result(date, null),
+    is_complete: false,
+  }));
+
+  assert.equal(summary.completedDates, 1);
+  assert.equal(summary.lastSettledDate, '2025-10-20');
+  assert.equal(summary.nextGameDate, null);
+  assert.equal(summary.isComplete, false);
 });
 
 test('season replay stops on the first failure and reports saved progress', async () => {
@@ -70,6 +83,14 @@ test('season replay rejects repeated or inconsistent server clocks', async () =>
 
   await assert.rejects(
     settleRemainingSeason('2025-10-20', async () => result('2025-10-21', null)),
+    SeasonReplayError,
+  );
+
+  await assert.rejects(
+    settleRemainingSeason('2025-10-20', async (date) => ({
+      ...result(date, '2025-10-21'),
+      is_complete: true,
+    })),
     SeasonReplayError,
   );
 });

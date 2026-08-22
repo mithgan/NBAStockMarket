@@ -7,7 +7,7 @@ export interface SeasonReplayProgress {
 }
 
 export interface SeasonReplaySummary extends SeasonReplayProgress {
-  isComplete: true;
+  isComplete: boolean;
 }
 
 export class SeasonReplayError extends Error {
@@ -31,6 +31,7 @@ export async function settleRemainingSeason(
   let nextGameDate: string | null = firstGameDate;
   let completedDates = 0;
   let lastSettledDate = firstGameDate;
+  let isComplete = false;
   const visited = new Set<string>();
 
   try {
@@ -51,15 +52,15 @@ export async function settleRemainingSeason(
       if (result.next_game_date !== null && result.next_game_date <= expectedGameDate) {
         throw new Error('The server replay clock did not move forward.');
       }
+      if (result.is_complete && result.next_game_date !== null) {
+        throw new Error('The server returned an inconsistent replay completion state.');
+      }
 
       completedDates += 1;
       lastSettledDate = result.game_date;
       nextGameDate = result.next_game_date;
+      isComplete = result.is_complete;
       onProgress?.({ completedDates, lastSettledDate, nextGameDate });
-
-      if (result.is_complete !== (nextGameDate === null)) {
-        throw new Error('The server returned an inconsistent replay completion state.');
-      }
     }
   } catch (error) {
     throw new SeasonReplayError(
@@ -75,6 +76,6 @@ export async function settleRemainingSeason(
     completedDates,
     lastSettledDate,
     nextGameDate,
-    isComplete: true,
+    isComplete,
   };
 }

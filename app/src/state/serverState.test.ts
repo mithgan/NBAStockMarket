@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { ServerBootstrap } from '../api/contracts';
-import { getGameSummary, STARTING_CASH } from './game';
+import { STARTING_BANKROLL } from './economy';
+import { getGameSummary } from './game';
 import {
   applyPortfolioValuationToSummary,
   applyServerPortfolioToPresentation,
@@ -39,6 +40,7 @@ function bootstrapFixture(): ServerBootstrap {
         player_id: 'sga', player_name: 'Shai Gilgeous-Alexander', shares: 1,
         average_cost_cents: 5_012_500_000, current_price_cents: 5_100_000_000,
         market_value_cents: 5_100_000_000, unrealized_pnl_cents: 87_500_000,
+        season_dividend_cents: 80_000_000,
       }],
       recent_trades: [],
       instruments: {
@@ -158,6 +160,7 @@ test('mapServerBootstrap converts exact server cents and state into screen data'
   }]);
   assert.equal(mapped.leaderboard[0].returnPct, -0.09);
   assert.equal(mapped.leaderboard[0].id, 'current-user');
+  assert.deepEqual(mapped.settlements, bootstrapFixture().settlements);
   assert.equal(mapped.canAdvanceDay, true);
 });
 
@@ -246,14 +249,17 @@ test('activity and history are ordered for the existing UI without inventing unk
     '2025-10-21',
     '2025-10-22',
   ]);
-  assert.equal(mapped.state.portfolioHistory[0].dailyChange, -500_000);
+  assert.equal(
+    mapped.state.portfolioHistory[0].dailyChange,
+    139_500_000 - STARTING_BANKROLL,
+  );
   assert.equal(mapped.state.portfolioHistory[1].dailyChange, 372_500);
 });
 
 test('pristine detection permits only the backend one-time transition shape', () => {
   const fixture = bootstrapFixture();
   fixture.portfolio.version = 0;
-  fixture.portfolio.cash_cents = STARTING_CASH * 100;
+  fixture.portfolio.cash_cents = STARTING_BANKROLL * 100;
   fixture.portfolio.holdings = [];
   fixture.portfolio.recent_trades = [];
   fixture.portfolio.instruments.weekly_shorts = [];
@@ -290,6 +296,12 @@ test('refresh feedback explains that syncing does not advance the shared replay'
   assert.equal(
     serverRefreshNotice(fixture),
     'Server data is up to date. The historical replay is complete.',
+  );
+
+  fixture.game.is_complete = false;
+  assert.equal(
+    serverRefreshNotice(fixture),
+    'Server data is up to date. Waiting for the next game date to become available.',
   );
 });
 

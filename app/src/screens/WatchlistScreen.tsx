@@ -8,8 +8,10 @@ import { useChartSurface } from '../hooks/useChartSurface';
 import { smoothLinePath, windowSurprise } from '../data/marketPresentation';
 import { cumulativeValues, selectTrendRange, type TrendPoint, type TrendRange } from '../data/trendPresentation';
 import type { Player } from '../data/types';
+import { alignedAxisIndex, localSeriesIndex } from '../data/watchlistAlignment';
 import { formatCompactSignedMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
+import { STARTING_BANKROLL } from '../state/economy';
 import { useWatchlist, WATCHLIST_LIMIT } from '../state/watchlist';
 import { rowMarker } from '../ui/domMarkers';
 import { colors, fonts, headingStyle, labelStyle, numeric, radius, space, type, weight } from '../theme';
@@ -60,7 +62,7 @@ interface WatchedSeries {
  * night across everyone at once.
  */
 export function WatchlistScreen() {
-  const { players, playerTrends, owns, summary, nextGameDate, nextGamePlayerIds, nextGameProjections } = usePortfolio();
+  const { players, playerTrends, summary, nextGameDate, nextGamePlayerIds, nextGameProjections } = usePortfolio();
   const { watched, toggle, clear } = useWatchlist();
   const [range, setRange] = useState<TrendRange>('L15');
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -83,19 +85,16 @@ export function WatchlistScreen() {
       },
     ];
   });
+  const comparisonCount = series.reduce((max, entry) => Math.max(max, entry.cumulative.length), 0);
   // The chart keeps watch order (stable colours); the list ranks by payout.
   const ranked = [...series].sort((a, b) => b.total - a.total);
-  // Positive payouts from watched players you do NOT own: money that went by.
-  const unclaimed = series
-    .filter((entry) => !owns(entry.player.id) && entry.total > 0)
-    .reduce((sum, entry) => sum + entry.total, 0);
   // Watched players on the next slate, each with the number to beat.
   const watchedNext = series
     .filter((entry) => nextGamePlayerIds.includes(entry.player.id))
     .map((entry) => {
       const surname = splitName(entry.player.name).last;
       const needs = nextGameProjections[entry.player.id];
-      return needs === undefined ? surname : `${surname} needs ${needs.toFixed(1)}`;
+      return needs === undefined ? surname : `${surname} must beat ${needs.toFixed(1)}`;
     });
   const upcomingLine = nextGameDate && watchedNext.length > 0
     ? `Next: ${watchedNext.slice(0, 2).join(' · ')}${watchedNext.length > 2 ? ` · +${watchedNext.length - 2} more` : ''}`
@@ -130,18 +129,7 @@ export function WatchlistScreen() {
           <Text style={styles.clearText}>Clear</Text>
         </Pressable>
       </View>
-      {unclaimed > 0 ? (
-        <Text
-          accessibilityLabel={`${formatSignedMoney(unclaimed)} paid out by watched players you do not own, over this window`}
-          numberOfLines={1}
-          style={styles.intro}
-        >
-          <Text style={styles.unclaimedFigure}>{formatCompactSignedMoney(unclaimed)}</Text>
-          {' paid out unowned — the cost of watching'}
-        </Text>
-      ) : (
-        <Text style={styles.intro}>Who has been paying, and how fast.</Text>
-      )}
+      <Text style={styles.intro}>Who has been paying, and how fast.</Text>
       {upcomingLine ? (
         <Text numberOfLines={1} style={styles.upcoming}>{upcomingLine}</Text>
       ) : null}
@@ -155,9 +143,11 @@ export function WatchlistScreen() {
       </View>
       <View style={styles.list}>
         {ranked.map((entry) => {
-          const owned = owns(entry.player.id);
-          const atIndex = activeIndex === null ? undefined : entry.cumulative[activeIndex];
-          const shown = atIndex ?? entry.total;
+          const localIndex = activeIndex === null
+            ? null
+            : localSeriesIndex(activeIndex, entry.cumulative.length, comparisonCount);
+          const atIndex = localIndex === null ? undefined : entry.cumulative[localIndex];
+          const shown = activeIndex === null ? entry.total : atIndex ?? 0;
           return (
             <View key={entry.player.id} style={styles.row}>
               <View style={[styles.swatch, { backgroundColor: entry.color }]} />
@@ -175,18 +165,16 @@ export function WatchlistScreen() {
               </View>
               <View style={styles.rowNumbers}>
                 <Text
-                  accessibilityLabel={`${entry.player.name} paid ${formatSignedMoney(entry.total)} across this window${owned ? ', and you own him' : ', which you did not receive because you do not own him'}`}
+                  accessibilityLabel={`${entry.player.name} paid ${formatSignedMoney(entry.total)} per holder across this window`}
                   numberOfLines={1}
-                  // Green and red are reserved for YOUR money; an unowned
-                  // player's payout is information, so it reads in gold ink.
-                  style={[styles.rowValue, owned ? (shown >= 0 ? styles.positive : styles.negative) : styles.unclaimedValue]}
+                  style={[styles.rowValue, styles.hypotheticalValue]}
                 >
                   {formatCompactSignedMoney(shown)}
                 </Text>
                 <Text numberOfLines={1} style={styles.rowNote}>
                   {activeIndex === null
-                    ? owned ? 'yours' : 'unclaimed'
-                    : atIndex === undefined ? 'no game yet' : `after ${activeIndex} games`}
+                    ? 'per holder'
+                    : atIndex === undefined ? 'no game yet' : `after ${localIndex} games`}
                 </Text>
               </View>
               <Pressable
@@ -203,7 +191,7 @@ export function WatchlistScreen() {
         })}
       </View>
       <Text style={styles.footnote}>
-        {`Dividends per holder, settled games only. Your portfolio: ${summary ? formatCompactSignedMoney(summary.totalValue - 140_000_000) : '+$0'} all time.`}
+        {`Dividends per holder, settled games only. Your portfolio: ${summary ? formatCompactSignedMoney(summary.totalValue - STARTING_BANKROLL) : '+$0'} all time.`}
       </Text>
     </ScrollView>
   );
@@ -320,7 +308,10 @@ function ComparisonChart({
           ) : null}
           {series.map((entry) => (
             <Path
-              d={smoothLinePath(entry.cumulative.map((value, index) => ({ x: xAt(index), y: yAt(value) })))}
+              d={smoothLinePath(entry.cumulative.map((value, index) => ({
+                x: xAt(alignedAxisIndex(index, entry.cumulative.length, count)),
+                y: yAt(value),
+              })))}
               fill="none"
               key={entry.player.id}
               stroke={entry.color}
@@ -331,8 +322,9 @@ function ComparisonChart({
           ))}
           {activeIndex !== null
             ? series.map((entry) => {
-                const value = entry.cumulative[activeIndex];
-                if (value === undefined) return null;
+                const localIndex = localSeriesIndex(activeIndex, entry.cumulative.length, count);
+                if (localIndex === null) return null;
+                const value = entry.cumulative[localIndex];
                 return <Circle cx={xAt(activeIndex)} cy={yAt(value)} fill={entry.color} key={entry.player.id} r={4} />;
               })
             : null}
@@ -372,7 +364,6 @@ const styles = StyleSheet.create({
     paddingTop: space.xs,
   },
   // goldInk, not green: this is information about money you did NOT collect.
-  unclaimedFigure: { ...numeric, color: colors.goldInk, fontSize: 17, fontWeight: weight.black },
   upcoming: {
     color: colors.faint,
     fontFamily: fonts.body,
@@ -448,7 +439,5 @@ const styles = StyleSheet.create({
   },
 
   pressed: { opacity: 0.65 },
-  unclaimedValue: { color: colors.goldInk },
-  positive: { color: colors.green },
-  negative: { color: colors.red },
+  hypotheticalValue: { color: colors.goldInk },
 });

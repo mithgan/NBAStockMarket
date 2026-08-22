@@ -136,4 +136,3 @@ const styles = StyleSheet.create({
   // Negative marks grow leftward: anchor the fill's right edge to the midpoint.
   clampDown: { backgroundColor: colors.red, left: undefined, right: '50%' },
 });
-

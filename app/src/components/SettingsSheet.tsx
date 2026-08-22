@@ -2,7 +2,12 @@ import type { ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line } from 'react-native-svg';
 
+import { formatCompactMoney } from '../format';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import {
+  BASE_DIVIDEND_DOLLARS_PER_NET_POINT,
+  STARTING_BANKROLL,
+} from '../state/economy';
 import { useDesignVariant } from '../theme/ThemeProvider';
 import { APPEARANCE_CHOICES, VARIANTS } from '../theme/variants';
 import { rowMarker } from '../ui/domMarkers';
@@ -138,11 +143,11 @@ export function SettingsSheet({
             </View>
             <View style={styles.factRow}>
               <Text style={styles.factLabel}>Starting bankroll</Text>
-              <Text style={styles.factValue}>$140M</Text>
+              <Text style={styles.factValue}>{formatCompactMoney(STARTING_BANKROLL)}</Text>
             </View>
             <View style={styles.factRow}>
               <Text style={styles.factLabel}>Dividend rate</Text>
-              <Text style={styles.factValue}>$40K per net point</Text>
+              <Text style={styles.factValue}>{formatCompactMoney(BASE_DIVIDEND_DOLLARS_PER_NET_POINT)} per net point</Text>
             </View>
             <View style={styles.factRow}>
               <Text style={styles.factLabel}>Listing tiers</Text>

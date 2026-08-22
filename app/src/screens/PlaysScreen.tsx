@@ -6,7 +6,8 @@ import { PositionCard } from '../components/PositionCard';
 import type { Player } from '../data/types';
 import { formatCompactMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
-import { DOLLARS_PER_NET_POINT, WEEKLY_TOTAL_CLAMP_NP } from '../state/game';
+import { WEEKLY_SHORT_DOLLARS_PER_NET_POINT } from '../state/economy';
+import { WEEKLY_TOTAL_CLAMP_NP } from '../state/game';
 import { colors, fonts, labelStyle, numeric, radius, space, type, weight } from '../theme';
 import { Button, SectionHeader, Tag } from '../ui/primitives';
 
@@ -41,6 +42,7 @@ export function PlaysScreen() {
     boostTargets,
     boostSlots,
     currentWeek,
+    isSeasonComplete,
     nextGameDate,
     pendingActions,
     players,
@@ -125,7 +127,7 @@ export function PlaysScreen() {
           <Text accessibilityRole="header" style={styles.title}>PLAYS</Text>
           <Text style={styles.titleMeta}>WEEKLY INSTRUMENTS</Text>
         </View>
-        <Tag label={currentWeek ?? 'SEASON COMPLETE'} tone="gold" />
+        <Tag label={currentWeek ?? (isSeasonComplete ? 'SEASON COMPLETE' : 'WAITING FOR SCHEDULE')} tone="gold" />
       </View>
 
       <Text
@@ -149,7 +151,7 @@ export function PlaysScreen() {
       {rulesOpen ? (
         <Text style={styles.rulesCopy}>
         Shorts reserve {formatCompactMoney(2_000_000)} collateral and settle at up to
-        {' '}+/-{formatCompactMoney(WEEKLY_TOTAL_CLAMP_NP * DOLLARS_PER_NET_POINT)}. Boosts cost 0.25% and
+        {' '}+/-{formatCompactMoney(WEEKLY_TOTAL_CLAMP_NP * WEEKLY_SHORT_DOLLARS_PER_NET_POINT)}. Boosts cost 0.25% and
         add one extra signed dividend, including losses. Slots reset each Monday.
         </Text>
       ) : null}
@@ -166,10 +168,10 @@ export function PlaysScreen() {
             const markedPayout = Math.max(
               -WEEKLY_TOTAL_CLAMP_NP,
               Math.min(WEEKLY_TOTAL_CLAMP_NP, position.accruedNetPoints),
-            ) * DOLLARS_PER_NET_POINT;
+            ) * WEEKLY_SHORT_DOLLARS_PER_NET_POINT;
             return (
               <PositionCard
-                clampValue={WEEKLY_TOTAL_CLAMP_NP * DOLLARS_PER_NET_POINT}
+                clampValue={WEEKLY_TOTAL_CLAMP_NP * WEEKLY_SHORT_DOLLARS_PER_NET_POINT}
                 figureLabel="MARKED"
                 key={position.id}
                 kind="SHORT"
@@ -206,7 +208,13 @@ export function PlaysScreen() {
       <SectionHeader label="WEEKLY SHORTS" meta="UNOWNED ONLY" />
       {shortCandidates.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>{nextGameDate ? 'No eligible players right now.' : 'Replay complete.'}</Text>
+          <Text style={styles.emptyTitle}>
+            {nextGameDate
+              ? 'No eligible players right now.'
+              : isSeasonComplete
+                ? 'Replay complete.'
+                : 'Waiting for the next game date.'}
+          </Text>
           <Text style={styles.subtle}>Refresh after the next server settlement or free a slot to see more options.</Text>
         </View>
       ) : (

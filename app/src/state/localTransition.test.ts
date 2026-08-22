@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { GAME_STORAGE_KEY, type StorageAdapter } from './persistence';
+import {
+  GAME_STORAGE_KEY,
+  LOCAL_DEMO_STORAGE_KEY,
+  type StorageAdapter,
+} from './persistence';
 import {
   finalizeLocalTransition,
   inspectLocalTransition,
@@ -42,6 +46,24 @@ test('inspectLocalTransition detects a legacy save without reading its contents'
   assert.deepEqual(fixture.operations, [
     `get:${transitionMarkerKey('user:one')}`,
     `get:${GAME_STORAGE_KEY}`,
+    `get:${LOCAL_DEMO_STORAGE_KEY}`,
+  ]);
+});
+
+test('inspectLocalTransition detects the currently deployed local-demo save', async () => {
+  const fixture = memoryStorage({ [LOCAL_DEMO_STORAGE_KEY]: 'local-demo-progress' });
+
+  const result = await inspectLocalTransition(fixture.storage, 'user:one');
+
+  assert.deepEqual(result, {
+    legacySavePresent: true,
+    transitionComplete: false,
+    error: null,
+  });
+  assert.deepEqual(fixture.operations, [
+    `get:${transitionMarkerKey('user:one')}`,
+    `get:${GAME_STORAGE_KEY}`,
+    `get:${LOCAL_DEMO_STORAGE_KEY}`,
   ]);
 });
 
@@ -51,29 +73,51 @@ test('transition inspection remains required after an initial server failure', (
   assert.equal(shouldInspectLocalTransition(true, false), false);
 });
 
-test('a user-scoped marker suppresses another legacy-save prompt', async () => {
+test('a user-scoped marker skips setup only when no newer prototype save exists', async () => {
   const key = transitionMarkerKey('user/a');
-  const fixture = memoryStorage({ [key]: 'complete', [GAME_STORAGE_KEY]: 'legacy' });
+  const fixture = memoryStorage({ [key]: 'complete' });
 
   const result = await inspectLocalTransition(fixture.storage, 'user/a');
 
   assert.equal(result.transitionComplete, true);
   assert.equal(result.legacySavePresent, false);
-  assert.deepEqual(fixture.operations, [`get:${key}`]);
+  assert.deepEqual(fixture.operations, [
+    `get:${key}`,
+    `get:${GAME_STORAGE_KEY}`,
+    `get:${LOCAL_DEMO_STORAGE_KEY}`,
+  ]);
   assert.notEqual(transitionMarkerKey('user/a'), transitionMarkerKey('user/b'));
 });
 
-test('finalizeLocalTransition clears the legacy save before writing the marker', async () => {
-  const fixture = memoryStorage({ [GAME_STORAGE_KEY]: 'legacy' });
+test('a prototype save created after an earlier transition is never silently orphaned', async () => {
+  const key = transitionMarkerKey('user/a');
+  const fixture = memoryStorage({
+    [key]: 'complete',
+    [LOCAL_DEMO_STORAGE_KEY]: 'newer-local-demo-progress',
+  });
+
+  const result = await inspectLocalTransition(fixture.storage, 'user/a');
+
+  assert.equal(result.transitionComplete, false);
+  assert.equal(result.legacySavePresent, true);
+});
+
+test('finalizeLocalTransition clears every prototype save before writing the marker', async () => {
+  const fixture = memoryStorage({
+    [GAME_STORAGE_KEY]: 'legacy',
+    [LOCAL_DEMO_STORAGE_KEY]: 'local-demo-progress',
+  });
 
   const result = await finalizeLocalTransition(fixture.storage, 'alice');
 
   assert.deepEqual(result, { complete: true, error: null });
   assert.deepEqual(fixture.operations, [
     `remove:${GAME_STORAGE_KEY}`,
+    `remove:${LOCAL_DEMO_STORAGE_KEY}`,
     `set:${transitionMarkerKey('alice')}:complete`,
   ]);
   assert.equal(fixture.values.has(GAME_STORAGE_KEY), false);
+  assert.equal(fixture.values.has(LOCAL_DEMO_STORAGE_KEY), false);
   assert.equal(fixture.values.get(transitionMarkerKey('alice')), 'complete');
 });
 

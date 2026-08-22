@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Polygon, Stop, Text as SvgText } from 'react-native-svg';
 
-import { nearestPointIndex } from '../data/chartGeometry';
+import { baselineYPosition, nearestPointIndex } from '../data/chartGeometry';
 import type { ChartCoordinate } from '../data/marketPresentation';
 import {
   availablePortfolioRanges,
@@ -19,7 +19,8 @@ import {
 } from '../format';
 import { useChartSurface } from '../hooks/useChartSurface';
 import { useCountUp } from '../hooks/useCountUp';
-import { STARTING_CASH, type PortfolioPoint } from '../state/game';
+import { STARTING_BANKROLL } from '../state/economy';
+import type { PortfolioPoint } from '../state/game';
 import { colors, fonts, heroNumber, labelStyle, numeric, space, type, weight } from '../theme';
 
 const DEFAULT_CHART_HEIGHT = 168;
@@ -74,7 +75,7 @@ export function PortfolioHistoryChart({
   // (account reset); fall back to the always-available full season.
   const activeRange = ranges.includes(range) ? range : 'Season';
   const { visible, baseline } = useMemo(
-    () => selectPortfolioRange(points, activeRange, STARTING_CASH),
+    () => selectPortfolioRange(points, activeRange, STARTING_BANKROLL),
     [activeRange, points],
   );
   const { coordinates, linePath, areaPath } = useMemo(() => {
@@ -94,16 +95,10 @@ export function PortfolioHistoryChart({
   scrubGeometry.current = { coordinates, width };
   // Sparkline discipline (after the declutter research): the plot keeps only
   // the line, its fill, the dashed start-of-range rule, and the end value.
-  const baselineY = useMemo(() => {
-    const values = visible.map((point) => point.totalValue);
-    if (values.length === 0) return null;
-    const high = Math.max(...values);
-    const low = Math.min(...values);
-    const span = high - low;
-    if (span === 0) return height / 2;
-    if (baseline <= low || baseline >= high) return null;
-    return 12 + ((high - baseline) / span) * (height - 24);
-  }, [baseline, height, visible]);
+  const baselineY = useMemo(
+    () => baselineYPosition(visible.map((point) => point.totalValue), baseline, height),
+    [baseline, height, visible],
+  );
   const firstDate = visible[0]?.date ?? null;
   const lastDate = visible.at(-1)?.date ?? null;
   const panResponder = useMemo(
@@ -120,7 +115,7 @@ export function PortfolioHistoryChart({
   );
   const scrubPoint = scrubIndex === null ? null : visible[scrubIndex] ?? null;
   const scrubCoordinate = scrubIndex === null ? null : coordinates[scrubIndex] ?? null;
-  const latestValue = totalValue ?? visible.at(-1)?.totalValue ?? STARTING_CASH;
+  const latestValue = totalValue ?? visible.at(-1)?.totalValue ?? STARTING_BANKROLL;
   const shownValue = scrubPoint ? scrubPoint.totalValue : latestValue;
   const change = scrubPoint
     ? scrubPoint.totalValue - baseline
@@ -141,6 +136,18 @@ export function PortfolioHistoryChart({
         <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={styles.heroValue}>
           {formatCompactMoney(animatedValue)}
         </Text>
+        {freeCash === undefined ? null : (
+          <Text
+            accessibilityLabel={`${formatMoney(freeCash)} cash available to spend`}
+            maxFontSizeMultiplier={1.4}
+            numberOfLines={1}
+            style={styles.emptyBalanceLine}
+          >
+            <Text style={styles.balanceStrong}>{formatCompactMoney(freeCash)}</Text>
+            {' cash available'}
+          </Text>
+        )}
+        {beforePlot}
         <Text style={styles.emptyTitle}>Your chart starts after the first replay day.</Text>
         <Text style={styles.emptyText}>
           Buy a player, then settle the next date to see your portfolio move.
@@ -150,11 +157,7 @@ export function PortfolioHistoryChart({
   }
 
   return (
-    <View
-      accessible
-      accessibilityLabel={`Portfolio value ${formatMoney(latestValue)}. Over the selected range, ${formatSignedMoney(portfolioPeriodChange(visible, baseline))} across ${visible.length} settled dates.`}
-      style={styles.block}
-    >
+    <View style={styles.block}>
       <View style={styles.hero}>
         <Text
           accessibilityLabel={`Portfolio value ${formatMoney(shownValue)}`}
@@ -214,6 +217,8 @@ export function PortfolioHistoryChart({
         </Text>
       )}
       <View
+        accessible
+        accessibilityLabel={`Portfolio value ${formatMoney(latestValue)}. Over the selected range, ${formatSignedMoney(portfolioPeriodChange(visible, baseline))} across ${visible.length} settled dates.`}
         nativeID="scrub-plot-portfolio"
         onLayout={onLayout}
         ref={ref}
@@ -361,6 +366,12 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
   },
   balanceStrong: { color: colors.text, fontWeight: weight.heavy },
+  emptyBalanceLine: {
+    ...numeric,
+    color: colors.faint,
+    fontSize: type.body,
+    fontWeight: weight.medium,
+  },
   statDivider: {
     width: 1,
     alignSelf: 'stretch',

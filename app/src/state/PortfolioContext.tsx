@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 import {
   createContext,
   useCallback,
@@ -13,9 +14,11 @@ import {
 import { MarketApiClient, MarketApiError } from '../api/client';
 import type { ServerBootstrap, ServerPortfolio } from '../api/contracts';
 import { settlementRecapSince } from '../data/dividendMetrics';
+import { writeSettlementMarker } from '../data/settlementMarker';
 import type { TrendPoint } from '../data/trendPresentation';
 import type { Player } from '../data/types';
 import { ActionLock } from './actionLock';
+import { isAppResume } from './appResume';
 import { formatCompactMoney, formatCompactSignedMoney, formatSignedMoney } from '../format';
 import { type GameLeaderboardEntry, type GameState, getGameSummary, type TradeSide } from './game';
 import {
@@ -50,6 +53,7 @@ interface PortfolioContextValue {
   state: GameState | null;
   players: Player[];
   leaderboard: GameLeaderboardEntry[];
+  settlements: ServerPresentationState['settlements'];
   summary: ReturnType<typeof getGameSummary> | null;
   displayName: string | null;
   message: string | null;
@@ -61,6 +65,7 @@ interface PortfolioContextValue {
   isRefreshing: boolean;
   isTransitioning: boolean;
   isGameplayReady: boolean;
+  isSeasonComplete: boolean;
   canAdvanceDay: boolean;
   seasonReplayProgress: SeasonReplayProgress | null;
   pendingActions: ReadonlySet<string>;
@@ -97,6 +102,11 @@ interface ReconciledActionResult {
   priceUpdate?: MutationPriceUpdate;
 }
 
+interface SnapshotWithRecap {
+  bootstrap: ServerBootstrap;
+  recapMessage: string | null;
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof MarketApiError) return error.message;
   if (error instanceof SeasonReplayError) return error.message;
@@ -131,6 +141,7 @@ export function PortfolioProvider({
   const reconciliationCoordinator = useRef(
     new MutationReconciliationCoordinator(actionLock.current),
   );
+  const appState = useRef(AppState.currentState);
 
   useEffect(() => () => {
     mounted.current = false;
@@ -146,11 +157,13 @@ export function PortfolioProvider({
     errorMode = 'blocking',
     showInitialLoader,
     showRefreshIndicator = !showInitialLoader,
+    updateSettlementMarker = true,
   }: {
     checkLocalTransition: boolean;
     errorMode?: 'blocking' | 'nonblocking' | 'confirmed-reconciliation' | 'ambiguous-reconciliation';
     showInitialLoader: boolean;
     showRefreshIndicator?: boolean;
+    updateSettlementMarker?: boolean;
   }): Promise<ServerBootstrap | null> => {
     const generation = snapshotGeneration.current.begin();
     if (showInitialLoader) setIsLoading(true);
@@ -173,9 +186,11 @@ export function PortfolioProvider({
       if (!mounted.current || !snapshotGeneration.current.isCurrent(generation)) return null;
       setServerError(null);
       installBootstrap(bootstrap);
-      if (bootstrap.game.last_settled_date) {
-        void AsyncStorage.setItem(
+      if (updateSettlementMarker) {
+        void writeSettlementMarker(
+          AsyncStorage,
           `nbsm:lastSeenSettled:${userId}`,
+          previous?.game.last_settled_date ?? null,
           bootstrap.game.last_settled_date,
         ).catch(() => {});
       }
@@ -211,39 +226,60 @@ export function PortfolioProvider({
     }
   }, [apiClient, installBootstrap, userId]);
 
+  const loadSnapshotWithRecap = useCallback(async ({
+    checkLocalTransition,
+    errorMode = 'blocking',
+    showInitialLoader,
+  }: {
+    checkLocalTransition: boolean;
+    errorMode?: 'blocking' | 'nonblocking' | 'confirmed-reconciliation' | 'ambiguous-reconciliation';
+    showInitialLoader: boolean;
+  }): Promise<SnapshotWithRecap | null> => {
+    const seenKey = `nbsm:lastSeenSettled:${userId}`;
+    let lastSeen: string | null = null;
+    try {
+      lastSeen = await AsyncStorage.getItem(seenKey);
+    } catch {
+      lastSeen = null;
+    }
+    const bootstrap = await loadSnapshot({
+      checkLocalTransition,
+      errorMode,
+      showInitialLoader,
+      updateSettlementMarker: false,
+    });
+    if (!bootstrap || !mounted.current) return null;
+
+    const latest = bootstrap.game.last_settled_date;
+    let recapMessage: string | null = null;
+    if (latest && lastSeen && latest > lastSeen) {
+      const recap = settlementRecapSince(bootstrap.settlements, lastSeen, latest);
+      if (recap.nights > 0) {
+        const span = `${recap.nights} ${recap.nights === 1 ? 'night' : 'nights'}`;
+        recapMessage = recap.paid === 0
+          ? `While you were away: ${span} settled.`
+          : recap.paid > 0
+            ? `While you were away: your players paid you ${formatCompactSignedMoney(recap.paid)} across ${span}.`
+            : `While you were away: your players cost you ${formatCompactMoney(Math.abs(recap.paid))} across ${span}.`;
+      }
+    }
+    try {
+      await writeSettlementMarker(AsyncStorage, seenKey, lastSeen, latest);
+    } catch {
+      // Storage is best-effort; the greeting is never worth an error state.
+    }
+    return { bootstrap, recapMessage };
+  }, [loadSnapshot, userId]);
+
   useEffect(() => {
     void (async () => {
-      // While you were away: nights that settled since this device last saw
-      // the clock. Read the marker BEFORE the load — loadSnapshot refreshes
-      // it, so reading afterwards would always compare the clock to itself.
-      const seenKey = `nbsm:lastSeenSettled:${userId}`;
-      let lastSeen: string | null = null;
-      try {
-        lastSeen = await AsyncStorage.getItem(seenKey);
-      } catch {
-        lastSeen = null;
-      }
-      const bootstrap = await loadSnapshot({ checkLocalTransition: true, showInitialLoader: true });
-      if (!bootstrap || !mounted.current) return;
-      const latest = bootstrap.game.last_settled_date;
-      try {
-        if (latest && lastSeen && latest > lastSeen) {
-          const recap = settlementRecapSince(bootstrap.activity.items, lastSeen);
-          if (recap.nights > 0 && mounted.current) {
-            const span = `${recap.nights} ${recap.nights === 1 ? 'night' : 'nights'}`;
-            setMessage(recap.paid === 0
-              ? `While you were away: ${span} settled.`
-              : recap.paid > 0
-                ? `While you were away: your players paid you ${formatCompactSignedMoney(recap.paid)} across ${span}.`
-                : `While you were away: your players cost you ${formatCompactMoney(Math.abs(recap.paid))} across ${span}.`);
-          }
-        }
-        if (latest) await AsyncStorage.setItem(seenKey, latest);
-      } catch {
-        // Storage is best-effort; the greeting is never worth an error state.
-      }
+      const result = await loadSnapshotWithRecap({
+        checkLocalTransition: true,
+        showInitialLoader: true,
+      });
+      if (result?.recapMessage && mounted.current) setMessage(result.recapMessage);
     })();
-  }, [loadSnapshot]);
+  }, [loadSnapshotWithRecap]);
 
   const updatePendingActions = useCallback(() => {
     if (mounted.current) setPendingActions(actionLock.current.snapshot());
@@ -260,7 +296,7 @@ export function PortfolioProvider({
     if (mounted.current) setMessage(null);
     let succeeded = false;
     try {
-      const refreshed = await loadSnapshot({
+      const result = await loadSnapshotWithRecap({
         checkLocalTransition: shouldInspectLocalTransition(
           localTransitionInspected,
           transitionRequired,
@@ -276,16 +312,31 @@ export function PortfolioProvider({
                 : 'blocking',
         showInitialLoader: false,
       });
+      const refreshed = result?.bootstrap ?? null;
       if (refreshed && mounted.current) {
         succeeded = true;
-        setMessage(serverRefreshNotice(refreshed));
+        setMessage(result?.recapMessage ?? serverRefreshNotice(refreshed));
       }
       return refreshed !== null;
     } finally {
       reconciliationCoordinator.current.finishRefresh(refreshAttempt, succeeded);
       updatePendingActions();
     }
-  }, [loadSnapshot, localTransitionInspected, transitionRequired, updatePendingActions]);
+  }, [loadSnapshotWithRecap, localTransitionInspected, transitionRequired, updatePendingActions]);
+
+  useEffect(() => {
+    if (isLoading || bootstrapRef.current === null) return undefined;
+    appState.current = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const previousState = appState.current;
+      appState.current = nextState;
+      if (!isAppResume(previousState, nextState)) return;
+      // refreshData owns the account refresh/mutation gates, so a foreground
+      // event cannot invalidate an in-flight trade reconciliation snapshot.
+      void refreshData();
+    });
+    return () => subscription.remove();
+  }, [isLoading, refreshData]);
 
   const runReconciledAction = useCallback(async (
     key: string,
@@ -353,10 +404,10 @@ export function PortfolioProvider({
     }
   }, [loadSnapshot, updatePendingActions]);
 
-  const runFullRefreshAction = useCallback(async (
+  const runFullRefreshAction = useCallback(async <T,>(
     key: string,
-    action: () => Promise<unknown>,
-    successMessage: string,
+    action: () => Promise<T>,
+    successMessage: string | ((result: T) => string),
   ): Promise<boolean> => {
     if (!reconciliationCoordinator.current.beginMutation(
       () => actionLock.current.acquire('account-mutation'),
@@ -369,7 +420,7 @@ export function PortfolioProvider({
     setMessage(null);
     let reconciliationReason: 'confirmed-global' | 'ambiguous' | null = null;
     try {
-      await action();
+      const result = await action();
       const refreshed = await loadSnapshot({
         checkLocalTransition: false,
         showInitialLoader: false,
@@ -378,7 +429,11 @@ export function PortfolioProvider({
         reconciliationReason = 'confirmed-global';
         return false;
       }
-      if (mounted.current) setMessage(successMessage);
+      if (mounted.current) {
+        setMessage(typeof successMessage === 'function'
+          ? successMessage(result)
+          : successMessage);
+      }
       return true;
     } catch (error) {
       reconciliationReason = mutationOutcomeMayHaveCommitted(error)
@@ -471,9 +526,14 @@ export function PortfolioProvider({
   ), [apiClient, currentQuoteVersion, runReconciledAction]);
 
   const advanceDay = useCallback(async () => {
-    const nextGameDate = bootstrapRef.current?.game.next_game_date;
+    const game = bootstrapRef.current?.game;
+    const nextGameDate = game?.next_game_date;
     if (!nextGameDate) {
-      if (mounted.current) setMessage('The historical replay is complete.');
+      if (mounted.current) {
+        setMessage(game?.is_complete
+          ? 'The historical replay is complete.'
+          : 'No game date is ready to settle yet. Refresh after the schedule updates.');
+      }
       return false;
     }
     return runFullRefreshAction(
@@ -484,9 +544,14 @@ export function PortfolioProvider({
   }, [apiClient, runFullRefreshAction]);
 
   const advanceSeason = useCallback(async () => {
-    const nextGameDate = bootstrapRef.current?.game.next_game_date;
+    const game = bootstrapRef.current?.game;
+    const nextGameDate = game?.next_game_date;
     if (!nextGameDate) {
-      if (mounted.current) setMessage('The historical replay is complete.');
+      if (mounted.current) {
+        setMessage(game?.is_complete
+          ? 'The historical replay is complete.'
+          : 'No game date is ready to settle yet. Refresh after the schedule updates.');
+      }
       return false;
     }
     setSeasonReplayProgress(null);
@@ -500,7 +565,9 @@ export function PortfolioProvider({
             if (mounted.current) setSeasonReplayProgress(progress);
           },
         ),
-        'The historical season is fully settled. Prices and portfolios are updated.',
+        (summary) => summary.isComplete
+          ? 'The historical season is fully settled. Prices and portfolios are updated.'
+          : `${summary.completedDates} game ${summary.completedDates === 1 ? 'date was' : 'dates were'} settled. Waiting for more schedule data.`,
       );
     } finally {
       if (mounted.current) setSeasonReplayProgress(null);
@@ -521,7 +588,11 @@ export function PortfolioProvider({
     try {
       let expected = bootstrapRef.current?.game.next_game_date ?? null;
       if (!expected) {
-        if (mounted.current) setMessage('The season replay is already complete.');
+        if (mounted.current) {
+          setMessage(bootstrapRef.current?.game.is_complete
+            ? 'The season replay is already complete.'
+            : 'No game date is ready to settle yet. Refresh after the schedule updates.');
+        }
         return false;
       }
       // Settle every game date inside the calendar span, so "+1 WEEK" collects
@@ -652,6 +723,7 @@ export function PortfolioProvider({
     state,
     players,
     leaderboard: presentation?.leaderboard ?? [],
+    settlements: presentation?.settlements ?? [],
     summary,
     displayName: presentation?.displayName ?? null,
     message,
@@ -663,6 +735,7 @@ export function PortfolioProvider({
     isRefreshing,
     isTransitioning,
     isGameplayReady,
+    isSeasonComplete: presentation?.isComplete ?? false,
     canAdvanceDay: (presentation?.canAdvanceDay ?? false) || apiClient.canAdvanceSeason,
     seasonReplayProgress,
     pendingActions,

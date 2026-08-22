@@ -3,10 +3,10 @@ import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { MarketApiClient } from './src/api/client';
-import { resolvePublicAppConfig } from './src/api/config';
-import { useOptionalAuth } from './src/auth/AuthContext';
-import './src/auth/AuthScreen';
+import { MarketApiClient } from './src/api/client';
+import { resolvePublicAppConfig, type PublicAppConfig } from './src/api/config';
+import { AuthProvider, useAuth, useOptionalAuth } from './src/auth/AuthContext';
+import { AuthScreen } from './src/auth/AuthScreen';
 import { seasonLabelFor } from './src/data/calendar';
 import { SeasonControl } from './src/components/SeasonControl';
 import { SettingsButton, SettingsSheet } from './src/components/SettingsSheet';
@@ -17,7 +17,6 @@ import { PlaysScreen } from './src/screens/PlaysScreen';
 import { DesignPreviewScreen } from './src/screens/DesignPreviewScreen';
 import { PortfolioScreen } from './src/screens/PortfolioScreen';
 import { WatchlistScreen } from './src/screens/WatchlistScreen';
-import { LocalMarketClient } from './src/api/localClient';
 import { PortfolioProvider, usePortfolio } from './src/state/PortfolioContext';
 import { ThemeProvider, useDesignVariant } from './src/theme/ThemeProvider';
 import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
@@ -224,7 +223,7 @@ function AppBody() {
     }
     return (
       <>
-        {activeTab === 'portfolio' && <PortfolioScreen />}
+        {activeTab === 'portfolio' && <PortfolioScreen onOpenMarket={() => setActiveTab('market')} />}
         {activeTab === 'market' && <MarketScreen />}
         {activeTab === 'watchlist' && <WatchlistScreen />}
         {activeTab === 'plays' && <PlaysScreen />}
@@ -318,16 +317,38 @@ function AppBody() {
   );
 }
 
-/**
- * The public build is a self-contained demo: a local market client seeded from
- * the committed season data, no server account required.
- */
-function LocalDemoApp() {
-  const client = useMemo(() => new LocalMarketClient(), []);
+function AuthenticatedRuntime({ config }: { config: PublicAppConfig }) {
+  const { getAccessToken, isLoading, user } = useAuth();
+  const client = useMemo(() => new MarketApiClient({
+    baseUrl: config.apiUrl,
+    apiPrefix: '',
+    adminAuthMode: 'bearer',
+    expectedUserId: user?.id ?? '',
+    getAccessToken,
+  }), [config.apiUrl, getAccessToken, user?.id]);
+
+  if (isLoading) {
+    return (
+      <CenteredState
+        busy
+        copy="Restoring your saved sign-in securely."
+        title="Checking your session"
+      />
+    );
+  }
+  if (!user) return <AuthScreen />;
   return (
-    <PortfolioProvider apiClient={client as unknown as MarketApiClient} userId="local-demo">
+    <PortfolioProvider apiClient={client} key={user.id} userId={user.id}>
       <AppBody />
     </PortfolioProvider>
+  );
+}
+
+function ConfiguredApp({ config }: { config: PublicAppConfig }) {
+  return (
+    <AuthProvider config={config}>
+      <AuthenticatedRuntime config={config} />
+    </AuthProvider>
   );
 }
 
@@ -343,7 +364,6 @@ function isDesignPreviewRoute(): boolean {
 }
 
 export default function App() {
-  resolvePublicAppConfig();
   if (isDesignPreviewRoute()) {
     return (
       <ThemeProvider>
@@ -358,11 +378,19 @@ export default function App() {
       </ThemeProvider>
     );
   }
+  const configResult = resolvePublicAppConfig();
   return (
     <ThemeProvider>
       <SafeAreaProvider style={styles.provider}>
         <StatusBar style="light" />
-        <LocalDemoApp />
+        {configResult.config ? (
+          <ConfiguredApp config={configResult.config} />
+        ) : (
+          <CenteredState
+            copy={`${configResult.error} Set the three EXPO_PUBLIC app variables before starting Expo.`}
+            title="App configuration missing"
+          />
+        )}
       </SafeAreaProvider>
     </ThemeProvider>
   );

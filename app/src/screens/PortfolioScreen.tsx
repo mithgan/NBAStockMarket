@@ -15,10 +15,11 @@ import {
 import type { Player } from '../data/types';
 import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePortfolio } from '../state/PortfolioContext';
-import { STARTING_CASH, type ActivityEvent } from '../state/game';
+import type { ActivityEvent } from '../state/game';
 import { useDesignVariant } from '../theme/ThemeProvider';
 import { colors, fonts, headingStyle, labelStyle, numeric, radius, space, type, weight } from '../theme';
 import { rowMarker } from '../ui/domMarkers';
+import { Button } from '../ui/primitives';
 import { PlayerDetail } from './MarketScreen';
 
 /**
@@ -173,7 +174,7 @@ function NightLogView({ activity, playerById, playerTrends, onClose }: {
   );
 }
 
-export function PortfolioScreen() {
+export function PortfolioScreen({ onOpenMarket }: { onOpenMarket: () => void }) {
   const { variant } = useDesignVariant();
   const {
     latestSettledDate,
@@ -182,6 +183,7 @@ export function PortfolioScreen() {
     nextGameProjections,
     players,
     playerTrends,
+    settlements,
     state,
     summary,
   } = usePortfolio();
@@ -198,15 +200,29 @@ export function PortfolioScreen() {
   const playerById = new Map(players.map((player) => [player.id, player]));
   const detailPlayer = detailPlayerId ? playerById.get(detailPlayerId) ?? null : null;
   const recentActivity = [...state.activity].reverse().slice(0, 10);
-  // What each player has actually paid THIS account: dated ledger entries
-  // only (settlement payouts), so a mid-season buy never claims payouts from
-  // nights the account was not holding him.
-  const receivedByPlayer = new Map<string, number>();
-  for (const entry of state.activity) {
-    if (entry.date === null) continue;
-    receivedByPlayer.set(entry.playerId, (receivedByPlayer.get(entry.playerId) ?? 0) + entry.cashDelta);
-  }
-
+  const latestSettlement = settlements.find(
+    (settlement) => settlement.game_date === latestSettledDate,
+  );
+  const latestContributions = nightContributions(
+    state.activity,
+    playerById,
+    playerTrends,
+    latestSettledDate,
+  );
+  const contributionNet = latestContributions.reduce(
+    (total, contribution) => total + contribution.dividend,
+    0,
+  );
+  const latestAccountDividend = latestSettlement
+    ? latestSettlement.current_user_dividend_cents / 100
+    : contributionNet;
+  // Activity is paginated. If the visible detail does not reconcile to the
+  // authoritative settlement total, keep the correct total and omit partial
+  // player attribution rather than presenting an incomplete ledger as exact.
+  const reconciledContributions = latestSettlement
+    && Math.abs(contributionNet - latestAccountDividend) >= 0.005
+    ? []
+    : latestContributions;
   // Anticipation from the public schedule, with the stakes attached: the
   // projection each of YOUR players must beat to pay you.
   const heldIds = new Set(state.holdings.map((holding) => holding.player_id));
@@ -216,7 +232,7 @@ export function PortfolioScreen() {
       const surname = playerById.get(id)?.name.split(' ').at(-1);
       if (!surname) return null;
       const needs = nextGameProjections[id];
-      return needs === undefined ? surname : `${surname} needs ${needs.toFixed(1)}`;
+      return needs === undefined ? surname : `${surname} must beat ${needs.toFixed(1)}`;
     })
     .filter((entry): entry is string => entry !== null);
   const upcomingLine = nextGameDate && upcomingStakes.length > 0
@@ -257,16 +273,21 @@ export function PortfolioScreen() {
         // what the night did to your money, so it renders before the plot —
         // and the plot itself compresses on a phone to keep it above the fold.
         beforePlot={
-          latestSettledDate ? (
+          latestSettlement ? (
             <SettlementSummary
-              contributions={nightContributions(state.holdings, playerById, playerTrends, latestSettledDate)}
+              accountNet={latestAccountDividend}
+              contributions={reconciledContributions}
               onOpenLog={() => setNightLogOpen(true)}
-              settledDate={latestSettledDate}
+              settledDate={latestSettlement.game_date}
               upcoming={upcomingLine}
             />
+          ) : upcomingLine ? (
+            <Text numberOfLines={1} style={styles.upcomingOnly}>{upcomingLine}</Text>
           ) : null
         }
-        earnings={latestSettledDate ? earningsWindows(state.activity, latestSettledDate) : null}
+        earnings={latestSettlement
+          ? earningsWindows(settlements, latestSettlement.game_date)
+          : null}
         freeCash={summary.freeCash}
         height={width < 900 ? Math.min(variant.chartHeight, 112) : variant.chartHeight}
         points={state.portfolioHistory}
@@ -287,11 +308,19 @@ export function PortfolioScreen() {
             <Text style={styles.subtle}>
               Open Market to buy one whole-player share. Fees are included at checkout.
             </Text>
+            <Button
+              accessibilityLabel="Open the player market"
+              label="OPEN MARKET"
+              onPress={onOpenMarket}
+            />
           </View>
         ) : (
           <View>
             {[...summary.holdings]
-              .sort((a, b) => (receivedByPlayer.get(b.player_id) ?? 0) - (receivedByPlayer.get(a.player_id) ?? 0))
+              .sort((a, b) => (
+                (b.seasonDividends ?? Number.NEGATIVE_INFINITY)
+                - (a.seasonDividends ?? Number.NEGATIVE_INFINITY)
+              ))
               .map((holding) => {
               const player = playerById.get(holding.player_id);
               if (!player) return null;
@@ -307,7 +336,7 @@ export function PortfolioScreen() {
                     unrealizedPnl: holding.unrealizedPnl,
                   }}
                   onPress={() => setDetailPlayerId(player.id)}
-                  received={receivedByPlayer.get(holding.player_id) ?? 0}
+                  received={holding.seasonDividends}
                   trend={showRowTrends ? selectTrendRange(settled, 'L15') : undefined}
                 />
               );
@@ -382,6 +411,14 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
   },
   cashLineStrong: { color: colors.text, fontWeight: weight.heavy },
+  upcomingOnly: {
+    color: colors.faint,
+    fontFamily: fonts.body,
+    fontSize: type.label,
+    fontWeight: weight.medium,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+  },
   rosterRegion: {
     backgroundColor: colors.surface,
     borderTopColor: colors.border,

@@ -5,17 +5,18 @@ import { priceChangePercent, recentForm } from './marketPresentation';
 
 /**
  * Money-first ordering (after "From Impact to Winning"): the market ranks by
- * what players PAY, not by prices that never move in this world. 'pays' is
+ * what players PAY while preserving live market movement. 'pays' is
  * the rate over the screen's window picker; 'yield' is the season's payout
- * per dollar of price — the value-hunting sort. 'move' died with the flat
- * prices it measured: a number that is always 0.0% cannot rank anything.
+ * per dollar of price — the value-hunting sort. 'move' ranks the trade-driven
+ * change from opening price.
  */
-export type MarketSort = 'pays' | 'yield' | 'value' | 'form' | 'name';
+export type MarketSort = 'pays' | 'yield' | 'move' | 'value' | 'form' | 'name';
 export type MarketFilter = 'all' | 'held' | 'affordable';
 
 export const MARKET_SORTS: { key: MarketSort; label: string; hint: string }[] = [
   { key: 'pays', label: 'Pays', hint: 'Sort by payout per game over the window' },
   { key: 'yield', label: 'Yield', hint: 'Sort by season payout per dollar of price' },
+  { key: 'move', label: 'Move', hint: 'Sort by price change since the market opened' },
   { key: 'value', label: 'Price', hint: 'Sort by highest price' },
   { key: 'form', label: 'Form', hint: 'Sort by best recent form versus expected' },
   { key: 'name', label: 'A-Z', hint: 'Sort players alphabetically' },
@@ -148,6 +149,8 @@ export function buildMarketRows({
       return rows.sort(descendingBy((row) => row.seasonYield));
     case 'form':
       return rows.sort(descendingBy((row) => row.formSurprise));
+    case 'move':
+      return rows.sort(descendingBy((row) => row.changePercent));
     case 'value':
       return rows.sort(descendingBy((row) => row.currentPrice));
     case 'pays':

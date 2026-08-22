@@ -48,6 +48,12 @@ test('value sort ranks by live price, not the opening listing', () => {
   assert.equal(rows[0].currentPrice, 27_000_000);
 });
 
+test('move sort ranks by trade-driven change from opening price', () => {
+  const rows = buildMarketRows({ ...baseInput, sort: 'move' });
+  assert.deepEqual(rows.map((row) => row.player.id), ['a', 'c', 'b']);
+  assert.equal(rows[0].changePercent, 20);
+});
+
 test('pays sort ranks by payout per game and pushes unplayed players last', () => {
   const rows = buildMarketRows({ ...baseInput, sort: 'pays' });
   // a pays +$200K per game, b pays -$120K, c has never played.

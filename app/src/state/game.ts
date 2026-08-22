@@ -122,6 +122,7 @@ export interface GameSummaryHolding extends GameHolding {
   costBasis: number;
   marketValue: number;
   unrealizedPnl: number;
+  seasonDividends: number | null;
 }
 
 export interface GameSummary {
@@ -476,6 +477,7 @@ export function getGameSummary(
       costBasis,
       marketValue: currentPrice,
       unrealizedPnl: currentPrice - costBasis,
+      seasonDividends: null,
     };
   });
   const heldMarketValue = holdings.reduce(

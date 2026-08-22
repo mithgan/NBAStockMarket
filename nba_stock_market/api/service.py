@@ -223,7 +223,7 @@ class MarketService:
         return {
             "market": self._bootstrap_market(session, account),
             "portfolio": self._portfolio_payload(session, account),
-            "game": self._game_state_payload(state),
+            "game": self._game_state_payload(session, state),
             "activity": self._bootstrap_activity(session, account),
             "portfolio_history": self._bootstrap_portfolio_history(
                 session,
@@ -691,7 +691,7 @@ class MarketService:
         with self.database.session() as session, session.begin():
             self._ensure_account(session, principal)
             state = self._game_state(session)
-            return self._game_state_payload(state)
+            return self._game_state_payload(session, state)
 
     def settlement_history(
         self,
@@ -1678,7 +1678,7 @@ class MarketService:
         session: Session,
         account: AccountRow,
         *,
-        limit: int = 30,
+        limit: int = 250,
     ) -> list[dict[str, object]]:
         settlements = session.scalars(
             select(SettlementRow)
@@ -2492,7 +2492,25 @@ class MarketService:
         }
 
     @staticmethod
-    def _game_state_payload(state: GameStateRow) -> dict[str, object]:
+    def _game_state_payload(
+        session: Session,
+        state: GameStateRow,
+    ) -> dict[str, object]:
+        next_game_rows = (
+            session.execute(
+                select(
+                    ReplayEventRow.player_id,
+                    ReplayEventRow.expected_net_points_micros,
+                )
+                .where(
+                    ReplayEventRow.game_date == state.next_game_date,
+                    ReplayEventRow.projected_minutes_micros.is_not(None),
+                )
+                .order_by(ReplayEventRow.player_id)
+            ).all()
+            if state.next_game_date is not None
+            else []
+        )
         return {
             "season_id": state.season_id,
             "last_settled_date": (
@@ -2505,6 +2523,14 @@ class MarketService:
                 if state.next_game_date is not None
                 else None
             ),
+            "next_game_player_ids": [row.player_id for row in next_game_rows],
+            "next_game_projections": [
+                {
+                    "player_id": row.player_id,
+                    "expected_net_points_micros": row.expected_net_points_micros,
+                }
+                for row in next_game_rows
+            ],
             "is_complete": state.next_game_date is None,
             "version": state.version,
         }
@@ -2594,6 +2620,24 @@ class MarketService:
             .where(HoldingRow.account_id == account.id)
             .order_by(PlayerListingRow.name)
         ).all()
+        state = self._game_state(session)
+        season_dividends = dict(
+            session.execute(
+                select(
+                    DividendRow.player_id,
+                    func.coalesce(func.sum(DividendRow.amount_cents), 0),
+                )
+                .join(
+                    SettlementRow,
+                    SettlementRow.game_date == DividendRow.game_date,
+                )
+                .where(
+                    DividendRow.account_id == account.id,
+                    SettlementRow.season_id == state.season_id,
+                )
+                .group_by(DividendRow.player_id)
+            ).all()
+        )
         holdings = [
             {
                 "player_id": player.id,
@@ -2606,6 +2650,7 @@ class MarketService:
                     holding.shares * player.current_price_cents
                     - holding.average_cost_cents
                 ),
+                "season_dividend_cents": int(season_dividends.get(player.id, 0)),
             }
             for holding, player in rows
         ]

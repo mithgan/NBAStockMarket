@@ -51,19 +51,20 @@ export interface SettlementRecap {
 
 /**
  * What settled after `sinceDate` did to this account — the while-you-were-away
- * greeting's arithmetic, straight from the server activity ledger.
+ * greeting's arithmetic, straight from authoritative settlement summaries.
  */
 export function settlementRecapSince(
-  activity: readonly { game_date: string | null; amount_cents: number }[],
+  settlements: readonly { game_date: string; current_user_dividend_cents: number }[],
   sinceDate: string | null,
+  throughDate: string,
 ): SettlementRecap {
   const dates = new Set<string>();
   let cents = 0;
-  for (const entry of activity) {
-    if (entry.game_date === null) continue;
+  for (const entry of settlements) {
     if (sinceDate !== null && entry.game_date <= sinceDate) continue;
+    if (entry.game_date > throughDate) continue;
     dates.add(entry.game_date);
-    cents += entry.amount_cents;
+    cents += entry.current_user_dividend_cents;
   }
   return { paid: cents / 100, nights: dates.size };
 }
@@ -82,22 +83,22 @@ function isoDaysBefore(date: string, days: number): string {
 }
 
 /**
- * The account's standing daily and weekly result, from the activity ledger —
- * the two numbers the top-of-screen readout carries. Dated entries only;
- * trades are dateless and never counted.
+ * The account's standing daily and weekly dividend result, from authoritative
+ * settlement summaries. Boosts, shorts, fees, refunds, and trades are excluded.
  */
 export function earningsWindows(
-  activity: readonly { date: string | null; cashDelta: number }[],
+  settlements: readonly { game_date: string; current_user_dividend_cents: number }[],
   latestSettledDate: string | null,
 ): EarningsWindows {
   if (latestSettledDate === null) return { tonight: 0, week: 0 };
   const weekStart = isoDaysBefore(latestSettledDate, 6);
   let tonight = 0;
   let week = 0;
-  for (const entry of activity) {
-    if (entry.date === null || entry.date > latestSettledDate) continue;
-    if (entry.date === latestSettledDate) tonight += entry.cashDelta;
-    if (entry.date >= weekStart) week += entry.cashDelta;
+  for (const settlement of settlements) {
+    if (settlement.game_date > latestSettledDate) continue;
+    const dividend = settlement.current_user_dividend_cents / 100;
+    if (settlement.game_date === latestSettledDate) tonight += dividend;
+    if (settlement.game_date >= weekStart) week += dividend;
   }
   return { tonight, week };
 }

@@ -1,4 +1,8 @@
-import { GAME_STORAGE_KEY, type StorageAdapter } from './persistence';
+import {
+  GAME_STORAGE_KEY,
+  LOCAL_DEMO_STORAGE_KEY,
+  type StorageAdapter,
+} from './persistence';
 
 const TRANSITION_MARKER_PREFIX = '@nba-stock-market/server-transition/v1:';
 
@@ -30,13 +34,12 @@ export async function inspectLocalTransition(
 ): Promise<LocalTransitionInspection> {
   try {
     const marker = await storage.getItem(transitionMarkerKey(userId));
-    if (marker !== null) {
-      return { legacySavePresent: false, transitionComplete: true, error: null };
-    }
     const legacySave = await storage.getItem(GAME_STORAGE_KEY);
+    const localDemoSave = await storage.getItem(LOCAL_DEMO_STORAGE_KEY);
+    const legacySavePresent = legacySave !== null || localDemoSave !== null;
     return {
-      legacySavePresent: legacySave !== null,
-      transitionComplete: false,
+      legacySavePresent,
+      transitionComplete: marker !== null && !legacySavePresent,
       error: null,
     };
   } catch {
@@ -54,6 +57,7 @@ export async function finalizeLocalTransition(
 ): Promise<LocalTransitionResult> {
   try {
     await storage.removeItem(GAME_STORAGE_KEY);
+    await storage.removeItem(LOCAL_DEMO_STORAGE_KEY);
   } catch {
     return {
       complete: false,

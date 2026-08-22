@@ -13,6 +13,7 @@ import {
 import type { AccessTokenProvider } from '../api/client';
 import type { PublicAppConfig } from '../api/config';
 import { authErrorMessage } from './authMessages';
+import { oauthRedirectUrl } from './oauthRedirect';
 import { getSupabaseClient, takeOAuthCallbackError } from './supabase';
 
 interface AuthContextValue {
@@ -124,7 +125,7 @@ export function AuthProvider({ config, children }: { config: PublicAppConfig; ch
     try {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin },
+        options: { redirectTo: oauthRedirectUrl(window.location) },
       });
       if (oauthError) {
         setError(authErrorMessage(oauthError.message, 'Google sign-in failed.'));

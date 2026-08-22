@@ -28,6 +28,8 @@ export interface ServerHolding {
   current_price_cents: number;
   market_value_cents: number;
   unrealized_pnl_cents: number;
+  /** Account-specific dividends received from this player in the active season. */
+  season_dividend_cents: number | null;
 }
 
 export interface ServerTrade {
@@ -363,6 +365,11 @@ function parseHolding(value: unknown, path = 'holding'): ServerHolding {
     current_price_cents: nonNegativeInteger(row.current_price_cents, `${path}.current_price_cents`),
     market_value_cents: nonNegativeInteger(row.market_value_cents, `${path}.market_value_cents`),
     unrealized_pnl_cents: integer(row.unrealized_pnl_cents, `${path}.unrealized_pnl_cents`),
+    // Null keeps an older backend from being presented as a real $0 result
+    // while frontend and backend deployments roll independently.
+    season_dividend_cents: row.season_dividend_cents === undefined
+      ? null
+      : nullableInteger(row.season_dividend_cents, `${path}.season_dividend_cents`),
   };
 }
 

@@ -13,10 +13,10 @@ import { Sparkline } from './Sparkline';
  * One owned player as a ledger row. The money story is split into its two
  * honest halves, each named, because they move for different reasons:
  *
- * - DIVIDENDS — what this player's nights have done to YOUR cash, summed
- *   from your own ledger, so a mid-season buy never claims payouts you were
- *   not holding for. Signed both ways: the word, unlike "paid", survives a
- *   negative night. His per-night rate rides as the caption.
+ * - DIVIDENDS — what this player's nights have done to YOUR cash, supplied
+ *   by the server's complete account aggregate so a mid-season buy never
+ *   claims payouts you were not holding for. Signed both ways: the word,
+ *   unlike "paid", survives a negative night. His per-night rate rides below.
  * - VALUE — share price against cost including fee; this only moves when
  *   trading does, so in the demo it mostly reads as the quiet fee line.
  *
@@ -33,21 +33,28 @@ export function HoldingRow({ holding, dividends, received, onPress, trend }: {
   };
   /** Season dividend summary for this player — rate, games, total. */
   dividends: DividendSummary;
-  /** What he has paid THIS account, from the activity ledger. */
-  received: number;
+  /** What he has paid THIS account, from the complete server aggregate. */
+  received: number | null;
   onPress: () => void;
   /** Recent settled games; the sparkline only draws with two or more. */
   trend?: TrendPoint[];
 }) {
   const { player, currentPrice, costBasis } = holding;
-  const paidColor = received >= 0 ? colors.green : colors.red;
+  const paidColor = received === null
+    ? colors.muted
+    : received >= 0
+      ? colors.green
+      : colors.red;
+  const receivedLabel = received === null
+    ? 'Season dividend history unavailable'
+    : `Dividends ${formatSignedMoney(received)} to you`;
   // Rate, then reliability: how much when he plays, and how often he pays.
   const rateCaption = dividends.perGame === null
     ? 'No settled games yet'
     : `${formatCompactSignedMoney(dividends.perGame)} a night · paid ${dividends.paidNights} of ${dividends.gamesPlayed}`;
   return (
     <Pressable
-      accessibilityLabel={`View ${player.name} details. Dividends ${formatSignedMoney(received)} to you. Pays ${dividends.perGame === null ? 'nothing yet' : `${formatSignedMoney(dividends.perGame)} per night, and paid on ${dividends.paidNights} of ${dividends.gamesPlayed} settled nights`}. Value ${formatMoney(currentPrice)} against ${formatMoney(costBasis)} paid including fee.`}
+      accessibilityLabel={`View ${player.name} details. ${receivedLabel}. Pays ${dividends.perGame === null ? 'nothing yet' : `${formatSignedMoney(dividends.perGame)} per night, and paid on ${dividends.paidNights} of ${dividends.gamesPlayed} settled nights`}. Value ${formatMoney(currentPrice)} against ${formatMoney(costBasis)} paid including fee.`}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
@@ -71,7 +78,7 @@ export function HoldingRow({ holding, dividends, received, onPress, trend }: {
         numberOfLines={1}
         style={[styles.paid, { color: paidColor }]}
       >
-        {formatCompactSignedMoney(received)}
+        {received === null ? '—' : formatCompactSignedMoney(received)}
       </Text>
     </Pressable>
   );

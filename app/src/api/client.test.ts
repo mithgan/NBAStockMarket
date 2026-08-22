@@ -187,6 +187,7 @@ test('trades use the Flask route and include the listing version', async () => {
   let requestedBody = '';
   const client = new MarketApiClient({
     baseUrl: 'https://api.example.com/api/nba-stock-market/',
+    apiPrefix: '',
     expectedUserId: 'alice',
     getAccessToken: aliceToken,
     idempotencyKeyFactory: () => 'trade-contract-key',
@@ -203,7 +204,7 @@ test('trades use the Flask route and include the listing version', async () => {
 
   assert.equal(
     requestedUrl,
-    'https://api.example.com/api/nba-stock-market/api/v1/trades',
+    'https://api.example.com/api/nba-stock-market/trades',
   );
   assert.deepEqual(JSON.parse(requestedBody), {
     player_id: '3112335',
@@ -260,6 +261,7 @@ test('historical day advancement requires and sends the settlement key', async (
   let settlementHeader = '';
   const client = new MarketApiClient({
     baseUrl: 'https://api.example.com/api/nba-stock-market',
+    apiPrefix: '',
     expectedUserId: 'alice',
     getAccessToken: aliceToken,
     settlementKey: 'sandbox-settlement-key-0123456789ab',
@@ -291,7 +293,7 @@ test('historical day advancement requires and sends the settlement key', async (
 
   assert.equal(
     requestedUrl,
-    'https://api.example.com/api/nba-stock-market/api/v1/admin/settlements/next',
+    'https://api.example.com/api/nba-stock-market/admin/settlements/next',
   );
   assert.deepEqual(JSON.parse(requestedBody), {
     expected_game_date: '2025-10-20',
@@ -317,6 +319,48 @@ test('day advancement without a settlement key fails closed before any request',
     (error: unknown) => error instanceof MarketApiError && error.code === 'advance_unavailable',
   );
   assert.equal(fetchCalls, 0);
+});
+
+test('Flask day advancement uses bearer admin auth without a public settlement key', async () => {
+  let requestedUrl = '';
+  let requestedHeaders: Record<string, string> = {};
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com/api/nba-stock-market',
+    apiPrefix: '',
+    adminAuthMode: 'bearer',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    idempotencyKeyFactory: () => 'flask-advance-key',
+    fetchImpl: async (url, init) => {
+      requestedUrl = String(url);
+      requestedHeaders = init?.headers as Record<string, string>;
+      return new Response(JSON.stringify({
+        data: {
+          replayed: false,
+          game_date: '2025-10-20',
+          next_game_date: '2025-10-21',
+          is_complete: false,
+          event_count: 12,
+          payout_count: 4,
+          net_cash_cents: 150_000,
+          cash_breakdown_cents: {
+            dividends: 200_000,
+            weekly_shorts: -50_000,
+            boosts: 0,
+          },
+        },
+      }), { status: 200 });
+    },
+  });
+
+  await client.advanceDay('2025-10-20');
+
+  assert.equal(
+    requestedUrl,
+    'https://api.example.com/api/nba-stock-market/admin/settlements/next',
+  );
+  assert.equal(requestedHeaders.Authorization, 'Bearer token');
+  assert.equal(requestedHeaders['X-Settlement-Key'], undefined);
 });
 
 test('a mutation retries a failed response body with the same idempotency key', async () => {
@@ -538,6 +582,26 @@ test('bootstrap loads one server-owned snapshot instead of stitching client read
 
   assert.equal(result.portfolio.account_id, 'alice');
   assert.deepEqual(requestedPaths, ['/api/v1/bootstrap']);
+});
+
+test('the Flask mount can disable the standalone API prefix', async () => {
+  const requestedUrls: string[] = [];
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.com/api/nba-stock-market/',
+    apiPrefix: '',
+    expectedUserId: 'alice',
+    getAccessToken: aliceToken,
+    fetchImpl: async (input) => {
+      requestedUrls.push(String(input));
+      return new Response(JSON.stringify({ data: bootstrapPayload }), { status: 200 });
+    },
+  });
+
+  await client.bootstrap();
+
+  assert.deepEqual(requestedUrls, [
+    'https://api.example.com/api/nba-stock-market/bootstrap',
+  ]);
 });
 
 test('bootstrap can request only results after the last installed settlement', async () => {

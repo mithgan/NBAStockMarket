@@ -40,7 +40,7 @@ export function LeaderboardScreen() {
         {you ? (
           <>
             <DisplayValue
-              accessibilityLabel={`Your rank, ${you.rank} of ${leaderboard.length}, ${rankBand(you.rank, leaderboard.length)}. Portfolio ${formatMoney(you.value)}, ${formatReturn(you.returnPct)} from 140 million. ${formatSignedMoney(summary.latestDailyChange)} on the latest replay date.`}
+              accessibilityLabel={`Your rank, ${you.rank} of ${leaderboard.length}, ${rankBand(you.rank, leaderboard.length)}. Portfolio ${formatMoney(you.value)}, ${formatReturn(you.returnPct)} return. ${formatSignedMoney(summary.latestDailyChange)} on the latest replay date.`}
               label={`OF ${leaderboard.length}`}
               tone="gold"
               value={`#${you.rank}`}
@@ -57,7 +57,7 @@ export function LeaderboardScreen() {
               <View style={styles.statDivider} />
               <View
                 accessible
-                accessibilityLabel={`${formatReturn(you.returnPct)} from the 140 million opening bankroll`}
+                accessibilityLabel={`${formatReturn(you.returnPct)} portfolio return`}
                 style={styles.statCell}
               >
                 <Text
@@ -67,7 +67,9 @@ export function LeaderboardScreen() {
                 >
                   {formatReturn(you.returnPct)}
                 </Text>
-                <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>VS $140M</Text>
+                <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={styles.statLabel}>
+                  RETURN
+                </Text>
               </View>
               <View style={styles.statDivider} />
               <View
@@ -114,9 +116,9 @@ export function LeaderboardScreen() {
               <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.rankColumn]}>#</Text>
               <Text style={[styles.columnHeaderText, styles.nameColumn]}>PORTFOLIO</Text>
               <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.valueColumn]}>VALUE</Text>
-              {/* The baseline is named: every return reads against the $140M
-                  opening bankroll, not against an unstated zero. */}
-              <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.returnColumn]}>VS $140M</Text>
+              <Text style={[styles.columnHeaderText, largeText ? styles.flexColumn : styles.returnColumn]}>
+                RETURN
+              </Text>
             </View>
             {leaderboard.map((entry, index) => (
               <View

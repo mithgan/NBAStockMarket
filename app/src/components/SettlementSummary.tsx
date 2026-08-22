@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { TrendPoint } from '../data/trendPresentation';
 import type { Player } from '../data/types';
 import { formatCompactSignedMoney, formatSignedMoney } from '../format';
-import type { GameHolding } from '../state/game';
+import type { ActivityEvent } from '../state/game';
 import { colors, fonts, numeric, space, type, weight } from '../theme';
 import { rowMarker } from '../ui/domMarkers';
 import { PlayerAvatar } from './PlayerAvatar';
@@ -16,21 +16,22 @@ export interface NightContribution {
 }
 
 /**
- * What each held player paid on one settled night, biggest absolute payout
- * first so the mover that explains the total leads the list.
+ * What each player held at settlement paid on one night, reconstructed from
+ * account-specific dividend activity rather than today's roster.
  */
 export function nightContributions(
-  holdings: readonly GameHolding[],
+  activity: readonly ActivityEvent[],
   playerById: Map<string, Player>,
   playerTrends: Record<string, TrendPoint[]>,
   settledDate: string | null,
 ): NightContribution[] {
   if (settledDate === null) return [];
   const contributions: NightContribution[] = [];
-  for (const holding of holdings) {
-    const player = playerById.get(holding.player_id);
+  for (const entry of activity) {
+    if (entry.kind !== 'dividend' || entry.date !== settledDate) continue;
+    const player = playerById.get(entry.playerId);
     if (!player) continue;
-    const point = (playerTrends[holding.player_id] ?? []).find(
+    const point = (playerTrends[entry.playerId] ?? []).find(
       (trendPoint) => trendPoint.date === settledDate,
     );
     if (point) {
@@ -38,7 +39,7 @@ export function nightContributions(
         player,
         netPoints: point.np,
         expectedNetPoints: point.expected_np,
-        dividend: point.dividend_per_holder,
+        dividend: entry.cashDelta,
       });
     }
   }
@@ -53,7 +54,8 @@ const LEDGER_ROWS_SHOWN = 3;
  * money it became. Misses render in red with the exact same structure as
  * hits; the whole block is the doorway to the game log.
  */
-export function SettlementSummary({ contributions, settledDate, onOpenLog, upcoming }: {
+export function SettlementSummary({ accountNet, contributions, settledDate, onOpenLog, upcoming }: {
+  accountNet: number;
   contributions: NightContribution[];
   settledDate: string;
   onOpenLog: () => void;
@@ -63,14 +65,13 @@ export function SettlementSummary({ contributions, settledDate, onOpenLog, upcom
   const quiet = contributions.length === 0;
   const shown = contributions.slice(0, LEDGER_ROWS_SHOWN);
   const overflow = contributions.length - shown.length;
-  const net = contributions.reduce((total, contribution) => total + contribution.dividend, 0);
   return (
     <View style={styles.block}>
       <Pressable
         accessibilityHint="Opens the game log, every settled night in order"
         accessibilityLabel={quiet
-          ? `Settled ${settledDate}. None of your players played. Opens the game log.`
-          : `Settled ${settledDate}. Your players paid ${formatSignedMoney(net)} across ${contributions.length} games. Opens the game log.`}
+          ? `Settled ${settledDate}. Account dividends ${formatSignedMoney(accountNet)}. Opens the game log.`
+          : `Settled ${settledDate}. Your players paid ${formatSignedMoney(accountNet)} across ${contributions.length} games. Opens the game log.`}
         accessibilityRole="button"
         {...rowMarker}
         onPress={onOpenLog}
@@ -79,7 +80,9 @@ export function SettlementSummary({ contributions, settledDate, onOpenLog, upcom
         {quiet ? (
           <View style={styles.head}>
             <Text numberOfLines={1} style={[styles.headline, styles.headlineQuiet]}>
-              None of your players played last night
+              {accountNet === 0
+                ? 'No player dividends hit your account last night'
+                : `Your players settled ${formatCompactSignedMoney(accountNet)}`}
             </Text>
             <Text style={styles.toggle}>Game log  ›</Text>
           </View>
