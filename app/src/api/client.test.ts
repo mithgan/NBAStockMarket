@@ -112,6 +112,7 @@ test('authenticated reads refresh once after a 401', async () => {
   assert.equal((await client.portfolio()).account_id, 'alice');
   assert.deepEqual(tokens, [false, true]);
   assert.equal((requests[1].headers as Record<string, string>).Authorization, 'Bearer fresh-token');
+  assert.equal(requests[1].cache, 'no-store');
 });
 
 test('a cold-start retry gets a longer timeout without changing the request', async () => {

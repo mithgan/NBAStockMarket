@@ -341,6 +341,7 @@ export class MarketApiClient {
       try {
         response = await this.fetchImpl(`${this.baseUrl}${path}`, {
           method,
+          cache: method === 'GET' ? 'no-store' : undefined,
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',
