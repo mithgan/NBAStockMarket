@@ -60,6 +60,7 @@ EXPECTED_MARKET_MIGRATIONS = {
     "20260723010000",
     "20260724000000",
     "20260829000000",
+    "20260830000000",
 }
 GAME_STATE_ID = "historical-2025-26"
 EXPECTED_REPLAY_EVENT_COUNT = 2_126
@@ -116,7 +117,9 @@ class AccountRow(Base):
         default=round(STARTING_CASH * 100),
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
@@ -156,10 +159,14 @@ class PlayerListingRow(Base):
     current_price_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     opening_price_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     actual_salary_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    shares_outstanding: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    shares_outstanding: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=100
+    )
     held_shares: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
@@ -188,7 +195,9 @@ class HoldingRow(Base):
     )
     shares: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     average_cost_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class TradeRow(Base):
@@ -200,7 +209,9 @@ class TradeRow(Base):
             name="uq_market_trade_account_idempotency",
         ),
         Index("ix_market_trades_account_created", "account_id", "created_at"),
-        Index("ix_market_trades_account_player", "account_id", "player_id", "created_at"),
+        Index(
+            "ix_market_trades_account_player", "account_id", "player_id", "created_at"
+        ),
         Index("ix_market_trades_player_created", "player_id", "created_at"),
         CheckConstraint("side IN ('buy', 'sell')", name="ck_market_trade_side"),
         CheckConstraint(
@@ -231,7 +242,9 @@ class TradeRow(Base):
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     is_roundtrip: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     response_payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class ReplayEventRow(Base):
@@ -291,7 +304,9 @@ class GameStateRow(Base):
     last_settled_date: Mapped[date | None] = mapped_column(Date)
     next_game_date: Mapped[date | None] = mapped_column(Date)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
@@ -317,7 +332,9 @@ class SettlementRow(Base):
     payout_count: Mapped[int] = mapped_column(Integer, nullable=False)
     net_cash_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     response_payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
-    settled_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    settled_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class DividendRow(Base):
@@ -343,7 +360,9 @@ class DividendRow(Base):
         primary_key=True,
     )
     amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class WeeklyShortRow(Base):
@@ -414,7 +433,9 @@ class WeeklyShortRow(Base):
     qualifying_games: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     payout_cents: Mapped[int | None] = mapped_column(BigInteger)
     settled_game_date: Mapped[date | None] = mapped_column(Date)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
@@ -477,7 +498,9 @@ class BoostRow(Base):
     fee_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     payout_cents: Mapped[int | None] = mapped_column(BigInteger)
     settled_game_date: Mapped[date | None] = mapped_column(Date)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
@@ -515,7 +538,9 @@ class InstrumentCommandRow(Base):
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     response_payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class AccountActivityRow(Base):
@@ -606,7 +631,9 @@ class PortfolioSnapshotRow(Base):
     reserved_collateral_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     market_value_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     total_value_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class AccountSettlementMembershipRow(Base):
@@ -645,7 +672,9 @@ class AccountResetCommandRow(Base):
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     response_payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class PerGameRulesetRow(Base):
@@ -725,7 +754,207 @@ class PerGameRulesetRow(Base):
     next_game_date: Mapped[date | None] = mapped_column(Date)
     event_cursor: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class PerGameLiveSlateRow(Base):
+    __tablename__ = "market_v2_live_slates"
+    __table_args__ = (
+        CheckConstraint(
+            "completion_next_event_sequence IS NULL "
+            "OR completion_next_event_sequence >= 0",
+            name="ck_market_v2_live_slate_completion_sequence",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id"],
+            ["market_v2_rulesets.id"],
+            ondelete="CASCADE",
+        ),
+        Index(
+            "ix_market_v2_live_slates_date",
+            "ruleset_id",
+            "game_date",
+        ),
+    )
+
+    ruleset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    game_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    next_game_date: Mapped[date | None] = mapped_column(Date)
+    next_game_date_resolved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    schedule_complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    expected_game_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    manifest_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    lock_succeeded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    completion_succeeded: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    completion_next_event_sequence: Mapped[int | None] = mapped_column(Integer)
+    unlock_succeeded: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class PerGameLiveGameRow(Base):
+    __tablename__ = "market_v2_live_games"
+    __table_args__ = (
+        CheckConstraint("event_sequence >= 0", name="ck_market_v2_live_game_sequence"),
+        CheckConstraint(
+            "status IN ('scheduled', 'in_progress', 'final', "
+            "'postponed', 'cancelled')",
+            name="ck_market_v2_live_game_status",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id"],
+            ["market_v2_rulesets.id"],
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "ruleset_id",
+            "game_id",
+            name="uq_market_v2_live_game_identity",
+        ),
+        Index(
+            "ix_market_v2_live_games_date",
+            "ruleset_id",
+            "provider",
+            "game_date",
+        ),
+    )
+
+    ruleset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    provider_game_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    game_id: Mapped[str] = mapped_column(String(96), nullable=False)
+    season_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    game_date: Mapped[date] = mapped_column(Date, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    next_game_date: Mapped[date | None] = mapped_column(Date)
+    event_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    home_team_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    away_team_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    expected_player_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    ignored_player_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    schedule_history: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class PerGameProviderPlayerMapRow(Base):
+    __tablename__ = "market_v2_provider_player_map"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "player_id",
+            name="uq_market_v2_provider_player_identity",
+        ),
+        ForeignKeyConstraint(
+            ["player_id"],
+            ["market_players.id"],
+            ondelete="RESTRICT",
+        ),
+    )
+
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    provider_player_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    player_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    player_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+
+
+class PerGameLiveResultCommandRow(Base):
+    __tablename__ = "market_v2_live_result_commands"
+    __table_args__ = (
+        CheckConstraint("revision >= 1", name="ck_market_v2_live_result_revision"),
+        CheckConstraint(
+            "actual_net_points_micros >= -1000000000 AND "
+            "actual_net_points_micros <= 1000000000",
+            name="ck_market_v2_live_result_actual_range",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'succeeded', 'permanent_failure')",
+            name="ck_market_v2_live_result_status",
+        ),
+        CheckConstraint("attempt_count >= 0", name="ck_market_v2_live_result_attempts"),
+        ForeignKeyConstraint(
+            ["ruleset_id", "provider", "provider_game_id"],
+            [
+                "market_v2_live_games.ruleset_id",
+                "market_v2_live_games.provider",
+                "market_v2_live_games.provider_game_id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["provider", "provider_player_id"],
+            [
+                "market_v2_provider_player_map.provider",
+                "market_v2_provider_player_map.provider_player_id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id", "player_id"],
+            ["market_v2_player_quotes.ruleset_id", "market_v2_player_quotes.player_id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "ruleset_id",
+            "idempotency_key",
+            name="uq_market_v2_live_result_idempotency",
+        ),
+        Index(
+            "ix_market_v2_live_results_pending",
+            "ruleset_id",
+            "status",
+            "created_at",
+        ),
+    )
+
+    ruleset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    provider_game_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    provider_player_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_id: Mapped[str] = mapped_column(String(96), nullable=False)
+    player_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    result_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    actual_net_points_micros: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utcnow, onupdate=utcnow
     )
@@ -750,7 +979,9 @@ class PerGameGameBoundaryRow(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     next_game_date: Mapped[date | None] = mapped_column(Date)
     event_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class PerGameQuoteRow(Base):
@@ -784,7 +1015,9 @@ class PerGameQuoteRow(Base):
     current_game_cost_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False)
     prior_season_value_per_game_dollars: Mapped[int | None] = mapped_column(BigInteger)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utcnow, onupdate=utcnow
     )
@@ -828,7 +1061,9 @@ class PerGameAccountRow(Base):
     latest_game_pnl_dollars: Mapped[int] = mapped_column(
         BigInteger, nullable=False, default=0
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utcnow, onupdate=utcnow
     )
@@ -837,9 +1072,7 @@ class PerGameAccountRow(Base):
 class PerGamePositionRow(Base):
     __tablename__ = "market_v2_positions"
     __table_args__ = (
-        CheckConstraint(
-            "side IN ('long', 'short')", name="ck_market_v2_position_side"
-        ),
+        CheckConstraint("side IN ('long', 'short')", name="ck_market_v2_position_side"),
         CheckConstraint(
             "status IN ('active', 'closed')",
             name="ck_market_v2_position_status",
@@ -918,7 +1151,9 @@ class PerGamePositionRow(Base):
     opened_event_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     closed_event_sequence: Mapped[int | None] = mapped_column(Integer)
     expires_on: Mapped[date | None] = mapped_column(Date)
-    opened_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    opened_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     closed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
@@ -949,15 +1184,15 @@ class PerGameProjectionRow(Base):
     model_name: Mapped[str] = mapped_column(String(64), nullable=False)
     model_version: Mapped[str] = mapped_column(String(64), nullable=False)
     captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class PerGameResultRow(Base):
     __tablename__ = "market_v2_player_game_results"
     __table_args__ = (
-        CheckConstraint(
-            "event_sequence >= 0", name="ck_market_v2_result_sequence"
-        ),
+        CheckConstraint("event_sequence >= 0", name="ck_market_v2_result_sequence"),
         CheckConstraint("revision >= 1", name="ck_market_v2_result_revision"),
         CheckConstraint(
             "actual_net_points_micros >= -1000000000 AND "
@@ -992,9 +1227,7 @@ class PerGameResultRow(Base):
             f"dividend_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER})",
             name="ck_market_v2_result_dividend",
         ),
-        CheckConstraint(
-            "event_cursor > 0", name="ck_market_v2_result_event_cursor"
-        ),
+        CheckConstraint("event_cursor > 0", name="ck_market_v2_result_event_cursor"),
         ForeignKeyConstraint(
             ["ruleset_id"],
             ["market_v2_rulesets.id"],
@@ -1013,12 +1246,8 @@ class PerGameResultRow(Base):
             ],
             ondelete="RESTRICT",
         ),
-        Index(
-            "ix_market_v2_results_cursor", "ruleset_id", "event_cursor"
-        ),
-        Index(
-            "ix_market_v2_results_game", "ruleset_id", "game_id", "player_id"
-        ),
+        Index("ix_market_v2_results_cursor", "ruleset_id", "event_cursor"),
+        Index("ix_market_v2_results_game", "ruleset_id", "game_id", "player_id"),
     )
 
     ruleset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -1040,7 +1269,9 @@ class PerGameResultRow(Base):
     event_cursor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     response_payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class PerGameAccrualRow(Base):
@@ -1050,17 +1281,13 @@ class PerGameAccrualRow(Base):
             "status IN ('settled', 'unsettled_missing_projection')",
             name="ck_market_v2_accrual_status",
         ),
-        CheckConstraint(
-            "side IN ('long', 'short')", name="ck_market_v2_accrual_side"
-        ),
+        CheckConstraint("side IN ('long', 'short')", name="ck_market_v2_accrual_side"),
         CheckConstraint(
             "locked_game_cost_dollars > 0 AND "
             f"locked_game_cost_dollars <= {MAX_PER_GAME_QUOTE_DOLLARS}",
             name="ck_market_v2_accrual_locked_cost",
         ),
-        CheckConstraint(
-            "event_sequence >= 0", name="ck_market_v2_accrual_sequence"
-        ),
+        CheckConstraint("event_sequence >= 0", name="ck_market_v2_accrual_sequence"),
         CheckConstraint(
             "latest_result_revision >= 1",
             name="ck_market_v2_accrual_revision",
@@ -1081,9 +1308,7 @@ class PerGameAccrualRow(Base):
             f"cumulative_pnl_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
             name="ck_market_v2_accrual_pnl",
         ),
-        CheckConstraint(
-            "event_cursor > 0", name="ck_market_v2_accrual_event_cursor"
-        ),
+        CheckConstraint("event_cursor > 0", name="ck_market_v2_accrual_event_cursor"),
         ForeignKeyConstraint(
             ["position_id", "ruleset_id", "account_id", "player_id"],
             [
@@ -1129,11 +1354,17 @@ class PerGameAccrualRow(Base):
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     base_result_revision: Mapped[int | None] = mapped_column(Integer)
     latest_result_revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    game_cost_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    game_cost_dollars: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
     dividend_dollars: Mapped[int | None] = mapped_column(BigInteger)
-    cumulative_pnl_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    cumulative_pnl_dollars: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
     event_cursor: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utcnow, onupdate=utcnow
     )
@@ -1142,9 +1373,7 @@ class PerGameAccrualRow(Base):
 class PerGameLedgerEntryRow(Base):
     __tablename__ = "market_v2_ledger_entries"
     __table_args__ = (
-        UniqueConstraint(
-            "ruleset_id", "source_key", name="uq_market_v2_ledger_source"
-        ),
+        UniqueConstraint("ruleset_id", "source_key", name="uq_market_v2_ledger_source"),
         CheckConstraint(
             "kind IN ('game_cost', 'game_dividend', 'dividend_correction', "
             "'open_fee', 'drop_fee')",
@@ -1155,9 +1384,7 @@ class PerGameLedgerEntryRow(Base):
             f"amount_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
             name="ck_market_v2_ledger_amount",
         ),
-        CheckConstraint(
-            "event_cursor > 0", name="ck_market_v2_ledger_event_cursor"
-        ),
+        CheckConstraint("event_cursor > 0", name="ck_market_v2_ledger_event_cursor"),
         ForeignKeyConstraint(
             ["position_id", "ruleset_id", "account_id", "player_id"],
             [
@@ -1212,7 +1439,9 @@ class PerGameLedgerEntryRow(Base):
         ForeignKey("market_v2_ledger_entries.id", ondelete="RESTRICT")
     )
     event_cursor: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class PerGameCommandRow(Base):
@@ -1249,15 +1478,15 @@ class PerGameCommandRow(Base):
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     response_payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class PerGamePnlSnapshotRow(Base):
     __tablename__ = "market_v2_pnl_snapshots"
     __table_args__ = (
-        CheckConstraint(
-            "event_cursor > 0", name="ck_market_v2_snapshot_event_cursor"
-        ),
+        CheckConstraint("event_cursor > 0", name="ck_market_v2_snapshot_event_cursor"),
         CheckConstraint(
             f"cumulative_pnl_dollars >= -{JAVASCRIPT_MAX_SAFE_INTEGER} AND "
             f"cumulative_pnl_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
@@ -1288,7 +1517,9 @@ class PerGamePnlSnapshotRow(Base):
     game_date: Mapped[date | None] = mapped_column(Date)
     cumulative_pnl_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False)
     latest_game_pnl_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 @dataclass(frozen=True)
@@ -1429,10 +1660,13 @@ class Database:
             with self.engine.connect().execution_options(
                 isolation_level="REPEATABLE READ"
             ) as connection:
-                with Session(
-                    bind=connection,
-                    expire_on_commit=False,
-                ) as session, session.begin():
+                with (
+                    Session(
+                        bind=connection,
+                        expire_on_commit=False,
+                    ) as session,
+                    session.begin(),
+                ):
                     yield session
             return
 
@@ -1470,7 +1704,10 @@ class Database:
             sqlite_lock.acquire()
         try:
             with self.session() as session, session.begin():
-                if session.bind is not None and session.bind.dialect.name == "postgresql":
+                if (
+                    session.bind is not None
+                    and session.bind.dialect.name == "postgresql"
+                ):
                     function = (
                         "pg_advisory_xact_lock"
                         if settlement_exclusive
@@ -1930,9 +2167,7 @@ class Database:
                             )
                         )
                     }
-                    missing_migrations = (
-                        EXPECTED_MARKET_MIGRATIONS - migration_versions
-                    )
+                    missing_migrations = EXPECTED_MARKET_MIGRATIONS - migration_versions
                     if missing_migrations:
                         raise RuntimeError(
                             "market database is missing required migrations: "
@@ -2007,7 +2242,9 @@ class Database:
                 if replay_state_row is not None:
                     replay_state = (replay_state_row.id, replay_state_row.season_id)
         except SQLAlchemyError as exc:
-            raise RuntimeError("market database is unavailable or not migrated") from exc
+            raise RuntimeError(
+                "market database is unavailable or not migrated"
+            ) from exc
         if self.engine.dialect.name != "postgresql" and (
             not isinstance(seed_count, int) or seed_count < 1
         ):
@@ -2114,7 +2351,9 @@ class Database:
             player_ids = {event.player_id for event in events}
             known_player_ids = set(
                 session.scalars(
-                    select(PlayerListingRow.id).where(PlayerListingRow.id.in_(player_ids))
+                    select(PlayerListingRow.id).where(
+                        PlayerListingRow.id.in_(player_ids)
+                    )
                 )
             )
             if known_player_ids != player_ids:
@@ -2129,9 +2368,7 @@ class Database:
                 )
             }
             for event in events:
-                existing_row = existing_events.get(
-                    (event.game_date, event.player_id)
-                )
+                existing_row = existing_events.get((event.game_date, event.player_id))
                 expected = (
                     event.actual_net_points_micros,
                     event.expected_net_points_micros,
@@ -2201,7 +2438,9 @@ class Database:
 
         events: list[SeedReplayEvent] = []
         for raw_day in raw_days:
-            if not isinstance(raw_day, dict) or not isinstance(raw_day.get("events"), list):
+            if not isinstance(raw_day, dict) or not isinstance(
+                raw_day.get("events"), list
+            ):
                 raise ValueError("replay seed day is invalid")
             raw_day_date = raw_day.get("date")
             if not isinstance(raw_day_date, str):
@@ -2223,9 +2462,7 @@ class Database:
                     )
                     qualifies = raw_event.get("qualifies_for_instruments", False)
                     if not isinstance(qualifies, bool):
-                        raise ValueError(
-                            "replay event qualification must be boolean"
-                        )
+                        raise ValueError("replay event qualification must be boolean")
                     if not has_instrument_metadata and any(
                         key in raw_event
                         for key in (

@@ -64,12 +64,19 @@ PER_GAME_V2_MIGRATION = (
     / "migrations"
     / "20260829000000_create_per_game_economy_v2.sql"
 )
+PER_GAME_LIVE_MIGRATION = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "20260830000000_create_per_game_live_ingestion.sql"
+)
 SCHEMA_MIGRATIONS = (
     MIGRATION,
     SETTLEMENT_MIGRATION,
     INSTRUMENT_MIGRATION,
     ACCOUNT_HISTORY_MIGRATION,
     PER_GAME_V2_MIGRATION,
+    PER_GAME_LIVE_MIGRATION,
 )
 MARKET_SEED = Path(__file__).parents[2] / "data" / "generated" / "market-seed.json"
 REPLAY_SEED = Path(__file__).parents[2] / "data" / "generated" / "replay-seed.json"
@@ -94,8 +101,7 @@ def normalized_sql() -> str:
 
 def cumulative_sql() -> str:
     return "\n".join(
-        migration.read_text(encoding="utf-8").lower()
-        for migration in SCHEMA_MIGRATIONS
+        migration.read_text(encoding="utf-8").lower() for migration in SCHEMA_MIGRATIONS
     )
 
 
@@ -152,9 +158,9 @@ def test_supabase_migration_matches_orm_table_structure() -> None:
                     rf"add column\s+{re.escape(column.name)}\s+([^,;\n]+)",
                     sql,
                 )
-            assert declaration, (
-                f"{table.name}.{column.name} is missing from its table definition"
-            )
+            assert (
+                declaration
+            ), f"{table.name}.{column.name} is missing from its table definition"
             column_sql = declaration.group(1)
             assert column_sql.startswith(expected_sql_type(column.type))
             if not column.nullable and not column.primary_key:
@@ -165,7 +171,9 @@ def test_supabase_migration_matches_orm_table_structure() -> None:
             assert f"primary key ({primary_key})" in definition
 
         for constraint in table.foreign_key_constraints:
-            targets = [element.target_fullname.split(".") for element in constraint.elements]
+            targets = [
+                element.target_fullname.split(".") for element in constraint.elements
+            ]
             target_table = targets[0][-2]
             target_columns = ", ".join(target[-1] for target in targets)
             assert all(target[-2] == target_table for target in targets)
@@ -183,9 +191,7 @@ def test_supabase_migration_matches_orm_table_structure() -> None:
             index_where = index.dialect_options["postgresql"].get("where")
             if index_where is not None:
                 expected_index += f" where {normalized_constraint_sql(index_where)}"
-            assert (
-                expected_index in normalized_constraint_sql(sql)
-            )
+            assert expected_index in normalized_constraint_sql(sql)
 
         normalized_definition = normalized_constraint_sql(sql)
         for constraint in table.constraints:
@@ -226,15 +232,11 @@ def test_supabase_migration_preserves_authoritative_economy_constraints() -> Non
 
 
 def test_per_game_v2_migration_enforces_game_and_position_identity() -> None:
-    sql = normalized_constraint_sql(
-        PER_GAME_V2_MIGRATION.read_text(encoding="utf-8")
-    )
+    sql = normalized_constraint_sql(PER_GAME_V2_MIGRATION.read_text(encoding="utf-8"))
 
     assert "create table public.market_v2_game_boundaries" in sql
     assert "primary key (ruleset_id, game_id)" in sql
-    assert "next_game_date date" in table_definition(
-        sql, "market_v2_game_boundaries"
-    )
+    assert "next_game_date date" in table_definition(sql, "market_v2_game_boundaries")
     assert (
         "foreign key (ruleset_id, game_id) references "
         "public.market_v2_game_boundaries (ruleset_id, game_id)"
@@ -252,18 +254,20 @@ def test_per_game_v2_migration_enforces_game_and_position_identity() -> None:
         "foreign key (position_id, ruleset_id, account_id, player_id) references "
         "public.market_v2_positions (id, ruleset_id, account_id, player_id)"
     )
-    assert table_definition(sql, "market_v2_position_game_accruals").count(
-        position_identity_fk
-    ) == 1
-    assert table_definition(sql, "market_v2_ledger_entries").count(
-        position_identity_fk
-    ) == 1
+    assert (
+        table_definition(sql, "market_v2_position_game_accruals").count(
+            position_identity_fk
+        )
+        == 1
+    )
+    assert (
+        table_definition(sql, "market_v2_ledger_entries").count(position_identity_fk)
+        == 1
+    )
 
 
 def test_per_game_v2_migration_provisions_preview_and_safe_money_contract() -> None:
-    sql = normalized_constraint_sql(
-        PER_GAME_V2_MIGRATION.read_text(encoding="utf-8")
-    )
+    sql = normalized_constraint_sql(PER_GAME_V2_MIGRATION.read_text(encoding="utf-8"))
 
     ruleset = table_definition(sql, "market_v2_rulesets")
     assert "enforce_roster_lock boolean not null default true" in ruleset
@@ -381,7 +385,9 @@ def test_seed_migration_reproduces_the_canonical_market_without_overwriting() ->
     assert "on conflict (id) do nothing" in sql
 
 
-def test_replay_seed_migration_reproduces_generated_events_without_overwriting() -> None:
+def test_replay_seed_migration_reproduces_generated_events_without_overwriting() -> (
+    None
+):
     payload = json.loads(REPLAY_SEED.read_text(encoding="utf-8"))
     sql = REPLAY_SEED_MIGRATION.read_text(encoding="utf-8").lower()
     events = [event for day in payload["days"] for event in day["events"]]
@@ -407,9 +413,10 @@ def test_replay_seed_migration_reproduces_generated_events_without_overwriting()
         )
         for event in events
     ]
-    assert replay_seed_digest(
-        sorted(digest_rows, key=lambda row: (row[0], row[1]))
-    ) == EXPECTED_REPLAY_SEED_SHA256
+    assert (
+        replay_seed_digest(sorted(digest_rows, key=lambda row: (row[0], row[1])))
+        == EXPECTED_REPLAY_SEED_SHA256
+    )
     for event in played_events:
         row = (
             f"('{event['game_date']}', '{event['player_id']}', "
@@ -458,6 +465,7 @@ def test_replay_seed_migration_reproduces_generated_events_without_overwriting()
         "20260723010000",
         "20260724000000",
         "20260829000000",
+        "20260830000000",
     }
 
 

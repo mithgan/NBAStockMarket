@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import ssl
 import time
@@ -46,11 +47,20 @@ class FetchResult:
 
 
 def parse_minutes(value: str | int | float) -> float:
+    if isinstance(value, bool):
+        raise ValueError("minutes must be a finite non-negative number")
     text = str(value).strip()
-    if ":" not in text:
-        return float(text)
-    minutes, seconds = text.split(":", 1)
-    return float(minutes) + float(seconds) / 60.0
+    if ":" in text:
+        whole_minutes, raw_seconds = text.split(":", 1)
+        seconds = float(raw_seconds)
+        if seconds < 0 or seconds >= 60:
+            raise ValueError("minute clock seconds must be in [0, 60)")
+        minutes = float(whole_minutes) + seconds / 60.0
+    else:
+        minutes = float(text)
+    if not math.isfinite(minutes) or minutes < 0:
+        raise ValueError("minutes must be a finite non-negative number")
+    return minutes
 
 
 def row_to_game_line(row: Mapping[str, Any]) -> BDLGameLine:

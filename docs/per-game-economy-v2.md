@@ -36,9 +36,9 @@ Raw net points are the product rule and do not require a D&T projection. The pro
 
 - Opening a position requires both the account version and the exact player quote version shown to the user. If either changed, the request is rejected before a cost is locked.
 - A live ruleset starts with roster mutations locked. Before any result for a game date is accepted, the scheduler must hold the lock for that exact date. Adds, drops, inverse opens, and inverse closes return `423 roster_locked` until the scheduler unlocks the matching date.
-- The scheduler locks before tipoff or before any outcome is knowable, settles every completed player-game in that window, and unlocks only after all available results for the window have been processed. A first settlement is rejected if the matching lock is no longer active. Later provider corrections are adjustments and do not require relocking.
+- The scheduler locks before tipoff or before any outcome is knowable, settles every completed player-game in that window, completes the date boundary, and unlocks only after all available results for the window have been processed. A first settlement or date completion is rejected if the matching lock is no longer active. Later provider corrections are adjustments and do not require relocking.
 - The settlement scheduler submits the completed game date and the authoritative next game date. The latter must be later than the completed date, or explicitly `null` when no future game is scheduled.
-- A new result advances the replay/live schedule. A later correction may adjust money, but it cannot move the schedule backward.
+- The idempotent date-completion command advances the replay/live schedule even when no listed player settled. A later correction may adjust money, but it cannot move the schedule backward.
 - Timed inverse positions are closed before the first game after their stored expiry and cannot receive any cash flow for that later game.
 
 Position opens send the versions read from the same bootstrap snapshot:
@@ -105,3 +105,39 @@ The Pages deployment is fail-closed during this cutover. It runs only when the r
 The migration provisions a historical-preview ruleset and one per-game quote for every existing market player, using the existing season opening value divided across 82 games as the initial preview anchor. That preview ruleset stays unlocked so the current replay UX remains testable. Any separately created live ruleset keeps the schema's fail-closed roster-lock defaults.
 
 No production migration or deployment is part of the implementation branch.
+
+## Live BDL settlement
+
+The live adapter is disabled by default. It is a callable hook for the existing
+Flask scheduler and fenced database lease, not a new timer or worker. When the
+lease owner calls the hook, it exhausts the paginated BDL schedule, reads the
+unpaginated box-score response, uses BDL's authoritative `status_state`, settles
+exact-final player results through the same v2 service, and leaves the date
+locked until every expected base result is durable.
+
+Provider observations and commands are stored before delivery. If the process
+loses a response after the v2 transaction commits, the next lease owner retries
+the same immutable idempotency key. Changed finalized box scores append the next
+result revision and the economy posts only the dividend adjustment. A changed
+net-points model output also creates a correction when the underlying provider
+stats fingerprint remains the same.
+
+The current game slate and tipoffs are durable before any separate lookup for
+the next game date. When a lock is due, the coordinator acquires it first and
+only then performs the future-schedule lookup, so a slow provider cannot leave
+roster mutations open after tipoff.
+
+This v2 raw-net-points path uses `BALL_DONT_LIE_API_KEY` and no D&T projection.
+The adapter also requires explicit provider-season and ruleset-season bindings;
+a mismatch fails before persistence, as does any non-raw dividend ruleset. Full
+BDL rosters are validated, while players absent from the active market are
+durably classified as ignored and cannot hold the roster lock forever. Open
+date manifests reconcile legitimate
+pregame additions and safe removals while retaining old rows for audit, but
+started, finalized, staged-result, or already-unlocked changes fail closed.
+This repository does not yet consume a live-settlement server flag or attach the
+hook to a scheduler. A follow-up adapter in Russell's Flask repository must keep
+the runtime disabled until staging has verified schedule completeness, player
+crosswalk coverage, retry behavior, and the exact-date roster lock. See
+`docs/live-settlement-v2.md` for the rollout contract. The migration in this
+branch is additive and has not been applied.

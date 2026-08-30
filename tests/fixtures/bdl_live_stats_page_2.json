@@ -1,0 +1,165 @@
+{
+  "data": [
+    {
+      "id": 9002,
+      "min": "48:00",
+      "fgm": 6,
+      "fga": 12,
+      "fg3m": 1,
+      "fg3a": 4,
+      "ftm": 3,
+      "fta": 4,
+      "oreb": 2,
+      "dreb": 7,
+      "ast": 3,
+      "stl": 0,
+      "blk": 1,
+      "turnover": 1,
+      "pts": 16,
+      "player": {
+        "id": 2001,
+        "first_name": "Blake",
+        "last_name": "South"
+      },
+      "team": {"id": 8, "abbreviation": "AWY"},
+      "game": {
+        "id": 18450001,
+        "date": "2026-03-15",
+        "season": 2025,
+        "status": "Final",
+        "status_state": "final",
+        "postponed": false,
+        "datetime": "2026-03-15T23:00:00.000Z"
+      }
+    },
+    {
+      "id": 9007,
+      "min": "48:00",
+      "fgm": 8,
+      "fga": 15,
+      "fg3m": 2,
+      "fg3a": 5,
+      "ftm": 4,
+      "fta": 4,
+      "oreb": 0,
+      "dreb": 4,
+      "ast": 2,
+      "stl": 0,
+      "blk": 0,
+      "turnover": 1,
+      "pts": 22,
+      "player": {
+        "id": 2002,
+        "first_name": "Away",
+        "last_name": "Two"
+      },
+      "team": {"id": 8, "abbreviation": "AWY"},
+      "game": {
+        "id": 18450001,
+        "date": "2026-03-15",
+        "season": 2025,
+        "status": "Final",
+        "status_state": "final",
+        "postponed": false,
+        "datetime": "2026-03-15T23:00:00.000Z"
+      }
+    },
+    {
+      "id": 9008,
+      "min": "48:00",
+      "fgm": 8,
+      "fga": 15,
+      "fg3m": 2,
+      "fg3a": 5,
+      "ftm": 4,
+      "fta": 4,
+      "oreb": 0,
+      "dreb": 4,
+      "ast": 2,
+      "stl": 0,
+      "blk": 0,
+      "turnover": 1,
+      "pts": 22,
+      "player": {
+        "id": 2003,
+        "first_name": "Away",
+        "last_name": "Three"
+      },
+      "team": {"id": 8, "abbreviation": "AWY"},
+      "game": {
+        "id": 18450001,
+        "date": "2026-03-15",
+        "season": 2025,
+        "status": "Final",
+        "status_state": "final",
+        "postponed": false,
+        "datetime": "2026-03-15T23:00:00.000Z"
+      }
+    },
+    {
+      "id": 9009,
+      "min": "48:00",
+      "fgm": 8,
+      "fga": 15,
+      "fg3m": 1,
+      "fg3a": 4,
+      "ftm": 4,
+      "fta": 4,
+      "oreb": 0,
+      "dreb": 4,
+      "ast": 2,
+      "stl": 0,
+      "blk": 0,
+      "turnover": 1,
+      "pts": 21,
+      "player": {
+        "id": 2004,
+        "first_name": "Away",
+        "last_name": "Four"
+      },
+      "team": {"id": 8, "abbreviation": "AWY"},
+      "game": {
+        "id": 18450001,
+        "date": "2026-03-15",
+        "season": 2025,
+        "status": "Final",
+        "status_state": "final",
+        "postponed": false,
+        "datetime": "2026-03-15T23:00:00.000Z"
+      }
+    },
+    {
+      "id": 9010,
+      "min": "48:00",
+      "fgm": 8,
+      "fga": 15,
+      "fg3m": 1,
+      "fg3a": 4,
+      "ftm": 4,
+      "fta": 4,
+      "oreb": 0,
+      "dreb": 4,
+      "ast": 2,
+      "stl": 0,
+      "blk": 0,
+      "turnover": 1,
+      "pts": 21,
+      "player": {
+        "id": 2005,
+        "first_name": "Away",
+        "last_name": "Five"
+      },
+      "team": {"id": 8, "abbreviation": "AWY"},
+      "game": {
+        "id": 18450001,
+        "date": "2026-03-15",
+        "season": 2025,
+        "status": "Final",
+        "status_state": "final",
+        "postponed": false,
+        "datetime": "2026-03-15T23:00:00.000Z"
+      }
+    }
+  ],
+  "meta": {"per_page": 5, "next_cursor": null}
+}

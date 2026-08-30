@@ -1,0 +1,165 @@
+{
+  "data": [
+    {
+      "id": 9001,
+      "min": "48:00",
+      "fgm": 8,
+      "fga": 15,
+      "fg3m": 2,
+      "fg3a": 5,
+      "ftm": 2,
+      "fta": 2,
+      "oreb": 1,
+      "dreb": 5,
+      "ast": 7,
+      "stl": 1,
+      "blk": 0,
+      "turnover": 2,
+      "pts": 20,
+      "player": {
+        "id": 1001,
+        "first_name": "Avery",
+        "last_name": "North"
+      },
+      "team": {"id": 25, "abbreviation": "HME"},
+      "game": {
+        "id": 18450001,
+        "date": "2026-03-15",
+        "season": 2025,
+        "status": "Final",
+        "status_state": "final",
+        "postponed": false,
+        "datetime": "2026-03-15T23:00:00.000Z"
+      }
+    },
+    {
+      "id": 9003,
+      "min": "48:00",
+      "fgm": 8,
+      "fga": 15,
+      "fg3m": 2,
+      "fg3a": 5,
+      "ftm": 4,
+      "fta": 4,
+      "oreb": 0,
+      "dreb": 4,
+      "ast": 2,
+      "stl": 0,
+      "blk": 0,
+      "turnover": 1,
+      "pts": 22,
+      "player": {
+        "id": 1002,
+        "first_name": "Home",
+        "last_name": "Two"
+      },
+      "team": {"id": 25, "abbreviation": "HME"},
+      "game": {
+        "id": 18450001,
+        "date": "2026-03-15",
+        "season": 2025,
+        "status": "Final",
+        "status_state": "final",
+        "postponed": false,
+        "datetime": "2026-03-15T23:00:00.000Z"
+      }
+    },
+    {
+      "id": 9004,
+      "min": "48:00",
+      "fgm": 8,
+      "fga": 15,
+      "fg3m": 2,
+      "fg3a": 5,
+      "ftm": 4,
+      "fta": 4,
+      "oreb": 0,
+      "dreb": 4,
+      "ast": 2,
+      "stl": 0,
+      "blk": 0,
+      "turnover": 1,
+      "pts": 22,
+      "player": {
+        "id": 1003,
+        "first_name": "Home",
+        "last_name": "Three"
+      },
+      "team": {"id": 25, "abbreviation": "HME"},
+      "game": {
+        "id": 18450001,
+        "date": "2026-03-15",
+        "season": 2025,
+        "status": "Final",
+        "status_state": "final",
+        "postponed": false,
+        "datetime": "2026-03-15T23:00:00.000Z"
+      }
+    },
+    {
+      "id": 9005,
+      "min": "48:00",
+      "fgm": 8,
+      "fga": 15,
+      "fg3m": 2,
+      "fg3a": 5,
+      "ftm": 4,
+      "fta": 4,
+      "oreb": 0,
+      "dreb": 4,
+      "ast": 2,
+      "stl": 0,
+      "blk": 0,
+      "turnover": 1,
+      "pts": 22,
+      "player": {
+        "id": 1004,
+        "first_name": "Home",
+        "last_name": "Four"
+      },
+      "team": {"id": 25, "abbreviation": "HME"},
+      "game": {
+        "id": 18450001,
+        "date": "2026-03-15",
+        "season": 2025,
+        "status": "Final",
+        "status_state": "final",
+        "postponed": false,
+        "datetime": "2026-03-15T23:00:00.000Z"
+      }
+    },
+    {
+      "id": 9006,
+      "min": "48:00",
+      "fgm": 8,
+      "fga": 15,
+      "fg3m": 2,
+      "fg3a": 5,
+      "ftm": 4,
+      "fta": 4,
+      "oreb": 0,
+      "dreb": 4,
+      "ast": 2,
+      "stl": 0,
+      "blk": 0,
+      "turnover": 1,
+      "pts": 22,
+      "player": {
+        "id": 1005,
+        "first_name": "Home",
+        "last_name": "Five"
+      },
+      "team": {"id": 25, "abbreviation": "HME"},
+      "game": {
+        "id": 18450001,
+        "date": "2026-03-15",
+        "season": 2025,
+        "status": "Final",
+        "status_state": "final",
+        "postponed": false,
+        "datetime": "2026-03-15T23:00:00.000Z"
+      }
+    }
+  ],
+  "meta": {"per_page": 5, "next_cursor": "stats-2"}
+}

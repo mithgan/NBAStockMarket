@@ -1,0 +1,21 @@
+{
+  "data": [
+    {
+      "id": 18450002,
+      "date": "2026-03-15",
+      "season": 2025,
+      "datetime": "2026-03-16T01:30:00.000Z",
+      "status": "7:30 PM ET",
+      "status_state": "scheduled",
+      "period": 0,
+      "time": "",
+      "postseason": false,
+      "postponed": false,
+      "home_team": {"id": 2, "abbreviation": "H02"},
+      "visitor_team": {"id": 14, "abbreviation": "A14"},
+      "home_team_score": 0,
+      "visitor_team_score": 0
+    }
+  ],
+  "meta": {"per_page": 1, "next_cursor": null}
+}

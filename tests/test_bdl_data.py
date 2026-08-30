@@ -37,6 +37,12 @@ class BDLDataTest(unittest.TestCase):
         self.assertEqual(parse_minutes("45"), 45.0)
         self.assertEqual(parse_minutes("45:30"), 45.5)
 
+    def test_minutes_rejects_invalid_or_negative_values(self) -> None:
+        for value in (True, -1, "-1", "12:60", "12:-1", "nan", "inf"):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    parse_minutes(value)
+
     def test_cursor_pagination_is_cached_resumable_and_idempotent(self) -> None:
         responses = [
             {"data": [{"id": 1}], "meta": {"next_cursor": 17}},

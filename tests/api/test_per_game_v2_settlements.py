@@ -14,12 +14,14 @@ from nba_stock_market.api.database import (
     Database,
     PerGameAccountRow,
     PerGameAccrualRow,
+    PerGameCommandRow,
     PerGameLedgerEntryRow,
     PerGamePositionRow,
     PerGameProjectionRow,
     PerGameResultRow,
     PerGameRulesetRow,
 )
+from nba_stock_market.api.per_game_service import PerGameService
 from nba_stock_market.api.settings import ApiSettings
 from tests.api.conftest import FixtureTokenVerifier
 
@@ -320,6 +322,30 @@ def test_base_settlement_posts_cost_and_dividend_exactly_once(
                 )
             )
             == 1
+        )
+        command = session.scalar(
+            select(PerGameCommandRow).where(
+                PerGameCommandRow.command_kind == "settle_player_game",
+                PerGameCommandRow.idempotency_key == "v2-base-settle-0001",
+            )
+        )
+        assert command is not None
+        legacy_payload = {
+            "game_id": "game-base-1",
+            "player_id": "sga",
+            "game_date": "2025-10-21",
+            "game_started_at": None,
+            "next_game_date": "2025-10-23",
+            "event_sequence": 0,
+            "result_revision": 1,
+            "actual_net_points": "20.0",
+            "saved_projection_net_points": None,
+            "projection_model": None,
+            "projection_version": None,
+            "projection_captured_at": None,
+        }
+        assert command.request_fingerprint == PerGameService._fingerprint(
+            "settle_player_game", legacy_payload
         )
 
 

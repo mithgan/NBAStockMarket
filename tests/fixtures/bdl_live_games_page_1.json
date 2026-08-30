@@ -1,0 +1,21 @@
+{
+  "data": [
+    {
+      "id": 18450001,
+      "date": "2026-03-15",
+      "season": 2025,
+      "datetime": "2026-03-15T23:00:00.000Z",
+      "status": "Final",
+      "status_state": "final",
+      "period": 4,
+      "time": "Final",
+      "postseason": false,
+      "postponed": false,
+      "home_team": {"id": 25, "abbreviation": "HME"},
+      "visitor_team": {"id": 8, "abbreviation": "AWY"},
+      "home_team_score": 108,
+      "visitor_team_score": 102
+    }
+  ],
+  "meta": {"per_page": 1, "next_cursor": "games-2"}
+}

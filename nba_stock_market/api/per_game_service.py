@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import hashlib
 import json
-from typing import Literal
+from typing import Callable, Literal
 from uuid import uuid4
 
 from sqlalchemy import func, or_, select
@@ -59,8 +59,15 @@ def api_problem(status_code: int, code: str, message: str) -> ApiProblem:
 class PerGameService:
     """Transactional persistence and read models for the additive v2 economy."""
 
-    def __init__(self, database: Database) -> None:
+    def __init__(self, database: Database, *, ruleset_id: str | None = None) -> None:
+        if ruleset_id is not None and (
+            not isinstance(ruleset_id, str)
+            or not ruleset_id.strip()
+            or len(ruleset_id) > 64
+        ):
+            raise ValueError("ruleset_id must be a non-empty identifier")
         self.database = database
+        self._ruleset_id = ruleset_id
 
     def bootstrap(
         self,
@@ -70,16 +77,14 @@ class PerGameService:
         ledger_limit: int = 50,
     ) -> dict[str, object]:
         if after_event_cursor is not None and after_event_cursor < 0:
-            raise api_problem(422, "validation_error", "Event cursor cannot be negative.")
+            raise api_problem(
+                422, "validation_error", "Event cursor cannot be negative."
+            )
         if ledger_limit < 1 or ledger_limit > MAX_LEDGER_PAGE_SIZE:
             raise api_problem(422, "validation_error", "Ledger limit is out of range.")
 
         with self.database.snapshot_session() as session:
-            ruleset = session.scalar(
-                select(PerGameRulesetRow)
-                .where(PerGameRulesetRow.is_active.is_(True))
-                .order_by(PerGameRulesetRow.created_at.desc())
-            )
+            ruleset = session.scalar(self._ruleset_query())
             if ruleset is not None:
                 account = session.get(
                     PerGameAccountRow,
@@ -111,7 +116,9 @@ class PerGameService:
                         current_account_id=principal.id,
                     )
 
-        with self.database.market_write_transaction(settlement_exclusive=True) as session:
+        with self.database.market_write_transaction(
+            settlement_exclusive=True
+        ) as session:
             ruleset = self._ensure_environment(session)
             self._ensure_account(session, ruleset, principal)
 
@@ -154,7 +161,9 @@ class PerGameService:
         }
         fingerprint = self._fingerprint("open_position", command_payload)
 
-        with self.database.market_write_transaction(settlement_exclusive=True) as session:
+        with self.database.market_write_transaction(
+            settlement_exclusive=True
+        ) as session:
             ruleset = self._ensure_environment(session, for_update=True)
             account = self._ensure_account(session, ruleset, principal, for_update=True)
             replay = self._command_replay(
@@ -251,9 +260,7 @@ class PerGameService:
                 player_id=player_id,
                 side=side,
                 status="active",
-                locked_game_cost_dollars=(
-                    domain_position.locked_per_game_cost_dollars
-                ),
+                locked_game_cost_dollars=(domain_position.locked_per_game_cost_dollars),
                 opened_event_sequence=ruleset.current_sequence,
                 expires_on=expires_on,
             )
@@ -301,7 +308,10 @@ class PerGameService:
                 "quote_version": quote.version,
                 "current_game_cost_dollars": quote.current_game_cost_dollars,
                 "account": self._account_payload(
-                    session, ruleset, account, active_override=active_positions + [position]
+                    session,
+                    ruleset,
+                    account,
+                    active_override=active_positions + [position],
                 ),
                 "position": self._position_payload(session, position),
                 "quote": self._quote_payload(session, quote),
@@ -331,7 +341,9 @@ class PerGameService:
         }
         fingerprint = self._fingerprint("close_position", command_payload)
 
-        with self.database.market_write_transaction(settlement_exclusive=True) as session:
+        with self.database.market_write_transaction(
+            settlement_exclusive=True
+        ) as session:
             ruleset = self._ensure_environment(session, for_update=True)
             account = self._ensure_account(session, ruleset, principal, for_update=True)
             replay = self._command_replay(
@@ -357,9 +369,13 @@ class PerGameService:
                 .with_for_update()
             )
             if position is None:
-                raise api_problem(404, "unknown_position", "That position does not exist.")
+                raise api_problem(
+                    404, "unknown_position", "That position does not exist."
+                )
             if position.status != "active":
-                raise api_problem(409, "position_closed", "That position is already closed.")
+                raise api_problem(
+                    409, "position_closed", "That position is already closed."
+                )
             quote = session.scalar(
                 select(PerGameQuoteRow)
                 .where(
@@ -369,7 +385,9 @@ class PerGameService:
                 .with_for_update()
             )
             if quote is None:
-                raise api_problem(503, "quote_unavailable", "The player quote is unavailable.")
+                raise api_problem(
+                    503, "quote_unavailable", "The player quote is unavailable."
+                )
 
             close_policy = replace(
                 self._domain_policy(ruleset),
@@ -455,6 +473,7 @@ class PerGameService:
         locked: bool,
         game_date: date,
         idempotency_key: str,
+        write_guard: Callable[[Session], None] | None = None,
     ) -> dict[str, object]:
         request_payload = {
             "locked": locked,
@@ -462,7 +481,11 @@ class PerGameService:
         }
         fingerprint = self._fingerprint("set_roster_mutation_lock", request_payload)
 
-        with self.database.market_write_transaction(settlement_exclusive=True) as session:
+        with self.database.market_write_transaction(
+            settlement_exclusive=True
+        ) as session:
+            if write_guard is not None:
+                write_guard(session)
             ruleset = self._ensure_environment(session, for_update=True)
             replay = self._command_replay(
                 session,
@@ -543,6 +566,125 @@ class PerGameService:
             )
             return response
 
+    def complete_game_date(
+        self,
+        *,
+        game_date: date,
+        next_game_date: date | None,
+        next_event_sequence: int,
+        idempotency_key: str,
+        write_guard: Callable[[Session], None] | None = None,
+    ) -> dict[str, object]:
+        """Advance one fully processed game date, even when no player settled."""
+
+        if type(game_date) is not date:
+            raise api_problem(422, "validation_error", "Game date must be a date.")
+        if next_game_date is not None and (
+            type(next_game_date) is not date or next_game_date <= game_date
+        ):
+            raise api_problem(
+                422,
+                "next_game_date_invalid",
+                "The next game date must be later than the completed game date.",
+            )
+        if (
+            type(next_event_sequence) is not int
+            or next_event_sequence < 0
+            or next_event_sequence > 2_147_483_647
+        ):
+            raise api_problem(
+                422,
+                "validation_error",
+                "Next event sequence must be a nonnegative 32-bit integer.",
+            )
+
+        request_payload = {
+            "game_date": game_date.isoformat(),
+            "next_game_date": (
+                next_game_date.isoformat() if next_game_date is not None else None
+            ),
+            "next_event_sequence": next_event_sequence,
+        }
+        fingerprint = self._fingerprint("complete_game_date", request_payload)
+
+        with self.database.market_write_transaction(
+            settlement_exclusive=True
+        ) as session:
+            if write_guard is not None:
+                write_guard(session)
+            ruleset = self._ensure_environment(session, for_update=True)
+            replay = self._command_replay(
+                session,
+                ruleset_id=ruleset.id,
+                account_id=ADMIN_ACCOUNT_ID,
+                command_kind="complete_game_date",
+                idempotency_key=idempotency_key,
+                fingerprint=fingerprint,
+            )
+            if replay is not None:
+                return replay
+            if ruleset.enforce_roster_lock and (
+                not ruleset.roster_mutations_locked
+                or ruleset.roster_lock_game_date != game_date
+            ):
+                raise api_problem(
+                    409,
+                    "roster_lock_required",
+                    "Keep roster changes locked while completing this game date.",
+                )
+            if (
+                ruleset.last_settled_date is not None
+                and game_date < ruleset.last_settled_date
+            ):
+                raise api_problem(
+                    409,
+                    "stale_game_date_completion",
+                    "A completed game date cannot move the market schedule backward.",
+                )
+
+            previous_last_settled_date = ruleset.last_settled_date
+            previous_next_game_date = ruleset.next_game_date
+            previous_sequence = ruleset.current_sequence
+            self._expire_short_positions(
+                session,
+                ruleset=ruleset,
+                game_date=game_date,
+                close_sequence=max(0, next_event_sequence - 1),
+            )
+            ruleset.last_settled_date = game_date
+            ruleset.next_game_date = next_game_date
+            ruleset.current_sequence = max(
+                ruleset.current_sequence,
+                next_event_sequence,
+            )
+            event_cursor = self._next_event_cursor(ruleset)
+            ruleset.updated_at = utcnow()
+            response = {
+                "schema_version": SCHEMA_VERSION,
+                "replayed": False,
+                "changed": (
+                    previous_last_settled_date != game_date
+                    or previous_next_game_date != next_game_date
+                    or previous_sequence != ruleset.current_sequence
+                ),
+                "event_cursor": event_cursor,
+                "last_settled_date": game_date.isoformat(),
+                "next_game_date": (
+                    next_game_date.isoformat() if next_game_date is not None else None
+                ),
+                "current_sequence": ruleset.current_sequence,
+            }
+            self._store_command(
+                session,
+                ruleset_id=ruleset.id,
+                account_id=ADMIN_ACCOUNT_ID,
+                command_kind="complete_game_date",
+                idempotency_key=idempotency_key,
+                fingerprint=fingerprint,
+                response=response,
+            )
+            return response
+
     def settle_player_game(
         self,
         *,
@@ -559,7 +701,11 @@ class PerGameService:
         projection_version: str | None,
         projection_captured_at: datetime | None,
         idempotency_key: str,
+        enforce_tipoff_exposure: bool = False,
+        write_guard: Callable[[Session], None] | None = None,
     ) -> dict[str, object]:
+        if type(enforce_tipoff_exposure) is not bool:
+            raise TypeError("enforce_tipoff_exposure must be boolean")
         if next_game_date is not None and next_game_date <= game_date:
             raise api_problem(
                 422,
@@ -592,9 +738,15 @@ class PerGameService:
                 else None
             ),
         }
+        if enforce_tipoff_exposure:
+            request_payload["enforce_tipoff_exposure"] = True
         fingerprint = self._fingerprint("settle_player_game", request_payload)
 
-        with self.database.market_write_transaction(settlement_exclusive=True) as session:
+        with self.database.market_write_transaction(
+            settlement_exclusive=True
+        ) as session:
+            if write_guard is not None:
+                write_guard(session)
             ruleset = self._ensure_environment(session, for_update=True)
             replay = self._command_replay(
                 session,
@@ -800,22 +952,39 @@ class PerGameService:
                 .with_for_update()
             ).all()
             if not accruals:
+                exposure_filters = [
+                    PerGamePositionRow.ruleset_id == ruleset.id,
+                    PerGamePositionRow.player_id == player_id,
+                    or_(
+                        PerGamePositionRow.side != PositionSide.SHORT.value,
+                        PerGamePositionRow.expires_on.is_(None),
+                        PerGamePositionRow.expires_on >= game_date,
+                    ),
+                ]
+                if enforce_tipoff_exposure and boundary.started_at is not None:
+                    exposure_filters.extend(
+                        [
+                            PerGamePositionRow.opened_at <= boundary.started_at,
+                            or_(
+                                PerGamePositionRow.closed_at.is_(None),
+                                PerGamePositionRow.closed_at > boundary.started_at,
+                            ),
+                        ]
+                    )
+                else:
+                    exposure_filters.extend(
+                        [
+                            PerGamePositionRow.opened_event_sequence <= event_sequence,
+                            or_(
+                                PerGamePositionRow.closed_event_sequence.is_(None),
+                                PerGamePositionRow.closed_event_sequence
+                                > event_sequence,
+                            ),
+                        ]
+                    )
                 exposures = session.scalars(
                     select(PerGamePositionRow)
-                    .where(
-                        PerGamePositionRow.ruleset_id == ruleset.id,
-                        PerGamePositionRow.player_id == player_id,
-                        PerGamePositionRow.opened_event_sequence <= event_sequence,
-                        or_(
-                            PerGamePositionRow.closed_event_sequence.is_(None),
-                            PerGamePositionRow.closed_event_sequence > event_sequence,
-                        ),
-                        or_(
-                            PerGamePositionRow.side != PositionSide.SHORT.value,
-                            PerGamePositionRow.expires_on.is_(None),
-                            PerGamePositionRow.expires_on >= game_date,
-                        ),
-                    )
+                    .where(*exposure_filters)
                     .with_for_update()
                 ).all()
                 accruals = [
@@ -858,7 +1027,9 @@ class PerGameService:
                     )
                 else:
                     if prior_settled is None or prior_settled.dividend_dollars is None:
-                        raise RuntimeError("correction is missing a settled prior dividend")
+                        raise RuntimeError(
+                            "correction is missing a settled prior dividend"
+                        )
                     self._post_correction(
                         session,
                         ruleset=ruleset,
@@ -879,7 +1050,10 @@ class PerGameService:
                     event_cursor=event_cursor,
                     account_deltas=event_deltas,
                 )
-                if ruleset.last_settled_date is None or game_date > ruleset.last_settled_date:
+                if (
+                    ruleset.last_settled_date is None
+                    or game_date > ruleset.last_settled_date
+                ):
                     ruleset.last_settled_date = game_date
             else:
                 for accrual in accruals:
@@ -960,9 +1134,7 @@ class PerGameService:
                 result_revision=result.revision,
                 kind="game_cost",
                 amount_dollars=cost_amount,
-                source_key=(
-                    f"base:{accrual.position_id}:{accrual.game_id}:game-cost"
-                ),
+                source_key=(f"base:{accrual.position_id}:{accrual.game_id}:game-cost"),
                 event_cursor=cost_cursor,
             )
             dividend_cursor = self._next_event_cursor(ruleset)
@@ -977,9 +1149,7 @@ class PerGameService:
                 result_revision=result.revision,
                 kind="game_dividend",
                 amount_dollars=dividend_amount,
-                source_key=(
-                    f"base:{accrual.position_id}:{accrual.game_id}:dividend"
-                ),
+                source_key=(f"base:{accrual.position_id}:{accrual.game_id}:dividend"),
                 event_cursor=dividend_cursor,
             )
             pnl_delta = self._safe_money(
@@ -1104,19 +1274,19 @@ class PerGameService:
             )
             account.latest_game_pnl_dollars = self._safe_money(
                 int(
-                session.scalar(
-                    select(
-                        func.coalesce(
-                            func.sum(PerGameAccrualRow.cumulative_pnl_dollars), 0
+                    session.scalar(
+                        select(
+                            func.coalesce(
+                                func.sum(PerGameAccrualRow.cumulative_pnl_dollars), 0
+                            )
+                        ).where(
+                            PerGameAccrualRow.ruleset_id == ruleset.id,
+                            PerGameAccrualRow.account_id == account_id,
+                            PerGameAccrualRow.status == SettlementStatus.SETTLED.value,
+                            PerGameAccrualRow.game_date == latest_game_date,
                         )
-                    ).where(
-                        PerGameAccrualRow.ruleset_id == ruleset.id,
-                        PerGameAccrualRow.account_id == account_id,
-                        PerGameAccrualRow.status == SettlementStatus.SETTLED.value,
-                        PerGameAccrualRow.game_date == latest_game_date,
                     )
-                )
-                or 0
+                    or 0
                 ),
                 field_name="Latest game P&L",
             )
@@ -1186,9 +1356,7 @@ class PerGameService:
         )
         has_more = len(history_cursors) > ledger_limit
         page_cursors = history_cursors[:ledger_limit]
-        next_cursor = (
-            page_cursors[-1] if has_more and page_cursors else None
-        )
+        next_cursor = page_cursors[-1] if has_more and page_cursors else None
         if page_cursors:
             ledger_rows = session.scalars(
                 select(PerGameLedgerEntryRow)
@@ -1245,7 +1413,9 @@ class PerGameService:
             )
             .order_by(ranked_accounts.c.rank)
         ).all()
-        active_positions = [position for position in positions if position.status == "active"]
+        active_positions = [
+            position for position in positions if position.status == "active"
+        ]
         long_used = sum(position.side == "long" for position in active_positions)
         short_used = sum(position.side == "short" for position in active_positions)
 
@@ -1313,15 +1483,17 @@ class PerGameService:
         *,
         for_update: bool = False,
     ) -> PerGameRulesetRow:
-        query = (
-            select(PerGameRulesetRow)
-            .where(PerGameRulesetRow.is_active.is_(True))
-            .order_by(PerGameRulesetRow.created_at.desc())
-        )
+        query = self._ruleset_query()
         if for_update:
             query = query.with_for_update()
         ruleset = session.scalar(query)
         if ruleset is None:
+            if self._ruleset_id is not None:
+                raise api_problem(
+                    503,
+                    "ruleset_unavailable",
+                    "The configured per-game ruleset is not active.",
+                )
             inactive_default = session.get(PerGameRulesetRow, DEFAULT_RULESET_ID)
             if inactive_default is not None:
                 raise api_problem(
@@ -1433,16 +1605,19 @@ class PerGameService:
             account.display_name = principal.display_name
         return account
 
-    @staticmethod
-    def _active_ruleset(session: Session) -> PerGameRulesetRow:
-        ruleset = session.scalar(
-            select(PerGameRulesetRow)
-            .where(PerGameRulesetRow.is_active.is_(True))
-            .order_by(PerGameRulesetRow.created_at.desc())
-        )
+    def _active_ruleset(self, session: Session) -> PerGameRulesetRow:
+        ruleset = session.scalar(self._ruleset_query())
         if ruleset is None:
-            raise api_problem(503, "ruleset_unavailable", "The per-game ruleset is unavailable.")
+            raise api_problem(
+                503, "ruleset_unavailable", "The per-game ruleset is unavailable."
+            )
         return ruleset
+
+    def _ruleset_query(self):
+        query = select(PerGameRulesetRow).where(PerGameRulesetRow.is_active.is_(True))
+        if self._ruleset_id is not None:
+            return query.where(PerGameRulesetRow.id == self._ruleset_id)
+        return query.order_by(PerGameRulesetRow.created_at.desc())
 
     @staticmethod
     def _require_account_version(
@@ -1629,7 +1804,9 @@ class PerGameService:
         ).all()
         quote_by_player = {quote.player_id: quote for quote in quotes}
         if set(quote_by_player) != set(player_ids):
-            raise api_problem(503, "quote_unavailable", "A player quote is unavailable.")
+            raise api_problem(
+                503, "quote_unavailable", "A player quote is unavailable."
+            )
 
         close_policy = replace(
             self._domain_policy(ruleset),
@@ -1649,8 +1826,13 @@ class PerGameService:
             )
             economy.close_position(position.id, sequence=close_sequence)
             moved_quote = economy.quote(position.player_id)
-            if moved_quote.current_per_game_cost_dollars != quote.current_game_cost_dollars:
-                quote.current_game_cost_dollars = moved_quote.current_per_game_cost_dollars
+            if (
+                moved_quote.current_per_game_cost_dollars
+                != quote.current_game_cost_dollars
+            ):
+                quote.current_game_cost_dollars = (
+                    moved_quote.current_per_game_cost_dollars
+                )
                 quote.version += 1
 
             position.status = "closed"
@@ -1756,7 +1938,10 @@ class PerGameService:
         if projection is not None:
             if requested_micros is not None and (
                 requested_micros != projection.projected_net_points_micros
-                or (projection_model is not None and projection_model != projection.model_name)
+                or (
+                    projection_model is not None
+                    and projection_model != projection.model_name
+                )
                 or (
                     projection_version is not None
                     and projection_version != projection.model_version
@@ -1771,7 +1956,11 @@ class PerGameService:
             return projection.projected_net_points_micros
         if requested_micros is None:
             return None
-        if projection_model is None or projection_version is None or captured_at is None:
+        if (
+            projection_model is None
+            or projection_version is None
+            or captured_at is None
+        ):
             raise RuntimeError("validated projection metadata is missing")
         session.add(
             PerGameProjectionRow(
@@ -1830,10 +2019,7 @@ class PerGameService:
         if (
             boundary.game_date != game_date
             or boundary.event_sequence != event_sequence
-            or (
-                enforce_next_game_date
-                and boundary.next_game_date != next_game_date
-            )
+            or (enforce_next_game_date and boundary.next_game_date != next_game_date)
             or (
                 normalized_start is not None
                 and boundary.started_at is not None
@@ -1855,9 +2041,7 @@ class PerGameService:
         return EconomyPolicy(
             ruleset_id=ruleset.id,
             dividend_basis=DividendBasis(ruleset.dividend_basis),
-            dividend_dollars_per_net_point=(
-                ruleset.dividend_dollars_per_net_point
-            ),
+            dividend_dollars_per_net_point=(ruleset.dividend_dollars_per_net_point),
             max_long_positions=ruleset.long_slot_limit,
             max_short_positions=ruleset.short_slot_limit,
             allow_opposing_positions=ruleset.allow_opposing_positions,
@@ -1962,9 +2146,7 @@ class PerGameService:
             "id": ruleset.id,
             "version": ruleset.version,
             "dividend_basis": ruleset.dividend_basis,
-            "dividend_dollars_per_net_point": (
-                ruleset.dividend_dollars_per_net_point
-            ),
+            "dividend_dollars_per_net_point": (ruleset.dividend_dollars_per_net_point),
             "long_slot_limit": ruleset.long_slot_limit,
             "short_slot_limit": ruleset.short_slot_limit,
             "allow_opposing_positions": ruleset.allow_opposing_positions,
@@ -2053,8 +2235,9 @@ class PerGameService:
         ).one()
         lifecycle_fees = int(
             session.scalar(
-                select(func.coalesce(func.sum(PerGameLedgerEntryRow.amount_dollars), 0))
-                .where(
+                select(
+                    func.coalesce(func.sum(PerGameLedgerEntryRow.amount_dollars), 0)
+                ).where(
                     PerGameLedgerEntryRow.ruleset_id == position.ruleset_id,
                     PerGameLedgerEntryRow.position_id == position.id,
                     PerGameLedgerEntryRow.kind.in_(("open_fee", "drop_fee")),
@@ -2084,7 +2267,9 @@ class PerGameService:
             "opened_event_sequence": position.opened_event_sequence,
             "closed_event_sequence": position.closed_event_sequence,
             "expires_on": (
-                position.expires_on.isoformat() if position.expires_on is not None else None
+                position.expires_on.isoformat()
+                if position.expires_on is not None
+                else None
             ),
             "cumulative_game_cost_dollars": cumulative_game_cost,
             "cumulative_dividend_dollars": cumulative_dividend,
@@ -2123,9 +2308,7 @@ class PerGameService:
                 row.saved_projection_net_points_micros
             ),
             "dividend_basis": row.dividend_basis,
-            "dividend_dollars_per_net_point": (
-                row.dividend_dollars_per_net_point
-            ),
+            "dividend_dollars_per_net_point": (row.dividend_dollars_per_net_point),
             "dividend_dollars": row.dividend_dollars,
             "adjusts_result_revision": row.adjusts_result_revision,
         }
@@ -2155,9 +2338,7 @@ class PerGameService:
             "locked_game_cost_dollars": accrual.locked_game_cost_dollars,
             "dividend_dollars": accrual.dividend_dollars,
             "net_pnl_dollars": (
-                accrual.cumulative_pnl_dollars
-                if accrual.status == "settled"
-                else None
+                accrual.cumulative_pnl_dollars if accrual.status == "settled" else None
             ),
             "adjusts_result_revision": (
                 result.adjusts_result_revision if result is not None else None

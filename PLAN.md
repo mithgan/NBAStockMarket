@@ -110,3 +110,22 @@ Root integration is the only owner allowed to modify shared exports, existing mi
 - 2026-08-29: Final autoreview returned no actionable findings. Full verification reached 385 Python tests plus 13 subtests, 262 app tests, a clean TypeScript check, a successful Expo export, and byte-identical 32-scenario historical simulation output.
 - 2026-08-29: Repeated the actual rendered workflow using an isolated local auth/schedule harness. Long and inverse positions, shared settlement, revision correction, leaderboard, roster lock, and 1440/390/320px layouts all passed. No production migration, deployment, or data operation was performed.
 - 2026-08-29: Russell confirmed the product dividend uses raw net points from that game, with the locked per-game cost charged separately. Raw net points remain the implementation default; D&T surprise remains available only for historical comparison and compatibility testing.
+- 2026-08-30: Added the disabled-by-default live BDL settlement boundary: finalized box scores, canonical raw-net-points calculation, exact ruleset binding, durable fenced commands, date-wide roster locks, retry-safe corrections, and additive provider-ingestion tables.
+- 2026-08-30: Hardened final-box validation, persisted current tipoffs before any future-schedule lookup, required an authoritative roster lock before resolving the next date, and made computed net-point changes explicit correction revisions even when provider stats are unchanged.
+- 2026-08-30: Final verification reached 481 Python tests plus 49 subtests, and autoreview returned no actionable findings. No migration, deployment, live configuration, or provider key was applied.
+
+## Live BDL settlement follow-up
+
+Run: `.context/orchestration/20260830-bdl-v2-live`
+
+Objective: turn finalized Ball Don't Lie player box scores into authoritative v2 raw-net-points settlements, using the existing in-process Flask scheduler/lease design rather than creating a second worker.
+
+### Audit ownership before implementation
+
+| Task | Read scope | Sole write scope | Must not edit |
+|---|---|---|---|
+| AUDIT-BDL | `nba_stock_market/bdl_data.py`, its fixtures/tests, BDL provider code in the current Flask backend | `handoffs/AUDIT-BDL.md` | Product code, tests, migrations |
+| AUDIT-LIVE | Current Flask stock-market runner, scheduler, provider, deployment docs, and scheduler/provider tests | `handoffs/AUDIT-LIVE.md` | Product code, tests, deployment config |
+| AUDIT-V2 | v2 settlement service/routes/schema and focused settlement tests | `handoffs/AUDIT-V2.md` | Product code, tests, migrations |
+
+All handoffs live under `.context/orchestration/20260830-bdl-v2-live/`. These three audit agents are read-only and have disjoint write paths. Root integration owns the design and all product edits after the contracts are reconciled.
