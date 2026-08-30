@@ -58,11 +58,18 @@ ACCOUNT_HISTORY_MIGRATION = (
     / "migrations"
     / "20260724000000_create_market_account_history.sql"
 )
+PER_GAME_V2_MIGRATION = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "20260829000000_create_per_game_economy_v2.sql"
+)
 SCHEMA_MIGRATIONS = (
     MIGRATION,
     SETTLEMENT_MIGRATION,
     INSTRUMENT_MIGRATION,
     ACCOUNT_HISTORY_MIGRATION,
+    PER_GAME_V2_MIGRATION,
 )
 MARKET_SEED = Path(__file__).parents[2] / "data" / "generated" / "market-seed.json"
 REPLAY_SEED = Path(__file__).parents[2] / "data" / "generated" / "replay-seed.json"
@@ -157,18 +164,27 @@ def test_supabase_migration_matches_orm_table_structure() -> None:
         if len(table.primary_key.columns) > 1:
             assert f"primary key ({primary_key})" in definition
 
-        for foreign_key in table.foreign_keys:
-            target = foreign_key.target_fullname.split(".")
+        for constraint in table.foreign_key_constraints:
+            targets = [element.target_fullname.split(".") for element in constraint.elements]
+            target_table = targets[0][-2]
+            target_columns = ", ".join(target[-1] for target in targets)
+            assert all(target[-2] == target_table for target in targets)
             assert (
-                f"references public.{target[-2]} ({target[-1]})"
-                in definition
+                f"references public.{target_table} ({target_columns})"
+                in normalized_constraint_sql(definition)
             )
 
         for index in table.indexes:
             columns = ", ".join(column.name for column in index.columns)
+            index_prefix = "create unique index" if index.unique else "create index"
+            expected_index = (
+                f"{index_prefix} {index.name} on public.{table.name} ({columns})"
+            )
+            index_where = index.dialect_options["postgresql"].get("where")
+            if index_where is not None:
+                expected_index += f" where {normalized_constraint_sql(index_where)}"
             assert (
-                f"create index {index.name} on public.{table.name} ({columns})"
-                in re.sub(r"\s+", " ", sql)
+                expected_index in normalized_constraint_sql(sql)
             )
 
         normalized_definition = normalized_constraint_sql(sql)
@@ -207,6 +223,65 @@ def test_supabase_migration_preserves_authoritative_economy_constraints() -> Non
     assert "unique (account_id, idempotency_key)" in sql
     assert "held_shares >= 0 and held_shares <= shares_outstanding" in sql
     assert "drop constraint if exists ck_market_account_cash" in sql
+
+
+def test_per_game_v2_migration_enforces_game_and_position_identity() -> None:
+    sql = normalized_constraint_sql(
+        PER_GAME_V2_MIGRATION.read_text(encoding="utf-8")
+    )
+
+    assert "create table public.market_v2_game_boundaries" in sql
+    assert "primary key (ruleset_id, game_id)" in sql
+    assert "next_game_date date" in table_definition(
+        sql, "market_v2_game_boundaries"
+    )
+    assert (
+        "foreign key (ruleset_id, game_id) references "
+        "public.market_v2_game_boundaries (ruleset_id, game_id)"
+    ) in sql
+    assert (
+        "constraint uq_market_v2_position_ownership unique "
+        "(id, ruleset_id, account_id, player_id)"
+    ) in sql
+    assert (
+        "create unique index uq_market_v2_positions_active_side on "
+        "public.market_v2_positions (ruleset_id, account_id, player_id, side) "
+        "where status = 'active'"
+    ) in sql
+    position_identity_fk = (
+        "foreign key (position_id, ruleset_id, account_id, player_id) references "
+        "public.market_v2_positions (id, ruleset_id, account_id, player_id)"
+    )
+    assert table_definition(sql, "market_v2_position_game_accruals").count(
+        position_identity_fk
+    ) == 1
+    assert table_definition(sql, "market_v2_ledger_entries").count(
+        position_identity_fk
+    ) == 1
+
+
+def test_per_game_v2_migration_provisions_preview_and_safe_money_contract() -> None:
+    sql = normalized_constraint_sql(
+        PER_GAME_V2_MIGRATION.read_text(encoding="utf-8")
+    )
+
+    ruleset = table_definition(sql, "market_v2_rulesets")
+    assert "enforce_roster_lock boolean not null default true" in ruleset
+    assert "roster_mutations_locked boolean not null default true" in ruleset
+    assert "roster_lock_game_date date" in ruleset
+    assert "last_roster_lock_game_date date" in ruleset
+    assert "transaction_fee_dollars <= 9007199254740991" in ruleset
+
+    quotes = table_definition(sql, "market_v2_player_quotes")
+    assert "current_game_cost_dollars <= 1000000000000" in quotes
+    assert "prior_season_value_per_game_dollars <= 1000000000000" in quotes
+    assert "9000000000000000000" not in sql
+
+    assert "insert into public.market_v2_rulesets" in sql
+    assert "'per-game-v2-staging'" in sql
+    assert "insert into public.market_v2_player_quotes" in sql
+    assert "round(opening_price_cents::numeric / 8200)::bigint" in sql
+    assert "from public.market_players" in sql
 
 
 def test_account_history_migration_backfills_authoritative_activity_ledgers() -> None:
@@ -382,6 +457,7 @@ def test_replay_seed_migration_reproduces_generated_events_without_overwriting()
         "20260723000000",
         "20260723010000",
         "20260724000000",
+        "20260829000000",
     }
 
 

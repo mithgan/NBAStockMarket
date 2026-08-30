@@ -5,9 +5,9 @@ only gameplay authority; the app does not read or write market state through Sup
 
 ## Run locally
 
-Copy the public environment template, then provide the API URL and the Supabase project URL plus
-its publishable key. Never place a Supabase secret or service-role key in an `EXPO_PUBLIC_*`
-variable.
+Copy the public environment template, then provide the API URL, its v2 path prefix, and the
+Supabase project URL plus its publishable key. Never place a Supabase secret or service-role key in
+an `EXPO_PUBLIC_*` variable.
 
 ```sh
 cd app
@@ -17,6 +17,7 @@ cp .env.example .env
 For local web or iOS Simulator development, start the Databallr Flask backend on `127.0.0.1:8083`
 and keep the template's API URL. Android Emulator users should set
 `EXPO_PUBLIC_NBA_STOCK_API_URL=http://10.0.2.2:8083/api/nba-stock-market`.
+Keep `EXPO_PUBLIC_NBA_STOCK_API_PREFIX=/v2` when the API URL includes that Flask mount path.
 A physical device cannot reach your computer through `127.0.0.1`; use an HTTPS development
 endpoint that the device can reach instead. Remote API and Supabase URLs must use HTTPS.
 
@@ -50,6 +51,7 @@ Configure these public Preview environment variables in Vercel:
 
 ```text
 EXPO_PUBLIC_NBA_STOCK_API_URL=https://api.databallr.com/api/nba-stock-market
+EXPO_PUBLIC_NBA_STOCK_API_PREFIX=/v2
 EXPO_PUBLIC_SUPABASE_URL=https://<databallr-auth-project>.supabase.co
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<databallr-auth-project-public-key>
 ```

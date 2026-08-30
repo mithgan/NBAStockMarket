@@ -3,21 +3,21 @@ import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { MarketApiClient } from './src/api/client';
+import { PerGameApiClient as MarketApiClient } from './src/api/perGameClient';
+import type { PerGamePositionSide } from './src/api/contracts';
 import { resolvePublicAppConfig, type PublicAppConfig } from './src/api/config';
 import { AuthProvider, useAuth, useOptionalAuth } from './src/auth/AuthContext';
 import { AuthScreen } from './src/auth/AuthScreen';
 import { seasonLabelFor } from './src/data/calendar';
-import { SeasonControl } from './src/components/SeasonControl';
+import { PerGameStatusStrip as SeasonControl } from './src/components/PerGameStatusStrip';
 import { SettingsButton, SettingsSheet } from './src/components/SettingsSheet';
 import { useReducedMotion } from './src/hooks/useReducedMotion';
-import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
-import { MarketScreen } from './src/screens/MarketScreen';
-import { PlaysScreen } from './src/screens/PlaysScreen';
+import { PerGameLeaderboardScreen as LeaderboardScreen } from './src/screens/PerGameLeaderboardScreen';
+import { PerGameMarketScreen as MarketScreen } from './src/screens/PerGameMarketScreen';
+import { PerGameResultsScreen as PlaysScreen } from './src/screens/PerGameResultsScreen';
 import { DesignPreviewScreen } from './src/screens/DesignPreviewScreen';
-import { PortfolioScreen } from './src/screens/PortfolioScreen';
-import { WatchlistScreen } from './src/screens/WatchlistScreen';
-import { PortfolioProvider, usePortfolio } from './src/state/PortfolioContext';
+import { PerGameRosterScreen as PortfolioScreen } from './src/screens/PerGameRosterScreen';
+import { PerGameProvider as PortfolioProvider, usePerGame as usePortfolio } from './src/state/PerGameContext';
 import { ThemeProvider, useDesignVariant } from './src/theme/ThemeProvider';
 import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
 import { installGlobalWebStyles } from './src/web/globalStyles';
@@ -27,13 +27,12 @@ installGlobalWebStyles();
 /** Circular databallr mark; radius is derived so it is never a card corner. */
 const BRAND_MARK_SIZE = 24;
 
-type Tab = 'portfolio' | 'market' | 'watchlist' | 'plays' | 'leaderboard';
+type Tab = 'portfolio' | 'market' | 'plays' | 'leaderboard';
 
 const tabs: { key: Tab; label: string }[] = [
-  { key: 'portfolio', label: 'Portfolio' },
+  { key: 'portfolio', label: 'Roster' },
   { key: 'market', label: 'Market' },
-  { key: 'watchlist', label: 'Watch' },
-  { key: 'plays', label: 'Plays' },
+  { key: 'plays', label: 'Results' },
   { key: 'leaderboard', label: 'Leaders' },
 ];
 
@@ -47,7 +46,7 @@ function AmbientFields() {
   const glow = variant.glow;
   if (!glow) return null;
   return (
-    <View pointerEvents="none" style={styles.ambient}>
+    <View style={styles.ambient}>
       <View
         nativeID="ambient-field-up"
         style={[
@@ -84,7 +83,7 @@ function AmbientFields() {
 function VariantTexture() {
   const { variant } = useDesignVariant();
   if (!variant.texture) return null;
-  return <View nativeID={`variant-texture-${variant.texture}`} pointerEvents="none" style={styles.texture} />;
+  return <View nativeID={`variant-texture-${variant.texture}`} style={styles.texture} />;
 }
 
 function CenteredState({
@@ -153,6 +152,7 @@ const WIDE_LAYOUT_MIN_WIDTH = 900;
 
 function AppBody() {
   const [activeTab, setActiveTab] = useState<Tab>('portfolio');
+  const [marketSide, setMarketSide] = useState<PerGamePositionSide>('long');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -187,7 +187,7 @@ function AppBody() {
       return (
         <CenteredState
           busy
-          copy="Loading market, portfolio, and game state from the server."
+          copy="Loading your roster, per-game market, and P&L from the server."
           title="Loading your account"
         />
       );
@@ -213,19 +213,25 @@ function AppBody() {
       return (
         <CenteredState
           actionLabel="RETRY"
-          copy={serverError ?? 'The server did not return a usable account snapshot.'}
+          copy={serverError ?? 'The server did not return a usable per-game account snapshot.'}
           onAction={() => {
             refreshData();
           }}
-          title="Account unavailable"
+          title="Per-game market unavailable"
         />
       );
     }
     return (
       <>
-        {activeTab === 'portfolio' && <PortfolioScreen onOpenMarket={() => setActiveTab('market')} />}
-        {activeTab === 'market' && <MarketScreen />}
-        {activeTab === 'watchlist' && <WatchlistScreen />}
+        {activeTab === 'portfolio' && (
+          <PortfolioScreen
+            onOpenMarket={(side) => {
+              setMarketSide(side);
+              setActiveTab('market');
+            }}
+          />
+        )}
+        {activeTab === 'market' && <MarketScreen initialSide={marketSide} />}
         {activeTab === 'plays' && <PlaysScreen />}
         {activeTab === 'leaderboard' && <LeaderboardScreen />}
       </>
@@ -321,11 +327,10 @@ function AuthenticatedRuntime({ config }: { config: PublicAppConfig }) {
   const { getAccessToken, isLoading, user } = useAuth();
   const client = useMemo(() => new MarketApiClient({
     baseUrl: config.apiUrl,
-    apiPrefix: '',
-    adminAuthMode: 'bearer',
+    apiPrefix: config.apiPrefix,
     expectedUserId: user?.id ?? '',
     getAccessToken,
-  }), [config.apiUrl, getAccessToken, user?.id]);
+  }), [config.apiPrefix, config.apiUrl, getAccessToken, user?.id]);
 
   if (isLoading) {
     return (
@@ -402,6 +407,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   ambient: {
+    pointerEvents: 'none',
     position: 'absolute',
     top: 0,
     left: 0,
@@ -410,6 +416,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   texture: {
+    pointerEvents: 'none',
     position: 'absolute',
     top: 0,
     left: 0,

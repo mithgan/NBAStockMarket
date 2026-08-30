@@ -1,0 +1,118 @@
+{
+  "bootstrap": {
+    "ruleset": {
+      "id": "per-game-v2-staging",
+      "version": 1,
+      "roster_mutations_locked": false,
+      "roster_lock_game_date": null,
+      "dividend_basis": "raw_net_points",
+      "dividend_dollars_per_net_point": 40000,
+      "long_slot_limit": 10,
+      "short_slot_limit": 5,
+      "quote_add_impact_bps": 25,
+      "quote_drop_impact_bps": 25,
+      "transaction_fee_dollars": 0,
+      "short_term_days": 7
+    },
+    "market": [
+      {
+        "player_id": "wembanyama-victor",
+        "name": "Victor Wembanyama",
+        "tier": "star",
+        "quote_version": 4,
+        "current_game_cost_dollars": 500000,
+        "prior_season_value_per_game_dollars": 472000
+      }
+    ],
+    "account": {
+      "account_id": "example-account",
+      "display_name": "Example",
+      "version": 8,
+      "cumulative_pnl_dollars": 76000,
+      "latest_game_pnl_dollars": 24000,
+      "long_slots": { "used": 1, "limit": 10, "remaining": 9 },
+      "short_slots": { "used": 0, "limit": 5, "remaining": 5 }
+    },
+    "positions": [
+      {
+        "position_id": "position-1",
+        "player_id": "wembanyama-victor",
+        "player_name": "Victor Wembanyama",
+        "side": "long",
+        "status": "active",
+        "locked_game_cost_dollars": 480000,
+        "opened_event_sequence": 12,
+        "closed_event_sequence": null,
+        "expires_on": null,
+        "cumulative_game_cost_dollars": 960000,
+        "cumulative_dividend_dollars": 1036000,
+        "cumulative_pnl_dollars": 76000
+      }
+    ],
+    "game": {
+      "season_id": "2026-27",
+      "last_settled_date": "2026-10-24",
+      "next_game_date": "2026-10-26",
+      "event_cursor": 48
+    },
+    "ledger": {
+      "items": [
+        {
+          "event_cursor": 48,
+          "entry_id": "entry-48",
+          "position_id": "position-1",
+          "player_id": "wembanyama-victor",
+          "game_id": "game-2",
+          "game_date": "2026-10-24",
+          "result_revision": 1,
+          "kind": "game_dividend",
+          "amount_dollars": 504000,
+          "adjusts_entry_id": null,
+          "created_at": "2026-10-25T03:12:00Z"
+        }
+      ],
+      "next_cursor": null
+    },
+    "settled_results": [
+      {
+        "event_cursor": 48,
+        "position_id": "position-1",
+        "player_id": "wembanyama-victor",
+        "game_id": "game-2",
+        "game_date": "2026-10-24",
+        "result_revision": 1,
+        "side": "long",
+        "kind": "base",
+        "status": "settled",
+        "locked_game_cost_dollars": 480000,
+        "dividend_dollars": 504000,
+        "net_pnl_dollars": 24000,
+        "adjusts_result_revision": null
+      }
+    ],
+    "leaderboard": [
+      {
+        "rank": 1,
+        "account_id": "example-account",
+        "display_name": "Example",
+        "cumulative_pnl_dollars": 76000,
+        "is_current_user": true
+      }
+    ],
+    "capabilities": {
+      "can_open_long": true,
+      "can_open_short": true,
+      "can_advance_replay": false
+    }
+  },
+  "open_position_response": {
+    "replayed": false,
+    "account_version": 9,
+    "position_id": "position-2",
+    "player_id": "player-2",
+    "side": "long",
+    "locked_game_cost_dollars": 210000,
+    "quote_version": 6,
+    "current_game_cost_dollars": 210525
+  }
+}

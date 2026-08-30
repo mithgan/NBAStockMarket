@@ -6,11 +6,13 @@ import { resolvePublicAppConfig } from './config';
 test('public app config accepts only explicit HTTP URLs and a publishable key', () => {
   assert.deepEqual(resolvePublicAppConfig({
     apiUrl: 'http://127.0.0.1:8011/',
+    apiPrefix: '/api/v2/',
     supabaseUrl: 'https://example.supabase.co/',
     supabasePublishableKey: 'public-key',
   }), {
     config: {
       apiUrl: 'http://127.0.0.1:8011',
+      apiPrefix: '/api/v2',
       supabaseUrl: 'https://example.supabase.co',
       supabasePublishableKey: 'public-key',
     },
@@ -49,4 +51,28 @@ test('public app config accepts only explicit HTTP URLs and a publishable key', 
     supabaseUrl: 'https://example.supabase.co',
     supabasePublishableKey: 'public-key',
   }).config?.apiUrl, 'http://10.0.2.2:8011');
+
+  assert.equal(resolvePublicAppConfig({
+    apiUrl: 'http://127.0.0.1:8011',
+    supabaseUrl: 'https://example.supabase.co',
+    supabasePublishableKey: 'public-key',
+  }).config?.apiPrefix, '/api/v2');
+
+  assert.equal(resolvePublicAppConfig({
+    apiUrl: 'https://api.example.com/api/nba-stock-market',
+    apiPrefix: '/v2',
+    supabaseUrl: 'https://example.supabase.co',
+    supabasePublishableKey: 'public-key',
+  }).config?.apiPrefix, '/v2');
+  assert.match(resolvePublicAppConfig({
+    apiUrl: 'https://api.example.com/api/nba-stock-market',
+    supabaseUrl: 'https://example.supabase.co',
+    supabasePublishableKey: 'public-key',
+  }).error ?? '', /API prefix is required/);
+  assert.match(resolvePublicAppConfig({
+    apiUrl: 'https://api.example.com',
+    apiPrefix: 'https://other.example.com/api/v2',
+    supabaseUrl: 'https://example.supabase.co',
+    supabasePublishableKey: 'public-key',
+  }).error ?? '', /URL path/);
 });

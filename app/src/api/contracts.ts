@@ -223,6 +223,187 @@ export interface ServerBootstrap {
   capabilities: MarketCapabilities;
 }
 
+// Per-game economy v2 intentionally lives beside the legacy asset-market
+// contract while the backend rolls out. The app runtime below consumes only
+// these types and never coerces a v1 response into the new economy.
+export type DividendBasis = 'raw_net_points' | 'surprise_vs_projection';
+export type PerGamePositionSide = 'long' | 'short';
+export type PerGamePositionStatus = 'active' | 'closed';
+export type PerGameResultKind = 'base' | 'correction';
+export type PerGameResultStatus = 'settled' | 'unsettled' | 'unsettled_missing_projection';
+export type PerGameLedgerKind =
+  | 'game_cost'
+  | 'game_dividend'
+  | 'dividend_correction'
+  | 'open_fee'
+  | 'drop_fee'
+  // The frozen fixture uses the generic names while the additive API uses the
+  // more explicit values above. Both sets remain finite and validated.
+  | 'dividend'
+  | 'correction'
+  | 'fee'
+  | 'penalty';
+
+export interface PerGameRuleset {
+  id: string;
+  version: number;
+  allowOpposingPositions: boolean;
+  rosterMutationsLocked: boolean;
+  rosterLockGameDate: string | null;
+  dividendBasis: DividendBasis;
+  dividendDollarsPerNetPoint: number;
+  longSlotLimit: number;
+  shortSlotLimit: number;
+  quoteAddImpactBps: number;
+  quoteDropImpactBps: number;
+  transactionFeeDollars: number;
+  shortTermDays: number | null;
+}
+
+export interface PerGameMarketPlayer {
+  playerId: string;
+  name: string;
+  tier: string;
+  quoteVersion: number;
+  currentGameCost: number;
+  priorSeasonValuePerGame: number | null;
+}
+
+export interface PerGameSlotSummary {
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
+export interface PerGameAccount {
+  accountId: string;
+  displayName: string;
+  version: number;
+  cumulativePnl: number;
+  latestGamePnl: number;
+  longSlots: PerGameSlotSummary;
+  shortSlots: PerGameSlotSummary;
+}
+
+export interface PerGamePosition {
+  positionId: string;
+  playerId: string;
+  playerName: string;
+  side: PerGamePositionSide;
+  status: PerGamePositionStatus;
+  lockedGameCost: number;
+  openedEventSequence: number;
+  closedEventSequence: number | null;
+  expiresOn: string | null;
+  cumulativeGameCost: number;
+  cumulativeDividend: number;
+  cumulativePnl: number;
+}
+
+export interface PerGameState {
+  seasonId: string;
+  lastSettledDate: string | null;
+  nextGameDate: string | null;
+  eventCursor: number;
+}
+
+export interface PerGameLedgerEntry {
+  eventCursor: number;
+  entryId: string;
+  positionId: string;
+  playerId: string;
+  gameId: string | null;
+  gameDate: string | null;
+  resultRevision: number | null;
+  kind: PerGameLedgerKind;
+  amountDollars: number;
+  adjustsEntryId: string | null;
+  createdAt: string;
+}
+
+export interface PerGameLedgerPage {
+  items: PerGameLedgerEntry[];
+  nextCursor: number | null;
+}
+
+export interface PerGameSettledResult {
+  eventCursor: number;
+  positionId: string;
+  playerId: string;
+  gameId: string;
+  gameDate: string;
+  resultRevision: number;
+  side: PerGamePositionSide;
+  kind: PerGameResultKind;
+  status: PerGameResultStatus;
+  lockedGameCost: number;
+  dividendDollars: number | null;
+  netPnl: number | null;
+  adjustsResultRevision: number | null;
+}
+
+export interface PerGameLeaderboardRow {
+  rank: number;
+  accountId: string;
+  displayName: string;
+  cumulativePnl: number;
+  isCurrentUser: boolean;
+}
+
+export interface PerGameCapabilities {
+  canOpenLong: boolean;
+  canOpenShort: boolean;
+  canAdvanceReplay: boolean;
+}
+
+export interface PerGameBootstrap {
+  ruleset: PerGameRuleset;
+  market: PerGameMarketPlayer[];
+  account: PerGameAccount;
+  positions: PerGamePosition[];
+  game: PerGameState;
+  ledger: PerGameLedgerPage;
+  settledResults: PerGameSettledResult[];
+  leaderboard: PerGameLeaderboardRow[];
+  capabilities: PerGameCapabilities;
+}
+
+export interface PerGamePositionMutationResult {
+  replayed: boolean;
+  accountVersion: number;
+  positionId: string;
+  playerId: string;
+  side: PerGamePositionSide;
+  lockedGameCost: number;
+  quoteVersion: number;
+  currentGameCost: number;
+}
+
+export interface PerGameOpenPositionIntent {
+  playerId: string;
+  playerName: string;
+  side: PerGamePositionSide;
+  expectedQuoteVersion: number;
+}
+
+export interface PerGameOpenPositionRequest {
+  playerId: string;
+  side: PerGamePositionSide;
+  expectedAccountVersion: number;
+  expectedQuoteVersion: number;
+}
+
+export interface PerGameClosePositionMutationResult {
+  replayed: boolean;
+  accountVersion: number;
+  positionId: string;
+  playerId: string;
+  side: PerGamePositionSide;
+  closedEventSequence: number;
+  quoteVersion: number;
+  currentGameCost: number;
+}
+
 type Parser<T> = (value: unknown, path?: string) => T;
 
 function record(value: unknown, path: string): Record<string, unknown> {
@@ -681,6 +862,360 @@ export function parseAdvanceResult(
     cash_breakdown_cents: parseCashBreakdown(
       row.cash_breakdown_cents,
       `${path}.cash_breakdown_cents`,
+    ),
+  };
+}
+
+function nullableNonNegativeInteger(value: unknown, path: string): number | null {
+  return value === null ? null : nonNegativeInteger(value, path);
+}
+
+function positiveInteger(value: unknown, path: string): number {
+  const parsed = integer(value, path);
+  if (parsed <= 0) throw new ContractError(`${path} must be positive.`);
+  return parsed;
+}
+
+function nullablePositiveInteger(value: unknown, path: string): number | null {
+  return value === null ? null : positiveInteger(value, path);
+}
+
+function parsePerGameSlots(value: unknown, path: string): PerGameSlotSummary {
+  const row = record(value, path);
+  const slots = {
+    used: nonNegativeInteger(row.used, `${path}.used`),
+    limit: nonNegativeInteger(row.limit, `${path}.limit`),
+    remaining: nonNegativeInteger(row.remaining, `${path}.remaining`),
+  };
+  if (slots.used + slots.remaining !== slots.limit) {
+    throw new ContractError(`${path} must reconcile used, remaining, and limit.`);
+  }
+  return slots;
+}
+
+function parsePerGameRuleset(value: unknown, path: string): PerGameRuleset {
+  const row = record(value, path);
+  return {
+    id: text(row.id, `${path}.id`),
+    version: positiveInteger(row.version, `${path}.version`),
+    // Older frozen v2 fixtures predate this field. Missing policy data must
+    // fail closed because the server default also forbids opposing positions.
+    allowOpposingPositions: row.allow_opposing_positions === undefined
+      ? false
+      : flag(row.allow_opposing_positions, `${path}.allow_opposing_positions`),
+    rosterMutationsLocked: flag(
+      row.roster_mutations_locked,
+      `${path}.roster_mutations_locked`,
+    ),
+    rosterLockGameDate: nullableIsoDate(
+      row.roster_lock_game_date,
+      `${path}.roster_lock_game_date`,
+    ),
+    dividendBasis: oneOf(
+      row.dividend_basis,
+      `${path}.dividend_basis`,
+      ['raw_net_points', 'surprise_vs_projection'] as const,
+    ),
+    dividendDollarsPerNetPoint: nonNegativeInteger(
+      row.dividend_dollars_per_net_point,
+      `${path}.dividend_dollars_per_net_point`,
+    ),
+    longSlotLimit: nonNegativeInteger(row.long_slot_limit, `${path}.long_slot_limit`),
+    shortSlotLimit: nonNegativeInteger(row.short_slot_limit, `${path}.short_slot_limit`),
+    quoteAddImpactBps: nonNegativeInteger(
+      row.quote_add_impact_bps,
+      `${path}.quote_add_impact_bps`,
+    ),
+    quoteDropImpactBps: nonNegativeInteger(
+      row.quote_drop_impact_bps,
+      `${path}.quote_drop_impact_bps`,
+    ),
+    transactionFeeDollars: nonNegativeInteger(
+      row.transaction_fee_dollars,
+      `${path}.transaction_fee_dollars`,
+    ),
+    shortTermDays: nullablePositiveInteger(
+      row.short_term_days,
+      `${path}.short_term_days`,
+    ),
+  };
+}
+
+export function parsePerGameMarketPlayer(
+  value: unknown,
+  path = 'market_player',
+): PerGameMarketPlayer {
+  const row = record(value, path);
+  return {
+    playerId: text(row.player_id, `${path}.player_id`),
+    name: text(row.name, `${path}.name`),
+    tier: text(row.tier, `${path}.tier`),
+    quoteVersion: nonNegativeInteger(row.quote_version, `${path}.quote_version`),
+    currentGameCost: nonNegativeInteger(
+      row.current_game_cost_dollars,
+      `${path}.current_game_cost_dollars`,
+    ),
+    priorSeasonValuePerGame: nullableNonNegativeInteger(
+      row.prior_season_value_per_game_dollars,
+      `${path}.prior_season_value_per_game_dollars`,
+    ),
+  };
+}
+
+export function parsePerGameAccount(value: unknown, path = 'account'): PerGameAccount {
+  const row = record(value, path);
+  return {
+    accountId: text(row.account_id, `${path}.account_id`),
+    displayName: text(row.display_name, `${path}.display_name`),
+    version: nonNegativeInteger(row.version, `${path}.version`),
+    cumulativePnl: integer(row.cumulative_pnl_dollars, `${path}.cumulative_pnl_dollars`),
+    latestGamePnl: integer(row.latest_game_pnl_dollars, `${path}.latest_game_pnl_dollars`),
+    longSlots: parsePerGameSlots(row.long_slots, `${path}.long_slots`),
+    shortSlots: parsePerGameSlots(row.short_slots, `${path}.short_slots`),
+  };
+}
+
+export function parsePerGamePosition(value: unknown, path = 'position'): PerGamePosition {
+  const row = record(value, path);
+  const openedEventSequence = nonNegativeInteger(
+    row.opened_event_sequence,
+    `${path}.opened_event_sequence`,
+  );
+  const closedEventSequence = nullableNonNegativeInteger(
+    row.closed_event_sequence,
+    `${path}.closed_event_sequence`,
+  );
+  if (closedEventSequence !== null && closedEventSequence < openedEventSequence) {
+    throw new ContractError(
+      `${path}.closed_event_sequence cannot precede the open sequence.`,
+    );
+  }
+  const status = oneOf(row.status, `${path}.status`, ['active', 'closed'] as const);
+  const side = oneOf(row.side, `${path}.side`, ['long', 'short'] as const);
+  const expiresOn = nullableIsoDate(row.expires_on, `${path}.expires_on`);
+  if ((status === 'active') !== (closedEventSequence === null)) {
+    throw new ContractError(`${path}.status must agree with its close sequence.`);
+  }
+  if (side === 'long' && expiresOn !== null) {
+    throw new ContractError(`${path}.expires_on is only valid for inverse positions.`);
+  }
+  return {
+    positionId: text(row.position_id, `${path}.position_id`),
+    playerId: text(row.player_id, `${path}.player_id`),
+    playerName: text(row.player_name, `${path}.player_name`),
+    side,
+    status,
+    lockedGameCost: nonNegativeInteger(
+      row.locked_game_cost_dollars,
+      `${path}.locked_game_cost_dollars`,
+    ),
+    openedEventSequence,
+    closedEventSequence,
+    expiresOn,
+    cumulativeGameCost: nonNegativeInteger(
+      row.cumulative_game_cost_dollars,
+      `${path}.cumulative_game_cost_dollars`,
+    ),
+    cumulativeDividend: integer(
+      row.cumulative_dividend_dollars,
+      `${path}.cumulative_dividend_dollars`,
+    ),
+    cumulativePnl: integer(row.cumulative_pnl_dollars, `${path}.cumulative_pnl_dollars`),
+  };
+}
+
+function parsePerGameState(value: unknown, path: string): PerGameState {
+  const row = record(value, path);
+  return {
+    seasonId: text(row.season_id, `${path}.season_id`),
+    lastSettledDate: nullableIsoDate(row.last_settled_date, `${path}.last_settled_date`),
+    nextGameDate: nullableIsoDate(row.next_game_date, `${path}.next_game_date`),
+    eventCursor: nonNegativeInteger(row.event_cursor, `${path}.event_cursor`),
+  };
+}
+
+export function parsePerGameLedgerEntry(
+  value: unknown,
+  path = 'ledger_entry',
+): PerGameLedgerEntry {
+  const row = record(value, path);
+  return {
+    eventCursor: nonNegativeInteger(row.event_cursor, `${path}.event_cursor`),
+    entryId: text(row.entry_id, `${path}.entry_id`),
+    positionId: text(row.position_id, `${path}.position_id`),
+    playerId: text(row.player_id, `${path}.player_id`),
+    gameId: nullableText(row.game_id, `${path}.game_id`),
+    gameDate: nullableIsoDate(row.game_date, `${path}.game_date`),
+    resultRevision: nullablePositiveInteger(row.result_revision, `${path}.result_revision`),
+    kind: oneOf(
+      row.kind,
+      `${path}.kind`,
+      [
+        'game_cost',
+        'game_dividend',
+        'dividend_correction',
+        'open_fee',
+        'drop_fee',
+        'dividend',
+        'correction',
+        'fee',
+        'penalty',
+      ] as const,
+    ),
+    amountDollars: integer(row.amount_dollars, `${path}.amount_dollars`),
+    adjustsEntryId: nullableText(row.adjusts_entry_id, `${path}.adjusts_entry_id`),
+    createdAt: isoTimestamp(row.created_at, `${path}.created_at`),
+  };
+}
+
+export function parsePerGameSettledResult(
+  value: unknown,
+  path = 'settled_result_v2',
+): PerGameSettledResult {
+  const row = record(value, path);
+  const kind = oneOf(row.kind, `${path}.kind`, ['base', 'correction'] as const);
+  const adjustsResultRevision = nullableInteger(
+    row.adjusts_result_revision,
+    `${path}.adjusts_result_revision`,
+  );
+  if (adjustsResultRevision !== null && adjustsResultRevision <= 0) {
+    throw new ContractError(`${path}.adjusts_result_revision must be positive when present.`);
+  }
+  if ((kind === 'correction') !== (adjustsResultRevision !== null)) {
+    throw new ContractError(`${path}.kind must agree with its adjusted revision.`);
+  }
+  return {
+    eventCursor: nonNegativeInteger(row.event_cursor, `${path}.event_cursor`),
+    positionId: text(row.position_id, `${path}.position_id`),
+    playerId: text(row.player_id, `${path}.player_id`),
+    gameId: text(row.game_id, `${path}.game_id`),
+    gameDate: isoDate(row.game_date, `${path}.game_date`),
+    resultRevision: positiveInteger(row.result_revision, `${path}.result_revision`),
+    side: oneOf(row.side, `${path}.side`, ['long', 'short'] as const),
+    kind,
+    status: oneOf(
+      row.status,
+      `${path}.status`,
+      ['settled', 'unsettled', 'unsettled_missing_projection'] as const,
+    ),
+    lockedGameCost: nonNegativeInteger(
+      row.locked_game_cost_dollars,
+      `${path}.locked_game_cost_dollars`,
+    ),
+    dividendDollars: nullableInteger(row.dividend_dollars, `${path}.dividend_dollars`),
+    netPnl: nullableInteger(row.net_pnl_dollars, `${path}.net_pnl_dollars`),
+    adjustsResultRevision,
+  };
+}
+
+function parsePerGameLeaderboardRow(
+  value: unknown,
+  path = 'leaderboard_v2',
+): PerGameLeaderboardRow {
+  const row = record(value, path);
+  return {
+    rank: positiveInteger(row.rank, `${path}.rank`),
+    accountId: text(row.account_id, `${path}.account_id`),
+    displayName: text(row.display_name, `${path}.display_name`),
+    cumulativePnl: integer(row.cumulative_pnl_dollars, `${path}.cumulative_pnl_dollars`),
+    isCurrentUser: flag(row.is_current_user, `${path}.is_current_user`),
+  };
+}
+
+function parsePerGameCapabilities(value: unknown, path: string): PerGameCapabilities {
+  const row = record(value, path);
+  return {
+    canOpenLong: flag(row.can_open_long, `${path}.can_open_long`),
+    canOpenShort: flag(row.can_open_short, `${path}.can_open_short`),
+    canAdvanceReplay: flag(row.can_advance_replay, `${path}.can_advance_replay`),
+  };
+}
+
+export function parsePerGameBootstrap(
+  value: unknown,
+  path = 'bootstrap_v2',
+): PerGameBootstrap {
+  const row = record(value, path);
+  const ledger = record(row.ledger, `${path}.ledger`);
+  const ruleset = parsePerGameRuleset(row.ruleset, `${path}.ruleset`);
+  const capabilities = parsePerGameCapabilities(row.capabilities, `${path}.capabilities`);
+  if (
+    ruleset.rosterMutationsLocked
+    && (capabilities.canOpenLong || capabilities.canOpenShort)
+  ) {
+    throw new ContractError(
+      `${path}.capabilities cannot allow roster opens while roster mutations are locked.`,
+    );
+  }
+  return {
+    ruleset,
+    market: list(row.market, `${path}.market`, parsePerGameMarketPlayer),
+    account: parsePerGameAccount(row.account, `${path}.account`),
+    positions: list(row.positions, `${path}.positions`, parsePerGamePosition),
+    game: parsePerGameState(row.game, `${path}.game`),
+    ledger: {
+      items: list(ledger.items, `${path}.ledger.items`, parsePerGameLedgerEntry),
+      nextCursor: nullableNonNegativeInteger(
+        ledger.next_cursor,
+        `${path}.ledger.next_cursor`,
+      ),
+    },
+    settledResults: list(
+      row.settled_results,
+      `${path}.settled_results`,
+      parsePerGameSettledResult,
+    ),
+    leaderboard: list(
+      row.leaderboard,
+      `${path}.leaderboard`,
+      parsePerGameLeaderboardRow,
+    ),
+    capabilities,
+  };
+}
+
+export function parsePerGamePositionMutationResult(
+  value: unknown,
+  path = 'position_mutation_v2',
+): PerGamePositionMutationResult {
+  const row = record(value, path);
+  return {
+    replayed: flag(row.replayed, `${path}.replayed`),
+    accountVersion: nonNegativeInteger(row.account_version, `${path}.account_version`),
+    positionId: text(row.position_id, `${path}.position_id`),
+    playerId: text(row.player_id, `${path}.player_id`),
+    side: oneOf(row.side, `${path}.side`, ['long', 'short'] as const),
+    lockedGameCost: nonNegativeInteger(
+      row.locked_game_cost_dollars,
+      `${path}.locked_game_cost_dollars`,
+    ),
+    quoteVersion: nonNegativeInteger(row.quote_version, `${path}.quote_version`),
+    currentGameCost: nonNegativeInteger(
+      row.current_game_cost_dollars,
+      `${path}.current_game_cost_dollars`,
+    ),
+  };
+}
+
+export function parsePerGameClosePositionMutationResult(
+  value: unknown,
+  path = 'close_position_mutation_v2',
+): PerGameClosePositionMutationResult {
+  const row = record(value, path);
+  return {
+    replayed: flag(row.replayed, `${path}.replayed`),
+    accountVersion: nonNegativeInteger(row.account_version, `${path}.account_version`),
+    positionId: text(row.position_id, `${path}.position_id`),
+    playerId: text(row.player_id, `${path}.player_id`),
+    side: oneOf(row.side, `${path}.side`, ['long', 'short'] as const),
+    closedEventSequence: nonNegativeInteger(
+      row.closed_event_sequence,
+      `${path}.closed_event_sequence`,
+    ),
+    quoteVersion: nonNegativeInteger(row.quote_version, `${path}.quote_version`),
+    currentGameCost: nonNegativeInteger(
+      row.current_game_cost_dollars,
+      `${path}.current_game_cost_dollars`,
     ),
   };
 }

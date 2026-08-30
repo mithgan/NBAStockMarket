@@ -1,5 +1,6 @@
 export interface PublicAppConfig {
   apiUrl: string;
+  apiPrefix: string;
   supabaseUrl: string;
   supabasePublishableKey: string;
 }
@@ -10,8 +11,29 @@ export type PublicAppConfigResult =
 
 interface PublicAppEnvironment {
   apiUrl?: string;
+  apiPrefix?: string;
   supabaseUrl?: string;
   supabasePublishableKey?: string;
+}
+
+function normalizedApiPrefix(value: string | undefined, apiUrl: string): string {
+  const explicitPrefix = value?.trim();
+  if (explicitPrefix === undefined) {
+    const basePath = new URL(apiUrl).pathname.replace(/\/+$/, '');
+    if (basePath) {
+      throw new Error('API prefix is required when API URL includes a path.');
+    }
+  }
+  const candidate = explicitPrefix ?? '/api/v2';
+  if (candidate === '' || candidate === '/') return '';
+  if (candidate.includes('?') || candidate.includes('#') || candidate.includes('://')) {
+    throw new Error('API prefix must be a URL path, not a URL.');
+  }
+  const segments = candidate.split('/').filter(Boolean);
+  if (segments.some((segment) => segment === '.' || segment === '..')) {
+    throw new Error('API prefix must not contain relative path segments.');
+  }
+  return `/${segments.join('/')}`;
 }
 
 function normalizedHttpUrl(value: string | undefined, label: string): string {
@@ -61,15 +83,18 @@ function validatePublishableKey(value: string | undefined): string {
 export function resolvePublicAppConfig(
   environment: PublicAppEnvironment = {
     apiUrl: process.env.EXPO_PUBLIC_NBA_STOCK_API_URL,
+    apiPrefix: process.env.EXPO_PUBLIC_NBA_STOCK_API_PREFIX,
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabasePublishableKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   },
 ): PublicAppConfigResult {
   try {
     const supabasePublishableKey = validatePublishableKey(environment.supabasePublishableKey);
+    const apiUrl = normalizedHttpUrl(environment.apiUrl, 'API URL');
     return {
       config: {
-        apiUrl: normalizedHttpUrl(environment.apiUrl, 'API URL'),
+        apiUrl,
+        apiPrefix: normalizedApiPrefix(environment.apiPrefix, apiUrl),
         supabaseUrl: normalizedHttpUrl(environment.supabaseUrl, 'Supabase URL'),
         supabasePublishableKey,
       },

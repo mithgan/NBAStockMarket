@@ -19,6 +19,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     JSON,
@@ -38,6 +39,10 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sess
 
 from nba_stock_market.api.auth import MAX_DISPLAY_NAME_LENGTH
 from nba_stock_market.engine import STARTING_CASH
+from nba_stock_market.per_game import (
+    JAVASCRIPT_MAX_SAFE_INTEGER,
+    MAX_PER_GAME_QUOTE_DOLLARS,
+)
 
 
 DATABASE_CONNECT_TIMEOUT_SECONDS = 5
@@ -54,6 +59,7 @@ EXPECTED_MARKET_MIGRATIONS = {
     "20260723000000",
     "20260723010000",
     "20260724000000",
+    "20260829000000",
 }
 GAME_STATE_ID = "historical-2025-26"
 EXPECTED_REPLAY_EVENT_COUNT = 2_126
@@ -639,6 +645,649 @@ class AccountResetCommandRow(Base):
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     response_payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class PerGameRulesetRow(Base):
+    __tablename__ = "market_v2_rulesets"
+    __table_args__ = (
+        CheckConstraint("version >= 1", name="ck_market_v2_ruleset_version"),
+        CheckConstraint(
+            "dividend_basis IN ('raw_net_points', 'surprise_vs_projection')",
+            name="ck_market_v2_ruleset_dividend_basis",
+        ),
+        CheckConstraint(
+            "dividend_dollars_per_net_point >= 0 AND "
+            "dividend_dollars_per_net_point <= 1000000000",
+            name="ck_market_v2_ruleset_dividend_rate",
+        ),
+        CheckConstraint(
+            "long_slot_limit >= 0 AND long_slot_limit <= 100",
+            name="ck_market_v2_ruleset_long_slots",
+        ),
+        CheckConstraint(
+            "short_slot_limit >= 0 AND short_slot_limit <= 100",
+            name="ck_market_v2_ruleset_short_slots",
+        ),
+        CheckConstraint(
+            "quote_add_impact_bps >= 0 AND quote_add_impact_bps <= 10000",
+            name="ck_market_v2_ruleset_add_impact",
+        ),
+        CheckConstraint(
+            "quote_drop_impact_bps >= 0 AND quote_drop_impact_bps <= 10000",
+            name="ck_market_v2_ruleset_drop_impact",
+        ),
+        CheckConstraint(
+            "transaction_fee_dollars >= 0 AND "
+            f"transaction_fee_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
+            name="ck_market_v2_ruleset_fee",
+        ),
+        CheckConstraint(
+            "short_term_days IS NULL OR short_term_days > 0",
+            name="ck_market_v2_ruleset_short_term",
+        ),
+        CheckConstraint(
+            "current_sequence >= 0",
+            name="ck_market_v2_ruleset_sequence",
+        ),
+        CheckConstraint(
+            "event_cursor >= 0",
+            name="ck_market_v2_ruleset_event_cursor",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    season_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    dividend_basis: Mapped[str] = mapped_column(String(32), nullable=False)
+    dividend_dollars_per_net_point: Mapped[int] = mapped_column(
+        BigInteger, nullable=False
+    )
+    long_slot_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    short_slot_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    allow_opposing_positions: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    enforce_roster_lock: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    roster_mutations_locked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    roster_lock_game_date: Mapped[date | None] = mapped_column(Date)
+    last_roster_lock_game_date: Mapped[date | None] = mapped_column(Date)
+    quote_add_impact_bps: Mapped[int] = mapped_column(Integer, nullable=False)
+    quote_drop_impact_bps: Mapped[int] = mapped_column(Integer, nullable=False)
+    transaction_fee_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    short_term_days: Mapped[int | None] = mapped_column(Integer)
+    current_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_settled_date: Mapped[date | None] = mapped_column(Date)
+    next_game_date: Mapped[date | None] = mapped_column(Date)
+    event_cursor: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class PerGameGameBoundaryRow(Base):
+    __tablename__ = "market_v2_game_boundaries"
+    __table_args__ = (
+        CheckConstraint(
+            "event_sequence >= 0", name="ck_market_v2_game_boundary_sequence"
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id"],
+            ["market_v2_rulesets.id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+    ruleset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    game_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    game_date: Mapped[date] = mapped_column(Date, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    next_game_date: Mapped[date | None] = mapped_column(Date)
+    event_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class PerGameQuoteRow(Base):
+    __tablename__ = "market_v2_player_quotes"
+    __table_args__ = (
+        CheckConstraint(
+            "current_game_cost_dollars > 0 AND "
+            f"current_game_cost_dollars <= {MAX_PER_GAME_QUOTE_DOLLARS}",
+            name="ck_market_v2_quote_current_cost",
+        ),
+        CheckConstraint(
+            "prior_season_value_per_game_dollars IS NULL OR "
+            "(prior_season_value_per_game_dollars >= 0 AND "
+            "prior_season_value_per_game_dollars <= "
+            f"{MAX_PER_GAME_QUOTE_DOLLARS})",
+            name="ck_market_v2_quote_prior_value",
+        ),
+        CheckConstraint("version >= 0", name="ck_market_v2_quote_version"),
+        ForeignKeyConstraint(
+            ["ruleset_id"],
+            ["market_v2_rulesets.id"],
+            ondelete="CASCADE",
+        ),
+        Index("ix_market_v2_quotes_player", "player_id"),
+    )
+
+    ruleset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    player_id: Mapped[str] = mapped_column(
+        ForeignKey("market_players.id", ondelete="RESTRICT"), primary_key=True
+    )
+    current_game_cost_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    prior_season_value_per_game_dollars: Mapped[int | None] = mapped_column(BigInteger)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class PerGameAccountRow(Base):
+    __tablename__ = "market_v2_accounts"
+    __table_args__ = (
+        CheckConstraint("version >= 0", name="ck_market_v2_account_version"),
+        CheckConstraint(
+            f"cumulative_pnl_dollars >= -{JAVASCRIPT_MAX_SAFE_INTEGER} AND "
+            f"cumulative_pnl_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
+            name="ck_market_v2_account_cumulative_pnl",
+        ),
+        CheckConstraint(
+            f"latest_game_pnl_dollars >= -{JAVASCRIPT_MAX_SAFE_INTEGER} AND "
+            f"latest_game_pnl_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
+            name="ck_market_v2_account_latest_pnl",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id"],
+            ["market_v2_rulesets.id"],
+            ondelete="CASCADE",
+        ),
+        Index(
+            "ix_market_v2_accounts_leaderboard",
+            "ruleset_id",
+            "cumulative_pnl_dollars",
+        ),
+    )
+
+    ruleset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    account_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    display_name: Mapped[str] = mapped_column(
+        String(MAX_DISPLAY_NAME_LENGTH), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cumulative_pnl_dollars: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
+    latest_game_pnl_dollars: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class PerGamePositionRow(Base):
+    __tablename__ = "market_v2_positions"
+    __table_args__ = (
+        CheckConstraint(
+            "side IN ('long', 'short')", name="ck_market_v2_position_side"
+        ),
+        CheckConstraint(
+            "status IN ('active', 'closed')",
+            name="ck_market_v2_position_status",
+        ),
+        CheckConstraint(
+            "locked_game_cost_dollars > 0 AND "
+            f"locked_game_cost_dollars <= {MAX_PER_GAME_QUOTE_DOLLARS}",
+            name="ck_market_v2_position_locked_cost",
+        ),
+        CheckConstraint(
+            "opened_event_sequence >= 0",
+            name="ck_market_v2_position_open_sequence",
+        ),
+        CheckConstraint(
+            "closed_event_sequence IS NULL OR "
+            "closed_event_sequence >= opened_event_sequence",
+            name="ck_market_v2_position_close_sequence",
+        ),
+        CheckConstraint(
+            "(status = 'active' AND closed_event_sequence IS NULL) OR "
+            "(status = 'closed' AND closed_event_sequence IS NOT NULL)",
+            name="ck_market_v2_position_status_boundary",
+        ),
+        CheckConstraint(
+            "side = 'short' OR expires_on IS NULL",
+            name="ck_market_v2_position_long_has_no_expiry",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id", "account_id"],
+            ["market_v2_accounts.ruleset_id", "market_v2_accounts.account_id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id", "player_id"],
+            ["market_v2_player_quotes.ruleset_id", "market_v2_player_quotes.player_id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "id",
+            "ruleset_id",
+            "account_id",
+            "player_id",
+            name="uq_market_v2_position_ownership",
+        ),
+        Index(
+            "uq_market_v2_positions_active_side",
+            "ruleset_id",
+            "account_id",
+            "player_id",
+            "side",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+            sqlite_where=text("status = 'active'"),
+        ),
+        Index(
+            "ix_market_v2_positions_account_status",
+            "ruleset_id",
+            "account_id",
+            "status",
+        ),
+        Index(
+            "ix_market_v2_positions_player_status",
+            "ruleset_id",
+            "player_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    ruleset_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    player_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    side: Mapped[str] = mapped_column(String(8), nullable=False)
+    status: Mapped[str] = mapped_column(String(8), nullable=False)
+    locked_game_cost_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    opened_event_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    closed_event_sequence: Mapped[int | None] = mapped_column(Integer)
+    expires_on: Mapped[date | None] = mapped_column(Date)
+    opened_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class PerGameProjectionRow(Base):
+    __tablename__ = "market_v2_saved_projections"
+    __table_args__ = (
+        CheckConstraint(
+            "projected_net_points_micros >= -1000000000 AND "
+            "projected_net_points_micros <= 1000000000",
+            name="ck_market_v2_projection_range",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id"],
+            ["market_v2_rulesets.id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id", "player_id"],
+            ["market_v2_player_quotes.ruleset_id", "market_v2_player_quotes.player_id"],
+            ondelete="RESTRICT",
+        ),
+    )
+
+    ruleset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    game_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    player_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    projected_net_points_micros: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    model_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class PerGameResultRow(Base):
+    __tablename__ = "market_v2_player_game_results"
+    __table_args__ = (
+        CheckConstraint(
+            "event_sequence >= 0", name="ck_market_v2_result_sequence"
+        ),
+        CheckConstraint("revision >= 1", name="ck_market_v2_result_revision"),
+        CheckConstraint(
+            "actual_net_points_micros >= -1000000000 AND "
+            "actual_net_points_micros <= 1000000000",
+            name="ck_market_v2_result_actual_range",
+        ),
+        CheckConstraint(
+            "dividend_basis IN ('raw_net_points', 'surprise_vs_projection')",
+            name="ck_market_v2_result_dividend_basis",
+        ),
+        CheckConstraint(
+            "dividend_dollars_per_net_point >= 0 AND "
+            "dividend_dollars_per_net_point <= 1000000000",
+            name="ck_market_v2_result_dividend_rate",
+        ),
+        CheckConstraint(
+            "saved_projection_net_points_micros IS NULL OR "
+            "(saved_projection_net_points_micros >= -1000000000 AND "
+            "saved_projection_net_points_micros <= 1000000000)",
+            name="ck_market_v2_result_projection_range",
+        ),
+        CheckConstraint(
+            "status IN ('settled', 'unsettled_missing_projection')",
+            name="ck_market_v2_result_status",
+        ),
+        CheckConstraint(
+            "kind IN ('base', 'correction')", name="ck_market_v2_result_kind"
+        ),
+        CheckConstraint(
+            "dividend_dollars IS NULL OR "
+            f"(dividend_dollars >= -{JAVASCRIPT_MAX_SAFE_INTEGER} AND "
+            f"dividend_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER})",
+            name="ck_market_v2_result_dividend",
+        ),
+        CheckConstraint(
+            "event_cursor > 0", name="ck_market_v2_result_event_cursor"
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id"],
+            ["market_v2_rulesets.id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id", "player_id"],
+            ["market_v2_player_quotes.ruleset_id", "market_v2_player_quotes.player_id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id", "game_id"],
+            [
+                "market_v2_game_boundaries.ruleset_id",
+                "market_v2_game_boundaries.game_id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_market_v2_results_cursor", "ruleset_id", "event_cursor"
+        ),
+        Index(
+            "ix_market_v2_results_game", "ruleset_id", "game_id", "player_id"
+        ),
+    )
+
+    ruleset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    game_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    player_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_date: Mapped[date] = mapped_column(Date, nullable=False)
+    event_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    actual_net_points_micros: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    saved_projection_net_points_micros: Mapped[int | None] = mapped_column(BigInteger)
+    dividend_basis: Mapped[str] = mapped_column(String(32), nullable=False)
+    dividend_dollars_per_net_point: Mapped[int] = mapped_column(
+        BigInteger, nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    dividend_dollars: Mapped[int | None] = mapped_column(BigInteger)
+    adjusts_result_revision: Mapped[int | None] = mapped_column(Integer)
+    event_cursor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    response_payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class PerGameAccrualRow(Base):
+    __tablename__ = "market_v2_position_game_accruals"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('settled', 'unsettled_missing_projection')",
+            name="ck_market_v2_accrual_status",
+        ),
+        CheckConstraint(
+            "side IN ('long', 'short')", name="ck_market_v2_accrual_side"
+        ),
+        CheckConstraint(
+            "locked_game_cost_dollars > 0 AND "
+            f"locked_game_cost_dollars <= {MAX_PER_GAME_QUOTE_DOLLARS}",
+            name="ck_market_v2_accrual_locked_cost",
+        ),
+        CheckConstraint(
+            "event_sequence >= 0", name="ck_market_v2_accrual_sequence"
+        ),
+        CheckConstraint(
+            "latest_result_revision >= 1",
+            name="ck_market_v2_accrual_revision",
+        ),
+        CheckConstraint(
+            "game_cost_dollars >= 0 AND "
+            f"game_cost_dollars <= {MAX_PER_GAME_QUOTE_DOLLARS}",
+            name="ck_market_v2_accrual_game_cost",
+        ),
+        CheckConstraint(
+            "dividend_dollars IS NULL OR "
+            f"(dividend_dollars >= -{JAVASCRIPT_MAX_SAFE_INTEGER} AND "
+            f"dividend_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER})",
+            name="ck_market_v2_accrual_dividend",
+        ),
+        CheckConstraint(
+            f"cumulative_pnl_dollars >= -{JAVASCRIPT_MAX_SAFE_INTEGER} AND "
+            f"cumulative_pnl_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
+            name="ck_market_v2_accrual_pnl",
+        ),
+        CheckConstraint(
+            "event_cursor > 0", name="ck_market_v2_accrual_event_cursor"
+        ),
+        ForeignKeyConstraint(
+            ["position_id", "ruleset_id", "account_id", "player_id"],
+            [
+                "market_v2_positions.id",
+                "market_v2_positions.ruleset_id",
+                "market_v2_positions.account_id",
+                "market_v2_positions.player_id",
+            ],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id", "account_id"],
+            ["market_v2_accounts.ruleset_id", "market_v2_accounts.account_id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id", "game_id", "player_id", "latest_result_revision"],
+            [
+                "market_v2_player_game_results.ruleset_id",
+                "market_v2_player_game_results.game_id",
+                "market_v2_player_game_results.player_id",
+                "market_v2_player_game_results.revision",
+            ],
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_market_v2_accruals_account_cursor",
+            "ruleset_id",
+            "account_id",
+            "event_cursor",
+        ),
+    )
+
+    ruleset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    position_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    game_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    player_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    game_date: Mapped[date] = mapped_column(Date, nullable=False)
+    event_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    side: Mapped[str] = mapped_column(String(8), nullable=False)
+    locked_game_cost_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    base_result_revision: Mapped[int | None] = mapped_column(Integer)
+    latest_result_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    game_cost_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    dividend_dollars: Mapped[int | None] = mapped_column(BigInteger)
+    cumulative_pnl_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    event_cursor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class PerGameLedgerEntryRow(Base):
+    __tablename__ = "market_v2_ledger_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "ruleset_id", "source_key", name="uq_market_v2_ledger_source"
+        ),
+        CheckConstraint(
+            "kind IN ('game_cost', 'game_dividend', 'dividend_correction', "
+            "'open_fee', 'drop_fee')",
+            name="ck_market_v2_ledger_kind",
+        ),
+        CheckConstraint(
+            f"amount_dollars >= -{JAVASCRIPT_MAX_SAFE_INTEGER} AND "
+            f"amount_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
+            name="ck_market_v2_ledger_amount",
+        ),
+        CheckConstraint(
+            "event_cursor > 0", name="ck_market_v2_ledger_event_cursor"
+        ),
+        ForeignKeyConstraint(
+            ["position_id", "ruleset_id", "account_id", "player_id"],
+            [
+                "market_v2_positions.id",
+                "market_v2_positions.ruleset_id",
+                "market_v2_positions.account_id",
+                "market_v2_positions.player_id",
+            ],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id", "account_id"],
+            ["market_v2_accounts.ruleset_id", "market_v2_accounts.account_id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id", "game_id", "player_id", "result_revision"],
+            [
+                "market_v2_player_game_results.ruleset_id",
+                "market_v2_player_game_results.game_id",
+                "market_v2_player_game_results.player_id",
+                "market_v2_player_game_results.revision",
+            ],
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_market_v2_ledger_account_cursor",
+            "ruleset_id",
+            "account_id",
+            "event_cursor",
+        ),
+        Index(
+            "ix_market_v2_ledger_game",
+            "ruleset_id",
+            "game_id",
+            "player_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    ruleset_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    position_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    player_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    game_id: Mapped[str | None] = mapped_column(String(96))
+    game_date: Mapped[date | None] = mapped_column(Date)
+    result_revision: Mapped[int | None] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    amount_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    source_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    adjusts_entry_id: Mapped[str | None] = mapped_column(
+        ForeignKey("market_v2_ledger_entries.id", ondelete="RESTRICT")
+    )
+    event_cursor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class PerGameCommandRow(Base):
+    __tablename__ = "market_v2_idempotency_commands"
+    __table_args__ = (
+        UniqueConstraint(
+            "ruleset_id",
+            "account_id",
+            "command_kind",
+            "idempotency_key",
+            name="uq_market_v2_command_idempotency",
+        ),
+        CheckConstraint(
+            "schema_version = 2", name="ck_market_v2_command_schema_version"
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id"],
+            ["market_v2_rulesets.id"],
+            ondelete="CASCADE",
+        ),
+        Index(
+            "ix_market_v2_commands_account_created",
+            "ruleset_id",
+            "account_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    ruleset_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    account_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    command_kind: Mapped[str] = mapped_column(String(48), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    response_payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class PerGamePnlSnapshotRow(Base):
+    __tablename__ = "market_v2_pnl_snapshots"
+    __table_args__ = (
+        CheckConstraint(
+            "event_cursor > 0", name="ck_market_v2_snapshot_event_cursor"
+        ),
+        CheckConstraint(
+            f"cumulative_pnl_dollars >= -{JAVASCRIPT_MAX_SAFE_INTEGER} AND "
+            f"cumulative_pnl_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
+            name="ck_market_v2_snapshot_cumulative_pnl",
+        ),
+        CheckConstraint(
+            f"latest_game_pnl_dollars >= -{JAVASCRIPT_MAX_SAFE_INTEGER} AND "
+            f"latest_game_pnl_dollars <= {JAVASCRIPT_MAX_SAFE_INTEGER}",
+            name="ck_market_v2_snapshot_latest_pnl",
+        ),
+        ForeignKeyConstraint(
+            ["ruleset_id", "account_id"],
+            ["market_v2_accounts.ruleset_id", "market_v2_accounts.account_id"],
+            ondelete="CASCADE",
+        ),
+        Index(
+            "ix_market_v2_snapshots_account_cursor",
+            "ruleset_id",
+            "account_id",
+            "event_cursor",
+        ),
+    )
+
+    ruleset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    account_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    event_cursor: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    game_id: Mapped[str | None] = mapped_column(String(96))
+    game_date: Mapped[date | None] = mapped_column(Date)
+    cumulative_pnl_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    latest_game_pnl_dollars: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
 
 

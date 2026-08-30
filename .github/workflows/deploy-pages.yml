@@ -21,13 +21,37 @@ concurrency:
 
 jobs:
   build-and-publish:
+    if: ${{ vars.NBA_STOCK_V2_ENABLED == 'true' && vars.NBA_STOCK_V2_API_PREFIX != '' }}
     runs-on: ubuntu-latest
     env:
       EXPO_PUBLIC_NBA_STOCK_API_URL: https://api.databallr.com/api/nba-stock-market
+      EXPO_PUBLIC_NBA_STOCK_API_PREFIX: ${{ vars.NBA_STOCK_V2_API_PREFIX }}
       EXPO_PUBLIC_SUPABASE_URL: https://bvwahamwfvolchcezxnw.supabase.co
       EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2d2FoYW13ZnZvbGNoY2V6eG53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzc3NTYyMjQsImV4cCI6MjA1MzMzMjIyNH0.QTl2U94zdqe9DFEFTypJMVoeanjvGsZr1zJ7ovv5Ujk
     steps:
       - uses: actions/checkout@v4
+      - name: Verify the mounted v2 backend before replacing Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint="${EXPO_PUBLIC_NBA_STOCK_API_URL%/}${EXPO_PUBLIC_NBA_STOCK_API_PREFIX}/meta"
+          response="$(curl --fail --silent --show-error "$endpoint")"
+          PROBE_RESPONSE="$response" python3 - <<'PY'
+          import json
+          import os
+
+          expected = {
+              "data": {
+                  "service": "nba-stock-market-api",
+                  "api_version": "v2",
+                  "schema_version": 2,
+                  "economy": "per_game",
+              }
+          }
+          actual = json.loads(os.environ["PROBE_RESPONSE"])
+          if actual != expected:
+              raise SystemExit(f"Unexpected v2 contract marker: {actual!r}")
+          PY
       - uses: actions/setup-node@v4
         with:
           node-version: 22
