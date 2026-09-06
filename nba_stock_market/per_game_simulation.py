@@ -68,6 +68,8 @@ class ScenarioConfig:
     universe_size: int = DEFAULT_UNIVERSE_SIZE
     long_slots: int = DEFAULT_LONG_SLOTS
     weekly_short_slots: int = DEFAULT_WEEKLY_SHORT_SLOTS
+    open_fee_dollars: int = 0
+    drop_fee_dollars: int = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.dividend_basis, DividendBasis):
@@ -76,6 +78,8 @@ class ScenarioConfig:
             raise ValueError("dividend rate must be non-negative")
         if self.quote_impact_bps < 0:
             raise ValueError("quote impact must be non-negative")
+        if self.open_fee_dollars < 0 or self.drop_fee_dollars < 0:
+            raise ValueError("fees must be non-negative")
         if self.universe_size < self.long_slots:
             raise ValueError("universe must be at least as large as the long roster")
         if self.long_slots != 10:
@@ -86,9 +90,14 @@ class ScenarioConfig:
     @property
     def scenario_id(self) -> str:
         shorts = "weekly-shorts" if self.weekly_shorts else "no-shorts"
+        fees = (
+            f"-fees-{self.open_fee_dollars}-{self.drop_fee_dollars}"
+            if self.open_fee_dollars or self.drop_fee_dollars
+            else ""
+        )
         return (
             f"{self.dividend_basis.value}-{self.dividend_dollars_per_net_point}-"
-            f"impact-{self.quote_impact_bps}-{shorts}-seed-{self.seed}"
+            f"impact-{self.quote_impact_bps}-{shorts}{fees}-seed-{self.seed}"
         )
 
 
@@ -103,6 +112,7 @@ class EvaluationMatrix:
     short_modes: tuple[bool, ...] = DEFAULT_SHORT_MODES
     seeds: tuple[int, ...] = DEFAULT_SEEDS
     universe_size: int = DEFAULT_UNIVERSE_SIZE
+    fee_pairs: tuple[tuple[int, int], ...] = ((0, 0),)
 
     def scenarios(self) -> tuple[ScenarioConfig, ...]:
         return tuple(
@@ -113,11 +123,14 @@ class EvaluationMatrix:
                 weekly_shorts=shorts,
                 seed=seed,
                 universe_size=self.universe_size,
+                open_fee_dollars=open_fee,
+                drop_fee_dollars=drop_fee,
             )
             for basis in self.bases
             for rate in self.rates
             for impact in self.quote_impacts_bps
             for shorts in self.short_modes
+            for open_fee, drop_fee in self.fee_pairs
             for seed in self.seeds
         )
 
@@ -519,6 +532,8 @@ def run_scenario(
         open_quote_impact_bps=config.quote_impact_bps,
         drop_quote_impact_bps=config.quote_impact_bps,
         minimum_quote_dollars=MINIMUM_QUOTE_DOLLARS,
+        open_fee_dollars=config.open_fee_dollars,
+        drop_fee_dollars=config.drop_fee_dollars,
     )
     economy = PerGameEconomy(list(opening.quotes), policy=policy)
     strategies = tuple(sorted(STRATEGIES))
@@ -1452,8 +1467,8 @@ def run_scenario(
             "long_slot_limit": config.long_slots,
             "short_slot_limit": 5,
             "weekly_short_slots_used": config.weekly_short_slots if config.weekly_shorts else 0,
-            "open_fee_dollars": 0,
-            "drop_fee_dollars": 0,
+            "open_fee_dollars": config.open_fee_dollars,
+            "drop_fee_dollars": config.drop_fee_dollars,
         },
         "seed": config.seed,
         "dataset": {
@@ -1498,6 +1513,8 @@ def _policy_key(report: dict[str, object]) -> tuple[object, ...]:
         policy["dividend_dollars_per_net_point"],
         policy["quote_impact_bps_on_add_and_drop"],
         policy["weekly_shorts"],
+        policy["open_fee_dollars"],
+        policy["drop_fee_dollars"],
     )
 
 
@@ -1506,7 +1523,17 @@ def _aggregate_policy_rows(scenarios: Sequence[dict[str, object]]) -> list[dict[
     for scenario in scenarios:
         grouped[_policy_key(scenario)].append(scenario)
     rows: list[dict[str, object]] = []
-    for key in sorted(grouped, key=lambda item: (str(item[0]), int(item[1]), int(item[2]), bool(item[3]))):
+    for key in sorted(
+        grouped,
+        key=lambda item: (
+            str(item[0]),
+            int(item[1]),
+            int(item[2]),
+            bool(item[3]),
+            int(item[4]),
+            int(item[5]),
+        ),
+    ):
         members = grouped[key]
         pnl_means = [
             float(member["user_pnl"]["distribution_dollars"]["mean"])  # type: ignore[index]
@@ -1518,6 +1545,8 @@ def _aggregate_policy_rows(scenarios: Sequence[dict[str, object]]) -> list[dict[
                 "dividend_dollars_per_net_point": key[1],
                 "quote_impact_bps": key[2],
                 "weekly_shorts": key[3],
+                "open_fee_dollars": key[4],
+                "drop_fee_dollars": key[5],
                 "seeds": [member["seed"] for member in members],
                 "mean_user_pnl_dollars": _rounded(statistics.fmean(pnl_means), 2),
                 "cross_seed_user_pnl_stdev_dollars": _rounded(statistics.pstdev(pnl_means), 2),
