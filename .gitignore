@@ -19,6 +19,9 @@ output/*
 !output/per-game-economy-v2.md
 !output/per-game-economy-v2.json
 !output/per-game-balance-study.md
+!output/per-game-rate-study.md
+!output/per-game-lock-drift.md
+!output/per-game-user-pnl-corrected.md
 .env
 !.env.example
 nba-stock-market.db

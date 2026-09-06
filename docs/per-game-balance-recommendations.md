@@ -47,6 +47,34 @@ positions; per-game settlement stays exactly as built.
 3. Fees: `open_fee_dollars=10_000`, `drop_fee_dollars=0` in the live ruleset
    (engine + schema already support both).
 
+## Addendum 2026-09-06 — rate, fair-cost, and user-P&L study
+
+Deeper battery (`output/per-game-rate-study.md`, `per-game-lock-drift.md`,
+`per-game-user-pnl-corrected.md`): production tiers, noise anatomy, 7 archetypes
+× 10 random seeds, a 6-rate legibility sweep, a 7-anchor × 4-checkpoint lock-drift
+test, and a corrected replay. Refinements to the table above:
+
+- **Rate: $20K/NP confirmed.** $10K-$25K all pass the legibility bands; $30K+
+  fails (nights p95 > $860K, star costs go 7-figure). $20K center: SGA $527K/game,
+  bench floor safe 2.4×, normal night ±$248K.
+- **Opening cost, corrected: last season's produced NP/game × rate, NO October
+  premium needed.** Measured lock drift 0.00 NP pooled, ≤±0.03 per tier — the
+  premium is only for players *without* last-season history (rookies: projection
+  + 1.0 NP through October). The earlier +1.0-for-everyone recommendation
+  over-corrects when the anchor is last-season value.
+- **Never lock October costs off early-season trailing production** (+0.9 NP/game
+  drift; flips a star roster from fair to −$23M/season). Trailing-10 requote takes
+  over per player once 3+ games exist — but the *opening* lock must be the
+  last-season anchor.
+- **The superstar late-season fade is real** (oracle-anchor drift −0.8 to −2.4
+  NP/game for locks after January; load management). Not a pricing bug — it is
+  the structural reason shorts exist. Expect "short the resting star" to be the
+  first skill meta.
+- **Normal-user P&L at $20K** (balanced 10-slot roster, fair locks, measured):
+  typical night ±$250K, big night (p95) ±$500K; typical week ±$610K, big week
+  ±$1.18M; a full-season pure-luck band (random rosters, 2 SD) of ±$8.7M — the
+  leaderboard noise floor a skill edge has to clear.
+
 ## Honest limits
 
 - The engine matrix's order flow is synthetic (4 archetypes, 2 seeds); churn rates
