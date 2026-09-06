@@ -22,6 +22,8 @@ output/*
 !output/per-game-rate-study.md
 !output/per-game-lock-drift.md
 !output/per-game-user-pnl-corrected.md
+!output/per-game-robustness.md
+!output/per-game-opening-anchor.md
 .env
 !.env.example
 nba-stock-market.db

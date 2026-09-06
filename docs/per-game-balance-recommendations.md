@@ -75,6 +75,38 @@ test, and a corrected replay. Refinements to the table above:
   ±$1.18M; a full-season pure-luck band (random rosters, 2 SD) of ±$8.7M — the
   leaderboard noise floor a skill edge has to clear.
 
+## Addendum 2026-09-06 (2) — cross-season robustness battery
+
+Six further test families across all three cached seasons plus an opening-anchor
+shootout (`output/per-game-robustness.md`, `per-game-opening-anchor.md`). Two
+findings **correct** earlier addendum claims:
+
+- **Opening cost, corrected again: last season's produced NP/game × 1.08 × rate.**
+  The true product test (lock 2024-25 openers at real 2023-24 production, etc.)
+  shows a RAW last-season lock leaks +$12.7K/+$17.2K per game — the league grows
+  year over year. The ×1.08 uplift prices both season pairs to +0.030 NP pooled
+  (+$598/game, fair). A flat +0.75 NP matches pooled but over-taxes the bench
+  (−2.28 NP worst tier); proportional wins. The earlier "0.00 drift, no premium"
+  readout came from a same-season proxy that was oracle-contaminated. D&T
+  opening-week projections are the WORST opening anchor tested (+1.9 NP =
+  +$38K/game leak) — use them only for players with no prior season, plus a
+  +1.9 NP correction (veteran-measured proxy; rookie-specific calibration TBD).
+- **"Short the fading superstar" retracted as a meta.** It was +$52K/window with
+  a 60.7% win rate in 2025-26 but −$15K and −$8K in the two prior seasons —
+  1-for-3 is an overfit, not a strategy. Random 7-day shorts are −$14K to −$20K
+  mean (win rate 48-49%) in all three seasons: shorts are a fair opinion market,
+  not an income stream, before fees.
+
+Confirmed cross-season: the trailing-10 requote leak is stable (+0.15 to +0.21
+NP ≈ $3-4K/game in every season); a **weekly full requote already removes ~92%
+of the frozen-quote leak** ($3.8-5.4K residual vs $49-59K frozen), so Ryan can
+pick the cheapest cadence to operate — the only hard requirement is "not
+frozen." Normal-user bands hold in all seasons (night SD $248-292K, week SD
+$611-741K at $20K). Retention note for the UI: a fair, engaged user hits a
+median **$1.2-1.9M peak-to-trough drawdown inside any 28-day window** (p95
+$2.9-3.6M) — frame the P&L views around weekly deltas and a since-you-joined
+baseline so a normal cold streak does not read as ruin.
+
 ## Honest limits
 
 - The engine matrix's order flow is synthetic (4 archetypes, 2 seeds); churn rates
