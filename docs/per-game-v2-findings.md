@@ -176,7 +176,41 @@ only more testing caught:
    window (armed before the window, settling game-by-game Mon–Sun). All P&L settles
    per game, exactly as v2 already does. Shorts are simply 7-day-expiry positions.
 
-## 9. Honest limits
+## 9. Dividend basis: the scoring-margin question (2026-09-06 addendum)
+
+Russ asked for scoring-margin impact instead of the weighted box score. Tested three
+ways (`output/per-game-margin-study.md`, `per-game-plusminus-study.md`,
+`per-game-blend-sweep.md`), including extracting real per-player on-court +/- from the
+cached ESPN summaries (all 79,503 player-games, 100% join — the CSV had dropped the
+column; note the live BDL pipeline does NOT carry +/-, so it could not settle on it
+anyway without a provider change).
+
+**Headline: the current NetPoints formula already IS a scoring-margin impact metric.**
+Its team sums predict actual game margins at **r = 0.963 out-of-sample** — statistically
+tied with a metric fit directly to margin (0.965 best blend, 0.939 pure fit) — while
+beating both alternatives on every product axis:
+
+| Basis | Team-margin r | Reliability (split-half) | Players ≤0 EV | Top-5 sanity |
+|---|---:|---:|---:|---|
+| **Old NetPoints** | **0.963** | 0.931 | **0/150** | SGA, Jalen Johnson, KAT… ✔ |
+| Margin-fit box weights | 0.939 | 0.953 | 38/150 | Gobert, Clingan, Diabaté… ✘ |
+| Raw on-court +/- | 1.000 (by construction) | **0.678** | 52/150 | SGA, then Champagnie/D. Robinson ✘ |
+
+Raw +/- is unusable as a per-game dividend: its nightly noise (±12.3) exceeds the entire
+market's value range (best player +11.6/game — one night is >100% noise), 35% of listed
+players have negative expected value (unpriceable above the floor), and a balanced
+roster at $20K would swing ±$1.04M per night against a star cost of only $232K. The
+blend dial shows no useful middle: by α=0.75 the top of the market is already Duren/
+Clingan/Gobert for +0.002 margin correlation.
+
+**Recommendation: keep the NetPoints basis and every constant in section 1 — present
+the r = 0.963 number to Russ as the evidence that margin impact is already what
+dividends pay for.** If the group still switches to the margin-fit weights, the rerun
+constants are: additive YoY opening uplift +0.28 (not ×1.08 — near-zero players can't
+be scaled), same requote rule, and an unsolved 25%-of-the-universe floor problem that
+needs a product decision before any rate can work.
+
+## 10. Honest limits
 
 - Engine-matrix order flow is synthetic (4 archetypes, 2 seeds); the archetype replays
   are single deterministic paths per roster (10 seeds for random). No live-demand market
@@ -188,7 +222,7 @@ only more testing caught:
   account's EV. If it earns beyond noise, the requote cadence is too slow — tighten it
   before touching any other knob.
 
-## 10. Evidence index
+## 11. Evidence index
 
 | Report | What it proves |
 |---|---|

@@ -31,3 +31,6 @@ nba-stock-market.db-shm
 nba-stock-market.db-wal
 supabase/.temp/
 supabase/.branches/
+!output/per-game-margin-study.md
+!output/per-game-plusminus-study.md
+!output/per-game-blend-sweep.md
