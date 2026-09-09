@@ -42,6 +42,10 @@ TRAIL = 10
 TRAIL_MIN = 3
 SLOTS = 10
 RATE = 20_000
+SIGN_FEE_DOLLARS = 10_000
+FLOOR_DOLLARS = 25_000
+SIGN_FEE_NP = SIGN_FEE_DOLLARS / RATE
+FLOOR_NP = FLOOR_DOLLARS / RATE
 SEEDS = tuple(range(1, 11))
 REGIMES = {"LOCKED": None, "CAP5": 0.05, "CAP10": 0.10, "CAP25": 0.25, "FULL": math.inf}
 
@@ -75,9 +79,9 @@ def main() -> int:
     def quote_at(pid: str, day: date) -> float | None:
         prior = [a for d, a in played_before[pid] if d < day]
         if len(prior) >= TRAIL_MIN:
-            return fmean(prior[-TRAIL:])
+            return max(fmean(prior[-TRAIL:]), FLOOR_NP)
         projs = [p for d, _, p in series[pid] if d <= day and p is not None]
-        return projs[0] if projs else None
+        return max(projs[0], FLOOR_NP) if projs else None
 
     def improver_score(pid: str, day: date) -> float | None:
         prior = [a for d, a in played_before[pid] if d < day]
@@ -121,6 +125,7 @@ def main() -> int:
                         low = cost - abs(cost) * regime_cap
                         high = cost + abs(cost) * regime_cap
                         new_cost = min(max(quote, low), high)
+                    new_cost = max(new_cost, FLOOR_NP)
                     if new_cost != cost:
                         repriced += 1
                     positions[pid] = new_cost
@@ -135,6 +140,7 @@ def main() -> int:
                             quote = quote_at(pid, day)
                             if quote is not None:
                                 positions[pid] = quote
+                                pnl -= SIGN_FEE_NP
             week = wk
             for pid, actual in by_date[day]:
                 if pid in positions:
@@ -169,7 +175,9 @@ def main() -> int:
         "# Held-cost repricing: locked vs weekly capped (2025-26, $20K/NP)",
         "",
         "Market quote = trailing-10 with weekly requote; signing cost = quote at signing.",
-        "Repricing happens at the week boundary before any of that week's games settle.",
+        "Every add pays the $10K signing fee; quotes, signing costs, and repriced costs",
+        "respect the $25K minimum price. Repricing happens at the week boundary before",
+        "any of that week's games settle.",
         "",
         "| Regime | Scout (improver-chaser) | Star hold | Balanced hold | Random x10 mean | Holder leak $/held game |",
         "|---|---:|---:|---:|---:|---:|",

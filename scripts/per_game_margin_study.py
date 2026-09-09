@@ -195,9 +195,14 @@ def main() -> int:
         "| Stat | Weight (margin pts per unit) | Old NetPoints weight |",
         "|---|---:|---:|",
     ]
+    from nba_stock_market.engine import NetPointsCoefficients
+
+    _engine = NetPointsCoefficients()
     old_weights = {
-        "pts": 1.0, "fga": -0.7, "fta": -0.35, "oreb": 1.2, "dreb": 0.85,
-        "ast": 0.7, "stl": 1.5, "blk": 1.2, "tov": -1.2, "three_pm": 0.5,
+        "pts": _engine.pts, "fga": _engine.fga, "fta": _engine.fta,
+        "oreb": _engine.offensive_rebounds, "dreb": _engine.defensive_rebounds,
+        "ast": _engine.ast, "stl": _engine.stl, "blk": _engine.blk,
+        "tov": _engine.tov, "three_pm": _engine.three_pm,
     }
     for stat in REGRESSORS:
         lines.append(f"| {stat} | {weights[stat]:+.3f} | {old_weights.get(stat, 0):+.2f} |")

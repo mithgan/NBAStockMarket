@@ -8,14 +8,14 @@
 |---|---:|---:|
 | pts | +0.877 | +1.00 |
 | fga | -1.438 | -0.70 |
-| fta | -0.681 | -0.35 |
-| oreb | +1.471 | +1.20 |
-| dreb | +1.516 | +0.85 |
+| fta | -0.681 | -0.40 |
+| oreb | +1.471 | +0.70 |
+| dreb | +1.516 | +0.30 |
 | ast | -0.012 | +0.70 |
 | stl | +1.755 | +1.50 |
-| blk | +0.421 | +1.20 |
-| tov | -1.386 | -1.20 |
-| three_pm | +0.017 | +0.50 |
+| blk | +0.421 | +1.00 |
+| tov | -1.386 | -1.00 |
+| three_pm | +0.017 | +0.10 |
 | intercept (fit only, not applied) | -20.56 | — |
 
 Out-of-sample validation (2025-26, 2,460 team-games): predicted vs actual margin correlation **r = 0.876**.

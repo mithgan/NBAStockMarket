@@ -38,10 +38,16 @@ MARGIN_WEIGHTS = {
     "pts": 0.877, "fga": -1.438, "fta": -0.681, "oreb": 1.471, "dreb": 1.516,
     "ast": -0.012, "stl": 1.755, "blk": 0.421, "tov": -1.386, "three_pm": 0.017,
 }
+from nba_stock_market.engine import NetPointsCoefficients
+
+_ENGINE = NetPointsCoefficients()
+# The exact engine weights, mapped to this script's CSV column keys.
 OLD_WEIGHTS = {
-    "pts": 1.0, "oreb": 1.2, "dreb": 0.85, "ast": 0.7, "stl": 1.5, "blk": 1.2,
-    "tov": -1.2, "fga": -0.7, "fgm": 0.0, "three_pm": 0.5, "fta": -0.35,
-    "ftm": 0.0, "minutes": -0.15,
+    "pts": _ENGINE.pts, "oreb": _ENGINE.offensive_rebounds,
+    "dreb": _ENGINE.defensive_rebounds, "ast": _ENGINE.ast, "stl": _ENGINE.stl,
+    "blk": _ENGINE.blk, "tov": _ENGINE.tov, "fga": _ENGINE.fga,
+    "fgm": _ENGINE.fgm, "three_pa": _ENGINE.three_pa, "three_pm": _ENGINE.three_pm,
+    "fta": _ENGINE.fta, "ftm": _ENGINE.ftm,
 }
 
 
@@ -123,6 +129,7 @@ def load_csv(season: str) -> list[dict[str, object]]:
                     "blk": float(r["blk"]),
                     "tov": float(r["tov"]),
                     "three_pm": float(r["three_pm"]),
+                    "three_pa": float(r["three_pa"]),
                     "minutes": float(r["minutes"]),
                 }
             )

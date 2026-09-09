@@ -11,7 +11,7 @@ how much of what you pay for tonight is a repeatable trait vs dice:
 
 | Metric | Split-half r | Per-game SD around player mean |
 |---|---:|---:|
-| old NetPoints | 0.931 | 6.04 |
+| old NetPoints | 0.954 | 7.07 |
 | margin-fit box | 0.953 | 5.23 |
 | raw +/- | 0.678 | 12.34 |
 
