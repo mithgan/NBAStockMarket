@@ -344,7 +344,7 @@ export interface PerGameSettledResult {
 
 export interface PerGameLeaderboardRow {
   rank: number;
-  accountId: string;
+  entryId: string;
   displayName: string;
   cumulativePnl: number;
   isCurrentUser: boolean;
@@ -1115,7 +1115,7 @@ function parsePerGameLeaderboardRow(
   const row = record(value, path);
   return {
     rank: positiveInteger(row.rank, `${path}.rank`),
-    accountId: text(row.account_id, `${path}.account_id`),
+    entryId: text(row.entry_id, `${path}.entry_id`),
     displayName: text(row.display_name, `${path}.display_name`),
     cumulativePnl: integer(row.cumulative_pnl_dollars, `${path}.cumulative_pnl_dollars`),
     isCurrentUser: flag(row.is_current_user, `${path}.is_current_user`),
@@ -1136,6 +1136,9 @@ export function parsePerGameBootstrap(
   path = 'bootstrap_v2',
 ): PerGameBootstrap {
   const row = record(value, path);
+  if (row.schema_version !== 2) {
+    throw new ContractError(`${path}.schema_version must be 2.`);
+  }
   const ledger = record(row.ledger, `${path}.ledger`);
   const ruleset = parsePerGameRuleset(row.ruleset, `${path}.ruleset`);
   const capabilities = parsePerGameCapabilities(row.capabilities, `${path}.capabilities`);

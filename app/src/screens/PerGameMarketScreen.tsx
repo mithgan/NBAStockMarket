@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 
 import type { PerGamePositionSide } from '../api/contracts';
+import { positionSlotHint } from '../data/perGameRules';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { formatCompactMoney, formatMoney } from '../format';
 import { usePerGame } from '../state/PerGameContext';
@@ -75,7 +76,7 @@ function MarketRow({ row, compact }: { row: PerGameMarketRow; compact: boolean }
       >
         <View style={styles.identity}>
           <Text numberOfLines={1} style={styles.playerKicker}>{kicker}</Text>
-          <Text numberOfLines={1} style={styles.playerName}>{player.name}</Text>
+          <Text numberOfLines={compact ? 2 : 1} style={styles.playerName}>{player.name}</Text>
           {row.blockedByOpposingPosition ? (
             <Text numberOfLines={compact ? 2 : 1} style={styles.blockedReason}>
               {row.unavailableReason}
@@ -163,8 +164,8 @@ export function PerGameMarketScreen({
       </View>
       <View accessibilityRole="tablist" style={styles.sideTabs}>
         {([
-          { key: 'long' as const, label: 'ROSTER', hint: 'Add players to your ten-player roster' },
-          { key: 'short' as const, label: 'INVERSE', hint: 'Open inverse positions in up to five slots' },
+          { key: 'long' as const, label: 'ROSTER', hint: positionSlotHint('long', bootstrap.account.longSlots.limit) },
+          { key: 'short' as const, label: 'INVERSE', hint: positionSlotHint('short', bootstrap.account.shortSlots.limit) },
         ]).map((option) => {
           const selected = side === option.key;
           return (

@@ -86,6 +86,13 @@ function mergeBootstrapPages(
       200,
     );
   }
+  if (incoming.account.version < previous.account.version) {
+    throw new PerGameApiError(
+      'The account version moved backward while loading account history.',
+      'invalid_account_version',
+      200,
+    );
+  }
   const ledgerById = new Map(previous.ledger.items.map((entry) => [entry.entryId, entry]));
   for (const entry of incoming.ledger.items) ledgerById.set(entry.entryId, entry);
   const resultsByIdentity = new Map(

@@ -13,7 +13,6 @@ import {
 import {
   PerGameApiClient,
   PerGameApiError,
-  perGameMutationOutcomeMayHaveCommitted,
 } from '../api/perGameClient';
 import type {
   PerGameBootstrap,
@@ -24,6 +23,7 @@ import type {
 import { isAppResume } from './appResume';
 import { ActionLock } from './actionLock';
 import { loadPerGameBootstrapSnapshot } from './perGameBootstrapLoader';
+import { runPerGameMutation } from './perGameMutation';
 import {
   MutationReconciliationCoordinator,
   type ReconciliationReason,
@@ -71,6 +71,7 @@ export function PerGameProvider({
 }) {
   const [bootstrap, setBootstrap] = useState<PerGameBootstrap | null>(null);
   const bootstrapRef = useRef<PerGameBootstrap | null>(null);
+  const minimumSnapshotRef = useRef<PerGameBootstrap | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -107,6 +108,7 @@ export function PerGameProvider({
   } = {}): Promise<PerGameBootstrap | null> => {
     const generation = requestGeneration.current + 1;
     requestGeneration.current = generation;
+    if (!mounted.current) return null;
     if (initial) setIsLoading(true);
     else setIsRefreshing(true);
     try {
@@ -114,6 +116,7 @@ export function PerGameProvider({
       const next = await loadPerGameBootstrapSnapshot({
         previous,
         incremental,
+        minimumSnapshot: minimumSnapshotRef.current,
         fetchBootstrap: (afterCursor) => apiClient.bootstrap(afterCursor),
         isCurrent: () => mounted.current && generation === requestGeneration.current,
       });
@@ -125,6 +128,7 @@ export function PerGameProvider({
         return null;
       }
       if (!mounted.current || generation !== requestGeneration.current) return null;
+      minimumSnapshotRef.current = null;
       installBootstrap(next);
       setServerError(null);
       return next;
@@ -192,7 +196,7 @@ export function PerGameProvider({
     return () => subscription.remove();
   }, [isLoading, refreshData]);
 
-  const runPositionAction = useCallback(async <T,>(
+  const runPositionAction = useCallback(async <T extends { accountVersion: number },>(
     key: string,
     action: () => Promise<T>,
     successMessage: string | ((result: T) => string),
@@ -206,29 +210,38 @@ export function PerGameProvider({
     updatePendingActions();
     setMessage(null);
     let reconciliationReason: ReconciliationReason | null = null;
+    const actionSnapshot = bootstrapRef.current;
     try {
-      const result = await action();
-      const refreshed = await loadSnapshot();
-      if (!refreshed) {
-        reconciliationReason = 'confirmed-global';
-        if (mounted.current) {
+      const outcome = await runPerGameMutation({
+        action,
+        acknowledge: (version) => {
+          if (mounted.current && actionSnapshot) {
+            minimumSnapshotRef.current = {
+              ...actionSnapshot,
+              account: { ...actionSnapshot.account, version },
+            };
+          }
+        },
+        refresh: async () => Boolean(await loadSnapshot()),
+      });
+      reconciliationReason = outcome.reconciliationReason;
+      if (!mounted.current) return false;
+      if (outcome.result) {
+        if (!outcome.refreshed) {
           setMessage('Your roster action completed, but the latest account could not sync. Reconcile before making another roster change.');
+          return false;
         }
-        return false;
+        setMessage(typeof successMessage === 'function' ? successMessage(outcome.result) : successMessage);
+        return true;
       }
-      if (mounted.current) {
-        setMessage(typeof successMessage === 'function' ? successMessage(result) : successMessage);
-      }
-      return true;
-    } catch (error) {
-      const uncertain = perGameMutationOutcomeMayHaveCommitted(error);
-      if (uncertain) reconciliationReason = 'ambiguous';
-      if (mounted.current) {
-        const suffix = uncertain
-          ? ' The result is uncertain. Reconcile before making another roster change.'
-          : '';
-        setMessage(`${errorMessage(error)}${suffix}`);
-      }
+      const suffix = outcome.reconciliationReason === 'ambiguous'
+        ? ' The result is uncertain. Reconcile before making another roster change.'
+        : outcome.reconciliationReason === 'conflict'
+          ? ' The latest account could not sync. Reconcile before making another roster change.'
+          : outcome.refreshed
+            ? ' Market refreshed. Review the updated roster and quote before trying again.'
+            : '';
+      setMessage(`${errorMessage(outcome.error)}${suffix}`);
       return false;
     } finally {
       actionLock.current.release(key);

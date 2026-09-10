@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -444,3 +445,75 @@ def test_database_rejects_duplicate_active_same_side_position(
     with pytest.raises(IntegrityError):
         with database.session() as session, session.begin():
             session.add(PerGamePositionRow(**duplicate))
+
+
+@pytest.mark.parametrize("term,next_date,last_date,available", [
+    (None, None, None, True),
+    (None, date(2025, 10, 21), date(2025, 10, 21), True),
+    (7, None, None, False),
+    (7, date(2025, 10, 21), date(2025, 10, 21), False),
+    (7, date(2025, 10, 21), date(2025, 10, 22), False),
+    (7, date(2025, 10, 21), date(2025, 10, 20), True),
+    (7, date(2025, 10, 21), None, True),
+])
+def test_short_capability_matches_the_open_schedule_requirement(
+    client: TestClient,
+    database: Database,
+    alice_headers: dict[str, str],
+    term: int | None,
+    next_date: date | None,
+    last_date: date | None,
+    available: bool,
+) -> None:
+    initial = client.get("/api/v2/bootstrap", headers=alice_headers).json()["data"]
+    with database.session() as session, session.begin():
+        ruleset = session.get(PerGameRulesetRow, initial["ruleset"]["id"])
+        assert ruleset is not None
+        ruleset.short_term_days = term
+        ruleset.next_game_date = next_date
+        ruleset.last_settled_date = last_date
+    before = client.get("/api/v2/bootstrap", headers=alice_headers).json()["data"]
+    assert before["capabilities"]["can_open_long"] is True
+    assert before["capabilities"]["can_open_short"] is available
+    quote = next(row for row in before["market"] if row["player_id"] == "sga")
+    response = client.post(
+        "/api/v2/positions",
+        headers=position_headers(alice_headers, "short-schedule-command"),
+        json={
+            "player_id": "sga",
+            "side": "short",
+            "expected_account_version": before["account"]["version"],
+            "expected_quote_version": quote["quote_version"],
+        },
+    )
+    if available:
+        assert response.status_code == 201
+        expected_expiry = (
+            (next_date + timedelta(days=term - 1)).isoformat() if term else None
+        )
+        assert response.json()["data"]["position"]["expires_on"] == expected_expiry
+    else:
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "short_schedule_unavailable"
+        assert client.get("/api/v2/bootstrap", headers=alice_headers).json()["data"] == before
+
+
+@pytest.mark.parametrize("locked,short_limit", [(True, 5), (False, 0)])
+def test_short_schedule_capability_keeps_slot_and_lock_restrictions(
+    client: TestClient,
+    database: Database,
+    alice_headers: dict[str, str],
+    locked: bool,
+    short_limit: int,
+) -> None:
+    initial = client.get("/api/v2/bootstrap", headers=alice_headers).json()["data"]
+    with database.session() as session, session.begin():
+        ruleset = session.get(PerGameRulesetRow, initial["ruleset"]["id"])
+        assert ruleset is not None
+        ruleset.next_game_date = date(2025, 10, 21)
+        ruleset.last_settled_date = None
+        ruleset.roster_mutations_locked = locked
+        ruleset.short_slot_limit = short_limit
+    state = client.get("/api/v2/bootstrap", headers=alice_headers).json()["data"]
+    assert state["capabilities"]["can_open_short"] is False
+    assert state["capabilities"]["can_open_long"] is (not locked)

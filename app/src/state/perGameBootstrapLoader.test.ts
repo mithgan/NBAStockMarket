@@ -7,7 +7,7 @@ import { parsePerGameBootstrap, type PerGameBootstrap } from '../api/contracts';
 import { loadPerGameBootstrapSnapshot } from './perGameBootstrapLoader';
 
 const example = JSON.parse(readFileSync(
-  resolve(import.meta.dirname, '../../../docs/per-game-economy-v2-api-example.json'),
+  resolve(import.meta.dirname, '../api/fixtures/perGameApiExample.json'),
   'utf8',
 )) as { bootstrap: unknown };
 
@@ -141,4 +141,35 @@ test('a rollover full snapshot is not returned after the request becomes stale',
 
   assert.equal(result, null);
   assert.equal(guardChecks, 2);
+});
+
+test('acknowledged account version remains a floor until a matching snapshot catches up', async () => {
+  const previous = bootstrap();
+  const minimumSnapshot = { ...previous, account: { ...previous.account, version: previous.account.version + 2 } };
+  for (const version of [previous.account.version, minimumSnapshot.account.version - 1, minimumSnapshot.account.version]) {
+    const result = await loadPerGameBootstrapSnapshot({
+      previous,
+      minimumSnapshot,
+      incremental: true,
+      fetchBootstrap: async () => ({ ...previous, account: { ...previous.account, version } }),
+      isCurrent: () => true,
+    });
+    assert.equal(result !== null, version >= minimumSnapshot.account.version);
+  }
+});
+
+test('an acknowledged old ruleset does not impose its account version on a new ruleset', async () => {
+  const previous = bootstrap();
+  const minimumSnapshot = { ...previous, account: { ...previous.account, version: 100 } };
+  const next = { ...previous, ruleset: { ...previous.ruleset, version: 2 }, account: { ...previous.account, version: 1 } };
+  const result = await loadPerGameBootstrapSnapshot({ previous, minimumSnapshot, incremental: true, fetchBootstrap: async () => next, isCurrent: () => true });
+  assert.equal(result, next);
+});
+
+test('a rollover probe cannot bypass the acknowledged floor if the full response returns to the same identity', async () => {
+  const previous = bootstrap();
+  const minimumSnapshot = { ...previous, account: { ...previous.account, version: previous.account.version + 1 } };
+  const rollover = { ...previous, ruleset: { ...previous.ruleset, version: 2 } };
+  const result = await loadPerGameBootstrapSnapshot({ previous, minimumSnapshot, incremental: true, fetchBootstrap: async (cursor) => cursor === undefined ? previous : rollover, isCurrent: () => true });
+  assert.equal(result, null);
 });

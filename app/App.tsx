@@ -21,6 +21,7 @@ import { PerGameProvider as PortfolioProvider, usePerGame as usePortfolio } from
 import { ThemeProvider, useDesignVariant } from './src/theme/ThemeProvider';
 import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
 import { installGlobalWebStyles } from './src/web/globalStyles';
+import { treatmentNavigation } from './src/web/treatmentNavigation';
 
 installGlobalWebStyles();
 
@@ -163,6 +164,7 @@ function AppBody() {
   const clearAuthMessage = auth?.clearMessage;
   const signOut = auth?.signOut;
   const {
+    bootstrap,
     confirmLocalTransition,
     dismissNotice,
     isLoading,
@@ -297,6 +299,10 @@ function AppBody() {
       {ready ? (wide ? null : renderTabBar('bottom')) : null}
       <SettingsSheet
         listedPlayers={players.length}
+        ruleset={bootstrap?.ruleset}
+        onOpenTreatments={typeof window === 'undefined' ? undefined : () => {
+          window.location.assign(treatmentNavigation(window.location.href).galleryUrl);
+        }}
         onClose={() => setSettingsOpen(false)}
         profile={
           auth?.user
@@ -362,10 +368,7 @@ function ConfiguredApp({ config }: { config: PublicAppConfig }) {
  * of the app, so every variant can be reviewed side by side at a stable URL.
  */
 function isDesignPreviewRoute(): boolean {
-  if (typeof window === 'undefined') return false;
-  const path = window.location.pathname.replace(/\/+$/, '');
-  if (path === '/treatments' || path.startsWith('/treatments/')) return true;
-  return new URLSearchParams(window.location.search).has('design');
+  return typeof window !== 'undefined' && treatmentNavigation(window.location.href).isPreview;
 }
 
 export default function App() {
@@ -392,7 +395,7 @@ export default function App() {
           <ConfiguredApp config={configResult.config} />
         ) : (
           <CenteredState
-            copy={`${configResult.error} Set the three EXPO_PUBLIC app variables before starting Expo.`}
+            copy={`${configResult.error} Set the public API URL, API prefix, and Supabase auth configuration before starting Expo.`}
             title="App configuration missing"
           />
         )}

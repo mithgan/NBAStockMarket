@@ -6,7 +6,8 @@ const ACCOUNT_REFRESH = 'account-refresh';
 export type ReconciliationReason =
   | 'confirmed-staged'
   | 'confirmed-global'
-  | 'ambiguous';
+  | 'ambiguous'
+  | 'conflict';
 
 export interface RefreshAttempt {
   reconciliationReason: ReconciliationReason | null;

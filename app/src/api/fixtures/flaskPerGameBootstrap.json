@@ -1,0 +1,334 @@
+{
+  "data": {
+    "account": {
+      "account_id": "5550a564-9da1-5c7f-a0cb-65afbec3d449",
+      "cumulative_pnl_dollars": 0,
+      "display_name": "Trader 5550a5",
+      "latest_game_pnl_dollars": 0,
+      "long_slots": {
+        "limit": 10,
+        "remaining": 10,
+        "used": 0
+      },
+      "short_slots": {
+        "limit": 5,
+        "remaining": 5,
+        "used": 0
+      },
+      "version": 0
+    },
+    "capabilities": {
+      "can_advance_replay": false,
+      "can_open_long": true,
+      "can_open_short": true
+    },
+    "game": {
+      "event_cursor": 25,
+      "event_sequence": 2,
+      "last_settled_date": "2026-09-11",
+      "next_game_date": "2026-09-12",
+      "season_id": "2026-27-QA"
+    },
+    "leaderboard": [
+      {
+        "cumulative_pnl_dollars": 395438,
+        "display_name": "Trader 3e08c5",
+        "entry_id": "trader_579c3e3ef773104bd89e4ba0",
+        "is_current_user": false,
+        "rank": 1
+      },
+      {
+        "cumulative_pnl_dollars": 395188,
+        "display_name": "Trader e02cf5",
+        "entry_id": "trader_5d7207cb0e19f5926d6c8332",
+        "is_current_user": false,
+        "rank": 2
+      },
+      {
+        "cumulative_pnl_dollars": 0,
+        "display_name": "Trader 5550a5",
+        "entry_id": "trader_27b05989c7f350e28a564c77",
+        "is_current_user": true,
+        "rank": 3
+      },
+      {
+        "cumulative_pnl_dollars": -395250,
+        "display_name": "Trader 075335",
+        "entry_id": "trader_ada0ae14d46c281161f66244",
+        "is_current_user": false,
+        "rank": 4
+      },
+      {
+        "cumulative_pnl_dollars": -395500,
+        "display_name": "Trader 3308b1",
+        "entry_id": "trader_e6f370cc95702648474ed539",
+        "is_current_user": false,
+        "rank": 5
+      }
+    ],
+    "ledger": {
+      "items": [],
+      "next_cursor": null
+    },
+    "market": [
+      {
+        "current_game_cost_dollars": 275000,
+        "name": "Amen Thompson",
+        "player_id": "4684740",
+        "prior_season_value_per_game_dollars": 295000,
+        "quote_version": 6,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 200000,
+        "name": "Bam Adebayo",
+        "player_id": "4066261",
+        "prior_season_value_per_game_dollars": 220000,
+        "quote_version": 4,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 162500,
+        "name": "Cade Cunningham",
+        "player_id": "4432166",
+        "prior_season_value_per_game_dollars": 142500,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 212500,
+        "name": "Chet Holmgren",
+        "player_id": "4433255",
+        "prior_season_value_per_game_dollars": 192500,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 462500,
+        "name": "Collin Gillespie",
+        "player_id": "4278585",
+        "prior_season_value_per_game_dollars": 442500,
+        "quote_version": 0,
+        "tier": "mid"
+      },
+      {
+        "current_game_cost_dollars": 437500,
+        "name": "De'Aaron Fox",
+        "player_id": "4066259",
+        "prior_season_value_per_game_dollars": 417500,
+        "quote_version": 0,
+        "tier": "mid"
+      },
+      {
+        "current_game_cost_dollars": 175000,
+        "name": "Derrick White",
+        "player_id": "3078576",
+        "prior_season_value_per_game_dollars": 195000,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 387500,
+        "name": "Desmond Bane",
+        "player_id": "4066320",
+        "prior_season_value_per_game_dollars": 367500,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 300000,
+        "name": "Devin Booker",
+        "player_id": "3136193",
+        "prior_season_value_per_game_dollars": 320000,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 400000,
+        "name": "Donovan Clingan",
+        "player_id": "5105565",
+        "prior_season_value_per_game_dollars": 420000,
+        "quote_version": 0,
+        "tier": "mid"
+      },
+      {
+        "current_game_cost_dollars": 187500,
+        "name": "Donovan Mitchell",
+        "player_id": "3908809",
+        "prior_season_value_per_game_dollars": 167500,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 325000,
+        "name": "Dyson Daniels",
+        "player_id": "4869342",
+        "prior_season_value_per_game_dollars": 345000,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 337500,
+        "name": "Evan Mobley",
+        "player_id": "4432158",
+        "prior_season_value_per_game_dollars": 317500,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 312500,
+        "name": "Giannis Antetokounmpo",
+        "player_id": "3032977",
+        "prior_season_value_per_game_dollars": 292500,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 375000,
+        "name": "Jalen Brunson",
+        "player_id": "3934672",
+        "prior_season_value_per_game_dollars": 395000,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 362500,
+        "name": "Jalen Duren",
+        "player_id": "4433621",
+        "prior_season_value_per_game_dollars": 342500,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 350000,
+        "name": "Jamal Murray",
+        "player_id": "3936299",
+        "prior_season_value_per_game_dollars": 370000,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 412500,
+        "name": "Jaylen Brown",
+        "player_id": "3917376",
+        "prior_season_value_per_game_dollars": 392500,
+        "quote_version": 0,
+        "tier": "mid"
+      },
+      {
+        "current_game_cost_dollars": 250000,
+        "name": "Karl-Anthony Towns",
+        "player_id": "3136195",
+        "prior_season_value_per_game_dollars": 270000,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 150000,
+        "name": "Kawhi Leonard",
+        "player_id": "6450",
+        "prior_season_value_per_game_dollars": 170000,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 287500,
+        "name": "Kevin Durant",
+        "player_id": "3202",
+        "prior_season_value_per_game_dollars": 267500,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 425000,
+        "name": "Kon Knueppel",
+        "player_id": "5061575",
+        "prior_season_value_per_game_dollars": 445000,
+        "quote_version": 0,
+        "tier": "mid"
+      },
+      {
+        "current_game_cost_dollars": 262500,
+        "name": "LaMelo Ball",
+        "player_id": "4432816",
+        "prior_season_value_per_game_dollars": 242500,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 137500,
+        "name": "Luka Doncic",
+        "player_id": "3945274",
+        "prior_season_value_per_game_dollars": 117500,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 100000,
+        "name": "Nikola Jokic",
+        "player_id": "3112335",
+        "prior_season_value_per_game_dollars": 120000,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 450000,
+        "name": "OG Anunoby",
+        "player_id": "3934719",
+        "prior_season_value_per_game_dollars": 470000,
+        "quote_version": 0,
+        "tier": "mid"
+      },
+      {
+        "current_game_cost_dollars": 237500,
+        "name": "Scottie Barnes",
+        "player_id": "4433134",
+        "prior_season_value_per_game_dollars": 217500,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 112500,
+        "name": "Shai Gilgeous-Alexander",
+        "player_id": "4278073",
+        "prior_season_value_per_game_dollars": 92500,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 225000,
+        "name": "Tyrese Maxey",
+        "player_id": "4431678",
+        "prior_season_value_per_game_dollars": 245000,
+        "quote_version": 0,
+        "tier": "star"
+      },
+      {
+        "current_game_cost_dollars": 125000,
+        "name": "Victor Wembanyama",
+        "player_id": "5104157",
+        "prior_season_value_per_game_dollars": 145000,
+        "quote_version": 0,
+        "tier": "star"
+      }
+    ],
+    "positions": [],
+    "ruleset": {
+      "allow_opposing_positions": false,
+      "dividend_basis": "raw_net_points",
+      "dividend_dollars_per_net_point": 40000,
+      "id": "qa-synthetic-2026",
+      "long_slot_limit": 10,
+      "quote_add_impact_bps": 25,
+      "quote_drop_impact_bps": 25,
+      "roster_lock_game_date": null,
+      "roster_mutations_locked": false,
+      "short_slot_limit": 5,
+      "short_term_days": 7,
+      "transaction_fee_dollars": 250,
+      "version": 1
+    },
+    "schema_version": 2,
+    "settled_results": []
+  }
+}

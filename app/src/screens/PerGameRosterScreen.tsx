@@ -48,7 +48,7 @@ function StatCell({ label, value }: { label: string; value: number }) {
 
 function PositionRow({ position }: { position: PerGamePosition }) {
   const { bootstrap, closePosition, pendingActions } = usePerGame();
-  const { fontScale } = useWindowDimensions();
+  const { fontScale, width } = useWindowDimensions();
   const actionKey = `position:${position.side}:${position.playerId}`;
   const pending = pendingActions.has(actionKey);
   const locked = pendingActions.has('account-mutation');
@@ -79,7 +79,7 @@ function PositionRow({ position }: { position: PerGamePosition }) {
         style={styles.positionCopy}
       >
         <Text style={styles.positionKicker}>{kicker}</Text>
-        <Text numberOfLines={fontScale > 1.25 ? undefined : 1} style={styles.positionName}>
+        <Text numberOfLines={fontScale > 1.25 ? undefined : width < 420 ? 2 : 1} style={styles.positionName}>
           {position.playerName}
         </Text>
         <Text style={styles.positionDetail}>
@@ -301,6 +301,9 @@ const styles = StyleSheet.create({
     ...labelStyle,
     color: colors.goldInk,
     fontVariant: ['tabular-nums'],
+    flexShrink: 0,
+    minWidth: 48,
+    textAlign: 'right',
   },
   positionRow: {
     minHeight: 72,

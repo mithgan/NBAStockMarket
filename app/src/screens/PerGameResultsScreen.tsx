@@ -90,10 +90,10 @@ function ResultRow({ compact, result, playerName }: {
           accessibilityLabel={`${equation.firstLabel} ${formatMoney(arithmetic.firstAmount)} minus ${equation.secondLabel} ${formatMoney(arithmetic.secondAmount)} equals ${formatSignedMoney(arithmetic.netPnl)}`}
           style={styles.equation}
         >
-          {equation.firstLabel} {formatCompactMoney(arithmetic.firstAmount)} - {' '}
-          {equation.secondLabel} {formatCompactMoney(arithmetic.secondAmount)} = {' '}
+          {equation.firstLabel} {formatMoney(arithmetic.firstAmount)} - {' '}
+          {equation.secondLabel} {formatMoney(arithmetic.secondAmount)} = {' '}
           <Text style={positive ? styles.positive : styles.negative}>
-            {formatCompactSignedMoney(arithmetic.netPnl)}
+            {formatSignedMoney(arithmetic.netPnl)}
           </Text>
         </Text>
       ) : null}

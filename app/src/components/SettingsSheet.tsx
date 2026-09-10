@@ -2,12 +2,9 @@ import type { ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line } from 'react-native-svg';
 
-import { formatCompactMoney } from '../format';
+import type { PerGameRuleset } from '../api/contracts';
+import { perGameRulesPresentation } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import {
-  BASE_DIVIDEND_DOLLARS_PER_NET_POINT,
-  STARTING_BANKROLL,
-} from '../state/economy';
 import { useDesignVariant } from '../theme/ThemeProvider';
 import { APPEARANCE_CHOICES, VARIANTS } from '../theme/variants';
 import { rowMarker } from '../ui/domMarkers';
@@ -62,6 +59,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export function SettingsSheet({
   onClose,
   onSignOut,
+  onOpenTreatments,
+  ruleset,
   seasonLabel,
   listedPlayers,
   profile,
@@ -69,12 +68,15 @@ export function SettingsSheet({
 }: {
   onClose: () => void;
   onSignOut?: () => void;
+  onOpenTreatments?: () => void;
+  ruleset?: PerGameRuleset;
   seasonLabel: string;
   listedPlayers: number;
   profile?: SettingsProfile;
   visible: boolean;
 }) {
   const reducedMotion = useReducedMotion();
+  const rules = ruleset ? perGameRulesPresentation(ruleset) : null;
   const { setVariant, variantId } = useDesignVariant();
   return (
     <Modal
@@ -128,8 +130,13 @@ export function SettingsSheet({
               );
             })}
             <Text style={styles.note}>
-              Every treatment here is checked against the same contrast floor the rest of the app holds. More of them live at /treatments.
+              Every treatment here is checked against the same contrast floor the rest of the app holds.
             </Text>
+            {onOpenTreatments ? (
+              <Pressable accessibilityRole="button" onPress={onOpenTreatments} style={styles.choice}>
+                <Text style={[styles.choiceName, styles.choiceNameSelected]}>View all treatments</Text>
+              </Pressable>
+            ) : null}
           </Section>
 
           <Section title="This season">
@@ -141,21 +148,17 @@ export function SettingsSheet({
               <Text style={styles.factLabel}>Listed players</Text>
               <Text style={styles.factValue}>{listedPlayers}</Text>
             </View>
-            <View style={styles.factRow}>
-              <Text style={styles.factLabel}>Starting bankroll</Text>
-              <Text style={styles.factValue}>{formatCompactMoney(STARTING_BANKROLL)}</Text>
-            </View>
-            <View style={styles.factRow}>
-              <Text style={styles.factLabel}>Dividend rate</Text>
-              <Text style={styles.factValue}>{formatCompactMoney(BASE_DIVIDEND_DOLLARS_PER_NET_POINT)} per net point</Text>
-            </View>
-            <View style={styles.factRow}>
-              <Text style={styles.factLabel}>Listing tiers</Text>
-              <Text style={styles.factValue}>STAR · MID</Text>
-            </View>
-            <Text style={styles.note}>
-              Dividends pay the difference between what a player actually did and what he was projected to do. Matching the projection pays nothing; missing it costs you. Prices move on trading, never on performance. Tiers band players by opening price — stars list dearest.
-            </Text>
+            {rules ? (
+              <>
+                {rules.facts.map((fact) => (
+                  <View key={fact.label} style={styles.factRow}>
+                    <Text style={styles.factLabel}>{fact.label}</Text>
+                    <Text style={styles.factValue}>{fact.value}</Text>
+                  </View>
+                ))}
+                <Text style={styles.note}>{rules.explanation}</Text>
+              </>
+            ) : <Text style={styles.note}>Current rules will appear when your account loads.</Text>}
           </Section>
 
           {profile ? (
@@ -346,6 +349,8 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: type.body,
     fontWeight: weight.heavy,
+    flexShrink: 1,
+    textAlign: 'right',
   },
   note: {
     color: colors.faint,

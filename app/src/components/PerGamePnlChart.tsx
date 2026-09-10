@@ -31,7 +31,6 @@ export function PerGamePnlChart({ entries }: { entries: readonly PerGameLedgerEn
     <View
       accessible
       accessibilityLabel={`Cumulative profit and loss chart from zero to ${formatSignedMoney(current)}`}
-      onLayout={onLayout}
       style={styles.container}
     >
       <View style={styles.heading}>
@@ -40,27 +39,29 @@ export function PerGamePnlChart({ entries }: { entries: readonly PerGameLedgerEn
           {formatCompactSignedMoney(current)}
         </Text>
       </View>
-      {entries.length === 0 ? (
-        <View style={styles.emptyChart}>
-          <View style={styles.zeroLine} />
-          <Text style={styles.emptyText}>Your chart starts at $0 after the first settled game.</Text>
-        </View>
-      ) : width > 0 ? (
-        <Svg height={CHART_HEIGHT} width={width}>
-          <Line
-            stroke={colors.borderStrong}
-            strokeDasharray="4 4"
-            strokeWidth={1}
-            x1={CHART_INSET}
-            x2={width - CHART_INSET}
-            y1={zeroY}
-            y2={zeroY}
-          />
-          <Path d={path} fill="none" stroke={color} strokeLinecap="round" strokeWidth={3} />
-        </Svg>
-      ) : (
-        <View style={styles.emptyChart} />
-      )}
+      <View onLayout={onLayout}>
+        {entries.length === 0 ? (
+          <View style={styles.emptyChart}>
+            <View style={styles.zeroLine} />
+            <Text style={styles.emptyText}>Your chart starts at $0. Fees and settled games will appear here.</Text>
+          </View>
+        ) : width > 0 ? (
+          <Svg height={CHART_HEIGHT} width={width}>
+            <Line
+              stroke={colors.borderStrong}
+              strokeDasharray="4 4"
+              strokeWidth={1}
+              x1={CHART_INSET}
+              x2={width - CHART_INSET}
+              y1={zeroY}
+              y2={zeroY}
+            />
+            <Path d={path} fill="none" stroke={color} strokeLinecap="round" strokeWidth={3} />
+          </Svg>
+        ) : (
+          <View style={styles.emptyChart} />
+        )}
+      </View>
     </View>
   );
 }

@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PortfolioHistoryChart } from '../components/PortfolioHistoryChart';
 import { Sparkline } from '../components/Sparkline';
@@ -6,6 +6,7 @@ import { formatCompactMoney, formatCompactSignedMoney } from '../format';
 import { useDesignVariant } from '../theme/ThemeProvider';
 import { colors, fonts, headingStyle, numeric, radius, space, type, weight } from '../theme';
 import { DesignScreen } from '../components/DesignScreen';
+import { treatmentNavigation } from '../web/treatmentNavigation';
 import type { TrendPoint } from '../data/trendPresentation';
 import type { PortfolioPoint } from '../state/game';
 
@@ -72,8 +73,17 @@ export function DesignPreviewScreen() {
     <ScrollView style={styles.scroll}>
       <View style={styles.banner}>
         <Text style={styles.bannerText}>
-          Treatment picker. Sample values, no account needed. A treatment picked here applies to the app too. Drop /treatments from the address to play it.
+          Treatment picker. Sample values, no account needed. A treatment picked here applies to the app too. Return to the app to use your chosen appearance.
         </Text>
+        {typeof window !== 'undefined' ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => window.location.assign(treatmentNavigation(window.location.href).appUrl)}
+            style={styles.returnButton}
+          >
+            <Text style={styles.returnText}>RETURN TO APP</Text>
+          </Pressable>
+        ) : null}
       </View>
       <PortfolioHistoryChart
         earnings={{ tonight: 529_000, week: 2_150_000 }}
@@ -176,6 +186,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
+  returnButton: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  returnText: { color: colors.goldInk, fontFamily: fonts.display, fontSize: type.label, fontWeight: weight.heavy },
   bannerText: {
     color: colors.goldInk,
     fontFamily: fonts.body,

@@ -244,7 +244,10 @@ export function mergePerGameBootstrap(
   incoming: PerGameBootstrap,
 ): PerGameBootstrap | null {
   if (!samePerGameBootstrapIdentity(previous, incoming)) return incoming;
-  if (incoming.game.eventCursor < previous.game.eventCursor) return null;
+  if (
+    incoming.game.eventCursor < previous.game.eventCursor
+    || incoming.account.version < previous.account.version
+  ) return null;
 
   const ledgerById = new Map(previous.ledger.items.map((entry) => [entry.entryId, entry]));
   for (const entry of incoming.ledger.items) ledgerById.set(entry.entryId, entry);

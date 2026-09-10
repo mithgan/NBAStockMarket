@@ -29,8 +29,10 @@ npx expo start
 ```
 
 The app presents an explicit configuration error when any public variable is missing or unsafe.
-After sign-in, it restores the Databallr Supabase session, loads the account from Flask, and keeps the
-legacy prototype save untouched until the user confirms the one-time server-account transition.
+After sign-in, it restores the Databallr Supabase session and loads the per-game account from Flask.
+The four gameplay tabs are Roster, Market, Results and Leaders. The score starts at $0; rules,
+fees, position limits, costs and settlements come from the selected backend ruleset. Older device
+prototype saves remain untouched and are not imported into the per-game account.
 
 ## Verify locally
 
@@ -42,10 +44,28 @@ npx expo export --platform web
 
 Application screens live in `src/screens/`; runtime-validated API contracts live in `src/api/`.
 
-## Private web play-test
+## GitHub Pages
 
-The Expo web client deploys as a standalone Vercel preview. It is not a
-Databallr page; only its trusted API lives in the Databallr Flask service.
+The published web address is `https://mithgan.github.io/NBAStockMarket/`. A published build may
+lag the source branch; check the displayed per-game tabs and rules rather than assuming the URL
+contains the latest code.
+
+The Pages workflow runs client tests and TypeScript checks before publishing. Publication requires
+repository variables `NBA_STOCK_V2_ENABLED=true` and `NBA_STOCK_V2_API_PREFIX=/v2`, and the
+Flask mount must return the v2 contract marker at `/api/nba-stock-market/v2/meta`. The marker
+identifies the installed API; it does not prove database configuration, successful sign-in or
+playable account state. Before enabling publication, verify an authenticated bootstrap and an
+open/close flow against the intended backend and ruleset. Keep the existing authentication and
+deployment gates in place while preparing a release.
+
+The export uses the `/NBAStockMarket` base path. Use the shared Databallr Auth project and allow
+the published origin in Flask CORS and the full callback path in Supabase's redirect configuration.
+Never use the separate market database project's identity configuration in the browser.
+
+## Optional private web preview
+
+The Expo web client can also deploy as a standalone Vercel preview. Its API remains in the
+existing Databallr Flask service.
 
 Configure these public Preview environment variables in Vercel:
 

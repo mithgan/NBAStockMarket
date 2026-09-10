@@ -10,7 +10,7 @@ import {
 } from './perGameClient';
 
 const example = JSON.parse(readFileSync(
-  resolve(import.meta.dirname, '../../../docs/per-game-economy-v2-api-example.json'),
+  resolve(import.meta.dirname, '../api/fixtures/perGameApiExample.json'),
   'utf8',
 )) as { bootstrap: unknown; open_position_response: unknown };
 
@@ -287,5 +287,21 @@ test('close position targets the stable position id with an account precondition
   assert.equal(calls[0].init?.method, 'DELETE');
   assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
     expected_account_version: 9,
+  });
+});
+
+test('paginated bootstrap rejects a regressive account snapshot before exposing history', async () => {
+  const first = structuredClone(example.bootstrap) as { ledger: { next_cursor: number | null }; account: { version: number } };
+  first.ledger.next_cursor = 48;
+  first.account.version = 9;
+  const second = structuredClone(first);
+  second.account.version = 8;
+  second.ledger.next_cursor = null;
+  let pages = 0;
+  const api = client((async () => envelope(++pages === 1 ? first : second)) as typeof fetch);
+  await assert.rejects(api.bootstrap(), (error: unknown) => {
+    assert.ok(error instanceof PerGameApiError);
+    assert.equal(error.code, 'invalid_account_version');
+    return true;
   });
 });

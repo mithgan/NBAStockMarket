@@ -122,32 +122,34 @@ export function PerGameStatusStrip() {
           </Text>
         </Pressable>
       </View>
-      {earnings ? (
-        <View
-          accessible
-          accessibilityLabel={`Last night ${formatSignedMoney(earnings.night)}, last seven nights ${formatSignedMoney(earnings.week)}`}
-          style={styles.earnings}
-        >
-          <Text style={styles.earningsLabel}>LAST NIGHT</Text>
-          <Text style={[styles.earningsValue, earnings.night >= 0 ? styles.up : styles.down]}>
-            {formatCompactSignedMoney(earnings.night)}
-          </Text>
-          <Text style={styles.earningsDot}>·</Text>
-          <Text style={styles.earningsLabel}>7 NIGHTS</Text>
-          <Text style={[styles.earningsValue, earnings.week >= 0 ? styles.up : styles.down]}>
-            {formatCompactSignedMoney(earnings.week)}
-          </Text>
-          <Pressable
-            accessibilityLabel={rulesOpen ? 'Hide the game rules' : 'Show the game rules'}
-            accessibilityRole="button"
-            aria-expanded={rulesOpen}
-            onPress={() => setRulesOpen((open) => !open)}
-            style={({ pressed }) => [styles.rulesToggle, pressed && styles.pressed]}
+      <View style={styles.earnings}>
+        {earnings ? (
+          <View
+            accessible
+            accessibilityLabel={`Last night ${formatSignedMoney(earnings.night)}, last seven nights ${formatSignedMoney(earnings.week)}`}
+            style={styles.earningsNumbers}
           >
-            <Text style={styles.rulesToggleText}>RULES {rulesOpen ? '▾' : '▸'}</Text>
-          </Pressable>
-        </View>
-      ) : null}
+            <Text style={styles.earningsLabel}>LAST NIGHT</Text>
+            <Text style={[styles.earningsValue, earnings.night >= 0 ? styles.up : styles.down]}>
+              {formatCompactSignedMoney(earnings.night)}
+            </Text>
+            <Text style={styles.earningsDot}>·</Text>
+            <Text style={styles.earningsLabel}>7 NIGHTS</Text>
+            <Text style={[styles.earningsValue, earnings.week >= 0 ? styles.up : styles.down]}>
+              {formatCompactSignedMoney(earnings.week)}
+            </Text>
+          </View>
+        ) : null}
+        <Pressable
+          accessibilityLabel={rulesOpen ? 'Hide the game rules' : 'Show the game rules'}
+          accessibilityRole="button"
+          aria-expanded={rulesOpen}
+          onPress={() => setRulesOpen((open) => !open)}
+          style={({ pressed }) => [styles.rulesToggle, pressed && styles.pressed]}
+        >
+          <Text style={styles.rulesToggleText}>RULES {rulesOpen ? '▾' : '▸'}</Text>
+        </Pressable>
+      </View>
       {rulesOpen ? (
         <View style={styles.rules}>
           <View style={[styles.ruleItem, reflow && styles.ruleItemReflow]}>
@@ -267,6 +269,12 @@ const styles = StyleSheet.create({
     paddingVertical: space.xs,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
+  },
+  earningsNumbers: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: space.sm,
   },
   earningsLabel: {
     ...labelStyle,

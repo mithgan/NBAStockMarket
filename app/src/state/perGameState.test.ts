@@ -15,7 +15,7 @@ import {
 } from './perGameState';
 
 const example = JSON.parse(readFileSync(
-  resolve(import.meta.dirname, '../../../docs/per-game-economy-v2-api-example.json'),
+  resolve(import.meta.dirname, '../api/fixtures/perGameApiExample.json'),
   'utf8',
 )) as { bootstrap: unknown };
 
@@ -280,4 +280,17 @@ test('market blocks an opposing-side CTA unless the active rules allow it', () =
   }, 'short')[0];
   assert.equal(allowed.canSubmit, true);
   assert.equal(allowed.blockedByOpposingPosition, false);
+});
+
+test('same identity rejects a regressive account version even when the world cursor advances', () => {
+  const previous = bootstrap();
+  for (const eventCursor of [previous.game.eventCursor, previous.game.eventCursor + 1]) {
+    const incoming = {
+      ...previous,
+      account: { ...previous.account, version: previous.account.version - 1 },
+      game: { ...previous.game, eventCursor },
+      positions: [],
+    };
+    assert.equal(mergePerGameBootstrap(previous, incoming), null);
+  }
 });

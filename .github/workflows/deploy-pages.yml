@@ -1,8 +1,8 @@
-name: Deploy reconstruction to GitHub Pages
+name: Verify and publish per-game market
 
-# Publishes the reconstructed app (app/) as a static site at
-# https://mithgan.github.io/NBAStockMarket/ so the recovered UI has a live
-# URL again. Publishes via the classic gh-pages branch because the workflow
+# Publishes the per-game app (app/) as a static site at
+# https://mithgan.github.io/NBAStockMarket/ after client and API contract checks.
+# Publishes via the classic gh-pages branch because the workflow
 # token may not create a Pages site through the API. Only browser-safe public
 # configuration is embedded in the static bundle.
 
@@ -20,7 +20,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verify-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci --no-audit --no-fund
+      - name: Verify the client
+        working-directory: app
+        run: |
+          npm test
+          npx tsc --noEmit
+
   build-and-publish:
+    needs: verify-client
     if: ${{ vars.NBA_STOCK_V2_ENABLED == 'true' && vars.NBA_STOCK_V2_API_PREFIX != '' }}
     runs-on: ubuntu-latest
     env:
@@ -83,4 +102,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: app/dist
           force_orphan: true
-          commit_message: 'deploy: reconstructed NBA Stock Market'
+          commit_message: 'deploy: per-game NBA Stock Market'

@@ -49,7 +49,7 @@ export function PerGameLeaderboardScreen() {
         </View>
       ) : rows.map((row) => (
         <View
-          key={row.accountId}
+          key={row.entryId}
           style={[styles.row, compact && styles.rowCompact, row.isCurrentUser && styles.currentRow]}
         >
           <Text style={[styles.rank, compact && styles.rankCompact]}>#{row.rank}</Text>

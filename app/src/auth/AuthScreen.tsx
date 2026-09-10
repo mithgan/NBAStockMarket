@@ -41,9 +41,9 @@ export function AuthScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.mark}><Text style={styles.markText}>DB</Text></View>
-        <Text accessibilityRole="header" style={styles.title}>Your portfolio, everywhere</Text>
+        <Text accessibilityRole="header" style={styles.title}>Your roster, everywhere</Text>
         <Text style={styles.copy}>
-          Sign in to trade players and keep one server-backed balance across devices.
+          Sign in to manage your roster and track your per-game score across devices.
         </Text>
 
         {error || notice ? (

@@ -1472,6 +1472,7 @@ class PerGameService:
                 "can_open_short": (
                     not ruleset.roster_mutations_locked
                     and short_used < ruleset.short_slot_limit
+                    and self._short_schedule_available(ruleset)
                 ),
                 "can_advance_replay": False,
             },
@@ -1749,14 +1750,21 @@ class PerGameService:
         )
 
     @staticmethod
-    def _short_expires_on(ruleset: PerGameRulesetRow) -> date | None:
+    def _short_schedule_available(ruleset: PerGameRulesetRow) -> bool:
+        return ruleset.short_term_days is None or (
+            ruleset.next_game_date is not None
+            and (
+                ruleset.last_settled_date is None
+                or ruleset.next_game_date > ruleset.last_settled_date
+            )
+        )
+
+    @classmethod
+    def _short_expires_on(cls, ruleset: PerGameRulesetRow) -> date | None:
         if ruleset.short_term_days is None:
             return None
         term_start = ruleset.next_game_date
-        if term_start is None or (
-            ruleset.last_settled_date is not None
-            and term_start <= ruleset.last_settled_date
-        ):
+        if not cls._short_schedule_available(ruleset):
             raise api_problem(
                 503,
                 "short_schedule_unavailable",

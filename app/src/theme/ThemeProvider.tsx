@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { applyVariant } from './applyVariant';
-import { DEFAULT_VARIANT, VARIANTS, isVariantId, type DesignVariant, type VariantId } from './variants';
+import { restoreSavedVariant } from './variantPersistence';
+import { DEFAULT_VARIANT, VARIANTS, type DesignVariant, type VariantId } from './variants';
 
 const STORAGE_KEY = 'nba-stock-market.design-variant';
 
@@ -18,15 +19,18 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [variantId, setVariantId] = useState<VariantId>(DEFAULT_VARIANT);
 
+  const selectionRevision = useRef(0);
+
   // Restore the saved choice once; a stale read must not clobber a pick the
   // user made while storage was still resolving.
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((stored) => {
-        if (!cancelled && isVariantId(stored)) setVariantId(stored);
-      })
-      .catch(() => {});
+    const revision = selectionRevision.current;
+    void restoreSavedVariant(
+      () => AsyncStorage.getItem(STORAGE_KEY),
+      setVariantId,
+      () => !cancelled && selectionRevision.current === revision,
+    );
     return () => {
       cancelled = true;
     };
@@ -37,6 +41,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [variantId]);
 
   const setVariant = useCallback((id: VariantId) => {
+    selectionRevision.current += 1;
     setVariantId(id);
     AsyncStorage.setItem(STORAGE_KEY, id).catch(() => {});
   }, []);

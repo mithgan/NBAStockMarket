@@ -10,7 +10,7 @@ import {
 } from './contracts';
 
 const example = JSON.parse(readFileSync(
-  resolve(import.meta.dirname, '../../../docs/per-game-economy-v2-api-example.json'),
+  resolve(import.meta.dirname, '../api/fixtures/perGameApiExample.json'),
   'utf8',
 )) as { bootstrap: unknown; open_position_response: unknown };
 
@@ -198,4 +198,18 @@ test('v2 preserves inverse expiry and rejects expiry on a long position', () => 
     () => parsePerGameBootstrap(value),
     /expires_on is only valid for inverse positions/,
   );
+});
+
+test('the real Flask bootstrap uses opaque leaderboard entry IDs', () => {
+  const payload = JSON.parse(readFileSync(resolve(import.meta.dirname, 'fixtures/flaskPerGameBootstrap.json'), 'utf8'));
+  const parsed = parsePerGameBootstrap(payload.data);
+  assert.ok(parsed.leaderboard.length > 0);
+  assert.equal(parsed.leaderboard[0].entryId, payload.data.leaderboard[0].entry_id);
+  assert.equal('account_id' in payload.data.leaderboard[0], false);
+});
+
+test('v2 bootstrap rejects missing or unexpected schema markers', () => {
+  for (const schema_version of [undefined, 1, 3, '2']) {
+    assert.throws(() => parsePerGameBootstrap({ ...(example.bootstrap as object), schema_version }), /schema_version/);
+  }
 });
