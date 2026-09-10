@@ -1,9 +1,13 @@
 import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { useState } from 'react';
+
 import type { PerGameLedgerEntry, PerGamePosition } from '../api/contracts';
 import { PerGamePnlChart } from '../components/PerGamePnlChart';
 import { PlayerAvatar } from '../components/PlayerAvatar';
+import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
+import { cardMarker } from '../ui/domMarkers';
 import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, fonts, headingStyle, heroNumber, labelStyle, space, type, weight } from '../theme';
@@ -121,9 +125,6 @@ function PositionRow({ position }: { position: PerGamePosition }) {
   );
 }
 
-/** react-native-web exposes this as data-card="player" for the hover lift. */
-const cardMarker: Record<string, unknown> = { dataSet: { card: 'player' } };
-
 /** Column count derives from a minimum tile width, not fixed breakpoints. */
 function gridColumns(width: number, fontScale: number): number {
   const usable = Math.min(width, 1040) - space.lg * 2;
@@ -131,7 +132,11 @@ function gridColumns(width: number, fontScale: number): number {
   return Math.max(2, Math.min(5, Math.floor(usable / minTile)));
 }
 
-function RosterSlotBox({ position, width }: { position: PerGamePosition; width: number }) {
+function RosterSlotBox({ position, width, onOpenProfile }: {
+  position: PerGamePosition;
+  width: number;
+  onOpenProfile: (playerId: string) => void;
+}) {
   const { bootstrap, closePosition, pendingActions } = usePerGame();
   const actionKey = `position:${position.side}:${position.playerId}`;
   const pending = pendingActions.has(actionKey);
@@ -145,7 +150,12 @@ function RosterSlotBox({ position, width }: { position: PerGamePosition; width: 
 
   return (
     <View {...cardMarker} style={[styles.slotBox, { width }]}>
-      <View style={styles.slotHead}>
+      <Pressable
+        accessibilityLabel={`View ${position.playerName} profile`}
+        accessibilityRole="button"
+        onPress={() => onOpenProfile(position.playerId)}
+        style={({ pressed }) => [styles.slotHead, pressed && styles.pressed]}
+      >
         <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={44} />
         <View style={styles.slotIdentity}>
           <Text numberOfLines={1} style={styles.slotKicker}>
@@ -153,7 +163,7 @@ function RosterSlotBox({ position, width }: { position: PerGamePosition; width: 
           </Text>
           <Text numberOfLines={2} style={styles.slotName}>{position.playerName}</Text>
         </View>
-      </View>
+      </Pressable>
       <Text
         accessibilityLabel={`Profit and loss ${formatSignedMoney(position.cumulativePnl)}`}
         style={[styles.slotPnl, position.cumulativePnl >= 0 ? styles.positive : styles.negative]}
@@ -219,11 +229,13 @@ function RosterGridSection({
   used,
   limit,
   onOpenMarket,
+  onOpenProfile,
 }: {
   positions: PerGamePosition[];
   used: number;
   limit: number;
   onOpenMarket: () => void;
+  onOpenProfile: (playerId: string) => void;
 }) {
   const { fontScale, width } = useWindowDimensions();
   const columns = gridColumns(width, fontScale);
@@ -239,7 +251,12 @@ function RosterGridSection({
       </View>
       <View style={styles.grid}>
         {positions.map((position) => (
-          <RosterSlotBox key={position.positionId} position={position} width={tileWidth} />
+          <RosterSlotBox
+            key={position.positionId}
+            onOpenProfile={onOpenProfile}
+            position={position}
+            width={tileWidth}
+          />
         ))}
         {Array.from({ length: emptyCount }, (_, index) => (
           <EmptySlotBox
@@ -305,11 +322,33 @@ export function PerGameRosterScreen({
   onOpenMarket: (side: PerGamePosition['side']) => void;
 }) {
   const { bootstrap } = usePerGame();
+  const [profileId, setProfileId] = useState<string | null>(null);
   const components = useMemo(
     () => scoreComponents(bootstrap?.ledger.items ?? []),
     [bootstrap?.ledger.items],
   );
   if (!bootstrap) return null;
+  const profilePosition = profileId
+    ? bootstrap.positions.find(
+      (row) => row.playerId === profileId && row.status === 'active',
+    ) ?? null
+    : null;
+  const profilePlayer = profileId
+    ? bootstrap.market.find((row) => row.playerId === profileId)
+      ?? (profilePosition
+        ? {
+            playerId: profilePosition.playerId,
+            name: profilePosition.playerName,
+            tier: '',
+            quoteVersion: 0,
+            currentGameCost: profilePosition.lockedGameCost,
+            priorSeasonValuePerGame: null,
+          }
+        : null)
+    : null;
+  const profileResults = profileId
+    ? bootstrap.settledResults.filter((result) => result.playerId === profileId)
+    : [];
   const active = bootstrap.positions.filter((position) => position.status === 'active');
   const longs = active.filter((position) => position.side === 'long');
   const shorts = active.filter((position) => position.side === 'short');
@@ -337,6 +376,7 @@ export function PerGameRosterScreen({
       <RosterGridSection
         limit={bootstrap.account.longSlots.limit}
         onOpenMarket={() => onOpenMarket('long')}
+        onOpenProfile={setProfileId}
         positions={longs}
         used={bootstrap.account.longSlots.used}
       />
@@ -348,6 +388,14 @@ export function PerGameRosterScreen({
         positions={shorts}
         title="Inverse positions"
         used={bootstrap.account.shortSlots.used}
+      />
+      <PlayerProfileSheet
+        dividendRate={bootstrap.ruleset.dividendDollarsPerNetPoint}
+        onClose={() => setProfileId(null)}
+        player={profilePlayer}
+        position={profilePosition}
+        results={profileResults}
+        visible={profileId !== null && profilePlayer !== null}
       />
     </ScrollView>
   );

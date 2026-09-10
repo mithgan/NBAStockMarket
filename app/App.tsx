@@ -373,13 +373,14 @@ function isDesignPreviewRoute(): boolean {
 }
 
 /**
- * `?mock` runs the complete app shell against the in-memory mock market so the
- * UI can be exercised and tweaked with no backend or sign-in. Development
- * builds only: the production route below stays exactly as authenticated,
- * fail-closed Flask, and release bundles never enter this branch.
+ * `?mock` runs the complete app shell against the in-memory sandbox market —
+ * the date sim: advance nights, lock costs, collect dividends — with no
+ * backend or sign-in. Like `?design`, it is an explicit opt-in URL; the
+ * default production route below stays authenticated, fail-closed Flask, and
+ * the sandbox labels itself in the season strip.
  */
 function isMockPreviewRoute(): boolean {
-  if (!__DEV__ || typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return false;
   return new URLSearchParams(window.location.search).has('mock');
 }
 

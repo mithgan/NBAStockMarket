@@ -85,6 +85,12 @@ export function PerGameStatusStrip() {
             {bootstrap.account.longSlots.used} / {bootstrap.account.longSlots.limit}
           </Text>
         </View>
+        {bootstrap.capabilities.canAdvanceReplay ? (
+          <View style={[styles.item, reflow && styles.itemReflow]}>
+            <Text style={styles.label}>MODE</Text>
+            <Text style={[styles.value, styles.sandbox]}>SANDBOX</Text>
+          </View>
+        ) : null}
         {rules.rosterMutationsLocked ? (
           <View
             accessible
@@ -369,6 +375,9 @@ const styles = StyleSheet.create({
     fontSize: type.label,
     fontWeight: weight.bold,
     lineHeight: 17,
+  },
+  sandbox: {
+    color: colors.goldInk,
   },
   up: {
     color: colors.green,

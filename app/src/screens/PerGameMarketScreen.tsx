@@ -11,22 +11,13 @@ import {
 
 import type { PerGamePositionSide } from '../api/contracts';
 import { positionSlotHint } from '../data/perGameRules';
+import { splitPlayerName } from '../data/playerName';
 import { PlayerAvatar } from '../components/PlayerAvatar';
+import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
 import { formatCompactMoney, formatMoney } from '../format';
 import { usePerGame } from '../state/PerGameContext';
 import { buildPerGameMarketRows, type PerGameMarketRow } from '../state/perGameState';
 import { colors, fonts, headingStyle, labelStyle, space, type, weight } from '../theme';
-
-const NAME_SUFFIXES = new Set(['jr.', 'jr', 'sr.', 'sr', 'ii', 'iii', 'iv', 'v']);
-
-/** Broadcast lower-third: quiet given name over the loud surname. */
-function splitPlayerName(name: string): { given: string; surname: string } {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length < 2) return { given: '', surname: name };
-  let index = parts.length - 1;
-  if (parts.length >= 3 && NAME_SUFFIXES.has(parts[index].toLowerCase())) index -= 1;
-  return { given: parts.slice(0, index).join(' '), surname: parts.slice(index).join(' ') };
-}
 
 function rosterLockMessage(gameDate: string | null): string {
   if (!gameDate) return 'Roster changes are locked while the current game is in progress.';
@@ -38,7 +29,11 @@ function rosterLockMessage(gameDate: string | null): string {
   return `Roster changes are locked for the ${date} game.`;
 }
 
-function MarketRow({ row, compact }: { row: PerGameMarketRow; compact: boolean }) {
+function MarketRow({ row, compact, onOpenProfile }: {
+  row: PerGameMarketRow;
+  compact: boolean;
+  onOpenProfile: (playerId: string) => void;
+}) {
   const { bootstrap, closePosition, openPosition, pendingActions } = usePerGame();
   const { player, position, side } = row;
   const actionKey = `position:${side}:${player.playerId}`;
@@ -73,8 +68,7 @@ function MarketRow({ row, compact }: { row: PerGameMarketRow; compact: boolean }
   return (
     <View style={[styles.row, compact && styles.rowTight]}>
       <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={compact ? 32 : 36} />
-      <View
-        accessible
+      <Pressable
         accessibilityLabel={[
           player.name,
           `${formatMoney(currentGameCost)} current game cost`,
@@ -82,8 +76,11 @@ function MarketRow({ row, compact }: { row: PerGameMarketRow; compact: boolean }
             ? 'prior season value unavailable'
             : `${formatMoney(priorSeasonValuePerGame)} prior season value per game`,
           position ? `${inverse ? 'inverse' : 'roster'} position active` : 'not rostered',
+          'View profile',
         ].join(', ')}
-        style={styles.details}
+        accessibilityRole="button"
+        onPress={() => onOpenProfile(player.playerId)}
+        style={({ pressed }) => [styles.details, pressed && styles.pressed]}
       >
         <View style={styles.identity}>
           <Text numberOfLines={1} style={styles.playerKicker}>{kicker}</Text>
@@ -105,7 +102,7 @@ function MarketRow({ row, compact }: { row: PerGameMarketRow; compact: boolean }
               : `LAST YEAR  ${formatCompactMoney(priorSeasonValuePerGame)}`}
           </Text>
         </View>
-      </View>
+      </Pressable>
       <Pressable
         accessibilityHint={rosterLocked ? rosterLockHint : row.unavailableReason ?? undefined}
         accessibilityLabel={rosterLocked
@@ -154,6 +151,7 @@ export function PerGameMarketScreen({
   const { fontScale, width } = useWindowDimensions();
   const [query, setQuery] = useState('');
   const [side, setSide] = useState<PerGamePositionSide>(initialSide);
+  const [profileId, setProfileId] = useState<string | null>(null);
   const compact = width < 420 || fontScale > 1.25;
   const rows = useMemo(() => {
     if (!bootstrap) return [];
@@ -167,6 +165,17 @@ export function PerGameMarketScreen({
   }, [bootstrap, query, side]);
   if (!bootstrap) return null;
   const slots = side === 'long' ? bootstrap.account.longSlots : bootstrap.account.shortSlots;
+  const profilePlayer = profileId
+    ? bootstrap.market.find((row) => row.playerId === profileId) ?? null
+    : null;
+  const profilePosition = profileId
+    ? bootstrap.positions.find(
+      (row) => row.playerId === profileId && row.status === 'active',
+    ) ?? null
+    : null;
+  const profileResults = profileId
+    ? bootstrap.settledResults.filter((result) => result.playerId === profileId)
+    : [];
 
   const listHeader = (
     <View style={styles.header}>
@@ -224,6 +233,7 @@ export function PerGameMarketScreen({
   );
 
   return (
+    <>
     <FlatList
       contentContainerStyle={styles.content}
       data={rows}
@@ -237,10 +247,21 @@ export function PerGameMarketScreen({
         </View>
       )}
       ListHeaderComponent={listHeader}
-      renderItem={({ item }) => <MarketRow compact={compact} row={item} />}
+      renderItem={({ item }) => (
+        <MarketRow compact={compact} onOpenProfile={setProfileId} row={item} />
+      )}
       style={styles.list}
       windowSize={9}
     />
+    <PlayerProfileSheet
+      dividendRate={bootstrap.ruleset.dividendDollarsPerNetPoint}
+      onClose={() => setProfileId(null)}
+      player={profilePlayer}
+      position={profilePosition}
+      results={profileResults}
+      visible={profileId !== null && profilePlayer !== null}
+    />
+    </>
   );
 }
 
