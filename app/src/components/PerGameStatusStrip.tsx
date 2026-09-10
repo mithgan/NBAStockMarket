@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { advanceMockNight } from '../api/mockPerGameClient';
+import { advanceMockNight, isMockActive } from '../api/mockPerGameClient';
 import { formatCompactMoney, formatCompactSignedMoney, formatSignedMoney } from '../format';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, fonts, labelStyle, space, type, weight } from '../theme';
@@ -85,7 +85,7 @@ export function PerGameStatusStrip() {
             {bootstrap.account.longSlots.used} / {bootstrap.account.longSlots.limit}
           </Text>
         </View>
-        {bootstrap.capabilities.canAdvanceReplay ? (
+        {bootstrap.capabilities.canAdvanceReplay && isMockActive() ? (
           <View style={[styles.item, reflow && styles.itemReflow]}>
             <Text style={styles.label}>MODE</Text>
             <Text style={[styles.value, styles.sandbox]}>SANDBOX</Text>
@@ -131,7 +131,7 @@ export function PerGameStatusStrip() {
               {isRefreshing ? 'WAIT' : reconciliationRequired ? 'RECONCILE' : 'REFRESH'}
             </Text>
           </Pressable>
-          {bootstrap.capabilities.canAdvanceReplay ? (
+          {bootstrap.capabilities.canAdvanceReplay && isMockActive() ? (
             <Pressable
               accessibilityLabel="Advance one night in the sandbox replay"
               accessibilityRole="button"

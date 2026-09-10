@@ -19,6 +19,7 @@ import {
   type PerGamePositionMutationResult,
 } from './contracts';
 import { PerGameApiError } from './perGameClient';
+import type { TrendPoint } from '../data/trendPresentation';
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -45,6 +46,8 @@ export class MockPerGameApiClient {
   private sequence: number;
   private cursor: number;
   private positionCounter = 0;
+  /** Full nightly history per listed player, for the in-depth profile. */
+  private trendsByPlayer: Record<string, TrendPoint[]> = {};
 
   constructor() {
     const parsed = parsePerGameBootstrap(
@@ -208,6 +211,25 @@ export class MockPerGameApiClient {
     state.ruleset.rosterLockGameDate = null;
 
     const rate = state.ruleset.dividendDollarsPerNetPoint;
+    // One roll per listed player: does he play tonight, and what does he
+    // produce? Every played night lands in his trend history, whether or not
+    // anyone holds him — the profile chart reads the whole league.
+    const actualByPlayer = new Map<string, number>();
+    for (const player of state.market) {
+      if (this.rng() > 0.55) continue;
+      const expectedNp = player.currentGameCost / rate;
+      const noise = (this.rng() + this.rng() + this.rng() - 1.5) * 14;
+      const actualNp = Math.round((expectedNp + noise) * 10) / 10;
+      actualByPlayer.set(player.playerId, actualNp);
+      const trend = this.trendsByPlayer[player.playerId]
+        ?? (this.trendsByPlayer[player.playerId] = []);
+      trend.push({
+        date,
+        np: actualNp,
+        expected_np: Math.round(expectedNp * 10) / 10,
+        dividend_per_holder: Math.round(actualNp * rate) - player.currentGameCost,
+      });
+    }
     let nightPnl = 0;
     for (const position of state.positions) {
       if (position.status !== 'active') continue;
@@ -220,11 +242,8 @@ export class MockPerGameApiClient {
         slots.remaining = Math.max(0, slots.limit - slots.used);
         continue;
       }
-      if (this.rng() > 0.55) continue;
-      const player = state.market.find((row) => row.playerId === position.playerId);
-      const expectedNp = (player?.currentGameCost ?? position.lockedGameCost) / rate;
-      const noise = (this.rng() + this.rng() + this.rng() - 1.5) * 14;
-      const actualNp = Math.round((expectedNp + noise) * 10) / 10;
+      const actualNp = actualByPlayer.get(position.playerId);
+      if (actualNp === undefined) continue;
       const dividend = Math.round(actualNp * rate);
       const cost = position.lockedGameCost;
       const pnl = position.side === 'long' ? dividend - cost : cost - dividend;
@@ -316,6 +335,10 @@ export class MockPerGameApiClient {
     }
   }
 
+  trendsFor(playerId: string): TrendPoint[] {
+    return clone(this.trendsByPlayer[playerId] ?? []);
+  }
+
   private appendFee(kind: 'open_fee' | 'drop_fee', position: PerGamePosition): void {
     const fee = this.snapshot.ruleset.transactionFeeDollars;
     if (fee <= 0) return;
@@ -343,6 +366,16 @@ let singleton: MockPerGameApiClient | null = null;
 export function mockPerGameClient(): MockPerGameApiClient {
   if (!singleton) singleton = new MockPerGameApiClient();
   return singleton;
+}
+
+/** True only while the ?mock route has instantiated the sandbox client. */
+export function isMockActive(): boolean {
+  return singleton !== null;
+}
+
+/** Full sandbox nightly history for one player; empty outside the mock. */
+export function mockPlayerTrends(playerId: string): TrendPoint[] {
+  return singleton ? singleton.trendsFor(playerId) : [];
 }
 
 /** Called by the status strip's sandbox control; true when a mock is active. */

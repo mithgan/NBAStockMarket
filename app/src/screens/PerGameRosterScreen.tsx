@@ -1,13 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { useState } from 'react';
-
 import type { PerGameLedgerEntry, PerGamePosition } from '../api/contracts';
+import { isMockActive, mockPlayerTrends } from '../api/mockPerGameClient';
 import { PerGamePnlChart } from '../components/PerGamePnlChart';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
-import { cardMarker } from '../ui/domMarkers';
 import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, fonts, headingStyle, heroNumber, labelStyle, space, type, weight } from '../theme';
@@ -50,7 +48,10 @@ function StatCell({ label, value }: { label: string; value: number }) {
   );
 }
 
-function PositionRow({ position }: { position: PerGamePosition }) {
+function PositionRow({ position, onOpenProfile }: {
+  position: PerGamePosition;
+  onOpenProfile: (playerId: string) => void;
+}) {
   const { bootstrap, closePosition, pendingActions } = usePerGame();
   const { fontScale, width } = useWindowDimensions();
   const actionKey = `position:${position.side}:${position.playerId}`;
@@ -71,16 +72,18 @@ function PositionRow({ position }: { position: PerGamePosition }) {
   return (
     <View style={styles.positionRow}>
       <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
-      <View
-        accessible
+      <Pressable
         accessibilityLabel={[
           position.playerName,
           `locked game cost ${formatMoney(position.lockedGameCost)}`,
           `${inverse ? 'cost credits' : 'game costs'} ${formatMoney(position.cumulativeGameCost)}`,
           `dividends ${formatMoney(position.cumulativeDividend)}`,
           `profit and loss ${formatSignedMoney(position.cumulativePnl)}`,
+          'View profile',
         ].join(', ')}
-        style={styles.positionCopy}
+        accessibilityRole="button"
+        onPress={() => onOpenProfile(position.playerId)}
+        style={({ pressed }) => [styles.positionCopy, pressed && styles.pressed]}
       >
         <Text style={styles.positionKicker}>{kicker}</Text>
         <Text numberOfLines={fontScale > 1.25 ? undefined : width < 420 ? 2 : 1} style={styles.positionName}>
@@ -90,7 +93,7 @@ function PositionRow({ position }: { position: PerGamePosition }) {
           {inverse ? 'credits' : 'costs'} {formatCompactMoney(position.cumulativeGameCost)}
           {' · '}divs {formatCompactMoney(position.cumulativeDividend)}
         </Text>
-      </View>
+      </Pressable>
       <Text
         accessibilityLabel={`Profit and loss ${formatSignedMoney(position.cumulativePnl)}`}
         style={[
@@ -125,152 +128,6 @@ function PositionRow({ position }: { position: PerGamePosition }) {
   );
 }
 
-/** Column count derives from a minimum tile width, not fixed breakpoints. */
-function gridColumns(width: number, fontScale: number): number {
-  const usable = Math.min(width, 1040) - space.lg * 2;
-  const minTile = fontScale > 1.3 ? 220 : 168;
-  return Math.max(2, Math.min(5, Math.floor(usable / minTile)));
-}
-
-function RosterSlotBox({ position, width, onOpenProfile }: {
-  position: PerGamePosition;
-  width: number;
-  onOpenProfile: (playerId: string) => void;
-}) {
-  const { bootstrap, closePosition, pendingActions } = usePerGame();
-  const actionKey = `position:${position.side}:${position.playerId}`;
-  const pending = pendingActions.has(actionKey);
-  const locked = pendingActions.has('account-mutation');
-  const rosterLocked = bootstrap?.ruleset.rosterMutationsLocked ?? true;
-  const rosterLockDate = bootstrap?.ruleset.rosterLockGameDate ?? null;
-  const rosterLockHint = rosterLockDate
-    ? `Roster changes are locked for the ${formatTermDate(rosterLockDate)} game.`
-    : 'Roster changes are locked while the current game is in progress.';
-  const disabled = pending || locked || rosterLocked;
-
-  return (
-    <View {...cardMarker} style={[styles.slotBox, { width }]}>
-      <Pressable
-        accessibilityLabel={`View ${position.playerName} profile`}
-        accessibilityRole="button"
-        onPress={() => onOpenProfile(position.playerId)}
-        style={({ pressed }) => [styles.slotHead, pressed && styles.pressed]}
-      >
-        <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={44} />
-        <View style={styles.slotIdentity}>
-          <Text numberOfLines={1} style={styles.slotKicker}>
-            {formatCompactMoney(position.lockedGameCost)}/GM
-          </Text>
-          <Text numberOfLines={2} style={styles.slotName}>{position.playerName}</Text>
-        </View>
-      </Pressable>
-      <Text
-        accessibilityLabel={`Profit and loss ${formatSignedMoney(position.cumulativePnl)}`}
-        style={[styles.slotPnl, position.cumulativePnl >= 0 ? styles.positive : styles.negative]}
-      >
-        {formatCompactSignedMoney(position.cumulativePnl)}
-      </Text>
-      <View style={styles.slotFoot}>
-        <Text
-          accessibilityLabel={`Game costs ${formatMoney(position.cumulativeGameCost)}, dividends ${formatMoney(position.cumulativeDividend)}`}
-          numberOfLines={1}
-          style={styles.slotDetail}
-        >
-          {formatCompactMoney(position.cumulativeDividend)} divs
-        </Text>
-        <Pressable
-          accessibilityHint={rosterLocked ? rosterLockHint : undefined}
-          accessibilityLabel={rosterLocked
-            ? `Drop ${position.playerName} unavailable while roster changes are locked`
-            : `Drop ${position.playerName}`}
-          accessibilityRole="button"
-          accessibilityState={{ disabled }}
-          disabled={disabled}
-          hitSlop={8}
-          onPress={() => {
-            if (!disabled) closePosition(position);
-          }}
-          style={({ pressed }) => [
-            styles.slotDrop,
-            disabled && styles.disabled,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={styles.slotDropText}>
-            {rosterLocked ? 'LOCKED' : pending ? 'WAIT' : 'DROP'}
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-function EmptySlotBox({ slot, width, onPress }: {
-  slot: number;
-  width: number;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityLabel={`Roster slot ${slot} is empty. Open the market to add a player`}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [styles.emptySlot, { width }, pressed && styles.pressed]}
-    >
-      <Text style={styles.emptySlotAdd}>+ ADD</Text>
-      <Text style={styles.emptySlotLabel}>SLOT {slot}</Text>
-    </Pressable>
-  );
-}
-
-/** The ten roster slots as physical boxes: your shelf, filled or waiting. */
-function RosterGridSection({
-  positions,
-  used,
-  limit,
-  onOpenMarket,
-  onOpenProfile,
-}: {
-  positions: PerGamePosition[];
-  used: number;
-  limit: number;
-  onOpenMarket: () => void;
-  onOpenProfile: (playerId: string) => void;
-}) {
-  const { fontScale, width } = useWindowDimensions();
-  const columns = gridColumns(width, fontScale);
-  const usable = Math.min(width, 1040) - space.lg * 2;
-  const tileWidth = Math.floor((usable - (columns - 1) * space.sm) / columns);
-  const emptyCount = Math.max(0, limit - positions.length);
-
-  return (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text accessibilityRole="header" style={styles.sectionTitle}>Your roster</Text>
-        <Text style={styles.slotCount}>{used} / {limit}</Text>
-      </View>
-      <View style={styles.grid}>
-        {positions.map((position) => (
-          <RosterSlotBox
-            key={position.positionId}
-            onOpenProfile={onOpenProfile}
-            position={position}
-            width={tileWidth}
-          />
-        ))}
-        {Array.from({ length: emptyCount }, (_, index) => (
-          <EmptySlotBox
-            key={`empty-${index}`}
-            onPress={onOpenMarket}
-            slot={positions.length + index + 1}
-            width={tileWidth}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
-
 function PositionSection({
   title,
   caption,
@@ -279,6 +136,7 @@ function PositionSection({
   positions,
   emptyCopy,
   onOpenMarket,
+  onOpenProfile,
 }: {
   title: string;
   caption?: string;
@@ -287,6 +145,7 @@ function PositionSection({
   positions: PerGamePosition[];
   emptyCopy: string;
   onOpenMarket: () => void;
+  onOpenProfile: (playerId: string) => void;
 }) {
   return (
     <View style={styles.section}>
@@ -310,7 +169,11 @@ function PositionSection({
           </Pressable>
         </View>
       ) : positions.map((position) => (
-        <PositionRow key={position.positionId} position={position} />
+        <PositionRow
+          key={position.positionId}
+          onOpenProfile={onOpenProfile}
+          position={position}
+        />
       ))}
     </View>
   );
@@ -373,11 +236,13 @@ export function PerGameRosterScreen({
         <StatCell label="FEES" value={components.fees} />
       </View>
       <PerGamePnlChart entries={bootstrap.ledger.items} />
-      <RosterGridSection
+      <PositionSection
+        emptyCopy="Add a player to lock today's per-game cost. Your score starts at $0."
         limit={bootstrap.account.longSlots.limit}
         onOpenMarket={() => onOpenMarket('long')}
         onOpenProfile={setProfileId}
         positions={longs}
+        title="Your roster"
         used={bootstrap.account.longSlots.used}
       />
       <PositionSection
@@ -385,16 +250,19 @@ export function PerGameRosterScreen({
         emptyCopy="Inverse positions profit when a player's dividend finishes below your locked game-cost credit."
         limit={bootstrap.account.shortSlots.limit}
         onOpenMarket={() => onOpenMarket('short')}
+        onOpenProfile={setProfileId}
         positions={shorts}
         title="Inverse positions"
         used={bootstrap.account.shortSlots.used}
       />
       <PlayerProfileSheet
         dividendRate={bootstrap.ruleset.dividendDollarsPerNetPoint}
+        latestSettledDate={bootstrap.game.lastSettledDate}
         onClose={() => setProfileId(null)}
         player={profilePlayer}
         position={profilePosition}
         results={profileResults}
+        trends={profileId !== null && isMockActive() ? mockPlayerTrends(profileId) : undefined}
         visible={profileId !== null && profilePlayer !== null}
       />
     </ScrollView>
@@ -566,104 +434,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: type.label,
     fontWeight: weight.black,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingBottom: space.lg,
-    backgroundColor: colors.background,
-  },
-  slotBox: {
-    minHeight: 148,
-    padding: space.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    backgroundColor: colors.surface,
-  },
-  slotHead: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: space.sm,
-  },
-  slotIdentity: {
-    minWidth: 0,
-    flex: 1,
-  },
-  slotKicker: {
-    ...labelStyle,
-    fontSize: type.label,
-    letterSpacing: 0.6,
-  },
-  slotName: {
-    marginTop: 1,
-    color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: type.body,
-    fontWeight: weight.heavy,
-    lineHeight: 16,
-  },
-  slotPnl: {
-    marginTop: space.sm,
-    fontFamily: fonts.display,
-    fontSize: type.title,
-    fontWeight: weight.heavy,
-    fontVariant: ['tabular-nums'],
-  },
-  slotFoot: {
-    marginTop: 'auto',
-    paddingTop: space.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: space.sm,
-  },
-  slotDetail: {
-    minWidth: 0,
-    flexShrink: 1,
-    color: colors.faint,
-    fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.bold,
-    fontVariant: ['tabular-nums'],
-  },
-  slotDrop: {
-    minHeight: 32,
-    justifyContent: 'center',
-    paddingHorizontal: space.sm,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    borderRadius: 4,
-    backgroundColor: colors.surfaceRaised,
-  },
-  slotDropText: {
-    color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.heavy,
-  },
-  emptySlot: {
-    minHeight: 148,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.xs,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.borderStrong,
-    borderRadius: 6,
-    backgroundColor: colors.background,
-  },
-  emptySlotAdd: {
-    color: colors.goldInk,
-    fontFamily: fonts.display,
-    fontSize: type.value,
-    fontWeight: weight.black,
-    letterSpacing: 1.1,
-  },
-  emptySlotLabel: {
-    ...labelStyle,
   },
   positive: {
     color: colors.green,

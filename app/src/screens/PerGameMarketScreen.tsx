@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 
 import type { PerGamePositionSide } from '../api/contracts';
+import { isMockActive, mockPlayerTrends } from '../api/mockPerGameClient';
 import { positionSlotHint } from '../data/perGameRules';
 import { splitPlayerName } from '../data/playerName';
 import { PlayerAvatar } from '../components/PlayerAvatar';
@@ -255,10 +256,12 @@ export function PerGameMarketScreen({
     />
     <PlayerProfileSheet
       dividendRate={bootstrap.ruleset.dividendDollarsPerNetPoint}
+      latestSettledDate={bootstrap.game.lastSettledDate}
       onClose={() => setProfileId(null)}
       player={profilePlayer}
       position={profilePosition}
       results={profileResults}
+      trends={profileId !== null && isMockActive() ? mockPlayerTrends(profileId) : undefined}
       visible={profileId !== null && profilePlayer !== null}
     />
     </>
