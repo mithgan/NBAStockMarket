@@ -20,9 +20,6 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "experiments": {
-      "baseUrl": "/NBAStockMarket/v2-preview"
     }
   }
 }
