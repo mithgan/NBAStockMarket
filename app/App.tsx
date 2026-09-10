@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensio
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PerGameApiClient as MarketApiClient } from './src/api/perGameClient';
+import { mockPerGameClient } from './src/api/mockPerGameClient';
 import type { PerGamePositionSide } from './src/api/contracts';
 import { resolvePublicAppConfig, type PublicAppConfig } from './src/api/config';
 import { AuthProvider, useAuth, useOptionalAuth } from './src/auth/AuthContext';
@@ -371,6 +372,26 @@ function isDesignPreviewRoute(): boolean {
   return typeof window !== 'undefined' && treatmentNavigation(window.location.href).isPreview;
 }
 
+/**
+ * `?mock` runs the complete app shell against the in-memory mock market so the
+ * UI can be exercised and tweaked with no backend or sign-in. Development
+ * builds only: the production route below stays exactly as authenticated,
+ * fail-closed Flask, and release bundles never enter this branch.
+ */
+function isMockPreviewRoute(): boolean {
+  if (!__DEV__ || typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).has('mock');
+}
+
+function MockPreviewRuntime() {
+  const client = mockPerGameClient() as unknown as MarketApiClient;
+  return (
+    <PortfolioProvider apiClient={client} key="mock-preview" userId="mock-preview">
+      <AppBody />
+    </PortfolioProvider>
+  );
+}
+
 export default function App() {
   if (isDesignPreviewRoute()) {
     return (
@@ -382,6 +403,15 @@ export default function App() {
             <VariantTexture />
             <DesignPreviewScreen />
           </View>
+        </SafeAreaProvider>
+      </ThemeProvider>
+    );
+  }
+  if (isMockPreviewRoute()) {
+    return (
+      <ThemeProvider>
+        <SafeAreaProvider style={styles.provider}>
+          <MockPreviewRuntime />
         </SafeAreaProvider>
       </ThemeProvider>
     );

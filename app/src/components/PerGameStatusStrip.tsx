@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { advanceMockNight } from '../api/mockPerGameClient';
 import { formatCompactMoney, formatCompactSignedMoney, formatSignedMoney } from '../format';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, fonts, labelStyle, space, type, weight } from '../theme';
@@ -121,6 +122,25 @@ export function PerGameStatusStrip() {
             {isRefreshing ? 'WAIT' : reconciliationRequired ? 'RECONCILE' : 'REFRESH'}
           </Text>
         </Pressable>
+        {bootstrap.capabilities.canAdvanceReplay ? (
+          <Pressable
+            accessibilityLabel="Advance one night in the sandbox replay"
+            accessibilityRole="button"
+            accessibilityState={{ disabled }}
+            disabled={disabled}
+            onPress={() => {
+              advanceMockNight();
+              refreshData();
+            }}
+            style={({ pressed }) => [
+              styles.advance,
+              disabled && styles.disabledControl,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={styles.advanceText}>+1 NIGHT</Text>
+          </Pressable>
+        ) : null}
       </View>
       <View style={styles.earnings}>
         {earnings ? (
@@ -252,6 +272,19 @@ const styles = StyleSheet.create({
   reconcile: {
     borderColor: colors.gold,
     backgroundColor: colors.goldSoft,
+  },
+  advance: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.md,
+    backgroundColor: colors.gold,
+  },
+  advanceText: {
+    color: colors.background,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.black,
   },
   refreshText: {
     color: colors.goldInk,
