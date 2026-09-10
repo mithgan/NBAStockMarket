@@ -1,52 +1,58 @@
-# On-court plus-minus as the dividend basis
-
-> Historical report: current-engine scoring comparisons below predate the September 10 correction and are superseded. These numbers and related recommendations have not been fully regenerated. See the [correction and available-data results](../docs/per-game-scoring-parity-fix.md).
+# Descriptive on-court plus-minus diagnostics
 
 - 2023-24: extracted 26,498 player-game +/- values, joined 26,283/26,283 log rows (100.0%).
 - 2024-25: extracted 26,373 player-game +/- values, joined 26,206/26,206 log rows (100.0%).
-- 2025-26: extracted 26,632 player-game +/- values, joined 26,540/26,540 log rows (100.0%).
+- 2025-26: extracted 26,640 player-game +/- values, joined 26,547/26,547 log rows (100.0%).
 
-## 1. Split-half reliability (the skill ceiling, 2025-26 listed players)
+## 1. Odd/even season-mean repeatability (2025-26 retrospective cohort)
 
-Correlation between each player's odd-game and even-game season mean —
-how much of what you pay for tonight is a repeatable trait vs dice:
+Correlation between each player's odd-game and even-game season mean measures repeatability of aggregates.
+This is not next-game prediction accuracy or a skill ceiling. Cohort uses final-season appearance counts, and each metric is measured on the same joined player-game rows.
 
 | Metric | Split-half r | Per-game SD around player mean |
 |---|---:|---:|
-| old NetPoints | 0.954 | 7.07 |
+| old NetPoints | 0.945 | 6.65 |
 | margin-fit box | 0.953 | 5.23 |
 | raw +/- | 0.678 | 12.34 |
 
-## 2. Scale and the negative-value problem (raw +/-)
+## 2. Observed player means and scale (raw +/-)
 
-Listed players with a season mean: 150. **52 (35%) have ≤0 expected value** (old NP: 0). Season-mean SD 3.56; top of market: Shai Gilgeous-Alexander +11.6, Chet Holmgren +9.8, Derrick White +7.8, Julian Champagnie +7.2, Duncan Robinson +7.0.
+Listed players with a season mean: 150. **52 (35%) have nonpositive observed season means**. Season-mean SD 3.56; top of market: Shai Gilgeous-Alexander +11.6, Chet Holmgren +9.8, Derrick White +7.8, Julian Champagnie +7.2, Duncan Robinson +7.0.
+Observed player means range from -9.10 to +11.59, a width of 20.69. Residual SD around a full-season mean is not a decomposition of irreducible noise.
 
-## 3. Requote leak per settled game (raw +/-, all seasons)
+## 3. Gross quote residuals after three strictly prior games
+
+Warmup games are not scored against their own mean. Retrospective cohort; no fees or price floor applied.
 
 | Season | frozen at open | weekly requote | nightly full |
 |---|---:|---:|---:|
-| 2023-24 | +1.006 | +0.140 | +0.100 |
-| 2024-25 | +0.315 | +0.088 | +0.063 |
-| 2025-26 | +0.148 | +0.106 | +0.076 |
+| 2023-24 | +1.048 | +0.145 | +0.105 |
+| 2024-25 | +0.328 | +0.092 | +0.065 |
+| 2025-26 | +0.154 | +0.111 | +0.079 |
 
 ## 4. YoY opening drift (lock at prior-season mean +/-)
 
 - 2023-24 → 2024-25: +0.587 margin-pts/game over 9,593 games.
 - 2024-25 → 2025-26: +0.872 margin-pts/game over 9,495 games.
 
-## 5. User P&L bands and rate sweep (raw +/-)
+## 5. Prior-only fixed-roster gross residuals and dollar sensitivity
 
-- stars: night SD 37.3 / p95 74.6; week SD 99.6 / p95 197.8 (margin-pts).
-- balanced: night SD 26.4 / p95 52.2; week SD 76.2 / p95 130.7 (margin-pts).
+Entry date 2025-10-31. Pool uses appearances before entry; ranking and fixed cost proxies use strictly earlier means with at least three observations. No full-season mean or rank sets these locks.
+No signing fees, price floor, budget, market impact or subsequent trading is simulated. These are research residuals, not full-policy user P&L or a recommended rate.
 
-| Rate | Star cost/game | Night p95 | Week p95 | p05 positive player | Floor OK |
+- high prior mean: night SD 46.8 / abs-p95 128.7; week SD 107.0 / abs-p95 438.8; season -6871.0 (score units).
+- middle prior mean: night SD 24.3 / abs-p95 56.2; week SD 57.1 / abs-p95 181.3; season -2254.9 (score units).
+
+| Rate | Highest prior cost proxy | Night abs-p95 | Week abs-p95 | p05 positive prior cost | p05 at least $25K? |
 |---|---:|---:|---:|---:|:---:|
-| $10K | $115,882 | ±$521,958 | ±$1,307,049 | $1,828 | no |
-| $15K | $173,824 | ±$782,937 | ±$1,960,573 | $2,741 | no |
-| $20K | $231,765 | ±$1,043,916 | ±$2,614,098 | $3,655 | no |
-| $25K | $289,706 | ±$1,304,895 | ±$3,267,622 | $4,569 | no |
-| $40K | $463,529 | ±$2,087,832 | ±$5,228,195 | $7,310 | no |
+| $10K | $204,000 | $561,667 | $1,812,683 | $4,650 | no |
+| $15K | $306,000 | $842,500 | $2,719,025 | $6,975 | no |
+| $20K | $408,000 | $1,123,333 | $3,625,367 | $9,300 | no |
+| $25K | $510,000 | $1,404,167 | $4,531,708 | $11,625 | no |
+| $40K | $816,000 | $2,246,667 | $7,250,733 | $18,600 | no |
 
-## 6. Shorts (7-day windows, raw +/-)
+## 6. Gross inverse-score residuals (7-calendar-day windows)
 
-3,138 windows: mean -0.33, SD 26.9 margin-pts, win rate 50.0%.
+Independent player windows in the retrospective cohort; not a short-roster strategy. Fees, floors, slot limits, DNP rules and early-close policy are absent.
+
+3,031 windows: mean -0.25, SD 27.1 margin-pts, win rate 50.2%.

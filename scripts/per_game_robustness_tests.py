@@ -1,21 +1,8 @@
-"""Cross-season robustness battery for per-game economy v2.
+"""Cross-season descriptive quote and gross residual diagnostics.
 
-Six test families over all three cached seasons (2023-24, 2024-25, 2025-26):
-
-R1. Anchor leak, cross-season - does the trailing-10 requote stay fair in every
-    season, or was 2025-26 lucky?
-R2. TRUE last-season opening lock - lock a season's opening costs at the PRIOR
-    season's actually-produced NP/game (the real product mechanic, not the
-    same-season proxy used before) and measure rest-of-season drift by tier.
-R3. Normal-user P&L bands, cross-season - is night ±$250K / week ±$610K stable?
-R4. Shorts under fair quotes - random weekly short EV, win rates, and the
-    predicted meta: shorting superstars after mid-January.
-R5. Requote cadence - how much leak each server implementation choice leaves:
-    nightly full, nightly half-step, weekly full, frozen.
-R6. Retention risk - probability a fair user is down after week 1 / month 1,
-    and max-drawdown distribution, at $20K/NP.
-
-Deterministic except the seeded random rosters in R3/R6.
+Retrospective cohorts are explicitly identified. Fixed-roster decisions use only
+prior observations. Dollar figures are illustrative conversions, not validated
+rates or full-policy user P&L; no fees, floor, cash budget or price impact is run.
 """
 from __future__ import annotations
 
@@ -29,6 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, ".")
 from nba_stock_market.per_game_simulation import load_historical_games
+from scripts.per_game_margin_study import prior_only_locks, prior_rosters
 
 SEASONS = (
     ("2023-24", Path("data/raw/2023-24"), Path("data/raw/dnt-2023-24")),
@@ -72,6 +60,8 @@ class SeasonData:
     def __init__(self, label: str, data_dir: Path, dnt_dir: Path) -> None:
         self.label = label
         games = load_historical_games(data_dir, dnt_dir)
+        if not games:
+            raise ValueError(f"no historical games for {label}")
         counts: dict[str, int] = defaultdict(int)
         for g in games:
             if g.saved_projection_net_points is not None:
@@ -79,10 +69,17 @@ class SeasonData:
         self.universe = {
             p for p, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:UNIVERSE_SIZE]
         }
+        if not counts:
+            raise ValueError(f"no saved pregame projections for {label}; projection diagnostics unavailable")
+        self.projection_count = sum(counts.values())
+        self.all_dated_series = defaultdict(list)
+        self.full_by_date = defaultdict(list)
         self.series: dict[str, list[tuple[date, float, float | None]]] = defaultdict(list)
         self.all_series: dict[str, list[float]] = defaultdict(list)
         for g in sorted(games, key=lambda g: (g.game_date, g.game_id, g.player_id)):
             self.all_series[g.player_id].append(g.actual_net_points)
+            self.all_dated_series[g.player_id].append((g.game_date, g.actual_net_points, g.saved_projection_net_points))
+            self.full_by_date[g.game_date].append((g.player_id, g.actual_net_points, g.saved_projection_net_points))
             if g.player_id in self.universe:
                 self.series[g.player_id].append(
                     (g.game_date, g.actual_net_points, g.saved_projection_net_points)
@@ -91,7 +88,7 @@ class SeasonData:
         for pid, s in self.series.items():
             for d, a, p in s:
                 self.by_date[d].append((pid, a, p))
-        self.dates = sorted(self.by_date)
+        self.dates = sorted(self.full_by_date)
         self.season_mean = {
             pid: fmean([a for _, a, _ in s])
             for pid, s in self.series.items()
@@ -122,22 +119,13 @@ def r1_anchor_leak(seasons: list[SeasonData]) -> list[str]:
     for s in seasons:
         trail_edges: list[float] = []
         proj_edges: list[float] = []
-        history: dict[str, list[float]] = defaultdict(list)
-        first_proj: dict[str, float] = {}
         for day in s.dates:
             for pid, actual, proj in s.by_date[day]:
-                if proj is not None and pid not in first_proj:
-                    first_proj[pid] = proj
-                prior = history[pid]
-                trailing = (
-                    fmean(prior[-TRAIL:]) if len(prior) >= TRAIL_MIN
-                    else (proj if proj is not None else first_proj.get(pid))
-                )
+                trailing = s.trailing_at(pid, day)
                 if trailing is not None:
                     trail_edges.append(actual - trailing)
                 if proj is not None:
                     proj_edges.append(actual - proj)
-                history[pid].append(actual)
         lines.append(
             f"| {s.label} | {len(trail_edges):,} | {fmean(trail_edges):+.3f} "
             f"(${fmean(trail_edges)*RATE:+,.0f}) | {fmean(proj_edges):+.3f} "
@@ -148,10 +136,10 @@ def r1_anchor_leak(seasons: list[SeasonData]) -> list[str]:
 
 
 def r2_true_last_season(seasons: list[SeasonData]) -> list[str]:
-    lines = ["## R2. TRUE last-season opening lock (the product mechanic)", ""]
+    lines = ["## R2. Prior-season mean residuals in the retrospective cohort", ""]
     lines.append(
         "Lock every listed player at his PRIOR season's produced NP/game (20+ games "
-        "played there), hold all season, measure mean(actual − locked) per game."
+        "played there), then measure mean(actual − locked) per observed game. Tiers use the prior mean. Current-season cohort is retrospective; this is not a full game ledger."
     )
     lines.append("")
     tier_names = [t for t, _, _ in TIERS]
@@ -168,7 +156,7 @@ def r2_true_last_season(seasons: list[SeasonData]) -> list[str]:
         covered = 0
         for pid, s in current.series.items():
             lock = prior_np.get(pid)
-            tier = current.tier_of(pid)
+            tier = next((name for name, low, high in TIERS if lock is not None and (low is None or lock >= low) and (high is None or lock < high)), None)
             if lock is None or tier is None:
                 continue
             covered += 1
@@ -185,7 +173,7 @@ def r2_true_last_season(seasons: list[SeasonData]) -> list[str]:
     lines.append("")
     lines.append(
         "Coverage gap = rookies/returners without a 20-game prior season; they need "
-        "the projection+premium path."
+        "a separately evaluated entry rule; no premium is selected here."
     )
     lines.append("")
     return lines
@@ -204,83 +192,68 @@ def _replay_fixed(s: SeasonData, roster: dict[str, float], start: date) -> list[
         if day < start:
             daily.append(0.0)
             continue
-        daily.append(sum(a - roster[pid] for pid, a, _ in s.by_date[day] if pid in roster))
+        daily.append(sum(a - roster[pid] for pid, a, _ in s.full_by_date[day] if pid in roster))
     return daily
 
 
 def r3_user_bands(seasons: list[SeasonData]) -> tuple[list[str], dict[str, dict[str, list[float]]]]:
-    lines = ["## R3. Normal-user P&L bands, cross-season ($20K, fair locks)", ""]
-    lines.append("| Season | Roster | Season P&L | Night SD | Night p95 | Week SD | Week p95 |")
+    lines = ["## R3. Prior-only fixed-roster gross residuals ($20K illustration)", ""]
+    lines.append("Pool, rankings and fixed mean-cost proxies use only dates before entry (the 11th observed game date; at least three prior observations). No final-season means, projections after entry, signing fees, floors or later trades enter this diagnostic.")
+    lines.append("")
+    lines.append("| Season | Roster | Season residual | Night SD | Night abs-p95 | Week SD | Week abs-p95 |")
     lines.append("|---|---|---:|---:|---:|---:|---:|")
-    paths: dict[str, dict[str, list[float]]] = {}
+    paths = {}
     for s in seasons:
+        if len(s.dates) <= 10:
+            raise ValueError(f"not enough game dates for fixed-roster replay: {s.label}")
         lock_day = s.dates[10]
-        early: dict[str, list[float]] = defaultdict(list)
-        for day in s.dates[:14]:
-            for pid, _, p in s.by_date[day]:
-                if p is not None:
-                    early[pid].append(p)
-        ranked = sorted(early, key=lambda pid: -fmean(early[pid]))
-        mid = len(ranked) // 2
-
-        def build(pids: list[str]) -> dict[str, float]:
-            roster = {}
-            for pid in pids:
-                anchor = (
-                    fmean([a for d, a, _ in s.series[pid] if d.month != 10 and d < s.dates[-1]])
-                    if len(s.series[pid]) >= 20
-                    else s.trailing_at(pid, lock_day)
-                )
-                if anchor is not None and not math.isnan(anchor):
-                    roster[pid] = anchor
-            return roster
-
-        season_paths: dict[str, list[float]] = {}
-        for name, pids in (
-            ("balanced", ranked[mid - 5:mid + 5]),
-            ("stars", ranked[:SLOTS]),
-        ):
-            daily = _replay_fixed(s, build(pids), lock_day)
-            season_paths[name] = daily
-            active = [v for v in daily if v != 0.0]
-            weeks = _weekly_totals(s.dates, daily)
-            lines.append(
-                f"| {s.label} | {name} | ${sum(daily)*RATE:+,.0f} "
-                f"| ±${pstdev(active)*RATE:,.0f} | ±${pct([abs(v) for v in active],0.95)*RATE:,.0f} "
-                f"| ±${pstdev(weeks)*RATE:,.0f} | ±${pct([abs(v) for v in weeks],0.95)*RATE:,.0f} |"
-            )
-        rand_daily_all: list[list[float]] = []
+        actual_series = {pid: [(day, actual) for day, actual, _ in values]
+                         for pid, values in s.all_dated_series.items()}
+        locks = prior_only_locks(actual_series, lock_day)
+        rosters = prior_rosters(locks)
+        season_paths = {}
+        def active_values(daily, held):
+            return [v for day, v in zip(s.dates, daily) if day >= lock_day
+                    and any(pid in held for pid, _, _ in s.full_by_date[day])]
+        def weeks_after_entry(daily):
+            pairs = [(day, value) for day, value in zip(s.dates, daily) if day >= lock_day]
+            return _weekly_totals([d for d, _ in pairs], [v for _, v in pairs])
+        for key, name in (("balanced", "middle prior mean"), ("stars", "high prior mean")):
+            roster = {pid: locks[pid] for pid in rosters[name]}
+            daily = _replay_fixed(s, roster, lock_day)
+            season_paths[key] = daily
+            active = active_values(daily, roster)
+            weeks = weeks_after_entry(daily)
+            lines.append(f"| {s.label} | {name} | ${sum(daily)*RATE:+,.0f} | ${pstdev(active)*RATE:,.0f} | ${pct([abs(v) for v in active],.95)*RATE:,.0f} | ${pstdev(weeks)*RATE:,.0f} | ${pct([abs(v) for v in weeks],.95)*RATE:,.0f} |")
+        rand_daily_all = []
+        random_active = []
         for seed in SEEDS:
             rng = random.Random(seed)
-            pool = sorted(pid for pid in s.season_mean)
+            pool = sorted(pid for pid, value in locks.items() if value > 0)
             rng.shuffle(pool)
-            daily = _replay_fixed(s, build(pool[:SLOTS]), lock_day)
+            roster = {pid: locks[pid] for pid in pool[:SLOTS]}
+            daily = _replay_fixed(s, roster, lock_day)
             rand_daily_all.append(daily)
-        totals = [sum(d) for d in rand_daily_all]
-        active = [v for d in rand_daily_all for v in d if v != 0.0]
-        weeks = [w for d in rand_daily_all for w in _weekly_totals(s.dates, d)]
+            random_active.extend(active_values(daily, roster))
+        totals = [sum(values) for values in rand_daily_all]
+        weeks = [value for values in rand_daily_all for value in weeks_after_entry(values)]
         season_paths["random"] = rand_daily_all[0]
         season_paths["__random_totals__"] = totals
         paths[s.label] = season_paths
-        lines.append(
-            f"| {s.label} | random ×10 | mean ${fmean(totals)*RATE:+,.0f} (SD ${pstdev(totals)*RATE:,.0f}) "
-            f"| ±${pstdev(active)*RATE:,.0f} | ±${pct([abs(v) for v in active],0.95)*RATE:,.0f} "
-            f"| ±${pstdev(weeks)*RATE:,.0f} | ±${pct([abs(v) for v in weeks],0.95)*RATE:,.0f} |"
-        )
+        lines.append(f"| {s.label} | random x{len(SEEDS)} | mean ${fmean(totals)*RATE:+,.0f} (SD ${pstdev(totals)*RATE:,.0f}) | ${pstdev(random_active)*RATE:,.0f} | ${pct([abs(v) for v in random_active],.95)*RATE:,.0f} | ${pstdev(weeks)*RATE:,.0f} | ${pct([abs(v) for v in weeks],.95)*RATE:,.0f} |")
     lines.append("")
     return lines, paths
 
 
 def r4_shorts(seasons: list[SeasonData]) -> list[str]:
-    lines = ["## R4. Shorts under fair trailing quotes (7-day windows, $20K)", ""]
-    lines.append("| Season | Windows | Mean P&L | SD | Win rate | Superstar-after-Jan15 mean | its win rate |")
+    lines = ["## R4. Gross inverse residuals at prior trailing/projected quotes (7-calendar-day windows)", ""]
+    lines.append("| Season | Windows | Mean P&L | SD | Win rate | Prior quote at least 20 NP after January 15 mean | its win rate |")
     lines.append("|---|---:|---:|---:|---:|---:|---:|")
     for s in seasons:
         jan15 = date(s.dates[0].year + 1, 1, 15)
         all_pnl: list[float] = []
         fade_pnl: list[float] = []
         for pid, series in s.series.items():
-            tier = s.tier_of(pid)
             index = 0
             while index < len(series):
                 start_day = series[index][0]
@@ -289,16 +262,18 @@ def r4_shorts(seasons: list[SeasonData]) -> list[str]:
                     index += 1
                     continue
                 end = start_day + timedelta(days=6)
+                if end > s.dates[-1]:
+                    break
                 total = 0.0
                 scan = index
                 while scan < len(series) and series[scan][0] <= end:
                     total += quote - series[scan][1]
                     scan += 1
                 all_pnl.append(total)
-                if tier == "Superstar" and start_day >= jan15:
+                if quote >= 20.0 and start_day >= jan15:
                     fade_pnl.append(total)
                 index = scan
-        win = sum(1 for v in all_pnl if v > 0) / len(all_pnl)
+        win = sum(1 for v in all_pnl if v > 0) / len(all_pnl) if all_pnl else math.nan
         fade_win = (
             sum(1 for v in fade_pnl if v > 0) / len(fade_pnl) if fade_pnl else float("nan")
         )
@@ -309,99 +284,91 @@ def r4_shorts(seasons: list[SeasonData]) -> list[str]:
         )
     lines.append("")
     lines.append(
-        "Random shorting is ≈ zero-EV before fees in every season (as designed); the "
-        "superstar-fade meta is the structural positive-EV short."
+        "These enumerate complete seven-calendar-day player windows in a retrospective cohort, not random or capacity-limited user portfolios. Quotes use earlier actuals once three exist, otherwise the first available dated pregame projection. The high-quote subset is classified at window entry, not from the final season. Means and win shares are observed gross residuals; no statistical edge, zero-EV guarantee or net-of-fee strategy is established."
     )
     lines.append("")
     return lines
 
 
 def r5_cadence(seasons: list[SeasonData]) -> list[str]:
-    lines = ["## R5. Requote cadence: leak left by each server implementation", ""]
-    lines.append("| Season | frozen at open | weekly full requote | nightly half-step | nightly full |")
-    lines.append("|---|---:|---:|---:|---:|")
+    lines = ["## R5. Quote-cadence gross residuals after first available projection", ""]
+    lines.append("| Season | Observations | frozen at entry | weekly full | half-step each league game date | full each league game date |")
+    lines.append("|---|---:|---:|---:|---:|---:|")
     for s in seasons:
-        leaks: dict[str, list[float]] = {k: [] for k in ("frozen", "weekly", "half", "full")}
+        leaks = {key: [] for key in ("frozen", "weekly", "half", "full")}
+        slate_dates = getattr(s, "dates", sorted({day for values in s.series.values() for day, _, _ in values}))
         for pid, series in s.series.items():
-            opening = None
-            projs = [p for _, _, p in series if p is not None]
-            if projs:
-                opening = projs[0]
-            if opening is None:
-                continue
-            quotes = {k: opening for k in leaks}
-            history: list[float] = []
+            quotes = None
             last_week = None
-            for d, actual, _ in series:
-                trailing = fmean(history[-TRAIL:]) if len(history) >= TRAIL_MIN else None
-                if trailing is not None:
+            by_day = defaultdict(list)
+            for day, actual, projection in series:
+                by_day[day].append((actual, projection))
+            for day in slate_dates:
+                week = day.isocalendar()[:2]
+                weekly_update_day = week != last_week
+                # The schedule advances even without a quote or enough history.
+                # Warmup becoming ready later cannot move this week's update.
+                last_week = week
+                today = by_day[day]
+                available = [projection for _, projection in today if projection is not None]
+                if quotes is None and available:
+                    quotes = dict.fromkeys(leaks, available[0])
+                prior = [actual for observed, actual, _ in series if observed < day]
+                if quotes is None:
+                    continue
+                if len(prior) >= TRAIL_MIN:
+                    trailing = fmean(prior[-TRAIL:])
                     quotes["full"] = trailing
-                    quotes["half"] = 0.5 * quotes["half"] + 0.5 * trailing
-                    wk = d.isocalendar()[:2]
-                    if wk != last_week:
+                    quotes["half"] = .5*quotes["half"] + .5*trailing
+                    if weekly_update_day:
                         quotes["weekly"] = trailing
-                        last_week = wk
-                for k in leaks:
-                    leaks[k].append(actual - quotes[k])
-                history.append(actual)
-        cells = " | ".join(
-            f"{fmean(leaks[k]):+.3f} (${fmean(leaks[k])*RATE:+,.0f})"
-            for k in ("frozen", "weekly", "half", "full")
-        )
-        lines.append(f"| {s.label} | {cells} |")
-    lines.append("")
-    lines.append(
-        "Leak = mean(actual − market quote) per settled game: what a NEW lock at the "
-        "prevailing quote earns for free. Frozen quotes are the money printer; any "
-        "trailing requote (weekly is enough) kills ~all of it."
-    )
-    lines.append("")
+                for actual, _ in today:
+                    for key in leaks:
+                        leaks[key].append(actual-quotes[key])
+        cells = " | ".join(f"{fmean(leaks[key]):+.3f} (${fmean(leaks[key])*RATE:+,.0f})" for key in leaks)
+        lines.append(f"| {s.label} | {len(leaks['frozen'])} | {cells} |")
+    lines += ["", "A saved projection is available only on its recorded pregame date; earlier games are excluded rather than backfilled. Updates occur on league game dates even when this player has no game; weekly updates occur on the first such date of an ISO week. If no quote or fewer than three prior actuals are available then, the weekly update is skipped until the next week; warmup completion does not trigger a midweek update. Residual means are descriptive and can change sign or size by season. This does not establish a money-printer claim, quote fairness, or a preferred cadence.", ""]
     return lines
 
 
+def max_drawdown(daily):
+    total = peak = worst = 0.0
+    for value in daily:
+        total += value
+        peak = max(peak, total)
+        worst = max(worst, peak-total)
+    return worst
+
+
+def path_risk(dates, daily, start):
+    if len(dates) != len(daily) or not dates:
+        raise ValueError("risk path needs matching nonempty dates and values")
+    by_date = defaultdict(float)
+    for day, value in zip(dates, daily):
+        if day >= start:
+            by_date[day] += value
+    end = max(dates)
+    calendar = [start + timedelta(days=i) for i in range(max(0, (end-start).days+1))]
+    values = [by_date[day] for day in calendar]
+    def at(days):
+        return sum(values[:days]) if len(values) >= days else None
+    # Each complete window starts from a zero baseline, preserving an initial loss.
+    windows = [max_drawdown(values[i:i+28]) for i in range(0, max(0,len(values)-27),14)]
+    return {"day7":at(7), "day28":at(28), "max_drawdown":max_drawdown(values), "window_drawdowns":windows}
+
+
 def r6_retention(seasons: list[SeasonData], paths: dict[str, dict[str, list[float]]]) -> list[str]:
-    lines = ["## R6. Retention risk for a fair user ($20K)", ""]
-    lines.append("| Season | Roster | P(down after 7 days) | P(down after 28 days) | Max drawdown p50 | p95 |")
-    lines.append("|---|---|---:|---:|---:|---:|")
+    lines = ["## R6. Realized path risk ($20K illustration; not retention probability)", ""]
+    lines.append("| Season | Roster | Down after 7 calendar days? | Down after 28 calendar days? | Full-path max drawdown | 28-day window p50 | p95 |")
+    lines.append("|---|---|---|---|---:|---:|---:|")
     for s in seasons:
         for name in ("balanced", "stars"):
-            daily = paths[s.label][name]
-            cum: list[float] = []
-            total = 0.0
-            for v in daily:
-                total += v
-                cum.append(total)
-            active_start = next(i for i, v in enumerate(daily) if v != 0.0)
-            day7 = cum[min(active_start + 6, len(cum) - 1)]
-            day28 = cum[min(active_start + 27, len(cum) - 1)]
-            peak = -math.inf
-            drawdowns: list[float] = []
-            worst = 0.0
-            for v in cum:
-                peak = max(peak, v)
-                worst = min(worst, v - peak)
-                drawdowns.append(worst)
-            window_downs: list[float] = []
-            for start in range(active_start, len(cum) - 28, 14):
-                seg = cum[start:start + 28]
-                seg_peak = -math.inf
-                seg_worst = 0.0
-                for v in seg:
-                    seg_peak = max(seg_peak, v)
-                    seg_worst = min(seg_worst, v - seg_peak)
-                window_downs.append(seg_worst)
-            lines.append(
-                f"| {s.label} | {name} | {'yes' if day7 < 0 else 'no'} "
-                f"| {'yes' if day28 < 0 else 'no'} "
-                f"| ${pct([abs(v) for v in window_downs],0.5)*RATE:,.0f} "
-                f"| ${pct([abs(v) for v in window_downs],0.95)*RATE:,.0f} |"
-            )
-    lines.append("")
-    lines.append(
-        "Single-path down/up flags are one draw each; the drawdown columns are "
-        "rolling 28-day windows (peak-to-trough inside the window)."
-    )
-    lines.append("")
+            risk = path_risk(s.dates, paths[s.label][name], s.dates[10])
+            flag = lambda value: "not observed" if value is None else ("yes" if value < 0 else "no")
+            windows = risk["window_drawdowns"]
+            cells = (f"${pct(windows,.5)*RATE:,.0f} | ${pct(windows,.95)*RATE:,.0f}" if windows else "not observed | not observed")
+            lines.append(f"| {s.label} | {name} | {flag(risk['day7'])} | {flag(risk['day28'])} | ${risk['max_drawdown']*RATE:,.0f} | {cells} |")
+    lines += ["", "Days are elapsed calendar days from entry, including dates without games. Each drawdown includes loss from the zero starting balance. Quantiles describe complete rolling 28-calendar-day windows sampled every 14 days; overlapping windows are not independent trials or retention probabilities.", ""]
     return lines
 
 
@@ -410,9 +377,9 @@ def main() -> int:
     lines = [
         "# Per-game economy v2 — cross-season robustness battery",
         "",
-        f"Universes: top {UNIVERSE_SIZE} per season by projected-game count "
+        f"Descriptive cohorts: retrospective top {UNIVERSE_SIZE} per season by full-season projected-game count "
         f"({', '.join(f'{s.label}: {len(s.series)} players / {sum(len(v) for v in s.series.values()):,} games' for s in seasons)}). "
-        f"Dollar figures at ${RATE/1000:.0f}K/NP.",
+        f"Dollar figures at ${RATE/1000:.0f}K/NP are illustrative, not rate recommendations. R3 uses a separate prior-only cohort. Saved projections are assumed available on their dated game; cache retrieval does not independently prove historical publication time.",
         "",
     ]
     lines += r1_anchor_leak(seasons)

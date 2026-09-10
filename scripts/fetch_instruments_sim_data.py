@@ -75,7 +75,7 @@ def download_json(url: str, path: Path, *, retries: int = 5) -> dict | list:
         try:
             payload = subprocess.run(
                 ["curl", "--location", "--fail", "--silent", "--show-error",
-                 "--max-time", "30", "--user-agent", "nba-stock-market-backtest/1.0", url],
+                 "--max-time", "30", url],
                 check=True, stdout=subprocess.PIPE,
             ).stdout
             parsed = json.loads(payload)

@@ -1,184 +1,114 @@
-"""Corrected normal-user P&L: archetype replay with last-season-value locks.
+"""Chronological user-P&L replay using actual previous-season production anchors.
 
-Same archetypes as the rate study's test C, but opening-week locks use the
-stable prior anchor (season mean excluding October, the stand-in for "last
-season's value per game" that the lock-drift test measured at ~0.00 pooled
-drift) instead of the October-inflated trailing-10. Mid-season adds still lock
-at trailing-10 (that is what the live market will quote). Reports daily and
-weekly P&L in NP and dollars at $15K/$20K/$25K.
+Previous-season means are computed from a separately supplied historical season;
+current-year future games are never a substitute. Initial costs use that mean
+(without an assumed policy markup), otherwise the first observed projection.
+Later adds use trailing production. Dollar replays apply the $25K floor and $10K
+fee at each candidate rate; fees and floors therefore are not scaled linearly.
 """
 from __future__ import annotations
 
-import math
-import random
-import statistics
+import argparse
 import sys
+import statistics
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
-sys.path.insert(0, ".")
-from nba_stock_market.per_game_simulation import load_historical_games
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-UNIVERSE_SIZE = 150
-TRAILING_WINDOW = 10
-TRAILING_MIN = 3
-SLOTS = 10
-SEEDS = tuple(range(1, 11))
+from nba_stock_market.engine import NetPointsModel
+from nba_stock_market.historical_data import load_game_records
+from scripts.per_game_rate_study import fmean, pct, pstdev
+from scripts.per_game_repricing_test import RepricingStudy, FLOOR_DOLLARS, SEEDS
+
 RATES = (15_000, 20_000, 25_000)
 
 
-def fmean(v):
-    return statistics.fmean(v) if v else float("nan")
+def previous_season_anchors(records, opening_day):
+    """Reject mixed/current-season input, even if it precedes the first trade."""
+    start_year = opening_day.year if opening_day.month >= 7 else opening_day.year - 1
+    earliest = date(start_year - 1, 7, 1)
+    latest = date(start_year, 7, 1)
+    if not records:
+        raise ValueError("previous-season game records are empty")
+    if any(not earliest <= record.game_date < latest for record in records):
+        raise ValueError("prior anchors require only actual previous-season games")
+    model = NetPointsModel()
+    values = defaultdict(list)
+    for record in sorted(records, key=lambda r: (r.game_date, r.game_id, r.player_id)):
+        values[record.player_id].append(model.score(record.box_score))
+    return {pid: fmean(actuals) for pid, actuals in values.items()}
 
 
-def pstdev(v):
-    return statistics.pstdev(v) if len(v) > 1 else float("nan")
+class PriorAnchorStudy(RepricingStudy):
+    def __init__(self, *args, prior_records, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.prior_anchors = previous_season_anchors(prior_records, self.opening_day)
+
+    def quote_dollars(self, pid, day):
+        if day == self.opening_day:
+            anchor = self.prior_anchors.get(pid)
+            if anchor is None:
+                projections = [r["proj"] for r in self.by_player[pid] if r["date"] < day and r["proj"] is not None]
+                anchor = projections[0] if projections else None
+            return max(FLOOR_DOLLARS, anchor * self.rate) if anchor is not None else None
+        return super().quote_dollars(pid, day)
 
 
-def pct(values, q):
-    if not values:
-        return float("nan")
-    ordered = sorted(values)
-    pos = q * (len(ordered) - 1)
-    lo = int(math.floor(pos))
-    hi = min(lo + 1, len(ordered) - 1)
-    return ordered[lo] + (ordered[hi] - ordered[lo]) * (pos - lo)
+def daily_and_weekly(study, result):
+    daily = {day: 0.0 for day in study.dates}
+    for event in result.events:
+        if event["kind"] == "open":
+            daily[event["date"]] -= event["fee"]
+        elif event["kind"] == "game":
+            daily[event["date"]] += event["dividend"] - event["cost"]
+    weeks = defaultdict(float)
+    for day, value in daily.items():
+        weeks[day.isocalendar()[:2]] += value
+    return list(daily.values()), list(weeks.values())
 
 
-def main() -> int:
-    games = load_historical_games(Path("data/raw/2025-26"), Path("data/raw/dnt"))
-    counts: dict[str, int] = defaultdict(int)
-    for g in games:
-        if g.saved_projection_net_points is not None:
-            counts[g.player_id] += 1
-    universe = {p for p, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:UNIVERSE_SIZE]}
-
-    series: dict[str, list[tuple[date, float, float | None]]] = defaultdict(list)
-    for g in sorted(games, key=lambda g: (g.game_date, g.game_id, g.player_id)):
-        if g.player_id in universe:
-            series[g.player_id].append((g.game_date, g.actual_net_points, g.saved_projection_net_points))
-    by_date: dict[date, list[tuple[str, float, float | None]]] = defaultdict(list)
-    for pid, s in series.items():
-        for d, a, p in s:
-            by_date[d].append((pid, a, p))
-    dates = sorted(by_date)
-
-    prior_anchor = {
-        pid: fmean([a for d, a, _ in s if d.month != 10])
-        for pid, s in series.items()
-        if len([a for d, a, _ in s if d.month != 10]) >= 20
-    }
-
-    def trailing_anchor(pid: str, day: date) -> float | None:
-        prior = [a for d, a, _ in series[pid] if d < day]
-        if len(prior) >= TRAILING_MIN:
-            return fmean(prior[-TRAILING_WINDOW:])
-        projs = [p for d, _, p in series[pid] if d <= day and p is not None]
-        return projs[0] if projs else None
-
-    def lock_anchor(pid: str, day: date, opening: bool) -> float | None:
-        if opening and pid in prior_anchor:
-            return prior_anchor[pid]
-        return trailing_anchor(pid, day)
-
-    early = dates[:14]
-    early_proj: dict[str, list[float]] = defaultdict(list)
-    for day in early:
-        for pid, _, p in by_date[day]:
-            if p is not None:
-                early_proj[pid].append(p)
-    ranked = sorted(early_proj, key=lambda pid: -fmean(early_proj[pid]))
-    rosters = {
-        "star holder": set(ranked[:SLOTS]),
-        "balanced holder": set(ranked[len(ranked) // 2 - 5:len(ranked) // 2 + 5]),
-        "bench holder": set(ranked[-SLOTS - 10:-10]),
-    }
-
-    def replay_fixed(roster: set[str]) -> list[float]:
-        locks = {}
-        lock_day = dates[10]
-        for pid in roster:
-            anchor = lock_anchor(pid, lock_day, opening=True)
-            if anchor is not None:
-                locks[pid] = anchor
-        daily = []
-        for day in dates:
-            if day < lock_day:
-                daily.append(0.0)
-                continue
-            daily.append(sum(a - locks[pid] for pid, a, _ in by_date[day] if pid in locks))
-        return daily
-
-    def replay_weekly_random(seed: int) -> list[float]:
-        rng = random.Random(seed)
-        locks: dict[str, float] = {}
-        week = None
-        daily = []
-        for index, day in enumerate(dates):
-            if index >= 10:
-                wk = day.isocalendar()[:2]
-                if wk != week:
-                    week = wk
-                    pool = sorted(pid for pid in universe if trailing_anchor(pid, day) is not None)
-                    rng.shuffle(pool)
-                    opening = index == 10
-                    locks = {}
-                    for pid in pool[:SLOTS]:
-                        anchor = lock_anchor(pid, day, opening=opening)
-                        if anchor is not None:
-                            locks[pid] = anchor
-            daily.append(sum(a - locks[pid] for pid, a, _ in by_date[day] if pid in locks))
-        return daily
-
-    results: dict[str, list[float]] = {k: replay_fixed(r) for k, r in rosters.items()}
-    random_runs = [replay_weekly_random(seed) for seed in SEEDS]
-
-    lines = ["# Corrected normal-user P&L (last-season opening locks)", ""]
-    lines.append("| Archetype | Season NP | Daily SD (NP) | Weekly SD (NP) | Night p95 | Week p95 |")
-    lines.append("|---|---:|---:|---:|---:|---:|")
-
-    def weekly_totals(daily: list[float]) -> list[float]:
-        acc: dict[tuple[int, int], float] = defaultdict(float)
-        for day, v in zip(dates, daily):
-            acc[day.isocalendar()[:2]] += v
-        return list(acc.values())
-
-    summary: dict[str, tuple[float, float, float]] = {}
-    for label, daily in results.items():
-        active = [v for v in daily if v != 0.0]
-        weeks = weekly_totals(daily)
-        summary[label] = (sum(daily), pstdev(active), pstdev(weeks))
-        lines.append(
-            f"| {label} | {sum(daily):+.0f} | {pstdev(active):.1f} | {pstdev(weeks):.1f} "
-            f"| {pct([abs(v) for v in active], 0.95):.1f} | {pct([abs(v) for v in weeks], 0.95):.1f} |"
-        )
-    rand_totals = [sum(r) for r in random_runs]
-    rand_daily = [v for r in random_runs for v in r if v != 0.0]
-    rand_weeks = [w for r in random_runs for w in weekly_totals(r)]
-    lines.append(
-        f"| weekly random (10 seeds) | {fmean(rand_totals):+.0f} (SD {pstdev(rand_totals):.0f}) "
-        f"| {pstdev(rand_daily):.1f} | {pstdev(rand_weeks):.1f} "
-        f"| {pct([abs(v) for v in rand_daily], 0.95):.1f} | {pct([abs(v) for v in rand_weeks], 0.95):.1f} |"
-    )
-    lines.append("")
-    lines.append("Dollar view, balanced holder (the 'normal user'):")
-    lines.append("")
-    lines.append("| Rate | Typical night (±1 SD) | Big night (p95) | Typical week (±1 SD) | Big week (p95) | Season luck band (random ±2 SD) |")
-    lines.append("|---|---:|---:|---:|---:|---:|")
-    _, day_sd, week_sd = summary["balanced holder"]
-    night95 = pct([abs(v) for v in results["balanced holder"] if v != 0.0], 0.95)
-    week95 = pct([abs(v) for v in weekly_totals(results["balanced holder"])], 0.95)
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-dir", type=Path, default=Path("data/raw/2025-26"))
+    parser.add_argument("--prior-data-dir", type=Path, default=Path("data/raw/2024-25"))
+    parser.add_argument("--dnt-dir", type=Path, default=Path("data/raw/dnt"))
+    parser.add_argument("--output", type=Path, default=Path("output/per-game-user-pnl-corrected.md"))
+    args = parser.parse_args(argv)
+    # Missing historical data is an explicit failure, never a same-season oracle.
+    prior_records = load_game_records(args.prior_data_dir / "player_game_logs.csv")
+    lines = ["# User P&L with actual previous-season opening anchors", "",
+             "Long-only, forced-hold/weekly-random diagnostic. Sample and fixed rosters are frozen before trading. Opening anchor is actual previous-season mean, without a policy markup; missing players use first observed projection. Later adds use trailing 10 prior games.",
+             "Each rate is replayed separately with a $25K floor and $10K fee per actual add. Retained positions keep their locked costs and do not incur another fee. Calendar-day statistics include zero-return days.",
+             "No bankroll constraints, demand impact, short lifecycle, rookie adjustment or strategic drop/re-signing are modeled. This does not select a rate or validate the complete economy.", ""]
     for rate in RATES:
-        lines.append(
-            f"| ${rate/1000:.0f}K | ±${day_sd*rate:,.0f} | ±${night95*rate:,.0f} "
-            f"| ±${week_sd*rate:,.0f} | ±${week95*rate:,.0f} "
-            f"| ±${2*pstdev(rand_totals)*rate:,.0f} |"
-        )
-    lines.append("")
-    out = Path("output/per-game-user-pnl-corrected.md")
-    out.write_text("\n".join(lines), encoding="utf-8")
-    print(f"wrote {out}")
+        study = PriorAnchorStudy(args.data_dir, args.dnt_dir, prior_records=prior_records, rate=rate)
+        coverage = len(study.universe & study.prior_anchors.keys())
+        if coverage == 0:
+            raise ValueError("previous-season anchors match none of the observed players")
+        lines += [f"## Rate ${rate:,}/NP; opening {study.opening_day}; prior coverage {coverage}/{len(study.universe)}", "",
+                  "| Archetype | Mean season net | Actual mean adds | Calendar-day SD | Weekly SD | Absolute night p95 | Absolute week p95 |",
+                  "|---|---:|---:|---:|---:|---:|---:|"]
+        for kind in ("star hold", "balanced", "bench hold", "random"):
+            seeds = SEEDS if kind == "random" else (None,)
+            runs = [study.run(None, study.picker(kind, seed), record_events=True) for seed in seeds]
+            daily = []
+            weekly = []
+            for run in runs:
+                d, w = daily_and_weekly(study, run)
+                if abs(sum(d) - run.net_dollars) > 0.0001:
+                    raise AssertionError("daily ledger does not reconcile")
+                daily.extend(d)
+                weekly.extend(w)
+            totals = [r.net_dollars for r in runs]
+            lines.append(f"| {kind} | ${fmean(totals):+,.0f} | {fmean([r.opens for r in runs]):.1f} | ${pstdev(daily):,.0f} | ${pstdev(weekly):,.0f} | ${pct([abs(v) for v in daily], .95):,.0f} | ${pct([abs(v) for v in weekly], .95):,.0f} |")
+            if kind == "random":
+                lines += ["", f"Random season totals: min ${min(totals):+,.0f}, max ${max(totals):+,.0f}, sample SD ${statistics.stdev(totals):,.0f} across {len(totals)} seeds. This is observed strategy variability, not a confidence interval or a calibrated luck band.", ""]
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"wrote {args.output}")
     return 0
 
 

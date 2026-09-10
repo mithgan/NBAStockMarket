@@ -1,16 +1,28 @@
-# Held-cost repricing: locked vs weekly capped (2025-26, $20K/NP)
+# Held-cost repricing: conditional long-only replay
 
-Market quote = trailing-10 with weekly requote; signing cost = quote at signing.
-Every add pays the $10K signing fee; quotes, signing costs, and repriced costs
-respect the $25K minimum price. Repricing happens at the week boundary before
-any of that week's games settle.
+Frozen sample: 150 players observed before 2025-11-04; fixed rosters also use only pre-opening projections.
+Quote = trailing 10 prior games (minimum 3), otherwise first observed projection. Every actual add pays $10K; all costs have a $25K floor; rate $20K/NP.
+Weekly updates occur before that week's roster changes and games. Gross holder leak excludes fees; net P&L includes fees.
+This isolates repricing. It excludes short expiry, demand impact, bankroll limits, prior-season anchors, and strategic drop/re-sign responses. It cannot select a production cap or rate.
 
-| Regime | Scout (improver-chaser) | Star hold | Balanced hold | Random x10 mean | Holder leak $/held game |
+| Regime | Scout net | Star hold net | Balanced hold net | Random mean net | Gross holder leak/held game |
 |---|---:|---:|---:|---:|---:|
-| LOCKED | $+825,525 | $-28,350,414 | $+23,948,238 | $-206,710 | $-636 |
-| CAP5 | $+469,383 | $-4,914,022 | $+17,607,656 | $-174,268 | $+1,287 |
-| CAP10 | $+140,231 | $-1,841,831 | $+13,531,856 | $-164,166 | $+1,148 |
-| CAP25 | $-614,409 | $-2,017,912 | $+7,020,619 | $-186,649 | $+284 |
-| FULL | $-1,331,687 | $-2,716,843 | $+3,636,963 | $-367,290 | $-460 |
+| LOCKED | $-582,923 | $-20,703,905 | $-668,976 | $-676,934 | $-723 |
+| CAP5 | $-1,178,358 | $-1,135,381 | $+2,770,846 | $-661,085 | $+2,454 |
+| CAP10 | $-1,589,822 | $-506,208 | $+2,219,535 | $-636,115 | $+2,443 |
+| CAP25 | $-2,363,967 | $-889,610 | $+403,604 | $-601,925 | $+2,072 |
+| FULL | $-3,144,623 | $-1,292,416 | $-711,702 | $-654,066 | $+1,675 |
 
-Scout = signs improvers while the trailing-10 quote still reflects old form; its edge under LOCKED is the permanent-annuity effect, and each cap level shows how much of that discovery premium survives.
+## Seed variation and actual opening counts
+
+These are descriptive comparisons across ten seeded rosters, not significance tests or proof of player skill.
+
+| Regime | Scout minus random mean | Random SD | Random min | Random max | Random seeds beaten by scout | Scout adds | Random mean adds |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| LOCKED | $+94,011 | $3,387,265 | $-5,700,376 | $+5,408,387 | 4/10 | 190 | 214.9 |
+| CAP5 | $-517,273 | $3,319,934 | $-5,641,544 | $+5,250,471 | 4/10 | 190 | 214.9 |
+| CAP10 | $-953,707 | $3,278,727 | $-5,683,990 | $+5,126,948 | 3/10 | 190 | 214.9 |
+| CAP25 | $-1,762,042 | $3,207,605 | $-5,790,326 | $+4,773,545 | 2/10 | 190 | 214.9 |
+| FULL | $-2,490,557 | $3,144,613 | $-5,815,676 | $+4,368,709 | 2/10 | 190 | 214.9 |
+
+Fixed-holder losses are forced-hold scenarios. Positive excess over a random mean on this sample does not validate stable skill or the complete game economy.

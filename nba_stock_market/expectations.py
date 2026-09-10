@@ -22,6 +22,32 @@ def normalize_player_name(name: str) -> str:
     return "".join(character for character in ascii_name.lower() if character.isalnum())
 
 
+# Historical ESPN/DNT archives use these verified names for the same NBA IDs.
+# Keep this feed-specific: global name normalization also serves salary inputs.
+_DNT_HISTORICAL_IDENTITIES = (
+    ("202710", ("Jimmy Butler III", "Jimmy Butler")),
+    ("1630231", ("KJ Martin", "Kenyon Martin Jr.")),
+    ("1641854", ("Craig Porter Jr.", "Craig Porter")),
+    ("1641998", ("Trey Jemison III", "Trey Jemison")),
+    ("1642267", ("Bub Carrington", "Carlton Carrington")),
+    ("1642259", ("Alex Sarr", "Alexandre Sarr")),
+    ("1630527", ("Brandon Boston Jr.", "Brandon Boston")),
+    ("1641877", ("Nate Mensah", "Nathan Mensah")),
+    ("1642385", ("Yongxi Cui", "Cui Yongxi")),
+)
+_DNT_IDENTITIES_BY_NAME = {
+    normalize_player_name(name): (
+        nba_id, tuple(normalize_player_name(variant) for variant in variants)
+    )
+    for nba_id, variants in _DNT_HISTORICAL_IDENTITIES
+    for name in variants
+}
+_DNT_SCORING_FIELDS = (
+    "p_pts", "p_orb", "p_drb", "p_ast", "p_stl", "p_blk", "p_tov",
+    "p_fg2a", "p_fg3a", "p_fg2m", "p_fg3m", "p_fta", "p_ftm", "p_mp",
+)
+
+
 def salary_implied_net_points(salary: float) -> float:
     """Map contract salary to a transparent cold-start prior."""
 
@@ -104,9 +130,9 @@ class DunksAndThreesExpectation:
 
     def __init__(self, *, cache_dir: Path = Path("data/raw/dnt")) -> None:
         self.cache_dir = Path(cache_dir)
-        self._by_date: dict[date, dict[str, dict[str, object]]] = {}
+        self._by_date: dict[date, dict[str, list[dict[str, object]]]] = {}
 
-    def _projections(self, game_date: date) -> dict[str, dict[str, object]]:
+    def _projections(self, game_date: date) -> dict[str, list[dict[str, object]]]:
         if game_date in self._by_date:
             return self._by_date[game_date]
         path = self.cache_dir / f"{game_date.isoformat()}.json"
@@ -118,21 +144,46 @@ class DunksAndThreesExpectation:
             raise ValueError(f"invalid Dunks & Threes cache for {game_date}: {path}") from exc
         if not isinstance(payload, list):
             raise ValueError(f"Dunks & Threes cache must contain a JSON list: {path}")
-        indexed: dict[str, dict[str, object]] = {}
+        indexed: dict[str, list[dict[str, object]]] = {}
         for row in payload:
             if not isinstance(row, dict) or not isinstance(row.get("player_name"), str):
                 raise ValueError(f"invalid Dunks & Threes projection row: {path}")
-            indexed[normalize_player_name(row["player_name"])] = row
+            indexed.setdefault(normalize_player_name(row["player_name"]), []).append(row)
         self._by_date[game_date] = indexed
         return indexed
+
+    def _projection_row(self, player_name: str, game_date: date) -> dict[str, object] | None:
+        indexed = self._projections(game_date)
+        name = normalize_player_name(player_name)
+        exact = indexed.get(name, [])
+        if len(exact) > 1:
+            raise ValueError(f"ambiguous Dunks & Threes projection for {player_name} on {game_date}")
+        if exact:
+            return exact[0]
+        identity = _DNT_IDENTITIES_BY_NAME.get(name)
+        if identity is None:
+            return None
+        nba_id, variants = identity
+        candidates = []
+        for variant in variants:
+            rows = indexed.get(variant, [])
+            if len(rows) > 1:
+                raise ValueError(f"ambiguous Dunks & Threes alias for {player_name} on {game_date}")
+            # Incoming player IDs are ESPN IDs; the saved feed carries NBA IDs.
+            candidates.extend(row for row in rows if str(row.get("player_id")) == nba_id)
+        if len(candidates) > 1:
+            raise ValueError(f"ambiguous Dunks & Threes alias for {player_name} on {game_date}")
+        return candidates[0] if candidates else None
 
     def projected_box_score(
         self, player: Player, game_date: date
     ) -> BoxScoreLine | None:
-        row = self._projections(game_date).get(normalize_player_name(player.name))
+        row = self._projection_row(player.name, game_date)
         if row is None:
             return None
         try:
+            if any(row[field] is None for field in _DNT_SCORING_FIELDS):
+                return None
             return BoxScoreLine(
                 pts=row["p_pts"],
                 offensive_rebounds=row["p_orb"],

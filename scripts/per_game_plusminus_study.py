@@ -1,17 +1,8 @@
-"""Literal on-court plus-minus as the dividend basis: extraction + full battery.
+"""Descriptive historical on-court plus-minus and prior-only residual studies.
 
-The cached ESPN game summaries carry per-player '+/-' that the CSV extraction
-dropped. This study extracts it for all three seasons (1,230 summaries each),
-joins to the game logs by (game_id, player_id), and answers whether raw
-scoring-margin impact can carry the per-game economy:
-
- 1. Coverage and scale (share of listed players with <=0 expected value).
- 2. Split-half reliability — the skill ceiling: correlate each player's
-    odd-game mean with his even-game mean, for old NetPoints vs margin-fit
-    box weights vs raw +/-. A dividend basis users cannot predict is a slot
-    machine, whatever its statistical pedigree.
- 3. Noise anatomy, requote leak, YoY opening drift, user P&L bands, rate
-    sweep, and 7-day shorts — same battery as the other bases.
+Odd/even season means measure repeatability, not a trading-skill ceiling. Raw
+plus-minus also includes teammate/opponent context and does not isolate causal
+individual impact. Dollar sensitivities do not select a production rate.
 """
 from __future__ import annotations
 
@@ -39,6 +30,8 @@ MARGIN_WEIGHTS = {
     "ast": -0.012, "stl": 1.755, "blk": 0.421, "tov": -1.386, "three_pm": 0.017,
 }
 from nba_stock_market.engine import NetPointsCoefficients
+from scripts.per_game_margin_study import prior_only_locks, prior_rosters, fixed_roster_bands, quote_residuals
+from scripts.per_game_blend_sweep import corr
 
 _ENGINE = NetPointsCoefficients()
 # The exact engine weights, mapped to this script's CSV column keys.
@@ -69,12 +62,6 @@ def pct(values, q):
     return ordered[lo] + (ordered[hi] - ordered[lo]) * (pos - lo)
 
 
-def corr(a, b):
-    ma, mb = fmean(a), fmean(b)
-    cov = fmean([(x - ma) * (y - mb) for x, y in zip(a, b)])
-    return cov / (pstdev(a) * pstdev(b))
-
-
 def extract_plusminus(season: str) -> dict[tuple[str, str], float]:
     """(game_id, player_id) -> on-court plus-minus."""
     out: dict[tuple[str, str], float] = {}
@@ -102,8 +89,11 @@ def extract_plusminus(season: str) -> dict[tuple[str, str], float]:
                     except ValueError:
                         continue
                     pid = str(entry.get("athlete", {}).get("id", ""))
-                    if pid:
-                        out[(game_id, pid)] = value
+                    if pid and math.isfinite(value):
+                        key = (game_id, pid)
+                        if key in out and out[key] != value:
+                            raise ValueError(f"conflicting plus-minus for {key}")
+                        out[key] = value
     return out
 
 
@@ -141,17 +131,21 @@ def score(row, weights):
 
 
 def main() -> int:
-    lines = ["# On-court plus-minus as the dividend basis", ""]
+    lines = ["# Descriptive on-court plus-minus diagnostics", ""]
     per_season = {}
     for season in SEASONS:
         pm = extract_plusminus(season)
-        rows = load_csv(season)
+        rows = sorted(load_csv(season), key=lambda r: (r["date"], r["game_id"], r["pid"]))
+        if not rows:
+            raise ValueError(f"no player-game rows for {season}")
         joined = 0
         for r in rows:
             key = (str(r["game_id"]), str(r["pid"]))
             r["pm"] = pm.get(key)
             if r["pm"] is not None:
                 joined += 1
+        if joined != len(rows):
+            raise ValueError(f"incomplete plus-minus coverage for {season}: {joined}/{len(rows)}; no full report written")
         counts: dict[str, int] = defaultdict(int)
         for r in rows:
             counts[str(r["pid"])] += 1
@@ -170,10 +164,10 @@ def main() -> int:
         "raw +/-": lambda r: r["pm"],
     }
 
-    lines.append("## 1. Split-half reliability (the skill ceiling, 2025-26 listed players)")
+    lines.append("## 1. Odd/even season-mean repeatability (2025-26 retrospective cohort)")
     lines.append("")
-    lines.append("Correlation between each player's odd-game and even-game season mean —")
-    lines.append("how much of what you pay for tonight is a repeatable trait vs dice:")
+    lines.append("Correlation between each player's odd-game and even-game season mean measures repeatability of aggregates.")
+    lines.append("This is not next-game prediction accuracy or a skill ceiling. Cohort uses final-season appearance counts, and each metric is measured on the same joined player-game rows.")
     lines.append("")
     lines.append("| Metric | Split-half r | Per-game SD around player mean |")
     lines.append("|---|---:|---:|")
@@ -204,17 +198,20 @@ def main() -> int:
     negative = sum(1 for v in season_pm.values() if v <= 0)
     names = {str(r["pid"]): str(r["name"]) for r in cur["rows"]}
     ranked = sorted(season_pm.items(), key=lambda kv: -kv[1])
-    lines.append("## 2. Scale and the negative-value problem (raw +/-)")
+    lines.append("## 2. Observed player means and scale (raw +/-)")
     lines.append("")
     lines.append(
         f"Listed players with a season mean: {len(season_pm)}. **{negative} "
-        f"({negative/len(season_pm):.0%}) have ≤0 expected value** (old NP: 0). "
+        f"({negative/len(season_pm):.0%}) have nonpositive observed season means**. "
         f"Season-mean SD {pstdev(list(season_pm.values())):.2f}; top of market: "
         + ", ".join(f"{names[p]} {m:+.1f}" for p, m in ranked[:5]) + "."
     )
+    lines.append(f"Observed player means range from {min(season_pm.values()):+.2f} to {max(season_pm.values()):+.2f}, a width of {max(season_pm.values())-min(season_pm.values()):.2f}. Residual SD around a full-season mean is not a decomposition of irreducible noise.")
     lines.append("")
 
-    lines.append("## 3. Requote leak per settled game (raw +/-, all seasons)")
+    lines.append("## 3. Gross quote residuals after three strictly prior games")
+    lines.append("")
+    lines.append("Warmup games are not scored against their own mean. Retrospective cohort; no fees or price floor applied.")
     lines.append("")
     lines.append("| Season | frozen at open | weekly requote | nightly full |")
     lines.append("|---|---:|---:|---:|")
@@ -228,21 +225,9 @@ def main() -> int:
         for pid, s in series.items():
             if len(s) < 5:
                 continue
-            opening = fmean([v for _, v in s[:3]])
-            quotes = dict.fromkeys(leaks, opening)
-            history: list[float] = []
-            last_week = None
-            for d, v in s:
-                trailing = fmean(history[-TRAIL:]) if len(history) >= TRAIL_MIN else None
-                if trailing is not None:
-                    quotes["full"] = trailing
-                    wk = d.isocalendar()[:2]
-                    if wk != last_week:
-                        quotes["weekly"] = trailing
-                        last_week = wk
-                for k in leaks:
-                    leaks[k].append(v - quotes[k])
-                history.append(v)
+            residuals = quote_residuals(s)
+            for key in leaks:
+                leaks[key].extend(residuals[key])
         lines.append(
             f"| {season} | {fmean(leaks['frozen']):+.3f} | {fmean(leaks['weekly']):+.3f} "
             f"| {fmean(leaks['full']):+.3f} |"
@@ -269,52 +254,39 @@ def main() -> int:
         lines.append(f"- {prior} → {current}: {fmean(drifts):+.3f} margin-pts/game over {len(drifts):,} games.")
     lines.append("")
 
-    dates = sorted({r["date"] for r in cur["rows"]})
+    all_series = defaultdict(list)
+    for row in cur["rows"]:
+        if row["pm"] is not None:
+            all_series[str(row["pid"])].append((row["date"], float(row["pm"])))
+    dates = sorted({row["date"] for row in cur["rows"]})
+    if len(dates) <= 10:
+        raise ValueError("need more than ten game dates for fixed-roster replay")
     lock_day = dates[10]
-    by_date: dict[date, list[tuple[str, float]]] = defaultdict(list)
-    for r in cur["rows"]:
-        if r["pid"] in cur["universe"] and r["pm"] is not None:
-            by_date[r["date"]].append((str(r["pid"]), float(r["pm"])))
-    positive_ranked = [p for p, m in ranked if m > 0]
-    mid = len(positive_ranked) // 2
-
-    def replay(pids):
-        locks = {p: season_pm[p] for p in pids if p in season_pm}
-        return [
-            sum(v - locks[p] for p, v in by_date[d] if p in locks) if d >= lock_day else 0.0
-            for d in dates
-        ]
-
-    lines.append("## 5. User P&L bands and rate sweep (raw +/-)")
+    locks = prior_only_locks(all_series, lock_day)
+    rosters = prior_rosters(locks)
+    bands = fixed_roster_bands(all_series, dates, lock_day, locks, rosters)
+    lines.append("## 5. Prior-only fixed-roster gross residuals and dollar sensitivity")
     lines.append("")
-    bands = {}
-    for name, pids in (("stars", positive_ranked[:SLOTS]), ("balanced", positive_ranked[mid - 5:mid + 5])):
-        daily = replay(pids)
-        active = [v for v in daily if v != 0.0]
-        weeks: dict[tuple[int, int], float] = defaultdict(float)
-        for d, v in zip(dates, daily):
-            weeks[d.isocalendar()[:2]] += v
-        bands[name] = (pstdev(active), pct([abs(v) for v in active], 0.95),
-                       pstdev(list(weeks.values())), pct([abs(v) for v in weeks.values()], 0.95))
-        lines.append(
-            f"- {name}: night SD {bands[name][0]:.1f} / p95 {bands[name][1]:.1f}; "
-            f"week SD {bands[name][2]:.1f} / p95 {bands[name][3]:.1f} (margin-pts)."
-        )
+    lines.append(f"Entry date {lock_day}. Pool uses appearances before entry; ranking and fixed cost proxies use strictly earlier means with at least three observations. No full-season mean or rank sets these locks.")
+    lines.append("No signing fees, price floor, budget, market impact or subsequent trading is simulated. These are research residuals, not full-policy user P&L or a recommended rate.")
     lines.append("")
-    star_np = ranked[0][1]
-    floor_np_val = pct(sorted(m for _, m in ranked if m > 0), 0.05)
-    _, np95, _, wp95 = bands["balanced"]
-    lines.append("| Rate | Star cost/game | Night p95 | Week p95 | p05 positive player | Floor OK |")
+    for name, values in bands.items():
+        nsd, np95, wsd, wp95, total = values
+        lines.append(f"- {name}: night SD {nsd:.1f} / abs-p95 {np95:.1f}; week SD {wsd:.1f} / abs-p95 {wp95:.1f}; season {total:+.1f} (score units).")
+    lines.append("")
+    positive_locks = sorted(value for value in locks.values() if value > 0)
+    star_np = max(positive_locks)
+    floor_np_val = pct(positive_locks, .05)
+    _, np95, _, wp95, _ = bands["middle prior mean"]
+    lines.append("| Rate | Highest prior cost proxy | Night abs-p95 | Week abs-p95 | p05 positive prior cost | p05 at least $25K? |")
     lines.append("|---|---:|---:|---:|---:|:---:|")
     for rate in CAND_RATES:
-        lines.append(
-            f"| ${rate/1000:.0f}K | ${star_np*rate:,.0f} | ±${np95*rate:,.0f} "
-            f"| ±${wp95*rate:,.0f} | ${floor_np_val*rate:,.0f} "
-            f"| {'yes' if floor_np_val*rate >= QUOTE_FLOOR else 'no'} |"
-        )
+        lines.append(f"| ${rate/1000:.0f}K | ${star_np*rate:,.0f} | ${np95*rate:,.0f} | ${wp95*rate:,.0f} | ${floor_np_val*rate:,.0f} | {'yes' if floor_np_val*rate >= QUOTE_FLOOR else 'no'} |")
     lines.append("")
 
-    lines.append("## 6. Shorts (7-day windows, raw +/-)")
+    lines.append("## 6. Gross inverse-score residuals (7-calendar-day windows)")
+    lines.append("")
+    lines.append("Independent player windows in the retrospective cohort; not a short-roster strategy. Fees, floors, slot limits, DNP rules and early-close policy are absent.")
     lines.append("")
     pnl = []
     series26: dict[str, list[tuple[date, float]]] = defaultdict(list)
@@ -331,6 +303,8 @@ def main() -> int:
                 continue
             quote = fmean(history[-TRAIL:])
             end = start_day + timedelta(days=6)
+            if end > dates[-1]:
+                break
             total = 0.0
             scan = index
             while scan < len(s) and s[scan][0] <= end:
@@ -340,7 +314,7 @@ def main() -> int:
             index = scan
     lines.append(
         f"{len(pnl):,} windows: mean {fmean(pnl):+.2f}, SD {pstdev(pnl):.1f} margin-pts, "
-        f"win rate {sum(1 for v in pnl if v > 0)/len(pnl):.1%}."
+        f"win rate {(sum(1 for v in pnl if v > 0)/len(pnl) if pnl else math.nan):.1%}."
     )
     lines.append("")
 

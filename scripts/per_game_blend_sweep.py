@@ -2,12 +2,9 @@
 
 NP_blend(alpha) = alpha * old_NetPoints + (1 - alpha) * margin_fit_box.
 
-For each alpha, measure the four things that decide the dividend basis:
- 1. Team-margin correlation (out-of-sample 2025-26): does the metric actually
-    capture scoring-margin impact? (Russ's requirement.)
- 2. Split-half reliability: can users predict what they pay for? (skill game)
- 3. Listed players with <=0 expected value: floor/unholdable problem. (product)
- 4. Top-5 players by the metric: ranking sanity check. (product)
+Report same-game team association, odd/even repeatability, observed player means,
+and ranking in a retrospective cohort. None alone identifies individual causal
+impact, a score zero point, next-game predictability, or a dollar conversion rate.
 """
 from __future__ import annotations
 
@@ -49,9 +46,21 @@ def pstdev(v):
 
 
 def corr(a, b):
+    if len(a) != len(b) or len(a) < 2:
+        raise ValueError("correlation needs equally sized samples with at least two values")
     ma, mb = fmean(a), fmean(b)
     cov = fmean([(x - ma) * (y - mb) for x, y in zip(a, b)])
-    return cov / (pstdev(a) * pstdev(b))
+    denominator = pstdev(a) * pstdev(b)
+    return cov / denominator if denominator else math.nan
+
+
+def association_diagnostics(scores, margins):
+    r = corr(scores, margins)
+    variance = pstdev(scores) ** 2
+    mean_score, mean_margin = fmean(scores), fmean(margins)
+    covariance = fmean([(s-mean_score)*(m-mean_margin) for s,m in zip(scores,margins)])
+    return {"r": r, "slope": covariance / variance if variance else math.nan,
+            "rmse": math.sqrt(fmean([(s-m)**2 for s,m in zip(scores,margins)]))}
 
 
 def load(season):
@@ -93,10 +102,12 @@ def main() -> int:
         teams_by_game[gid].append(team)
 
     lines = [
-        "# Blend dial: alpha*oldNP + (1-alpha)*marginFit (2025-26 out-of-sample)",
+        "# Blend diagnostics: alpha * engine NP + (1 - alpha) * uncentered margin fit (2025-26)",
         "",
-        "| alpha | Team-margin r | Split-half reliability | Players <=0 EV | Top 5 |",
-        "|---|---:|---:|---:|---|",
+        "Final same-game box scores are inputs, not pregame predictions. The top-150 player cohort uses final-season appearance counts; it is descriptive, not an implementable selection rule. The margin component omits the fitted team intercept and does not identify a player-score baseline.",
+        "",
+        "| alpha | Team-margin r | Unscaled team-diff RMSE | Margin-on-score slope | Odd/even mean r | Players with mean <=0 | Sample top 5 |",
+        "|---|---:|---:|---:|---:|---:|---|",
     ]
     for alpha in ALPHAS:
         team_metric: dict[tuple[str, str], float] = defaultdict(float)
@@ -109,7 +120,7 @@ def main() -> int:
             a, b = teams
             diffs.append(team_metric[(gid, a)] - team_metric[(gid, b)])
             margins.append(team_pts[(gid, a)] - team_pts[(gid, b)])
-        margin_r = corr(diffs, margins)
+        association = association_diagnostics(diffs, margins)
 
         per_player: dict[str, list[float]] = defaultdict(list)
         for r in sorted(rows, key=lambda r: (r["date"], r["game_id"], r["pid"])):
@@ -127,14 +138,18 @@ def main() -> int:
             names[p] for p, _ in sorted(season_means.items(), key=lambda kv: -kv[1])[:5]
         )
         lines.append(
-            f"| {alpha:.2f} | {margin_r:.3f} | {reliability:.3f} | "
+            f"| {alpha:.2f} | {association['r']:.3f} | {association['rmse']:.3f} | {association['slope']:.3f} | {reliability:.3f} | "
             f"{negatives}/{len(season_means)} | {top5} |"
         )
     lines.append("")
     lines.append(
-        "alpha=1 is the old formula; alpha=0 is the pure margin fit. Team-margin r "
-        "for raw on-court +/- team sums is 1.000 by construction but its per-player "
-        "split-half reliability is only 0.678 (see per-game-plusminus-study.md)."
+        "A points-only control has r = 1 and RMSE = 0 by construction: the team difference "
+        "of player PTS is the target itself. Positive scaling preserves correlation "
+        "while changing dividends; subtracting the same total from both teams also "
+        "preserves every margin difference while changing player baselines. These "
+        "diagnostics therefore do not validate individual attribution, a rate, or "
+        "statistical equivalence. Odd/even season means measure repeatability of "
+        "aggregates, not a skill ceiling or next-game forecast accuracy."
     )
     lines.append("")
     out = Path("output/per-game-blend-sweep.md")

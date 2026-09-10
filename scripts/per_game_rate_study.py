@@ -1,27 +1,29 @@
 """Rate study for per-game economy v2: $/NP, fair costs, and normal-user P&L.
 
-Six deterministic tests over the cached 2025-26 season (top-150 listed universe):
+Six descriptive diagnostics over a sample fixed from information available before trading:
 
 A. Production landscape — produced NP per game by tier; the fair-cost table.
 B. Noise anatomy — per-game surprise SD by tier; how many roster games land per
    night; the analytic night/week swing a fair-priced 10-slot roster must expect.
-C. Archetype replay — seven user archetypes (star holder, balanced holder,
-   bench holder, 10x random fixed, weekly random rebalancer, nightly streamer,
+C. Archetype replay — star holder, balanced holder,
+   bench holder, weekly random rebalancer, participation-oracle streamer,
    momentum chaser) run through the season with costs LOCKED at the trailing
    production anchor on add date. Daily and weekly P&L distributions in NP.
 D. Rate sweep — tests A-C expressed in dollars at candidate rates, against
    explicit legibility bands, plus the quote-floor constraint at the bottom of
    the listed universe.
-E. Skill separation — does a full season separate skill from luck (rate-free).
-F. Aggregate flow — gross dividend flow per user-night (economy "money supply").
+E. Descriptive strategy separation (rate-free; not a skill significance test).
+F. Aggregate flow — gross dividend scale, without a net-money-supply claim.
 
-Costs lock at add; dividends pay raw produced NP. Fees excluded here (see
-output/per-game-balance-study.md section 3). No network, no RNG outside the
-seeded random archetypes.
+Costs lock at add; dividends pay raw produced NP. These rate-free diagnostics
+exclude fees and the monetary quote floor; dollar values are a linear scale
+illustration, not a full-policy replay or a validated rate recommendation. The
+participation-oracle streamer is excluded from the legibility gate. No network.
 """
 from __future__ import annotations
 
 import argparse
+import sys
 import math
 import random
 import statistics
@@ -29,6 +31,9 @@ from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Callable, Sequence
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from nba_stock_market.per_game_simulation import load_historical_games
 
@@ -71,78 +76,90 @@ def money(np_value: float, rate: int) -> str:
     return f"${np_value * rate:+,.0f}"
 
 
+def opening_date(games, calibration_dates: int = 14) -> date:
+    """Trade only after the complete calibration window has been observed."""
+    dates = sorted({game.game_date for game in games})
+    if len(dates) <= calibration_dates:
+        raise ValueError("need more than 14 game dates for the calibration and evaluation windows")
+    return dates[calibration_dates]
+
+
+def asof_universe(games, cutoff: date, limit: int = UNIVERSE_SIZE) -> set[str]:
+    """Canonical availability ordering, frozen strictly before the trade date.
+
+    This is a research sample, not a claim about the production listed market.
+    Adding future rows cannot change its membership.
+    """
+    first = {}
+    for game in sorted(games, key=lambda g: (g.game_date, g.game_id, g.player_id)):
+        if game.game_date < cutoff and game.saved_projection_net_points is not None:
+            first.setdefault(game.player_id, game.game_date)
+    return {pid for pid, _ in sorted(first.items(), key=lambda item: (item[1], item[0]))[:limit]}
+
+
 class Study:
-    def __init__(self, data_dir: Path, dnt_dir: Path) -> None:
-        games = load_historical_games(data_dir, dnt_dir)
-        counts: dict[str, int] = defaultdict(int)
-        for g in games:
-            if g.saved_projection_net_points is not None:
-                counts[g.player_id] += 1
-        ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-        self.universe = {pid for pid, _ in ranked[:UNIVERSE_SIZE]}
+    def __init__(self, data_dir: Path | None = None, dnt_dir: Path | None = None,
+                 *, games=None, trade_day: date | None = None) -> None:
+        games = list(games) if games is not None else load_historical_games(data_dir, dnt_dir)
+        if any(not math.isfinite(g.actual_net_points) or
+               (g.saved_projection_net_points is not None and not math.isfinite(g.saved_projection_net_points)) for g in games):
+            raise ValueError("nonfinite actual or projection in study data")
+        self.opening_day = trade_day if trade_day is not None else opening_date(games)
+        self.universe = asof_universe(games, self.opening_day)
+        if len(self.universe) < SLOTS:
+            raise ValueError("fewer than 10 observed players before the trading cutoff")
         self.names: dict[str, str] = {}
         ordered = sorted(games, key=lambda g: (g.game_date, g.game_id, g.player_id))
         self.rows: list[dict[str, object]] = []
         first_proj: dict[str, float] = {}
-        history: dict[str, list[float]] = defaultdict(list)
+        history = defaultdict(list)
         for g in ordered:
             if g.player_id not in self.universe:
                 continue
             self.names.setdefault(g.player_id, g.player_name)
             proj = g.saved_projection_net_points
-            if proj is not None and g.player_id not in first_proj:
-                first_proj[g.player_id] = proj
-            prior = history[g.player_id]
-            trailing = (
-                fmean(prior[-TRAILING_WINDOW:]) if len(prior) >= TRAILING_MIN else None
-            )
-            anchor = trailing if trailing is not None else (
-                proj if proj is not None else first_proj.get(g.player_id)
-            )
-            self.rows.append(
-                {
-                    "pid": g.player_id,
-                    "date": g.game_date,
-                    "actual": g.actual_net_points,
-                    "proj": proj,
-                    "anchor": anchor,
-                }
-            )
-            history[g.player_id].append(g.actual_net_points)
-        self.by_date: dict[date, list[dict[str, object]]] = defaultdict(list)
+            if proj is not None:
+                first_proj.setdefault(g.player_id, proj)
+            # Strict dates also exclude an earlier same-day record from the quote.
+            prior = [actual for day, actual in history[g.player_id] if day < g.game_date]
+            trailing = fmean(prior[-TRAILING_WINDOW:]) if len(prior) >= TRAILING_MIN else None
+            anchor = trailing if trailing is not None else first_proj.get(g.player_id)
+            self.rows.append({"pid": g.player_id, "date": g.game_date,
+                              "actual": g.actual_net_points, "proj": proj, "anchor": anchor})
+            history[g.player_id].append((g.game_date, g.actual_net_points))
+        self.by_date = defaultdict(list)
+        self.by_player = defaultdict(list)
         for row in self.rows:
-            self.by_date[row["date"]].append(row)  # type: ignore[index]
-        self.dates = sorted(self.by_date)
-        self.season_np: dict[str, float] = {}
-        by_player: dict[str, list[float]] = defaultdict(list)
-        for row in self.rows:
-            by_player[str(row["pid"])].append(float(row["actual"]))  # type: ignore[arg-type]
-        for pid, vals in by_player.items():
-            if len(vals) >= 20:
-                self.season_np[pid] = fmean(vals)
-        self.games_played = {pid: len(v) for pid, v in by_player.items()}
+            self.by_date[row["date"]].append(row)
+            self.by_player[row["pid"]].append(row)
+        end = max(row["date"] for row in self.rows)
+        self.dates = [self.opening_day + timedelta(days=i) for i in range((end - self.opening_day).days + 1)]
+        if not self.dates:
+            raise ValueError("no evaluation dates after calibration")
+        self.season_np = {pid: fmean([float(r["actual"]) for r in rows]) for pid, rows in self.by_player.items()}
+        self.games_played = {pid: len(rows) for pid, rows in self.by_player.items()}
 
     # ---- anchors -----------------------------------------------------------
     def anchor_on(self, pid: str, day: date) -> float | None:
         """Anchor quote (NP) for pid as of day: trailing before that date."""
         prior = [
             float(r["actual"])  # type: ignore[arg-type]
-            for r in self.rows
-            if r["pid"] == pid and r["date"] < day  # type: ignore[operator]
+            for r in self.by_player.get(pid, [])
+            if r["date"] < day  # type: ignore[operator]
         ]
         if len(prior) >= TRAILING_MIN:
             return fmean(prior[-TRAILING_WINDOW:])
         projs = [
             float(r["proj"])  # type: ignore[arg-type]
-            for r in self.rows
-            if r["pid"] == pid and r["date"] <= day and r["proj"] is not None  # type: ignore[operator]
+            for r in self.by_player.get(pid, [])
+            if r["date"] <= day and r["proj"] is not None  # type: ignore[operator]
         ]
         return projs[0] if projs else None
 
 
 # ---- Test A: production landscape ---------------------------------------
 def test_a(study: Study) -> list[str]:
-    lines = ["## A. Production landscape and the fair-cost table", ""]
+    lines = ["## A. Retrospective production landscape (not opening prices)", ""]
     tiered: dict[str, list[tuple[str, float]]] = {name: [] for name, _, _ in TIERS}
     for pid, mean_np in study.season_np.items():
         for name, low, high in TIERS:
@@ -160,12 +177,12 @@ def test_a(study: Study) -> list[str]:
         lows = min(m for _, m in members)
         highs = max(m for _, m in members)
         def cb(rate: int) -> str:
-            return f"${max(lows,0)*rate/1000:,.0f}K-${highs*rate/1000:,.0f}K"
+            return f"${lows*rate/1000:,.0f}K-${highs*rate/1000:,.0f}K"
         lines.append(
             f"| {name} | {band} | {len(members)} | {mean_np:.1f} | {cb(15_000)} | {cb(20_000)} | {cb(25_000)} |"
         )
     lines.append("")
-    top = sorted(study.season_np.items(), key=lambda kv: -kv[1])[:8]
+    top = sorted(study.season_np.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
     lines.append("Example fair per-game costs (season produced NP × rate):")
     lines.append("")
     lines.append("| Player | NP/game | at $15K | at $20K | at $25K | at $40K |")
@@ -175,22 +192,20 @@ def test_a(study: Study) -> list[str]:
         lines.append(f"| {study.names[pid]} | {np_pg:.2f} | {cells} |")
     floor_np = pct(sorted(study.season_np.values()), 0.05)
     lines.append("")
-    lines.append(
-        f"Bottom of the listed universe (p05 season NP/game): {floor_np:.2f} NP. "
-        f"The ${QUOTE_FLOOR_DOLLARS/1000:.0f}K quote floor stops distorting the bench "
-        f"only when rate ≥ ${QUOTE_FLOOR_DOLLARS / max(floor_np, 0.01):,.0f}/NP."
-    )
+    requirement = (f"p05 alone reaches the $25K floor at ${QUOTE_FLOOR_DOLLARS / floor_np:,.0f}/NP"
+                   if floor_np > 0 else "no positive rate lifts this nonpositive p05 mean above the floor")
+    lines.append(f"Retrospective p05 production is {floor_np:.2f} NP; {requirement}. Test D checks the minimum player, not p05.")
     lines.append("")
     return lines
 
 
 # ---- Test B: noise anatomy ------------------------------------------------
 def test_b(study: Study) -> list[str]:
-    lines = ["## B. Noise anatomy: what one night of a fair roster must swing", ""]
+    lines = ["## B. Descriptive noise anatomy and an independence approximation", ""]
     surprises_by_tier: dict[str, list[float]] = {name: [] for name, _, _ in TIERS}
     all_edges: list[float] = []
     for row in study.rows:
-        if row["anchor"] is None:
+        if row["date"] < study.opening_day or row["anchor"] is None:
             continue
         edge = float(row["actual"]) - float(row["anchor"])  # type: ignore[arg-type]
         all_edges.append(edge)
@@ -211,8 +226,8 @@ def test_b(study: Study) -> list[str]:
     sd1 = pstdev(all_edges)
     lines.append(f"| **All listed** | {len(all_edges):,} | {sd1:.2f} | ±${sd1*20_000:,.0f} |")
     lines.append("")
-    per_night = [len(v) for v in study.by_date.values()]
-    density = fmean(per_night) / UNIVERSE_SIZE
+    per_night = [len(study.by_date[day]) for day in study.dates]
+    density = fmean(per_night) / len(study.universe)
     exp_games = SLOTS * density
     lines.append(
         f"Schedule density: a listed player plays {density:.2f} games per calendar "
@@ -234,7 +249,7 @@ def test_b(study: Study) -> list[str]:
 def replay(
     study: Study,
     pick: Callable[[date, set[str]], set[str] | None],
-    start_index: int = 10,
+    start_index: int = 0,
 ) -> tuple[list[float], int]:
     """Replay a roster policy; returns per-date P&L in NP and add count."""
     roster: dict[str, float] = {}
@@ -247,7 +262,7 @@ def replay(
                 for pid in list(roster):
                     if pid not in want:
                         del roster[pid]
-                for pid in want:
+                for pid in sorted(want):
                     if pid not in roster:
                         anchor = study.anchor_on(pid, day)
                         if anchor is not None:
@@ -264,17 +279,17 @@ def replay(
 
 def test_c(study: Study) -> tuple[list[str], dict[str, list[float]]]:
     lines = ["## C. Archetype replay: a season of daily P&L (costs locked at add)", ""]
-    early_days = study.dates[:14]
+    early_days = sorted(day for day in study.by_date if day < study.opening_day)
     early_proj: dict[str, list[float]] = defaultdict(list)
     for day in early_days:
         for row in study.by_date[day]:
             if row["proj"] is not None:
                 early_proj[str(row["pid"])].append(float(row["proj"]))  # type: ignore[arg-type]
-    ranked_early = sorted(early_proj, key=lambda pid: -fmean(early_proj[pid]))
+    ranked_early = sorted(early_proj, key=lambda pid: (-fmean(early_proj[pid]), pid))
     star_roster = set(ranked_early[:SLOTS])
     mid_start = len(ranked_early) // 2 - SLOTS // 2
     balanced_roster = set(ranked_early[mid_start:mid_start + SLOTS])
-    bench_roster = set(ranked_early[-SLOTS - 10:-10])
+    bench_roster = set(ranked_early[-SLOTS - 10:-10] if len(ranked_early) >= SLOTS + 10 else ranked_early[-SLOTS:])
 
     def fixed(roster: set[str]) -> Callable[[date, set[str]], set[str] | None]:
         state = {"done": False}
@@ -316,8 +331,8 @@ def test_c(study: Study) -> tuple[list[str], dict[str, list[float]]]:
         for pid in study.universe:
             prior = [
                 float(r["actual"])  # type: ignore[arg-type]
-                for r in study.rows
-                if r["pid"] == pid and r["date"] < day  # type: ignore[operator]
+                for r in study.by_player.get(pid, [])
+                if r["date"] < day  # type: ignore[operator]
             ]
             if len(prior) >= 6:
                 hot = fmean(prior[-3:]) - fmean(prior[-TRAILING_WINDOW:])
@@ -331,7 +346,7 @@ def test_c(study: Study) -> tuple[list[str], dict[str, list[float]]]:
         ("star holder", fixed(star_roster)),
         ("balanced holder", fixed(balanced_roster)),
         ("bench holder", fixed(bench_roster)),
-        ("nightly streamer", streamer),
+        ("participation-oracle streamer", streamer),
         ("momentum chaser", momentum),
     ):
         daily, adds = replay(study, policy)
@@ -347,10 +362,12 @@ def test_c(study: Study) -> tuple[list[str], dict[str, list[float]]]:
     results["weekly random (10 seeds pooled)"] = pooled
     add_counts["weekly random (10 seeds pooled)"] = fmean([float(a) for a in random_adds])
 
+    lines.append("Calendar-day observations include zero-return days. The streamer knows realized participation; it is an oracle diagnostic, not an executable policy.")
+    lines.append("")
     lines.append("| Archetype | Adds | Season P&L (NP) | Daily mean | Daily SD | Daily p05 | Daily p95 |")
     lines.append("|---|---:|---:|---:|---:|---:|---:|")
     for label, daily in results.items():
-        active = [d for d in daily if d != 0.0]
+        active = daily
         season = sum(daily) if "pooled" not in label else sum(daily) / len(RANDOM_SEEDS)
         lines.append(
             f"| {label} | {add_counts[label]:.0f} | {season:+.0f} | {fmean(active):+.2f} "
@@ -391,43 +408,50 @@ def test_c(study: Study) -> tuple[list[str], dict[str, list[float]]]:
 
 
 # ---- Test D: rate sweep ----------------------------------------------------
+def rate_band_failures(night, week, season_sd, minimum_cost, star_cost):
+    failures = []
+    if minimum_cost < QUOTE_FLOOR_DOLLARS:
+        failures.append("floor binds")
+    if not 150_000 <= night <= 750_000:
+        failures.append("night outside band")
+    if not 500_000 <= week <= 2_000_000:
+        failures.append("week outside band")
+    if not 0 <= season_sd < 10_000_000:
+        failures.append("season spread outside band")
+    if star_cost >= 1_000_000:
+        failures.append("star cost not under $1M")
+    if not all(math.isfinite(v) for v in (night, week, season_sd, minimum_cost, star_cost)):
+        failures.append("nonfinite input")
+    return failures
+
+
 def test_d(study: Study, results: dict[str, list[float]]) -> list[str]:
     lines = ["## D. Rate sweep against legibility bands", ""]
-    balanced = [d for d in results["balanced holder"] if d != 0.0]
-    star = [d for d in results["star holder"] if d != 0.0]
+    balanced = results["balanced holder"]
+    star = results["star holder"]
     weekly_bal = results["__weekly__"]
     night_p95 = pct([abs(v) for v in balanced], 0.95)
     night_p99_star = pct([abs(v) for v in star], 0.99)
     week_p95 = pct([abs(v) for v in weekly_bal], 0.95)
-    season_spread = pstdev([sum(v) for k, v in results.items() if not k.startswith("__") and "pooled" not in k])
-    floor_np = pct(sorted(study.season_np.values()), 0.05)
+    season_spread = pstdev([sum(v) for k, v in results.items() if not k.startswith("__") and "pooled" not in k and "oracle" not in k])
+    floor_np = min(study.season_np.values())
     top_np = max(study.season_np.values())
     lines.append(
         "Bands: a normal night p95 should land between $150K and $750K; a normal "
-        "week p95 between $500K and $2M; the season archetype spread in single-digit "
-        "$M; the whole listed universe priced above the $25K floor; a superstar "
+        "week p95 between $500K and $2M; the non-oracle season archetype SD below $10M; "
+        "the minimum retrospective player mean above the $25K floor; a superstar "
         "cost under $1M/game so the anchor column stays readable."
     )
     lines.append("")
-    lines.append("| Rate | Star cost/game | p05 player cost | Night p95 (balanced) | Worst star night p99 | Week p95 | Season archetype SD | Floor OK | Verdict |")
+    lines.append("| Rate | Star cost/game | Minimum player cost | Night p95 (balanced) | Worst star night p99 | Week p95 | Season archetype SD | Floor OK | Verdict |")
     lines.append("|---|---:|---:|---:|---:|---:|---:|:---:|---|")
     for rate in RATES:
         floor_ok = floor_np * rate >= QUOTE_FLOOR_DOLLARS
         night = night_p95 * rate
         week = week_p95 * rate
         star_cost = top_np * rate
-        verdict_bits = []
-        if not floor_ok:
-            verdict_bits.append("floor distorts bench")
-        if night < 150_000:
-            verdict_bits.append("nights feel flat")
-        if night > 750_000:
-            verdict_bits.append("nights too violent")
-        if week > 2_000_000:
-            verdict_bits.append("weeks too violent")
-        if star_cost > 1_000_000:
-            verdict_bits.append("star cost 7 figures")
-        verdict = "; ".join(verdict_bits) if verdict_bits else "**in band**"
+        verdict_bits = rate_band_failures(night, week, season_spread * rate, floor_np * rate, star_cost)
+        verdict = "; ".join(verdict_bits) if verdict_bits else "bands pass (diagnostic only)"
         lines.append(
             f"| ${rate/1000:.0f}K | ${star_cost:,.0f} | ${floor_np*rate:,.0f} "
             f"| ±${night:,.0f} | ±${night_p99_star*rate:,.0f} | ±${week:,.0f} "
@@ -439,10 +463,10 @@ def test_d(study: Study, results: dict[str, list[float]]) -> list[str]:
 
 # ---- Test E: skill separation ---------------------------------------------
 def test_e(results: dict[str, list[float]]) -> list[str]:
-    lines = ["## E. Skill separation over one season (rate-free)", ""]
+    lines = ["## E. Descriptive strategy differences (rate-free; not a skill test)", ""]
     star = sum(results["star holder"])
     bench = sum(results["bench holder"])
-    streamer = sum(results["nightly streamer"])
+    streamer = sum(results["participation-oracle streamer"])
     momentum = sum(results["momentum chaser"])
     pooled_daily = results["weekly random (10 seeds pooled)"]
     per_seed_totals: list[float] = []
@@ -451,6 +475,8 @@ def test_e(results: dict[str, list[float]]) -> list[str]:
         per_seed_totals.append(sum(pooled_daily[i * chunk:(i + 1) * chunk]))
     rand_mean = fmean(per_seed_totals)
     rand_sd = pstdev(per_seed_totals)
+    def distance(value):
+        return f"{(value - rand_mean) / rand_sd:+.1f}σ" if rand_sd > 0 else "undefined (zero seed variance)"
     lines.append(
         f"Weekly-random season P&L across 10 seeds: mean {rand_mean:+.0f} NP, "
         f"SD {rand_sd:.0f} NP. Archetype season totals (NP): star {star:+.0f}, "
@@ -459,10 +485,9 @@ def test_e(results: dict[str, list[float]]) -> list[str]:
     lines.append("")
     lines.append(
         "Distance from random in random-SDs: "
-        f"star {abs(star - rand_mean) / rand_sd:.1f}σ, "
-        f"bench {abs(bench - rand_mean) / rand_sd:.1f}σ, "
-        f"streamer {abs(streamer - rand_mean) / rand_sd:.1f}σ, "
-        f"momentum {abs(momentum - rand_mean) / rand_sd:.1f}σ."
+        f"star {distance(star)}, bench {distance(bench)}, "
+        f"oracle streamer {distance(streamer)}, momentum {distance(momentum)}. "
+        "These signed distances are descriptive, not significance tests."
     )
     lines.append("")
     return lines
@@ -470,23 +495,21 @@ def test_e(results: dict[str, list[float]]) -> list[str]:
 
 # ---- Test F: aggregate flow -------------------------------------------------
 def test_f(study: Study) -> list[str]:
-    lines = ["## F. Aggregate dividend flow (the money supply per user)", ""]
-    nightly_np = [sum(float(r["actual"]) for r in rows) for rows in study.by_date.values()]  # type: ignore[arg-type]
+    lines = ["## F. Gross dividend scale (not net money supply)", ""]
+    nightly_np = [sum(float(r["actual"]) for r in study.by_date[day]) for day in study.dates]  # type: ignore[arg-type]
     per_night = fmean(nightly_np)
-    lines.append("| Rate | League-wide dividend flow/night (150 listed) | One full roster's gross flow/night |")
+    lines.append(f"| Rate | Sample dividend flow/calendar night ({len(study.universe)} players) | Illustrative p75 roster gross flow/night |")
     lines.append("|---|---:|---:|")
-    density = fmean([len(v) for v in study.by_date.values()]) / UNIVERSE_SIZE
+    density = fmean([len(study.by_date[day]) for day in study.dates]) / len(study.universe)
     roster_np = pct(sorted(study.season_np.values()), 0.75) * SLOTS * density
     for rate in RATES:
         lines.append(
-            f"| ${rate/1000:.0f}K | ${per_night*rate:,.0f} | ≈ ${roster_np*rate:,.0f} in, "
-            f"≈ the same out in costs |"
+            f"| ${rate/1000:.0f}K | ${per_night*rate:,.0f} | ≈ ${roster_np*rate:,.0f} |"
         )
     lines.append("")
     lines.append(
-        "Under fair pricing the two columns net to ≈ zero per user; the gross flow "
-        "is what the product surfaces every night, so it must read as real money "
-        "without dwarfing the costs users click on."
+        "The illustrative roster uses the retrospective p75 player mean and average schedule density. "
+        "Gross dividend totals alone do not estimate net money creation; that requires actual costs, fees and position counts."
     )
     lines.append("")
     return lines
@@ -503,11 +526,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     lines = [
         "# Per-game economy v2 — rate, fair-cost, and user-P&L study",
         "",
-        f"Universe: top {UNIVERSE_SIZE} players by projected-game count; "
-        f"{len(study.rows):,} settled player-games; {len(study.dates)} game dates. "
+        f"Sample: {len(study.universe)} players selected by first projection availability strictly before {study.opening_day}; "
+        f"{len(study.rows):,} total player-games including calibration; {len(study.dates)} evaluation calendar days. "
         f"Costs lock at the trailing-{TRAILING_WINDOW} produced-NP anchor on add "
         f"date ({TRAILING_MIN}+ prior games, else the saved pregame projection). "
-        "All P&L computed in NP first; dollars are linear in the rate.",
+        "Gross P&L excludes fees and quote floors; linear dollar views are diagnostics only. "
+        "This partial-policy study cannot approve a rate, cap, or skill claim.",
         "",
     ]
     lines += test_a(study)

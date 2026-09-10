@@ -1,97 +1,99 @@
 # Per-game economy v2 — rate, fair-cost, and user-P&L study
 
-Universe: top 150 players by projected-game count; 11,108 settled player-games; 164 game dates. Costs lock at the trailing-10 produced-NP anchor on add date (3+ prior games, else the saved pregame projection). All P&L computed in NP first; dollars are linear in the rate.
+Sample: 150 players selected by first projection availability strictly before 2025-11-04; 8,963 total player-games including calibration; 160 evaluation calendar days. Costs lock at the trailing-10 produced-NP anchor on add date (3+ prior games, else the saved pregame projection). Gross P&L excludes fees and quote floors; linear dollar views are diagnostics only. This partial-policy study cannot approve a rate, cap, or skill claim.
 
-## A. Production landscape and the fair-cost table
+## A. Retrospective production landscape (not opening prices)
 
 | Tier | NP/game band | Players | Mean NP | Fair cost band at $15K | at $20K | at $25K |
 |---|---|---:|---:|---|---|---|
-| Superstar | 20-30 | 3 | 22.7 | $307K-$395K | $409K-$527K | $512K-$659K |
-| Star | 14-20 | 19 | 16.5 | $211K-$289K | $281K-$385K | $352K-$481K |
-| Starter | 9-14 | 47 | 11.0 | $135K-$209K | $180K-$278K | $225K-$348K |
-| Rotation | 5-9 | 55 | 6.9 | $75K-$134K | $100K-$179K | $125K-$224K |
-| Bench | 0-5 | 26 | 3.7 | $27K-$74K | $36K-$99K | $45K-$123K |
+| Superstar | 20-30 | 5 | 23.4 | $301K-$395K | $401K-$527K | $501K-$659K |
+| Star | 14-20 | 21 | 16.4 | $210K-$289K | $280K-$385K | $350K-$481K |
+| Starter | 9-14 | 39 | 11.0 | $137K-$209K | $183K-$278K | $229K-$348K |
+| Rotation | 5-9 | 47 | 6.6 | $75K-$129K | $101K-$172K | $126K-$214K |
+| Bench | 0-5 | 38 | 3.1 | $-9K-$75K | $-12K-$100K | $-15K-$125K |
 
 Example fair per-game costs (season produced NP × rate):
 
 | Player | NP/game | at $15K | at $20K | at $25K | at $40K |
 |---|---:|---:|---:|---:|---:|
 | Shai Gilgeous-Alexander | 26.35 | $395,206 | $526,941 | $658,676 | $1,053,882 |
-| Tyrese Maxey | 21.26 | $318,857 | $425,143 | $531,429 | $850,286 |
+| Luka Doncic | 26.10 | $391,535 | $522,047 | $652,559 | $1,044,094 |
+| Giannis Antetokounmpo | 24.19 | $362,875 | $483,833 | $604,792 | $967,667 |
 | Donovan Mitchell | 20.47 | $307,104 | $409,471 | $511,839 | $818,943 |
+| Joel Embiid | 20.04 | $300,553 | $400,737 | $500,921 | $801,474 |
 | Jaylen Brown | 19.26 | $288,856 | $385,141 | $481,426 | $770,282 |
-| Jamal Murray | 19.16 | $287,400 | $383,200 | $479,000 | $766,400 |
-| Jalen Johnson | 18.65 | $279,750 | $373,000 | $466,250 | $746,000 |
-| Kevin Durant | 18.37 | $275,567 | $367,423 | $459,279 | $734,846 |
-| Jalen Duren | 18.09 | $271,329 | $361,771 | $452,214 | $723,543 |
+| Lauri Markkanen | 19.03 | $285,500 | $380,667 | $475,833 | $761,333 |
+| Stephen Curry | 18.55 | $278,180 | $370,907 | $463,634 | $741,814 |
 
-Bottom of the listed universe (p05 season NP/game): 2.95 NP. The $25K quote floor stops distorting the bench only when rate ≥ $8,485/NP.
+Retrospective p05 production is 1.73 NP; p05 alone reaches the $25K floor at $14,463/NP. Test D checks the minimum player, not p05.
 
-## B. Noise anatomy: what one night of a fair roster must swing
+## B. Descriptive noise anatomy and an independence approximation
 
 | Tier | Games | Per-game edge SD (NP) | SD at $20K |
 |---|---:|---:|---:|
-| Superstar | 208 | 8.88 | ±$177,659 |
-| Star | 1,411 | 8.57 | ±$171,493 |
-| Starter | 3,518 | 7.47 | ±$149,416 |
-| Rotation | 4,090 | 6.36 | ±$127,296 |
-| Bench | 1,881 | 5.23 | ±$104,597 |
-| **All listed** | 11,108 | 6.93 | ±$138,630 |
+| Superstar | 249 | 9.40 | ±$188,054 |
+| Star | 1,186 | 8.36 | ±$167,153 |
+| Starter | 2,217 | 7.54 | ±$150,827 |
+| Rotation | 2,667 | 6.25 | ±$125,082 |
+| Bench | 1,702 | 4.86 | ±$97,220 |
+| **All listed** | 8,021 | 6.84 | ±$136,846 |
 
-Schedule density: a listed player plays 0.45 games per calendar night → a full 10-slot roster catches ≈ 4.5 games/night and ≈ 32 games/week.
+Schedule density: a listed player plays 0.33 games per calendar night → a full 10-slot roster catches ≈ 3.3 games/night and ≈ 23 games/week.
 
-Analytic fair-roster swing: night SD ≈ 14.7 NP, week SD ≈ 39.0 NP (dollar values in test D).
+Analytic fair-roster swing: night SD ≈ 12.5 NP, week SD ≈ 33.1 NP (dollar values in test D).
 
 ## C. Archetype replay: a season of daily P&L (costs locked at add)
 
+Calendar-day observations include zero-return days. The streamer knows realized participation; it is an oracle diagnostic, not an executable policy.
+
 | Archetype | Adds | Season P&L (NP) | Daily mean | Daily SD | Daily p05 | Daily p95 |
 |---|---:|---:|---:|---:|---:|---:|
-| star holder | 10 | -1163 | -7.75 | 18.7 | -38.8 | +23.5 |
-| balanced holder | 10 | +862 | +5.75 | 13.7 | -14.3 | +28.0 |
-| bench holder | 10 | +878 | +5.93 | 13.9 | -14.6 | +26.6 |
-| nightly streamer | 1356 | -318 | -2.06 | 29.1 | -49.1 | +41.2 |
-| momentum chaser | 219 | +153 | +1.04 | 16.8 | -25.8 | +28.1 |
-| weekly random (10 seeds pooled) | 225 | +16 | +0.11 | 14.8 | -23.4 | +25.5 |
+| star holder | 10 | -1030 | -6.44 | 17.2 | -36.8 | +23.1 |
+| balanced holder | 10 | -28 | -0.18 | 13.9 | -25.1 | +22.8 |
+| bench holder | 10 | +114 | +0.71 | 7.6 | -10.5 | +14.8 |
+| participation-oracle streamer | 1342 | -275 | -1.72 | 26.7 | -43.8 | +44.9 |
+| momentum chaser | 190 | +68 | +0.42 | 13.4 | -22.1 | +20.1 |
+| weekly random (10 seeds pooled) | 215 | +84 | +0.52 | 12.3 | -19.0 | +20.5 |
 
-Random-seed season spread (weekly random, NP): -28, -254, +272, -273, +200, -177, +327, +84, -32, +42
+Random-seed season spread (weekly random, NP): -163, +94, +167, +106, +383, +55, +253, -8, -168, +117
 
 | Archetype | Weekly mean (NP) | Weekly SD | Weekly p05 | Weekly p95 |
 |---|---:|---:|---:|---:|
-| star holder | -46.53 | 51.5 | -126.3 | +24.1 |
-| balanced holder | +34.49 | 30.6 | -21.8 | +74.5 |
-| bench holder | +35.12 | 33.3 | -9.5 | +96.2 |
-| nightly streamer | -12.71 | 66.6 | -134.4 | +71.4 |
-| momentum chaser | +6.13 | 35.9 | -50.6 | +60.6 |
-| weekly random (10 seeds pooled) | +0.64 | 38.8 | -58.6 | +65.7 |
+| star holder | -44.79 | 39.5 | -119.0 | +6.9 |
+| balanced holder | -1.24 | 30.8 | -70.4 | +31.9 |
+| bench holder | +4.94 | 19.8 | -31.7 | +34.1 |
+| participation-oracle streamer | -11.94 | 65.5 | -102.0 | +58.3 |
+| momentum chaser | +2.94 | 32.8 | -46.0 | +48.6 |
+| weekly random (10 seeds pooled) | +3.64 | 34.7 | -51.8 | +63.6 |
 
 ## D. Rate sweep against legibility bands
 
-Bands: a normal night p95 should land between $150K and $750K; a normal week p95 between $500K and $2M; the season archetype spread in single-digit $M; the whole listed universe priced above the $25K floor; a superstar cost under $1M/game so the anchor column stays readable.
+Bands: a normal night p95 should land between $150K and $750K; a normal week p95 between $500K and $2M; the non-oracle season archetype SD below $10M; the minimum retrospective player mean above the $25K floor; a superstar cost under $1M/game so the anchor column stays readable.
 
-| Rate | Star cost/game | p05 player cost | Night p95 (balanced) | Worst star night p99 | Week p95 | Season archetype SD | Floor OK | Verdict |
+| Rate | Star cost/game | Minimum player cost | Night p95 (balanced) | Worst star night p99 | Week p95 | Season archetype SD | Floor OK | Verdict |
 |---|---:|---:|---:|---:|---:|---:|:---:|---|
-| $10K | $263,471 | $29,462 | ±$287,830 | ±$559,320 | ±$744,924 | $7,691,248 | yes | **in band** |
-| $15K | $395,206 | $44,193 | ±$431,745 | ±$838,981 | ±$1,117,387 | $11,536,872 | yes | **in band** |
-| $20K | $526,941 | $58,924 | ±$575,659 | ±$1,118,641 | ±$1,489,849 | $15,382,496 | yes | **in band** |
-| $25K | $658,676 | $73,655 | ±$719,574 | ±$1,398,301 | ±$1,862,311 | $19,228,120 | yes | **in band** |
-| $30K | $790,412 | $88,386 | ±$863,489 | ±$1,677,961 | ±$2,234,773 | $23,073,745 | yes | nights too violent; weeks too violent |
-| $40K | $1,053,882 | $117,848 | ±$1,151,319 | ±$2,237,282 | ±$2,979,698 | $30,764,993 | yes | nights too violent; weeks too violent; star cost 7 figures |
+| $10K | $263,471 | $-5,900 | ±$307,540 | ±$467,536 | ±$704,062 | $4,709,598 | no | floor binds |
+| $15K | $395,206 | $-8,850 | ±$461,310 | ±$701,304 | ±$1,056,093 | $7,064,397 | no | floor binds |
+| $20K | $526,941 | $-11,800 | ±$615,080 | ±$935,072 | ±$1,408,124 | $9,419,196 | no | floor binds |
+| $25K | $658,676 | $-14,750 | ±$768,850 | ±$1,168,840 | ±$1,760,155 | $11,773,995 | no | floor binds; night outside band; season spread outside band |
+| $30K | $790,412 | $-17,700 | ±$922,620 | ±$1,402,607 | ±$2,112,186 | $14,128,795 | no | floor binds; night outside band; week outside band; season spread outside band |
+| $40K | $1,053,882 | $-23,600 | ±$1,230,160 | ±$1,870,143 | ±$2,816,248 | $18,838,393 | no | floor binds; night outside band; week outside band; season spread outside band; star cost not under $1M |
 
-## E. Skill separation over one season (rate-free)
+## E. Descriptive strategy differences (rate-free; not a skill test)
 
-Weekly-random season P&L across 10 seeds: mean +16 NP, SD 200 NP. Archetype season totals (NP): star -1163, bench +878, streamer -318, momentum +153.
+Weekly-random season P&L across 10 seeds: mean +84 NP, SD 161 NP. Archetype season totals (NP): star -1030, bench +114, streamer -275, momentum +68.
 
-Distance from random in random-SDs: star 5.9σ, bench 4.3σ, streamer 1.7σ, momentum 0.7σ.
+Distance from random in random-SDs: star -6.9σ, bench +0.2σ, oracle streamer -2.2σ, momentum -0.1σ. These signed distances are descriptive, not significance tests.
 
-## F. Aggregate dividend flow (the money supply per user)
+## F. Gross dividend scale (not net money supply)
 
-| Rate | League-wide dividend flow/night (150 listed) | One full roster's gross flow/night |
+| Rate | Sample dividend flow/calendar night (150 players) | Illustrative p75 roster gross flow/night |
 |---|---:|---:|
-| $10K | $6,179,037 | ≈ $520,430 in, ≈ the same out in costs |
-| $15K | $9,268,555 | ≈ $780,645 in, ≈ the same out in costs |
-| $20K | $12,358,073 | ≈ $1,040,859 in, ≈ the same out in costs |
-| $25K | $15,447,591 | ≈ $1,301,074 in, ≈ the same out in costs |
-| $30K | $18,537,110 | ≈ $1,561,289 in, ≈ the same out in costs |
-| $40K | $24,716,146 | ≈ $2,081,719 in, ≈ the same out in costs |
+| $10K | $4,541,972 | ≈ $385,265 |
+| $15K | $6,812,958 | ≈ $577,897 |
+| $20K | $9,083,944 | ≈ $770,530 |
+| $25K | $11,354,930 | ≈ $963,162 |
+| $30K | $13,625,916 | ≈ $1,155,795 |
+| $40K | $18,167,888 | ≈ $1,541,060 |
 
-Under fair pricing the two columns net to ≈ zero per user; the gross flow is what the product surfaces every night, so it must read as real money without dwarfing the costs users click on.
+The illustrative roster uses the retrospective p75 player mean and average schedule density. Gross dividend totals alone do not estimate net money creation; that requires actual costs, fees and position counts.

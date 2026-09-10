@@ -1,23 +1,9 @@
-"""Scoring-margin impact metric: fit, validate, and rerun the v2 balancing.
+"""Descriptive box-score fit to same-game team margin and pricing residuals.
 
-Russ wants dividends on scoring-margin impact instead of the old hand-weighted
-box score. No data source in the pipeline carries per-player on-court
-plus-minus (ESPN cache, BDL /stats, BDL /box_scores all lack it), but every
-source carries team scores and team affiliation. The implementable metric is
-therefore a box-score formula whose weights are FIT to team scoring margin
-(the BPM family): regress team-game margin on team-game box aggregates, apply
-the fitted weights to individual player lines.
-
-Steps:
- 1. Fit margin weights on 2023-24 + 2024-25 team-games; validate out-of-sample
-    on 2025-26 (predicted team-diff vs actual margin correlation).
- 2. Compare the metric to the old NetPoints per player-season (rank shift).
- 3. Rerun the core balancing under margin-NP: tiers/scale, negative-value share
-    (the floor problem), noise anatomy, frozen vs trailing requote leak (all
-    seasons), true last-season opening drift + uplift refit, fixed-roster user
-    bands, 7-day shorts, and a rate sweep against the same legibility bands.
-
-Pure replay arithmetic; the only randomness is none.
+The team regression does not identify individual causal impact or a player-score
+zero point. Its uncentered player component is a research statistic, not a new
+game rule. Historical cohorts are retrospective; explicitly marked fixed-roster
+replays select players and prices using only observations before their start.
 """
 from __future__ import annotations
 
@@ -169,6 +155,82 @@ def old_np(row: dict[str, object]) -> float:
     return NetPointsModel().score(line)
 
 
+def prior_only_locks(series, start: date, *, limit: int = UNIVERSE_SIZE):
+    """Select a fixed pool and mean-cost proxy from strictly earlier game dates."""
+    prior = {pid: [value for day, value in values if day < start]
+             for pid, values in series.items()}
+    eligible = [pid for pid, values in prior.items() if len(values) >= TRAIL_MIN]
+    selected = sorted(eligible, key=lambda pid: (-len(prior[pid]), pid))[:limit]
+    return {pid: fmean(prior[pid]) for pid in selected}
+
+
+def prior_rosters(locks, slots: int = SLOTS):
+    positive = sorted((pid for pid, cost in locks.items() if cost > 0),
+                      key=lambda pid: (-locks[pid], pid))
+    if len(positive) < slots:
+        raise ValueError(f"need {slots} positive prior-only cost proxies; found {len(positive)}")
+    mid = len(positive) // 2
+    start = max(0, min(mid - slots // 2, len(positive) - slots))
+    return {"high prior mean": positive[:slots], "middle prior mean": positive[start:start + slots]}
+
+
+def quote_residuals(series):
+    """Gross residuals after three prior observations; never price the warmup."""
+    residuals = {key: [] for key in ("frozen", "weekly", "full")}
+    history = []
+    quotes = None
+    last_week = None
+    for day, value in sorted(series, key=lambda item: item[0]):
+        prior = [v for d, v in history if d < day]
+        if len(prior) >= TRAIL_MIN:
+            trailing = fmean(prior[-TRAIL:])
+            if quotes is None:
+                quotes = dict.fromkeys(residuals, trailing)
+            quotes["full"] = trailing
+            week = day.isocalendar()[:2]
+            if week != last_week:
+                quotes["weekly"] = trailing
+                last_week = week
+            for key in residuals:
+                residuals[key].append(value - quotes[key])
+        history.append((day, value))
+    return residuals
+
+
+def prior_transition_uplifts(raw_drifts):
+    """The first transition calibrates only; later ones use completed transitions."""
+    return [None if index == 0 else fmean(raw_drifts[:index])
+            for index in range(len(raw_drifts))]
+
+
+def fixed_roster_bands(series, dates, start, locks, rosters):
+    """Gross fixed-roster residuals, including zero-net nights with game exposure."""
+    by_date = defaultdict(list)
+    for pid, values in series.items():
+        for day, value in values:
+            by_date[day].append((pid, value))
+    bands = {}
+    for name, pids in rosters.items():
+        held = set(pids)
+        active = []
+        weeks = defaultdict(float)
+        total = 0.0
+        for day in dates:
+            if day < start:
+                continue
+            exposed = [(pid, value) for pid, value in by_date[day] if pid in held]
+            net = sum(value - locks[pid] for pid, value in exposed)
+            if exposed:
+                active.append(net)
+            weeks[day.isocalendar()[:2]] += net
+            total += net
+        if not active:
+            raise ValueError(f"roster {name} has no post-entry observations")
+        bands[name] = (pstdev(active), pct([abs(v) for v in active], .95),
+                       pstdev(list(weeks.values())), pct([abs(v) for v in weeks.values()], .95), total)
+    return bands
+
+
 def main() -> int:
     season_rows = {label: load_rows(path) for label, path in SEASONS}
 
@@ -182,16 +244,14 @@ def main() -> int:
     corr = cov / (pstdev(predicted) * pstdev(actual))
 
     lines = [
-        "# Scoring-margin impact — metric fit and rebalanced economy",
+        "# Team-margin fit and descriptive pricing diagnostics",
         "",
-        "**Data reality check:** no pipeline source carries per-player on-court "
-        "plus-minus (ESPN cache, BDL /stats, and BDL /box_scores were all "
-        "inspected). Team scores + affiliations exist everywhere, so this study "
-        "fits box-score weights TO team scoring margin (BPM family) — the "
-        "implementable version of Russ's ask. If he means literal on-court +/-, "
-        "that needs a new provider field before anything can settle on it.",
+        "This regression uses final box scores to describe same-game team margin; "
+        "it is not a pregame forecast or identified individual impact estimator. "
+        "ESPN's saved summaries separately contain raw player plus-minus. "
+        "No dollar rate, price floor, fees, roster policy or live provider capability is validated here.",
         "",
-        "## 1. Fitted margin weights (train 2023-24+2024-25, 9,832 team-games)",
+        f"## 1. Fitted margin weights (train 2023-24 + 2024-25, {len(train):,} team-games)",
         "",
         "| Stat | Weight (margin pts per unit) | Old NetPoints weight |",
         "|---|---:|---:|",
@@ -209,9 +269,14 @@ def main() -> int:
         lines.append(f"| {stat} | {weights[stat]:+.3f} | {old_weights.get(stat, 0):+.2f} |")
     lines.append(f"| intercept (fit only, not applied) | {intercept:+.2f} | — |")
     lines.append("")
+    lines.append("Only the fitted regressors are tabulated; the complete engine comparison also includes FGM, FTM, three-point attempts and minutes.")
+    lines.append("The intercept is used in the team prediction. The player tables below use only the uncentered linear component; its zero point is not calibrated individual margin impact.")
+    lines.append("")
     lines.append(
-        f"Out-of-sample validation (2025-26, {len(test):,} team-games): predicted "
-        f"vs actual margin correlation **r = {corr:.3f}**."
+        f"Held-season same-game association (2025-26, {len(test):,} team-games): fitted "
+        f"vs actual margin correlation **r = {corr:.3f}**, "
+        f"RMSE {math.sqrt(fmean([(p-a)**2 for p,a in zip(predicted, actual)])):.3f} points. "
+        "Correlation alone does not establish calibration, attribution or statistical equivalence to another metric."
     )
     lines.append("")
 
@@ -249,16 +314,18 @@ def main() -> int:
 
     negative = [p for p, m in season_mean.items() if m <= 0]
     ranked = sorted(season_mean.items(), key=lambda kv: -kv[1])
-    lines.append("## 2. Scale, ranking shift, and the negative-value problem")
+    lines.append("## 2. Retrospective player means and uncentered score scale")
+    lines.append("")
+    lines.append("The top-150 cohort uses completed-season appearance counts. It describes this sample and is not a pregame listing rule or unrestricted league ranking.")
     lines.append("")
     lines.append(
         f"Player-season means (2025-26, {len(season_mean)} listed players): metric SD "
         f"{pstdev(list(season_mean.values())):.2f} margin-pts vs old-NP SD "
-        f"{pstdev(list(old_mean.values())):.2f}; correlation between the two rankings "
-        f"**ρ ≈ {corr2:.3f}**."
+        f"{pstdev(list(old_mean.values())):.2f}; Pearson correlation between player means "
+        f"**r = {corr2:.3f}** (not a rank correlation)."
     )
     lines.append("")
-    lines.append(f"**{len(negative)} of {len(season_mean)} listed players have ≤0 expected margin impact** — they cannot be fairly priced above a floor and are structurally unholdable longs. (Old NP: 0 players ≤0.)")
+    lines.append(f"**{len(negative)} of {len(season_mean)} sampled players have nonpositive uncentered season means**; engine means: {sum(value <= 0 for value in old_mean.values())} nonpositive. These are observed means, not expected causal impact or a validated floor policy.")
     lines.append("")
     lines.append("| Player | Margin-NP/game | Old NP/game |")
     lines.append("|---|---:|---:|")
@@ -266,7 +333,9 @@ def main() -> int:
         lines.append(f"| {cur['names'][pid]} | {m:+.2f} | {old_mean[pid]:.2f} |")
     lines.append("")
 
-    lines.append("## 3. Requote leak per settled game (margin-NP, all seasons)")
+    lines.append("## 3. Gross quote residuals after a three-game warmup (uncentered score)")
+    lines.append("")
+    lines.append("Prices use strictly prior dates. Warmup games are excluded. No fees or floor are applied; training-season rows are in-sample diagnostics under the fitted weights.")
     lines.append("")
     lines.append("| Season | frozen at open | weekly requote | nightly full |")
     lines.append("|---|---:|---:|---:|")
@@ -276,21 +345,9 @@ def main() -> int:
         for pid, s in data["series"].items():
             if len(s) < 5:
                 continue
-            opening = fmean([v for _, v in s[:3]])
-            quotes = {k: opening for k in leaks}
-            history: list[float] = []
-            last_week = None
-            for d, v in s:
-                trailing = fmean(history[-TRAIL:]) if len(history) >= TRAIL_MIN else None
-                if trailing is not None:
-                    quotes["full"] = trailing
-                    wk = d.isocalendar()[:2]
-                    if wk != last_week:
-                        quotes["weekly"] = trailing
-                        last_week = wk
-                for k in leaks:
-                    leaks[k].append(v - quotes[k])
-                history.append(v)
+            residuals = quote_residuals(s)
+            for key in leaks:
+                leaks[key].extend(residuals[key])
         leak_results[label] = {k: fmean(v) for k, v in leaks.items()}
         lines.append(
             f"| {label} | {leak_results[label]['frozen']:+.3f} | "
@@ -298,10 +355,10 @@ def main() -> int:
         )
     lines.append("")
 
-    lines.append("## 4. True last-season opening lock (margin-NP)")
+    lines.append("## 4. Prior-season mean residual and chronological uplift diagnostic")
     lines.append("")
-    lines.append("| Season pair | Raw drift/game | With fitted uplift |")
-    lines.append("|---|---:|---:|")
+    lines.append("| Season pair | Raw drift/game | Uplift from earlier transitions | Residual after earlier uplift |")
+    lines.append("|---|---:|---:|---:|")
     uplifts = []
     for (pl, pd_), (cl, cd) in zip(list(per_season.items()), list(per_season.items())[1:]):
         prior_np = {pid: fmean(v) for pid, v in pd_["all"].items() if len(v) >= 20}
@@ -313,77 +370,48 @@ def main() -> int:
             for _, v in s:
                 drifts.append(v - lock)
         raw = fmean(drifts)
+        prior_uplift = prior_transition_uplifts([*uplifts, raw])[-1]
+        lines.append(f"| {pl} → {cl} | {raw:+.3f} | " + ("not available | calibration only |" if prior_uplift is None else f"{prior_uplift:+.3f} | {raw-prior_uplift:+.3f} |"))
         uplifts.append(raw)
-        lines.append(f"| {pl} → {cl} | {raw:+.3f} | {raw - fmean(uplifts):+.3f} (uplift +{fmean(uplifts):.2f}) |")
     lines.append("")
-    uplift = fmean(uplifts)
-    lines.append(f"Mean YoY uplift under margin-NP: **+{uplift:.2f} margin-pts/game** (additive; the ×1.08 proportional form fails here because near-zero players cannot be scaled).")
+    lines.append("The current transition never enters its own uplift. Historical cohorts remain retrospective and the first transition is within the model's fitting period; these two pairs do not validate a production uplift or a multiplicative alternative.")
     lines.append("")
 
-    dates = sorted({d for s in cur["series"].values() for d, _ in s})
+    # The executable diagnostic pool includes all players observed before entry,
+    # not the retrospective top-150 population used in the descriptive tables.
+    full_series = defaultdict(list)
+    for row in sorted(cur["rows"], key=lambda r: (r["date"], r["game_id"], r["pid"])):
+        full_series[str(row["pid"])].append((row["date"], margin_np(row, weights)))
+    dates = sorted({day for values in full_series.values() for day, _ in values})
+    if len(dates) <= 10:
+        raise ValueError("need more than ten observed game dates for fixed-roster replay")
     lock_day = dates[10]
-    by_date: dict[date, list[tuple[str, float]]] = defaultdict(list)
-    for pid, s in cur["series"].items():
-        for d, v in s:
-            by_date[d].append((pid, v))
-
-    def replay(roster_pids: list[str]) -> list[float]:
-        locks = {}
-        for pid in roster_pids:
-            m = season_mean.get(pid)
-            if m is not None:
-                locks[pid] = m
-        return [
-            sum(v - locks[pid] for pid, v in by_date[d] if pid in locks) if d >= lock_day else 0.0
-            for d in dates
-        ]
-
-    positive_ranked = [pid for pid, m in ranked if m > 0]
-    mid = len(positive_ranked) // 2
-    lines.append("## 5. User P&L bands and the rate sweep (margin-NP units)")
+    locks = prior_only_locks(full_series, lock_day)
+    rosters = prior_rosters(locks)
+    band_rows = fixed_roster_bands(full_series, dates, lock_day, locks, rosters)
+    lines.append("## 5. Prior-only fixed-roster residuals and dollar sensitivity")
     lines.append("")
-    band_rows = {}
-    for name, pids in (("stars", positive_ranked[:SLOTS]), ("balanced", positive_ranked[mid - 5:mid + 5])):
-        daily = replay(pids)
-        active = [v for v in daily if v != 0.0]
-        weeks: dict[tuple[int, int], float] = defaultdict(float)
-        for d, v in zip(dates, daily):
-            weeks[d.isocalendar()[:2]] += v
-        band_rows[name] = (pstdev(active), pct([abs(v) for v in active], 0.95), pstdev(list(weeks.values())), pct([abs(v) for v in list(weeks.values())], 0.95))
-    lines.append("| Roster | Night SD | Night p95 | Week SD | Week p95 | (margin-pts) |")
-    lines.append("|---|---:|---:|---:|---:|---|")
-    for name, (nsd, np95, wsd, wp95) in band_rows.items():
-        lines.append(f"| {name} | {nsd:.1f} | {np95:.1f} | {wsd:.1f} | {wp95:.1f} | |")
+    lines.append(f"Entry date {lock_day}: pool chosen by prior appearances, ranking and fixed cost proxies from strictly earlier mean scores (at least three games). No final-season ranking or mean sets these locks.")
+    lines.append("These are gross research residuals, not the full game ledger: no signing fees, price floor, market impact, roster changes or budget constraint. Dollar rows only multiply the same path by a rate; none is approved.")
     lines.append("")
-
-    star_cost = ranked[0][1]
-    floor_np_val = pct(sorted(m for _, m in ranked if m > 0), 0.05)
-    nsd, np95, wsd, wp95 = band_rows["balanced"]
-    lines.append("| Rate | Star cost/game | Night p95 | Week p95 | p05 positive player | Floor OK | Verdict |")
-    lines.append("|---|---:|---:|---:|---:|:---:|---|")
+    lines.append("| Roster | Night SD | Night abs-p95 | Week SD | Week abs-p95 | Season total (score units) |")
+    lines.append("|---|---:|---:|---:|---:|---:|")
+    for name, (nsd, np95, wsd, wp95, total) in band_rows.items():
+        lines.append(f"| {name} | {nsd:.1f} | {np95:.1f} | {wsd:.1f} | {wp95:.1f} | {total:+.1f} |")
+    lines.append("")
+    positive_locks = sorted(value for value in locks.values() if value > 0)
+    star_cost = max(positive_locks)
+    floor_np_val = pct(positive_locks, .05)
+    _, np95, _, wp95, _ = band_rows["middle prior mean"]
+    lines.append("| Rate | Highest prior cost proxy | Night abs-p95 | Week abs-p95 | p05 positive prior cost | p05 at least $25K? |")
+    lines.append("|---|---:|---:|---:|---:|:---:|")
     for rate in CAND_RATES:
-        night = np95 * rate
-        week = wp95 * rate
-        fl = floor_np_val * rate >= QUOTE_FLOOR
-        bits = []
-        if night < 150_000:
-            bits.append("nights feel flat")
-        if night > 750_000:
-            bits.append("nights too violent")
-        if week > 2_000_000:
-            bits.append("weeks too violent")
-        if star_cost * rate > 1_000_000:
-            bits.append("star cost 7 figures")
-        if not fl:
-            bits.append("floor distorts")
-        verdict = "; ".join(bits) if bits else "**in band**"
-        lines.append(
-            f"| ${rate/1000:.0f}K | ${star_cost*rate:,.0f} | ±${night:,.0f} | ±${week:,.0f} "
-            f"| ${floor_np_val*rate:,.0f} | {'yes' if fl else 'no'} | {verdict} |"
-        )
+        lines.append(f"| ${rate/1000:.0f}K | ${star_cost*rate:,.0f} | ${np95*rate:,.0f} | ${wp95*rate:,.0f} | ${floor_np_val*rate:,.0f} | {'yes' if floor_np_val*rate >= QUOTE_FLOOR else 'no'} |")
     lines.append("")
 
-    lines.append("## 6. Shorts (7-day windows, margin-NP units)")
+    lines.append("## 6. Gross inverse-score residuals (7-calendar-day windows)")
+    lines.append("")
+    lines.append("Retrospective player cohort; each window uses prior-date trailing means. These are independent player windows, not a short-roster strategy; fees, floors, slot limits, DNP rules and early-close policy are absent.")
     lines.append("")
     pnl: list[float] = []
     for pid, s in cur["series"].items():
@@ -396,6 +424,8 @@ def main() -> int:
                 continue
             quote = fmean(history[-TRAIL:])
             end = start_day + timedelta(days=6)
+            if end > dates[-1]:
+                break  # Right-censored windows are not complete seven-day observations.
             total = 0.0
             scan = index
             while scan < len(s) and s[scan][0] <= end:
@@ -405,7 +435,7 @@ def main() -> int:
             index = scan
     lines.append(
         f"{len(pnl):,} windows: mean {fmean(pnl):+.2f}, SD {pstdev(pnl):.1f} margin-pts, "
-        f"win rate {sum(1 for v in pnl if v > 0)/len(pnl):.1%}."
+        f"win rate {(sum(1 for v in pnl if v > 0)/len(pnl) if pnl else math.nan):.1%}."
     )
     lines.append("")
 

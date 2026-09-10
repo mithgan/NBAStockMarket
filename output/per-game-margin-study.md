@@ -1,10 +1,8 @@
-# Scoring-margin impact — metric fit and rebalanced economy
+# Team-margin fit and descriptive pricing diagnostics
 
-> Historical report: current-engine scoring comparisons below predate the September 10 correction and are superseded. These numbers and related recommendations have not been fully regenerated. See the [correction and available-data results](../docs/per-game-scoring-parity-fix.md).
+This regression uses final box scores to describe same-game team margin; it is not a pregame forecast or identified individual impact estimator. ESPN's saved summaries separately contain raw player plus-minus. No dollar rate, price floor, fees, roster policy or live provider capability is validated here.
 
-**Data reality check:** no pipeline source carries per-player on-court plus-minus (ESPN cache, BDL /stats, and BDL /box_scores were all inspected). Team scores + affiliations exist everywhere, so this study fits box-score weights TO team scoring margin (BPM family) — the implementable version of Russ's ask. If he means literal on-court +/-, that needs a new provider field before anything can settle on it.
-
-## 1. Fitted margin weights (train 2023-24+2024-25, 9,832 team-games)
+## 1. Fitted margin weights (train 2023-24 + 2024-25, 4,920 team-games)
 
 | Stat | Weight (margin pts per unit) | Old NetPoints weight |
 |---|---:|---:|
@@ -20,59 +18,71 @@
 | three_pm | +0.017 | +0.10 |
 | intercept (fit only, not applied) | -20.56 | — |
 
-Out-of-sample validation (2025-26, 2,460 team-games): predicted vs actual margin correlation **r = 0.876**.
+Only the fitted regressors are tabulated; the complete engine comparison also includes FGM, FTM, three-point attempts and minutes.
+The intercept is used in the team prediction. The player tables below use only the uncentered linear component; its zero point is not calibrated individual margin impact.
 
-## 2. Scale, ranking shift, and the negative-value problem
+Held-season same-game association (2025-26, 2,460 team-games): fitted vs actual margin correlation **r = 0.876**, RMSE 7.970 points. Correlation alone does not establish calibration, attribution or statistical equivalence to another metric.
 
-Player-season means (2025-26, 150 listed players): metric SD 3.55 margin-pts vs old-NP SD 4.54; correlation between the two rankings **ρ ≈ -0.093**.
+## 2. Retrospective player means and uncentered score scale
 
-**38 of 150 listed players have ≤0 expected margin impact** — they cannot be fairly priced above a floor and are structurally unholdable longs. (Old NP: 0 players ≤0.)
+The top-150 cohort uses completed-season appearance counts. It describes this sample and is not a pregame listing rule or unrestricted league ranking.
+
+Player-season means (2025-26, 150 listed players): metric SD 3.55 margin-pts vs old-NP SD 4.50; Pearson correlation between player means **r = -0.080** (not a rank correlation).
+
+**38 of 150 sampled players have nonpositive uncentered season means**; engine means: 0 nonpositive. These are observed means, not expected causal impact or a validated floor policy.
 
 | Player | Margin-NP/game | Old NP/game |
 |---|---:|---:|
 | Rudy Gobert | +14.86 | 11.60 |
-| Donovan Clingan | +13.42 | 12.90 |
+| Donovan Clingan | +13.42 | 12.74 |
 | Moussa Diabate | +11.48 | 8.95 |
 | Jalen Duren | +11.40 | 18.09 |
-| Neemias Queta | +11.05 | 10.94 |
-| Kel'el Ware | +10.96 | 10.72 |
-| Karl-Anthony Towns | +10.13 | 16.69 |
+| Neemias Queta | +11.05 | 10.93 |
+| Kel'el Ware | +10.96 | 10.57 |
+| Karl-Anthony Towns | +10.13 | 16.48 |
 | Deandre Ayton | +9.38 | 10.84 |
 
-## 3. Requote leak per settled game (margin-NP, all seasons)
+## 3. Gross quote residuals after a three-game warmup (uncentered score)
+
+Prices use strictly prior dates. Warmup games are excluded. No fees or floor are applied; training-season rows are in-sample diagnostics under the fitted weights.
 
 | Season | frozen at open | weekly requote | nightly full |
 |---|---:|---:|---:|
-| 2023-24 | +0.112 | +0.019 | +0.005 |
-| 2024-25 | +0.456 | +0.024 | +0.016 |
-| 2025-26 | +0.465 | +0.046 | +0.029 |
+| 2023-24 | +0.116 | +0.020 | +0.005 |
+| 2024-25 | +0.475 | +0.025 | +0.016 |
+| 2025-26 | +0.485 | +0.048 | +0.031 |
 
-## 4. True last-season opening lock (margin-NP)
+## 4. Prior-season mean residual and chronological uplift diagnostic
 
-| Season pair | Raw drift/game | With fitted uplift |
-|---|---:|---:|
-| 2023-24 → 2024-25 | +0.298 | +0.000 (uplift +0.30) |
-| 2024-25 → 2025-26 | +0.257 | -0.021 (uplift +0.28) |
+| Season pair | Raw drift/game | Uplift from earlier transitions | Residual after earlier uplift |
+|---|---:|---:|---:|
+| 2023-24 → 2024-25 | +0.298 | not available | calibration only |
+| 2024-25 → 2025-26 | +0.257 | +0.298 | -0.041 |
 
-Mean YoY uplift under margin-NP: **+0.28 margin-pts/game** (additive; the ×1.08 proportional form fails here because near-zero players cannot be scaled).
+The current transition never enters its own uplift. Historical cohorts remain retrospective and the first transition is within the model's fitting period; these two pairs do not validate a production uplift or a multiplicative alternative.
 
-## 5. User P&L bands and the rate sweep (margin-NP units)
+## 5. Prior-only fixed-roster residuals and dollar sensitivity
 
-| Roster | Night SD | Night p95 | Week SD | Week p95 | (margin-pts) |
-|---|---:|---:|---:|---:|---|
-| stars | 13.0 | 25.4 | 27.2 | 45.4 | |
-| balanced | 10.2 | 20.1 | 23.9 | 54.3 | |
+Entry date 2025-10-31: pool chosen by prior appearances, ranking and fixed cost proxies from strictly earlier mean scores (at least three games). No final-season ranking or mean sets these locks.
+These are gross research residuals, not the full game ledger: no signing fees, price floor, market impact, roster changes or budget constraint. Dollar rows only multiply the same path by a rate; none is approved.
 
-| Rate | Star cost/game | Night p95 | Week p95 | p05 positive player | Floor OK | Verdict |
-|---|---:|---:|---:|---:|:---:|---|
-| $10K | $148,564 | ±$201,319 | ±$542,647 | $3,887 | no | floor distorts |
-| $15K | $222,846 | ±$301,978 | ±$813,970 | $5,830 | no | floor distorts |
-| $20K | $297,127 | ±$402,638 | ±$1,085,294 | $7,773 | no | floor distorts |
-| $25K | $371,409 | ±$503,297 | ±$1,356,617 | $9,717 | no | floor distorts |
-| $30K | $445,691 | ±$603,956 | ±$1,627,941 | $11,660 | no | floor distorts |
-| $40K | $594,255 | ±$805,275 | ±$2,170,588 | $15,547 | no | nights too violent; weeks too violent; floor distorts |
-| $50K | $742,818 | ±$1,006,594 | ±$2,713,234 | $19,433 | no | nights too violent; weeks too violent; floor distorts |
+| Roster | Night SD | Night abs-p95 | Week SD | Week abs-p95 | Season total (score units) |
+|---|---:|---:|---:|---:|---:|
+| high prior mean | 13.1 | 28.0 | 30.3 | 90.7 | -973.4 |
+| middle prior mean | 9.6 | 20.7 | 22.6 | 52.6 | -428.1 |
 
-## 6. Shorts (7-day windows, margin-NP units)
+| Rate | Highest prior cost proxy | Night abs-p95 | Week abs-p95 | p05 positive prior cost | p05 at least $25K? |
+|---|---:|---:|---:|---:|:---:|
+| $10K | $163,459 | $206,876 | $525,980 | $3,855 | no |
+| $15K | $245,189 | $310,314 | $788,971 | $5,783 | no |
+| $20K | $326,919 | $413,752 | $1,051,961 | $7,711 | no |
+| $25K | $408,649 | $517,190 | $1,314,951 | $9,639 | no |
+| $30K | $490,378 | $620,628 | $1,577,941 | $11,566 | no |
+| $40K | $653,838 | $827,504 | $2,103,922 | $15,422 | no |
+| $50K | $817,297 | $1,034,381 | $2,629,902 | $19,277 | no |
 
-3,138 windows: mean -0.16, SD 11.6 margin-pts, win rate 50.4%.
+## 6. Gross inverse-score residuals (7-calendar-day windows)
+
+Retrospective player cohort; each window uses prior-date trailing means. These are independent player windows, not a short-roster strategy; fees, floors, slot limits, DNP rules and early-close policy are absent.
+
+3,031 windows: mean -0.18, SD 11.7 margin-pts, win rate 50.3%.
