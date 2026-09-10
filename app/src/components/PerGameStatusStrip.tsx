@@ -101,46 +101,50 @@ export function PerGameStatusStrip() {
             </Text>
           </View>
         ) : null}
-        <Pressable
-          accessibilityLabel={reconciliationRequired
-            ? 'Reconcile account after uncertain roster action'
-            : 'Refresh per-game market data'}
-          accessibilityRole="button"
-          accessibilityState={{ disabled }}
-          disabled={disabled}
-          onPress={() => {
-            refreshData();
-          }}
-          style={({ pressed }) => [
-            styles.refresh,
-            reconciliationRequired && styles.reconcile,
-            disabled && styles.disabledControl,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={styles.refreshText}>
-            {isRefreshing ? 'WAIT' : reconciliationRequired ? 'RECONCILE' : 'REFRESH'}
-          </Text>
-        </Pressable>
-        {bootstrap.capabilities.canAdvanceReplay ? (
+        {/* The two controls travel as one unit so a narrow wrap never strands
+            a lone button on its own line. */}
+        <View style={styles.actions}>
           <Pressable
-            accessibilityLabel="Advance one night in the sandbox replay"
+            accessibilityLabel={reconciliationRequired
+              ? 'Reconcile account after uncertain roster action'
+              : 'Refresh per-game market data'}
             accessibilityRole="button"
             accessibilityState={{ disabled }}
             disabled={disabled}
             onPress={() => {
-              advanceMockNight();
               refreshData();
             }}
             style={({ pressed }) => [
-              styles.advance,
+              styles.refresh,
+              reconciliationRequired && styles.reconcile,
               disabled && styles.disabledControl,
               pressed && styles.pressed,
             ]}
           >
-            <Text style={styles.advanceText}>+1 NIGHT</Text>
+            <Text style={styles.refreshText}>
+              {isRefreshing ? 'WAIT' : reconciliationRequired ? 'RECONCILE' : 'REFRESH'}
+            </Text>
           </Pressable>
-        ) : null}
+          {bootstrap.capabilities.canAdvanceReplay ? (
+            <Pressable
+              accessibilityLabel="Advance one night in the sandbox replay"
+              accessibilityRole="button"
+              accessibilityState={{ disabled }}
+              disabled={disabled}
+              onPress={() => {
+                advanceMockNight();
+                refreshData();
+              }}
+              style={({ pressed }) => [
+                styles.advance,
+                disabled && styles.disabledControl,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.advanceText}>+1 NIGHT</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
       <View style={styles.earnings}>
         {earnings ? (
@@ -258,10 +262,14 @@ const styles = StyleSheet.create({
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
   },
+  actions: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
   refresh: {
     minHeight: 44,
-    minWidth: 82,
-    marginLeft: 'auto',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: space.md,
@@ -277,7 +285,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: space.md,
+    paddingHorizontal: space.sm,
     backgroundColor: colors.gold,
   },
   advanceText: {

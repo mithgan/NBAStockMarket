@@ -17,6 +17,17 @@ import { usePerGame } from '../state/PerGameContext';
 import { buildPerGameMarketRows, type PerGameMarketRow } from '../state/perGameState';
 import { colors, fonts, headingStyle, labelStyle, space, type, weight } from '../theme';
 
+const NAME_SUFFIXES = new Set(['jr.', 'jr', 'sr.', 'sr', 'ii', 'iii', 'iv', 'v']);
+
+/** Broadcast lower-third: quiet given name over the loud surname. */
+function splitPlayerName(name: string): { given: string; surname: string } {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return { given: '', surname: name };
+  let index = parts.length - 1;
+  if (parts.length >= 3 && NAME_SUFFIXES.has(parts[index].toLowerCase())) index -= 1;
+  return { given: parts.slice(0, index).join(' '), surname: parts.slice(index).join(' ') };
+}
+
 function rosterLockMessage(gameDate: string | null): string {
   if (!gameDate) return 'Roster changes are locked while the current game is in progress.';
   const date = new Intl.DateTimeFormat('en-US', {
@@ -54,14 +65,14 @@ function MarketRow({ row, compact }: { row: PerGameMarketRow; compact: boolean }
     : row.unavailableReason && !position
       ? blockedActionLabel
       : actionLabel;
-  const kicker = [
-    player.tier.toUpperCase(),
-    position ? (inverse ? 'INVERSE ACTIVE' : 'ON ROSTER') : null,
-  ].filter(Boolean).join(' · ');
+  const { given, surname } = splitPlayerName(player.name);
+  const kicker = [given.toUpperCase(), player.tier.toUpperCase()]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <View style={styles.row}>
-      <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={36} />
+    <View style={[styles.row, compact && styles.rowTight]}>
+      <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={compact ? 32 : 36} />
       <View
         accessible
         accessibilityLabel={[
@@ -76,7 +87,7 @@ function MarketRow({ row, compact }: { row: PerGameMarketRow; compact: boolean }
       >
         <View style={styles.identity}>
           <Text numberOfLines={1} style={styles.playerKicker}>{kicker}</Text>
-          <Text numberOfLines={compact ? 2 : 1} style={styles.playerName}>{player.name}</Text>
+          <Text numberOfLines={compact ? 2 : 1} style={styles.playerName}>{surname}</Text>
           {row.blockedByOpposingPosition ? (
             <Text numberOfLines={compact ? 2 : 1} style={styles.blockedReason}>
               {row.unavailableReason}
@@ -117,6 +128,7 @@ function MarketRow({ row, compact }: { row: PerGameMarketRow; compact: boolean }
         }}
         style={({ pressed }) => [
           styles.action,
+          compact && styles.actionCompact,
           position ? styles.closeAction : inverse ? styles.inverseAction : styles.addAction,
           disabled && styles.disabled,
           pressed && styles.pressed,
@@ -338,6 +350,10 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     backgroundColor: colors.background,
   },
+  rowTight: {
+    gap: space.sm,
+    paddingHorizontal: space.md,
+  },
   details: {
     minWidth: 0,
     flex: 1,
@@ -397,6 +413,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+  },
+  actionCompact: {
+    width: 64,
   },
   addAction: {
     borderColor: colors.gold,
