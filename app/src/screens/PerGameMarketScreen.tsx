@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 
 import type { PerGamePositionSide } from '../api/contracts';
+import { PlayerAvatar } from '../components/PlayerAvatar';
 import { formatCompactMoney, formatMoney } from '../format';
 import { usePerGame } from '../state/PerGameContext';
 import { buildPerGameMarketRows, type PerGameMarketRow } from '../state/perGameState';
@@ -52,9 +53,14 @@ function MarketRow({ row, compact }: { row: PerGameMarketRow; compact: boolean }
     : row.unavailableReason && !position
       ? blockedActionLabel
       : actionLabel;
+  const kicker = [
+    player.tier.toUpperCase(),
+    position ? (inverse ? 'INVERSE ACTIVE' : 'ON ROSTER') : null,
+  ].filter(Boolean).join(' · ');
 
   return (
-    <View style={[styles.row, compact && styles.rowCompact]}>
+    <View style={styles.row}>
+      <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={36} />
       <View
         accessible
         accessibilityLabel={[
@@ -65,21 +71,21 @@ function MarketRow({ row, compact }: { row: PerGameMarketRow; compact: boolean }
             : `${formatMoney(priorSeasonValuePerGame)} prior season value per game`,
           position ? `${inverse ? 'inverse' : 'roster'} position active` : 'not rostered',
         ].join(', ')}
-        style={[styles.details, compact && styles.detailsCompact]}
+        style={styles.details}
       >
-        <View style={[styles.identity, compact && styles.identityCompact]}>
+        <View style={styles.identity}>
+          <Text numberOfLines={1} style={styles.playerKicker}>{kicker}</Text>
           <Text numberOfLines={1} style={styles.playerName}>{player.name}</Text>
-          <Text numberOfLines={1} style={styles.playerMeta}>
-            {player.tier.toUpperCase()}{position ? ` · ${inverse ? 'INVERSE ACTIVE' : 'ON ROSTER'}` : ''}
-          </Text>
           {row.blockedByOpposingPosition ? (
-            <Text style={styles.blockedReason}>{row.unavailableReason}</Text>
+            <Text numberOfLines={compact ? 2 : 1} style={styles.blockedReason}>
+              {row.unavailableReason}
+            </Text>
           ) : null}
         </View>
-        <View style={[styles.priceColumn, compact && styles.priceColumnCompact]}>
-          <Text style={styles.priceLabel}>CURRENT / GAME</Text>
+        <View style={styles.priceColumn}>
           <Text style={styles.currentPrice}>
             {formatCompactMoney(currentGameCost)}
+            <Text style={styles.perGame}>/GM</Text>
           </Text>
           <Text style={styles.priorValue}>
             {priorSeasonValuePerGame === null
@@ -117,7 +123,7 @@ function MarketRow({ row, compact }: { row: PerGameMarketRow; compact: boolean }
       >
         <Text style={[
           styles.actionText,
-          !position && !inverse && styles.addActionText,
+          !position && (inverse ? styles.inverseActionText : styles.addActionText),
         ]}>
           {visibleActionLabel}
         </Text>
@@ -135,7 +141,7 @@ export function PerGameMarketScreen({
   const { fontScale, width } = useWindowDimensions();
   const [query, setQuery] = useState('');
   const [side, setSide] = useState<PerGamePositionSide>(initialSide);
-  const compact = width < 520 || fontScale > 1.25;
+  const compact = width < 420 || fontScale > 1.25;
   const rows = useMemo(() => {
     if (!bootstrap) return [];
     const normalized = query.trim().toLocaleLowerCase();
@@ -152,12 +158,7 @@ export function PerGameMarketScreen({
   const listHeader = (
     <View style={styles.header}>
       <View style={styles.titleLine}>
-        <View>
-          <Text accessibilityRole="header" style={styles.title}>MARKET</Text>
-          <Text style={styles.subtitle}>
-            Lock today's per-game cost until you drop the player.
-          </Text>
-        </View>
+        <Text accessibilityRole="header" style={styles.title}>Market</Text>
         <Text style={styles.slots}>{slots.used} / {slots.limit}</Text>
       </View>
       <View accessibilityRole="tablist" style={styles.sideTabs}>
@@ -242,27 +243,19 @@ const styles = StyleSheet.create({
   },
   titleLine: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: space.lg,
     paddingHorizontal: space.lg,
-    paddingTop: space.xl,
-    paddingBottom: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.md,
   },
   title: {
     ...headingStyle,
-    letterSpacing: 0,
-  },
-  subtitle: {
-    maxWidth: 520,
-    marginTop: space.xs,
-    color: colors.muted,
-    fontSize: type.body,
-    lineHeight: 20,
   },
   slots: {
     ...labelStyle,
-    color: colors.gold,
+    color: colors.goldInk,
     fontVariant: ['tabular-nums'],
   },
   sideTabs: {
@@ -286,20 +279,22 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: type.label,
     fontWeight: weight.heavy,
+    letterSpacing: 1.1,
   },
   sideTabTextSelected: {
-    color: colors.gold,
+    color: colors.goldInk,
   },
   inverseExplainer: {
     marginHorizontal: space.lg,
     marginTop: space.md,
-    color: colors.cyan,
+    color: colors.muted,
     fontSize: 12,
     lineHeight: 18,
   },
   search: {
-    minHeight: 48,
-    margin: space.lg,
+    minHeight: 44,
+    marginHorizontal: space.lg,
+    marginTop: space.md,
     marginBottom: space.md,
     paddingHorizontal: space.md,
     borderWidth: 1,
@@ -309,7 +304,7 @@ const styles = StyleSheet.create({
     fontSize: type.body,
   },
   columnLabels: {
-    minHeight: 34,
+    minHeight: 30,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: space.lg,
@@ -322,28 +317,25 @@ const styles = StyleSheet.create({
   },
   columnCost: {
     ...labelStyle,
-    width: 142,
+    width: 132,
     textAlign: 'right',
   },
   columnAction: {
     ...labelStyle,
     width: 82,
-    textAlign: 'right',
+    marginLeft: space.md,
+    textAlign: 'center',
   },
   row: {
-    minHeight: 96,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
     paddingHorizontal: space.lg,
-    paddingVertical: space.md,
+    paddingVertical: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     backgroundColor: colors.background,
-  },
-  rowCompact: {
-    minHeight: 142,
-    alignItems: 'center',
   },
   details: {
     minWidth: 0,
@@ -352,58 +344,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
   },
-  detailsCompact: {
-    flexWrap: 'wrap',
-  },
   identity: {
     minWidth: 0,
     flex: 1,
   },
-  identityCompact: {
-    flexBasis: '100%',
+  playerKicker: {
+    ...labelStyle,
+    fontSize: type.label,
+    letterSpacing: 0.6,
   },
   playerName: {
+    marginTop: 1,
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: type.value,
     fontWeight: weight.heavy,
   },
-  playerMeta: {
-    marginTop: 4,
-    color: colors.faint,
-    fontFamily: fonts.display,
-    fontSize: 11,
-    fontWeight: weight.bold,
-  },
   blockedReason: {
-    marginTop: space.xs,
-    color: colors.gold,
+    marginTop: 2,
+    color: colors.goldInk,
     fontSize: 11,
-    lineHeight: 16,
+    lineHeight: 15,
   },
   priceColumn: {
-    width: 142,
     alignItems: 'flex-end',
-  },
-  priceColumnCompact: {
-    width: 'auto',
-    flex: 1,
-    alignItems: 'flex-start',
-  },
-  priceLabel: {
-    ...labelStyle,
-    fontSize: 11,
+    flexShrink: 0,
   },
   currentPrice: {
-    marginTop: 2,
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: type.value,
     fontWeight: weight.heavy,
     fontVariant: ['tabular-nums'],
   },
+  perGame: {
+    color: colors.faint,
+    fontSize: type.label,
+    fontWeight: weight.bold,
+  },
   priorValue: {
-    marginTop: 3,
+    marginTop: 2,
     color: colors.faint,
     fontFamily: fonts.display,
     fontSize: 11,
@@ -422,8 +402,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gold,
   },
   inverseAction: {
-    borderColor: colors.cyan,
-    backgroundColor: colors.cyanSoft,
+    borderColor: colors.goldLine,
+    backgroundColor: colors.goldSoft,
   },
   closeAction: {
     borderColor: colors.borderStrong,
@@ -437,6 +417,9 @@ const styles = StyleSheet.create({
   },
   addActionText: {
     color: colors.background,
+  },
+  inverseActionText: {
+    color: colors.goldInk,
   },
   empty: {
     minHeight: 220,

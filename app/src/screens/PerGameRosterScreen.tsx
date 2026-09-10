@@ -1,10 +1,12 @@
+import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import type { PerGamePosition } from '../api/contracts';
+import type { PerGameLedgerEntry, PerGamePosition } from '../api/contracts';
 import { PerGamePnlChart } from '../components/PerGamePnlChart';
+import { PlayerAvatar } from '../components/PlayerAvatar';
 import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePerGame } from '../state/PerGameContext';
-import { colors, fonts, headingStyle, labelStyle, space, type, weight } from '../theme';
+import { colors, fonts, headingStyle, heroNumber, labelStyle, space, type, weight } from '../theme';
 
 function formatTermDate(value: string): string {
   return new Intl.DateTimeFormat('en-US', {
@@ -14,9 +16,39 @@ function formatTermDate(value: string): string {
   }).format(new Date(`${value}T00:00:00Z`));
 }
 
+const DIVIDEND_KINDS = new Set(['game_dividend', 'dividend', 'dividend_correction', 'correction']);
+const FEE_KINDS = new Set(['open_fee', 'drop_fee', 'fee', 'penalty']);
+
+/** The hero decomposed: score = dividends − game costs − fees, from the ledger. */
+function scoreComponents(entries: PerGameLedgerEntry[]) {
+  let dividends = 0;
+  let gameCosts = 0;
+  let fees = 0;
+  for (const entry of entries) {
+    if (entry.kind === 'game_cost') gameCosts += entry.amountDollars;
+    else if (DIVIDEND_KINDS.has(entry.kind)) dividends += entry.amountDollars;
+    else if (FEE_KINDS.has(entry.kind)) fees += entry.amountDollars;
+  }
+  return { dividends, gameCosts, fees };
+}
+
+function StatCell({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.statCell}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text
+        accessibilityLabel={`${label} ${formatSignedMoney(value)}`}
+        style={[styles.statValue, value >= 0 ? styles.positive : styles.negative]}
+      >
+        {formatCompactSignedMoney(value)}
+      </Text>
+    </View>
+  );
+}
+
 function PositionRow({ position }: { position: PerGamePosition }) {
   const { bootstrap, closePosition, pendingActions } = usePerGame();
-  const { fontScale, width } = useWindowDimensions();
+  const { fontScale } = useWindowDimensions();
   const actionKey = `position:${position.side}:${position.playerId}`;
   const pending = pendingActions.has(actionKey);
   const locked = pendingActions.has('account-mutation');
@@ -27,56 +59,43 @@ function PositionRow({ position }: { position: PerGamePosition }) {
     : 'Roster changes are locked while the current game is in progress.';
   const disabled = pending || locked || rosterLocked;
   const inverse = position.side === 'short';
-  const compact = width < 420 || fontScale > 1.25;
+  const kicker = [
+    `${formatCompactMoney(position.lockedGameCost)}/GM LOCKED`,
+    inverse && position.expiresOn ? `THRU ${formatTermDate(position.expiresOn).toUpperCase()}` : null,
+  ].filter(Boolean).join(' · ');
 
   return (
-    <View style={[styles.positionRow, compact && styles.positionRowCompact]}>
-      <View style={styles.positionCopy}>
-        <View style={styles.positionNameLine}>
-          <Text numberOfLines={1} style={styles.positionName}>{position.playerName}</Text>
-          <Text style={[styles.sideTag, inverse && styles.inverseTag]}>
-            {inverse ? 'INVERSE' : 'ROSTER'}
-          </Text>
-        </View>
-        <Text
-          accessibilityLabel={`Locked game cost ${formatMoney(position.lockedGameCost)}`}
-          style={styles.lockedCost}
-        >
-          {formatCompactMoney(position.lockedGameCost)} locked / game
+    <View style={styles.positionRow}>
+      <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
+      <View
+        accessible
+        accessibilityLabel={[
+          position.playerName,
+          `locked game cost ${formatMoney(position.lockedGameCost)}`,
+          `${inverse ? 'cost credits' : 'game costs'} ${formatMoney(position.cumulativeGameCost)}`,
+          `dividends ${formatMoney(position.cumulativeDividend)}`,
+          `profit and loss ${formatSignedMoney(position.cumulativePnl)}`,
+        ].join(', ')}
+        style={styles.positionCopy}
+      >
+        <Text style={styles.positionKicker}>{kicker}</Text>
+        <Text numberOfLines={fontScale > 1.25 ? undefined : 1} style={styles.positionName}>
+          {position.playerName}
         </Text>
-        <View style={styles.metrics}>
-          <View style={styles.metric}>
-            <Text style={styles.metricLabel}>{inverse ? 'COST CREDITS' : 'GAME COSTS'}</Text>
-            <Text accessibilityLabel={formatMoney(position.cumulativeGameCost)} style={styles.metricValue}>
-              {formatCompactMoney(position.cumulativeGameCost)}
-            </Text>
-          </View>
-          <View style={styles.metric}>
-            <Text style={styles.metricLabel}>{inverse ? 'DIVIDENDS PAID' : 'DIVIDENDS'}</Text>
-            <Text accessibilityLabel={formatMoney(position.cumulativeDividend)} style={styles.metricValue}>
-              {formatCompactMoney(position.cumulativeDividend)}
-            </Text>
-          </View>
-          <View style={styles.metric}>
-            <Text style={styles.metricLabel}>P&amp;L</Text>
-            <Text
-              accessibilityLabel={formatSignedMoney(position.cumulativePnl)}
-              style={[
-                styles.metricValue,
-                position.cumulativePnl >= 0 ? styles.positive : styles.negative,
-              ]}
-            >
-              {formatCompactSignedMoney(position.cumulativePnl)}
-            </Text>
-          </View>
-        </View>
-        {inverse ? (
-          <Text style={styles.inverseCopy}>
-            Each game credits your locked cost, then subtracts the player's dividend.
-            {position.expiresOn ? ` Active through ${formatTermDate(position.expiresOn)}.` : ''}
-          </Text>
-        ) : null}
+        <Text style={styles.positionDetail}>
+          {inverse ? 'credits' : 'costs'} {formatCompactMoney(position.cumulativeGameCost)}
+          {' · '}divs {formatCompactMoney(position.cumulativeDividend)}
+        </Text>
       </View>
+      <Text
+        accessibilityLabel={`Profit and loss ${formatSignedMoney(position.cumulativePnl)}`}
+        style={[
+          styles.positionPnl,
+          position.cumulativePnl >= 0 ? styles.positive : styles.negative,
+        ]}
+      >
+        {formatCompactSignedMoney(position.cumulativePnl)}
+      </Text>
       <Pressable
         accessibilityHint={rosterLocked ? rosterLockHint : undefined}
         accessibilityLabel={rosterLocked
@@ -90,7 +109,6 @@ function PositionRow({ position }: { position: PerGamePosition }) {
         }}
         style={({ pressed }) => [
           styles.dropButton,
-          compact && styles.dropButtonCompact,
           disabled && styles.disabled,
           pressed && styles.pressed,
         ]}
@@ -105,6 +123,7 @@ function PositionRow({ position }: { position: PerGamePosition }) {
 
 function PositionSection({
   title,
+  caption,
   used,
   limit,
   positions,
@@ -112,6 +131,7 @@ function PositionSection({
   onOpenMarket,
 }: {
   title: string;
+  caption?: string;
   used: number;
   limit: number;
   positions: PerGamePosition[];
@@ -121,7 +141,10 @@ function PositionSection({
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text accessibilityRole="header" style={styles.sectionTitle}>{title}</Text>
+        <View style={styles.sectionCopy}>
+          <Text accessibilityRole="header" style={styles.sectionTitle}>{title}</Text>
+          {caption ? <Text style={styles.sectionCaption}>{caption}</Text> : null}
+        </View>
         <Text style={styles.slotCount}>{used} / {limit}</Text>
       </View>
       {positions.length === 0 ? (
@@ -149,12 +172,15 @@ export function PerGameRosterScreen({
   onOpenMarket: (side: PerGamePosition['side']) => void;
 }) {
   const { bootstrap } = usePerGame();
+  const components = useMemo(
+    () => scoreComponents(bootstrap?.ledger.items ?? []),
+    [bootstrap?.ledger.items],
+  );
   if (!bootstrap) return null;
   const active = bootstrap.positions.filter((position) => position.status === 'active');
   const longs = active.filter((position) => position.side === 'long');
   const shorts = active.filter((position) => position.side === 'short');
   const pnl = bootstrap.account.cumulativePnl;
-  const latest = bootstrap.account.latestGamePnl;
 
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.scroll}>
@@ -166,12 +192,13 @@ export function PerGameRosterScreen({
         >
           {formatCompactSignedMoney(pnl)}
         </Text>
-        <Text
-          accessibilityLabel={`Latest game profit and loss ${formatSignedMoney(latest)}`}
-          style={styles.latest}
-        >
-          Latest game {formatCompactSignedMoney(latest)}
-        </Text>
+      </View>
+      <View style={styles.statBar}>
+        <StatCell label="DIVIDENDS" value={components.dividends} />
+        <View style={styles.statRule} />
+        <StatCell label="GAME COSTS" value={components.gameCosts} />
+        <View style={styles.statRule} />
+        <StatCell label="FEES" value={components.fees} />
       </View>
       <PerGamePnlChart entries={bootstrap.ledger.items} />
       <PositionSection
@@ -183,6 +210,7 @@ export function PerGameRosterScreen({
         used={bootstrap.account.longSlots.used}
       />
       <PositionSection
+        caption="Each game credits your locked cost, then subtracts the player's dividend."
         emptyCopy="Inverse positions profit when a player's dividend finishes below your locked game-cost credit."
         limit={bootstrap.account.shortSlots.limit}
         onOpenMarket={() => onOpenMarket('short')}
@@ -202,30 +230,43 @@ const styles = StyleSheet.create({
     paddingBottom: 110,
   },
   hero: {
-    minHeight: 150,
     justifyContent: 'center',
     paddingHorizontal: space.lg,
-    paddingVertical: space.xl,
+    paddingTop: space.xl,
+    paddingBottom: space.lg,
     backgroundColor: colors.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderStrong,
   },
   eyebrow: {
     ...labelStyle,
     marginBottom: space.sm,
   },
   heroValue: {
-    fontFamily: fonts.display,
-    fontSize: 46,
-    fontWeight: weight.black,
-    fontVariant: ['tabular-nums'],
+    ...heroNumber,
   },
-  latest: {
-    marginTop: space.sm,
-    color: colors.muted,
+  statBar: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    paddingVertical: space.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderStrong,
+  },
+  statCell: {
+    flex: 1,
+    paddingHorizontal: space.lg,
+  },
+  statRule: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+  },
+  statLabel: {
+    ...labelStyle,
+    marginBottom: 3,
+  },
+  statValue: {
     fontFamily: fonts.display,
-    fontSize: type.body,
-    fontWeight: weight.bold,
+    fontSize: type.value,
+    fontWeight: weight.heavy,
     fontVariant: ['tabular-nums'],
   },
   section: {
@@ -233,112 +274,83 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderStrong,
   },
   sectionHeader: {
-    minHeight: 62,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: space.lg,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
     backgroundColor: colors.surface,
+  },
+  sectionCopy: {
+    minWidth: 0,
+    flexShrink: 1,
   },
   sectionTitle: {
     ...headingStyle,
     letterSpacing: 0,
   },
+  sectionCaption: {
+    marginTop: 3,
+    color: colors.faint,
+    fontSize: type.label,
+    lineHeight: 15,
+  },
   slotCount: {
     ...labelStyle,
-    color: colors.gold,
+    color: colors.goldInk,
     fontVariant: ['tabular-nums'],
   },
   positionRow: {
-    minHeight: 150,
+    minHeight: 72,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
     paddingHorizontal: space.lg,
-    paddingVertical: space.lg,
+    paddingVertical: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     backgroundColor: colors.background,
-  },
-  positionRowCompact: {
-    flexWrap: 'wrap',
   },
   positionCopy: {
     minWidth: 0,
     flex: 1,
   },
-  positionNameLine: {
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
+  positionKicker: {
+    ...labelStyle,
+    fontSize: type.label,
+    letterSpacing: 0.6,
   },
   positionName: {
-    minWidth: 0,
-    flexShrink: 1,
+    marginTop: 1,
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: type.value,
     fontWeight: weight.heavy,
   },
-  sideTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    color: colors.gold,
-    backgroundColor: colors.goldSoft,
+  positionDetail: {
+    marginTop: 2,
+    color: colors.faint,
     fontFamily: fonts.display,
-    fontSize: 11,
-    fontWeight: weight.heavy,
-  },
-  inverseTag: {
-    color: colors.cyan,
-    backgroundColor: colors.cyanSoft,
-  },
-  lockedCost: {
-    marginTop: 5,
-    color: colors.muted,
-    fontSize: type.body,
-    fontVariant: ['tabular-nums'],
-  },
-  metrics: {
-    marginTop: space.md,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: space.lg,
-  },
-  metric: {
-    minWidth: 88,
-  },
-  metricLabel: {
-    ...labelStyle,
-    fontSize: 11,
-  },
-  metricValue: {
-    marginTop: 3,
-    color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: type.body,
+    fontSize: type.label,
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
   },
-  inverseCopy: {
-    marginTop: space.sm,
-    color: colors.faint,
-    fontSize: 11,
-    lineHeight: 16,
+  positionPnl: {
+    fontFamily: fonts.display,
+    fontSize: type.title,
+    fontWeight: weight.heavy,
+    fontVariant: ['tabular-nums'],
   },
   dropButton: {
-    minWidth: 72,
+    minWidth: 64,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.borderStrong,
     backgroundColor: colors.surfaceRaised,
-  },
-  dropButtonCompact: {
-    marginLeft: 'auto',
   },
   dropButtonText: {
     color: colors.text,
@@ -347,7 +359,6 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
   },
   empty: {
-    minHeight: 160,
     alignItems: 'flex-start',
     justifyContent: 'center',
     padding: space.xl,

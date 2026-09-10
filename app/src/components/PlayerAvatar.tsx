@@ -1,8 +1,13 @@
 import { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
-import type { Player } from '../data/types';
 import { colors, fonts, radius, weight } from '../theme';
+
+/** The minimal identity a headshot needs; the full Player satisfies it. */
+interface AvatarPlayer {
+  id: string;
+  name: string;
+}
 
 function initials(name: string) {
   return name
@@ -19,7 +24,7 @@ function initials(name: string) {
  * keeps a column of 300 faces aligned. Falls back to initials when the ESPN
  * headshot 404s.
  */
-export function PlayerAvatar({ player, size = 38 }: { player: Player; size?: number }) {
+export function PlayerAvatar({ player, size = 38 }: { player: AvatarPlayer; size?: number }) {
   const [failed, setFailed] = useState(false);
 
   return (

@@ -8,24 +8,26 @@ export function PerGameLeaderboardScreen() {
   const { bootstrap } = usePerGame();
   const { fontScale, width } = useWindowDimensions();
   if (!bootstrap) return null;
-  const compact = width < 520 || fontScale > 1.2;
+  // Rows wrap only for large text; a narrow phone still reads one row per line.
+  const compact = fontScale > 1.2;
+  const narrow = width < 520 || compact;
   const rows = [...bootstrap.leaderboard].sort((left, right) => left.rank - right.rank);
   const current = rows.find((row) => row.isCurrentUser) ?? null;
 
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.scroll}>
       <View style={styles.header}>
-        <Text accessibilityRole="header" style={styles.title}>P&amp;L LEADERS</Text>
+        <Text accessibilityRole="header" style={styles.title}>Leaders</Text>
         <Text style={styles.subtitle}>Ranked by cumulative game P&amp;L from a $0 starting score.</Text>
         {current ? (
-          <View style={[styles.currentSummary, compact && styles.currentSummaryCompact]}>
+          <View style={[styles.currentSummary, narrow && styles.currentSummaryCompact]}>
             <Text style={styles.currentLabel}>YOUR RANK</Text>
             <Text style={styles.currentRank}>#{current.rank}</Text>
             <Text
               accessibilityLabel={`Your cumulative profit and loss ${formatSignedMoney(current.cumulativePnl)}`}
               style={[
                 styles.currentPnl,
-                compact && styles.currentPnlCompact,
+                narrow && styles.currentPnlCompact,
                 current.cumulativePnl >= 0 ? styles.positive : styles.negative,
               ]}
             >
@@ -34,7 +36,7 @@ export function PerGameLeaderboardScreen() {
           </View>
         ) : null}
       </View>
-      {!compact ? (
+      {!narrow ? (
         <View style={styles.tableHead}>
           <Text style={styles.rankLabel}>RANK</Text>
           <Text style={styles.nameLabel}>PLAYER</Text>
@@ -52,7 +54,8 @@ export function PerGameLeaderboardScreen() {
         >
           <Text style={[styles.rank, compact && styles.rankCompact]}>#{row.rank}</Text>
           <Text style={[styles.name, compact && styles.nameCompact]}>
-            {row.displayName}{row.isCurrentUser ? '  YOU' : ''}
+            {row.displayName}
+            {row.isCurrentUser ? <Text style={styles.youTag}>{'  YOU'}</Text> : null}
           </Text>
           <Text
             accessibilityLabel={`${row.displayName}, ${formatSignedMoney(row.cumulativePnl)} cumulative profit and loss`}
@@ -86,7 +89,6 @@ const styles = StyleSheet.create({
   },
   title: {
     ...headingStyle,
-    letterSpacing: 0,
   },
   subtitle: {
     marginTop: space.sm,
@@ -160,8 +162,17 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingVertical: space.md,
   },
+  // You are marked in gold ink and a gold rule, not by tinting your whole row.
   currentRow: {
-    backgroundColor: colors.goldSoft,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.gold,
+    backgroundColor: colors.surface,
+  },
+  youTag: {
+    color: colors.goldInk,
+    fontSize: type.label,
+    fontWeight: weight.heavy,
+    letterSpacing: 1.1,
   },
   rank: {
     width: 58,

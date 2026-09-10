@@ -3,6 +3,7 @@ import { FlatList, StyleSheet, Text, useWindowDimensions, View } from 'react-nat
 import type { PerGameLedgerEntry, PerGameSettledResult } from '../api/contracts';
 import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePerGame } from '../state/PerGameContext';
+import { PlayerAvatar } from '../components/PlayerAvatar';
 import {
   buildPerGameActivity,
   perGamePlayerName,
@@ -46,6 +47,8 @@ function ResultRow({ compact, result, playerName }: {
 
   return (
     <View style={styles.row}>
+      <PlayerAvatar player={{ id: result.playerId, name: playerName }} size={28} />
+      <View style={styles.rowBody}>
       <View style={[styles.rowHeader, compact && styles.rowHeaderCompact]}>
         <View style={[styles.identity, compact && styles.identityCompact]}>
           <Text style={styles.playerName}>{playerName}</Text>
@@ -99,6 +102,7 @@ function ResultRow({ compact, result, playerName }: {
           This result does not reconcile. Refresh before relying on it.
         </Text>
       ) : null}
+      </View>
     </View>
   );
 }
@@ -136,6 +140,8 @@ function FeeActivityRow({ compact, entry, playerName }: {
       accessible
       style={styles.row}
     >
+      <PlayerAvatar player={{ id: entry.playerId, name: playerName }} size={28} />
+      <View style={styles.rowBody}>
       <View style={[styles.rowHeader, compact && styles.rowHeaderCompact]}>
         <View style={[styles.identity, compact && styles.identityCompact]}>
           <Text style={styles.playerName}>{playerName}</Text>
@@ -149,6 +155,7 @@ function FeeActivityRow({ compact, entry, playerName }: {
         </View>
       </View>
       <Text style={styles.feeExplanation}>{feeExplanation(entry, playerName)}</Text>
+      </View>
     </View>
   );
 }
@@ -174,10 +181,7 @@ export function PerGameResultsScreen() {
       )}
       ListHeaderComponent={(
         <View style={styles.header}>
-          <Text accessibilityRole="header" style={styles.title}>GAME RESULTS</Text>
-          <Text style={styles.subtitle}>
-            Every row shows the exact cost, dividend, and net P&amp;L. Fees show their direct score change, and corrections never charge the game cost twice.
-          </Text>
+          <Text accessibilityRole="header" style={styles.title}>Results</Text>
         </View>
       )}
       maxToRenderPerBatch={12}
@@ -217,29 +221,27 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: space.lg,
-    paddingVertical: space.xl,
+    paddingVertical: space.lg,
     backgroundColor: colors.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
   },
   title: {
     ...headingStyle,
-    letterSpacing: 0,
-  },
-  subtitle: {
-    maxWidth: 700,
-    marginTop: space.sm,
-    color: colors.muted,
-    fontSize: type.body,
-    lineHeight: 20,
   },
   row: {
-    minHeight: 120,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: space.md,
     paddingHorizontal: space.lg,
-    paddingVertical: space.lg,
+    paddingVertical: space.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
     backgroundColor: colors.background,
+  },
+  rowBody: {
+    minWidth: 0,
+    flex: 1,
   },
   rowHeader: {
     minWidth: 0,
@@ -296,7 +298,7 @@ const styles = StyleSheet.create({
   feeTag: {
     paddingHorizontal: 6,
     paddingVertical: 3,
-    color: colors.gold,
+    color: colors.goldInk,
     backgroundColor: colors.goldSoft,
     fontFamily: fonts.display,
     fontSize: 11,
@@ -337,7 +339,7 @@ const styles = StyleSheet.create({
   unsettled: {
     ...labelStyle,
     marginTop: space.md,
-    color: colors.gold,
+    color: colors.goldInk,
   },
   reconcileError: {
     marginTop: space.sm,
