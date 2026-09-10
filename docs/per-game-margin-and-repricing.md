@@ -1,5 +1,7 @@
 # Scoring-Margin Impact & Weekly Repricing — Results
 
+> Historical report: current-engine scoring comparisons below predate the September 10 correction and are superseded. These numbers and related recommendations have not been fully regenerated. See the [correction and available-data results](per-game-scoring-parity-fix.md).
+
 **Author:** Mith · **Date:** 2026-09-08 (rev 2) · **For:** Ryan's two asks — "rerun the
 balancing with scoring-margin impact before picking a rate" and "update their cost each
 week but limit how much it can change… then test it against keeping the price they

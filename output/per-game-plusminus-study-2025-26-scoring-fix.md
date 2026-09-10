@@ -1,10 +1,8 @@
+> Corrected scoring, 2025–26 subset only. Historical cross-season sections are intentionally empty. This is not the full three-season study.
+
 # On-court plus-minus as the dividend basis
 
-> Historical report: current-engine scoring comparisons below predate the September 10 correction and are superseded. These numbers and related recommendations have not been fully regenerated. See the [correction and available-data results](../docs/per-game-scoring-parity-fix.md).
-
-- 2023-24: extracted 26,498 player-game +/- values, joined 26,283/26,283 log rows (100.0%).
-- 2024-25: extracted 26,373 player-game +/- values, joined 26,206/26,206 log rows (100.0%).
-- 2025-26: extracted 26,632 player-game +/- values, joined 26,540/26,540 log rows (100.0%).
+- 2025-26: extracted 26,640 player-game +/- values, joined 26,547/26,547 log rows (100.0%).
 
 ## 1. Split-half reliability (the skill ceiling, 2025-26 listed players)
 
@@ -13,7 +11,7 @@ how much of what you pay for tonight is a repeatable trait vs dice:
 
 | Metric | Split-half r | Per-game SD around player mean |
 |---|---:|---:|
-| old NetPoints | 0.954 | 7.07 |
+| old NetPoints | 0.945 | 6.65 |
 | margin-fit box | 0.953 | 5.23 |
 | raw +/- | 0.678 | 12.34 |
 
@@ -25,14 +23,10 @@ Listed players with a season mean: 150. **52 (35%) have ≤0 expected value** (o
 
 | Season | frozen at open | weekly requote | nightly full |
 |---|---:|---:|---:|
-| 2023-24 | +1.006 | +0.140 | +0.100 |
-| 2024-25 | +0.315 | +0.088 | +0.063 |
 | 2025-26 | +0.148 | +0.106 | +0.076 |
 
 ## 4. YoY opening drift (lock at prior-season mean +/-)
 
-- 2023-24 → 2024-25: +0.587 margin-pts/game over 9,593 games.
-- 2024-25 → 2025-26: +0.872 margin-pts/game over 9,495 games.
 
 ## 5. User P&L bands and rate sweep (raw +/-)
 

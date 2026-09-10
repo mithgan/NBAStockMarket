@@ -1,5 +1,7 @@
 # Per-Game Economy v2 — Balancing Findings
 
+> Historical report: current-engine scoring comparisons below predate the September 10 correction and are superseded. These numbers and related recommendations have not been fully regenerated. See the [correction and available-data results](per-game-scoring-parity-fix.md).
+
 **Author:** Mith · **Date:** 2026-09-06 · **Status:** complete test battery, constants ready for the live ruleset
 
 Every number in this document was measured by running a sim or replay on cached real

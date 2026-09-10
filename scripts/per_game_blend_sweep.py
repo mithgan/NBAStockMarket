@@ -34,7 +34,7 @@ OLD_WEIGHTS = {
     "dreb": _ENGINE.defensive_rebounds, "ast": _ENGINE.ast, "stl": _ENGINE.stl,
     "blk": _ENGINE.blk, "tov": _ENGINE.tov, "fga": _ENGINE.fga,
     "fgm": _ENGINE.fgm, "three_pa": _ENGINE.three_pa, "three_pm": _ENGINE.three_pm,
-    "fta": _ENGINE.fta, "ftm": _ENGINE.ftm,
+    "fta": _ENGINE.fta, "ftm": _ENGINE.ftm, "minutes": _ENGINE.minutes,
 }
 ALPHAS = (1.0, 0.75, 0.5, 0.25, 0.0)
 UNIVERSE_SIZE = 150

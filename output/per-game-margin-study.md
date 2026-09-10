@@ -1,5 +1,7 @@
 # Scoring-margin impact — metric fit and rebalanced economy
 
+> Historical report: current-engine scoring comparisons below predate the September 10 correction and are superseded. These numbers and related recommendations have not been fully regenerated. See the [correction and available-data results](../docs/per-game-scoring-parity-fix.md).
+
 **Data reality check:** no pipeline source carries per-player on-court plus-minus (ESPN cache, BDL /stats, and BDL /box_scores were all inspected). Team scores + affiliations exist everywhere, so this study fits box-score weights TO team scoring margin (BPM family) — the implementable version of Russ's ask. If he means literal on-court +/-, that needs a new provider field before anything can settle on it.
 
 ## 1. Fitted margin weights (train 2023-24+2024-25, 9,832 team-games)
