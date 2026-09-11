@@ -11,6 +11,7 @@ import { AuthProvider, useAuth, useOptionalAuth } from './src/auth/AuthContext';
 import { AuthScreen } from './src/auth/AuthScreen';
 import { seasonLabelFor } from './src/data/calendar';
 import { PerGameStatusStrip as SeasonControl } from './src/components/PerGameStatusStrip';
+import { SimBar } from './src/components/SimBar';
 import { SettingsButton, SettingsSheet } from './src/components/SettingsSheet';
 import { useReducedMotion } from './src/hooks/useReducedMotion';
 import { PerGameLeaderboardScreen as LeaderboardScreen } from './src/screens/PerGameLeaderboardScreen';
@@ -291,6 +292,7 @@ function AppBody() {
       </View>
       {ready && wide ? renderTabBar('top') : null}
       {ready ? <SeasonControl /> : null}
+      {ready ? <SimBar /> : null}
       {authError && clearAuthMessage ? (
         <NoticeBanner message={authError} onDismiss={clearAuthMessage} />
       ) : message ? (

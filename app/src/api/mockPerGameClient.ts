@@ -49,21 +49,41 @@ export class MockPerGameApiClient {
   /** Full nightly history per listed player, for the in-depth profile. */
   private trendsByPlayer: Record<string, TrendPoint[]> = {};
 
+  /** The sandbox season's opening date, for the sim bar's day counter. */
+  seasonStart: string | null;
+
   constructor() {
+    this.seasonStart = null;
+    this.snapshot = this.openingSnapshot();
+    this.cursor = this.snapshot.game.eventCursor;
+    this.sequence = this.cursor;
+  }
+
+  /** Restart the season in place — the provider keeps its client reference. */
+  reset(): void {
+    this.snapshot = this.openingSnapshot();
+    this.cursor = this.snapshot.game.eventCursor;
+    this.sequence = this.cursor;
+    this.positionCounter = 0;
+    this.trendsByPlayer = {};
+    this.rng = makeRng(20_262_027);
+  }
+
+  private openingSnapshot(): PerGameBootstrap {
     const parsed = parsePerGameBootstrap(
       (fixtureJson as { data: unknown }).data,
       'mockFixture',
     );
-    this.snapshot = clone(parsed);
-    this.snapshot.capabilities = { ...this.snapshot.capabilities, canAdvanceReplay: true };
-    this.snapshot.ruleset = {
-      ...this.snapshot.ruleset,
+    const snapshot = clone(parsed);
+    this.seasonStart = snapshot.game.lastSettledDate ?? snapshot.game.nextGameDate;
+    snapshot.capabilities = { ...snapshot.capabilities, canAdvanceReplay: true };
+    snapshot.ruleset = {
+      ...snapshot.ruleset,
       rosterMutationsLocked: false,
       rosterLockGameDate: null,
     };
-    this.snapshot.account = { ...this.snapshot.account, displayName: 'Mock preview' };
-    this.cursor = this.snapshot.game.eventCursor;
-    this.sequence = this.cursor;
+    snapshot.account = { ...snapshot.account, displayName: 'Mock preview' };
+    return snapshot;
   }
 
   async bootstrap(afterCursor?: number): Promise<PerGameBootstrap> {
@@ -376,6 +396,25 @@ export function isMockActive(): boolean {
 /** Full sandbox nightly history for one player; empty outside the mock. */
 export function mockPlayerTrends(playerId: string): TrendPoint[] {
   return singleton ? singleton.trendsFor(playerId) : [];
+}
+
+/** The sandbox season's opening date; null outside the mock. */
+export function mockSeasonStart(): string | null {
+  return singleton?.seasonStart ?? null;
+}
+
+/** Settle several nights in one gesture (the sim bar's +1 WEEK). */
+export function advanceMockNights(count: number): boolean {
+  if (!singleton) return false;
+  for (let night = 0; night < count; night += 1) singleton.advanceNight();
+  return true;
+}
+
+/** Restart the sandbox season from the opening snapshot. */
+export function resetMock(): boolean {
+  if (!singleton) return false;
+  singleton.reset();
+  return true;
 }
 
 /** Called by the status strip's sandbox control; true when a mock is active. */

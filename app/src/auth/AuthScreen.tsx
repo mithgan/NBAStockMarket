@@ -135,6 +135,18 @@ export function AuthScreen() {
           >
             <Text style={styles.secondaryText}>CREATE ACCOUNT</Text>
           </Pressable>
+          {typeof window !== 'undefined' ? (
+            <Pressable
+              accessibilityLabel="Explore the sandbox season without an account"
+              accessibilityRole="button"
+              onPress={() => {
+                window.location.search = '?mock';
+              }}
+              style={({ pressed }) => [styles.sandboxLink, pressed && styles.pressed]}
+            >
+              <Text style={styles.sandboxText}>NO ACCOUNT? EXPLORE THE SANDBOX SEASON ▸</Text>
+            </Pressable>
+          ) : null}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -142,6 +154,8 @@ export function AuthScreen() {
 }
 
 const styles = StyleSheet.create({
+  sandboxLink: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
+  sandboxText: { color: colors.gold, fontSize: 11, fontWeight: '900', letterSpacing: 1 },
   container: { flex: 1, backgroundColor: colors.background },
   content: { flexGrow: 1, justifyContent: 'center', alignSelf: 'center', width: '100%', maxWidth: 480, padding: 24 },
   mark: { width: 44, height: 44, borderRadius: 7, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },

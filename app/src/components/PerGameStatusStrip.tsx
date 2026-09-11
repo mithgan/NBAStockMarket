@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { advanceMockNight, isMockActive } from '../api/mockPerGameClient';
 import { formatCompactMoney, formatCompactSignedMoney, formatSignedMoney } from '../format';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, fonts, labelStyle, space, type, weight } from '../theme';
@@ -85,12 +84,6 @@ export function PerGameStatusStrip() {
             {bootstrap.account.longSlots.used} / {bootstrap.account.longSlots.limit}
           </Text>
         </View>
-        {bootstrap.capabilities.canAdvanceReplay && isMockActive() ? (
-          <View style={[styles.item, reflow && styles.itemReflow]}>
-            <Text style={styles.label}>MODE</Text>
-            <Text style={[styles.value, styles.sandbox]}>SANDBOX</Text>
-          </View>
-        ) : null}
         {rules.rosterMutationsLocked ? (
           <View
             accessible
@@ -131,25 +124,6 @@ export function PerGameStatusStrip() {
               {isRefreshing ? 'WAIT' : reconciliationRequired ? 'RECONCILE' : 'REFRESH'}
             </Text>
           </Pressable>
-          {bootstrap.capabilities.canAdvanceReplay && isMockActive() ? (
-            <Pressable
-              accessibilityLabel="Advance one night in the sandbox replay"
-              accessibilityRole="button"
-              accessibilityState={{ disabled }}
-              disabled={disabled}
-              onPress={() => {
-                advanceMockNight();
-                refreshData();
-              }}
-              style={({ pressed }) => [
-                styles.advance,
-                disabled && styles.disabledControl,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={styles.advanceText}>+1 NIGHT</Text>
-            </Pressable>
-          ) : null}
         </View>
       </View>
       <View style={styles.earnings}>
@@ -287,19 +261,6 @@ const styles = StyleSheet.create({
     borderColor: colors.gold,
     backgroundColor: colors.goldSoft,
   },
-  advance: {
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: space.sm,
-    backgroundColor: colors.gold,
-  },
-  advanceText: {
-    color: colors.background,
-    fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.black,
-  },
   refreshText: {
     color: colors.goldInk,
     fontFamily: fonts.display,
@@ -375,9 +336,6 @@ const styles = StyleSheet.create({
     fontSize: type.label,
     fontWeight: weight.bold,
     lineHeight: 17,
-  },
-  sandbox: {
-    color: colors.goldInk,
   },
   up: {
     color: colors.green,
