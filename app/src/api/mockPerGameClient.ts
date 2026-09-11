@@ -32,6 +32,9 @@ function addDays(iso: string, days: number): string {
 }
 
 /** Deterministic RNG so a mock session replays the same season every reload. */
+/** Opening-night eve of the 2025-26 season — the sandbox's Day 0. */
+const SANDBOX_OPENING_EVE = '2025-10-20';
+
 function makeRng(seed: number) {
   let state = seed >>> 0;
   return () => {
@@ -75,6 +78,14 @@ export class MockPerGameApiClient {
       'mockFixture',
     );
     const snapshot = clone(parsed);
+    // The sandbox replays last season's calendar: Day 0 is the eve of the
+    // 2025-26 opener (Oct 21, 2025), so the 174-day track walks the real dates.
+    snapshot.game = {
+      ...snapshot.game,
+      seasonId: '2025-26',
+      lastSettledDate: SANDBOX_OPENING_EVE,
+      nextGameDate: addDays(SANDBOX_OPENING_EVE, 1),
+    };
     this.seasonStart = snapshot.game.lastSettledDate ?? snapshot.game.nextGameDate;
     snapshot.capabilities = { ...snapshot.capabilities, canAdvanceReplay: true };
     snapshot.ruleset = {
