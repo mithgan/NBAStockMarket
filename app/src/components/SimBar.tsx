@@ -29,9 +29,10 @@ function dateLabel(value: string): string {
 }
 
 /**
- * The season progression bar: where the sandbox is in its season, and the
- * controls that move it. Renders only while the mock market is driving —
- * the live game's clock belongs to the server.
+ * The season progression bar. While the sandbox drives, its controls settle
+ * nights; in the signed-in app the same bar is the sandbox's front door —
+ * one tap enters a practice season, and the real account stays signed in
+ * (the live game's clock belongs to the server).
  */
 export function SimBar() {
   const {
@@ -47,16 +48,22 @@ export function SimBar() {
     const timer = setTimeout(() => setConfirmingReset(false), 4000);
     return () => clearTimeout(timer);
   }, [confirmingReset]);
-  if (!bootstrap || !isMockActive()) return null;
+  const mockDriving = isMockActive();
+  const canEnterSandbox = typeof window !== 'undefined';
+  if (!bootstrap || (!mockDriving && !canEnterSandbox)) return null;
 
-  const disabled = !isGameplayReady || isRefreshing || pendingActions.size > 0;
-  const start = mockSeasonStart();
-  const settled = bootstrap.game.lastSettledDate;
+  const enterSandbox = () => {
+    window.location.search = '?mock';
+  };
+  const disabled = mockDriving
+    && (!isGameplayReady || isRefreshing || pendingActions.size > 0);
+  const start = mockDriving ? mockSeasonStart() : null;
+  const settled = mockDriving ? bootstrap.game.lastSettledDate : null;
   const day = start && settled
     ? Math.min(Math.max(daysBetween(start, settled), 0), SEASON_TOTAL_DAYS)
     : 0;
   const progress = day / SEASON_TOTAL_DAYS;
-  const seasonComplete = day >= SEASON_TOTAL_DAYS;
+  const seasonComplete = mockDriving && day >= SEASON_TOTAL_DAYS;
   const advanceDisabled = disabled || seasonComplete;
 
   return (
@@ -65,32 +72,50 @@ export function SimBar() {
         <View style={styles.readoutCopy}>
           <Text style={styles.eyebrow}>SANDBOX SEASON REPLAY</Text>
           <Text numberOfLines={1} style={styles.date}>
-            {settled ? dateLabel(settled) : 'Opening night eve'}
-            <Text style={styles.dayCount}>  ·  Day {day} / {SEASON_TOTAL_DAYS}</Text>
+            {mockDriving
+              ? (settled ? dateLabel(settled) : 'Opening night eve')
+              : 'Practice season — your account is untouched'}
+            {mockDriving ? (
+              <Text style={styles.dayCount}>  ·  Day {day} / {SEASON_TOTAL_DAYS}</Text>
+            ) : null}
           </Text>
         </View>
-        <Pressable
-          accessibilityLabel={confirmingReset
-            ? 'Confirm restarting the sandbox season'
-            : 'Restart the sandbox season'}
-          accessibilityRole="button"
-          accessibilityState={{ disabled }}
-          disabled={disabled}
-          onPress={() => {
-            if (confirmingReset) {
-              setConfirmingReset(false);
-              resetMock();
-              refreshData();
-            } else {
-              setConfirmingReset(true);
-            }
-          }}
-          style={({ pressed }) => [styles.resetButton, pressed && !disabled && styles.pressed]}
-        >
-          <Text style={[styles.resetText, confirmingReset && styles.resetArmed]}>
-            {confirmingReset ? 'SURE?' : 'RESET'}
-          </Text>
-        </Pressable>
+        {mockDriving && canEnterSandbox ? (
+          <Pressable
+            accessibilityLabel="Leave the sandbox and return to the live market"
+            accessibilityRole="button"
+            onPress={() => {
+              window.location.search = '';
+            }}
+            style={({ pressed }) => [styles.resetButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.resetText}>EXIT</Text>
+          </Pressable>
+        ) : null}
+        {mockDriving ? (
+          <Pressable
+            accessibilityLabel={confirmingReset
+              ? 'Confirm restarting the sandbox season'
+              : 'Restart the sandbox season'}
+            accessibilityRole="button"
+            accessibilityState={{ disabled }}
+            disabled={disabled}
+            onPress={() => {
+              if (confirmingReset) {
+                setConfirmingReset(false);
+                resetMock();
+                refreshData();
+              } else {
+                setConfirmingReset(true);
+              }
+            }}
+            style={({ pressed }) => [styles.resetButton, pressed && !disabled && styles.pressed]}
+          >
+            <Text style={[styles.resetText, confirmingReset && styles.resetArmed]}>
+              {confirmingReset ? 'SURE?' : 'RESET'}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <View
@@ -112,6 +137,10 @@ export function SimBar() {
             disabled={advanceDisabled}
             key={label}
             onPress={() => {
+              if (!mockDriving) {
+                enterSandbox();
+                return;
+              }
               advanceMockNights(nights);
               refreshData();
             }}
