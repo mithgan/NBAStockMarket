@@ -3,6 +3,42 @@ import test from 'node:test';
 
 import { resolvePublicAppConfig } from './config';
 
+const stagingEnvironment = {
+  authProvider: 'databallr',
+  apiUrl: 'http://localhost:8787/v1/apps/stock-market',
+  apiPrefix: '/v2',
+  oauthIssuer: 'https://accounts.databallr.dev/api/auth',
+  oauthClientId: 'registered-public-client',
+  oauthAudience: 'https://api.databallr.dev/v1/apps/stock-market',
+  oauthRedirectUri: 'http://localhost:8080/',
+};
+
+test('explicit staging login needs no Supabase credentials and preserves the exact callback', () => {
+  const result = resolvePublicAppConfig(stagingEnvironment);
+  assert.equal(result.error, null);
+  assert.equal(result.config?.authProvider, 'databallr');
+  assert.ok(result.config?.authProvider === 'databallr');
+  assert.equal(result.config.oauth.redirectUri, 'http://localhost:8080/');
+  assert.equal('supabaseUrl' in result.config, false);
+});
+
+test('invalid Databallr configuration cannot fall back to valid Supabase credentials', () => {
+  for (const override of [
+    { oauthClientId: '' }, { oauthIssuer: 'https://accounts.databallr.com/api/auth' },
+    { oauthIssuer: 'http://accounts.databallr.dev/api/auth' },
+    { oauthAudience: 'https://api.databallr.dev/v1/other' },
+    { oauthRedirectUri: 'http://127.0.0.1:8080/' },
+    { oauthRedirectUri: 'http://localhost:8080' },
+    { oauthRedirectUri: 'http://localhost:8080/?next=other' },
+    { authProvider: 'databallr-typo' },
+  ]) {
+    const result = resolvePublicAppConfig({ ...stagingEnvironment,
+      supabaseUrl: 'https://example.supabase.co', supabasePublishableKey: 'public-key', ...override });
+    assert.equal(result.config, null, JSON.stringify(override));
+    assert.ok(result.error);
+  }
+});
+
 test('public app config accepts only explicit HTTP URLs and a publishable key', () => {
   assert.deepEqual(resolvePublicAppConfig({
     apiUrl: 'http://127.0.0.1:8011/',

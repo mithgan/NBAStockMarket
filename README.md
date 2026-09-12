@@ -290,3 +290,37 @@ report generation makes no network calls. The replay selects the top 150 players
 (with reported salary fallbacks), and evaluates 100 seeded buy-and-hold 10-player portfolios. The default expectation
 model is cached Dunks & Threes; missing projection rows use the salary-implied cold-start prior.
 Trading and live Dunks & Threes calls are deliberately disabled during replay.
+
+## Shared Databallr login — staging preview
+
+The migration branch adds `EXPO_PUBLIC_AUTH_PROVIDER=databallr`. Leaving it unset
+preserves the published app's Supabase login. A misconfigured Databallr login
+stops with an error; it never falls back to another issuer.
+
+Use `app/.env.staging.example` for the local preview, with the separate stock-market
+Worker running on port 8787. Copy it to `app/.env.local`, then run from `app/`:
+
+```sh
+npm ci
+npm run web -- --localhost --port 8080
+```
+
+Open `http://localhost:8080/`, not `127.0.0.1`. This exact return URL is registered
+for the Official staging public/native client. The app requests only `openid`,
+`profile`, and `email`, with code flow and S256 PKCE. No client secret belongs in
+the frontend. The issuer and game audience are staging-only; a hosted preview,
+mobile build, or production rollout needs its own approved redirect/configuration.
+
+Access tokens stay in memory. Reloading, expiry, or an API authentication rejection
+requires signing in again. Signing out clears this game's session; it does not
+sign you out of the Databallr platform. The popup hands its callback directly to
+the originating game window; no auth state or token is saved in browser storage.
+The app checks the callback,
+state, and issuer, then obtains account identity from the issuer's authenticated
+userinfo endpoint. The Worker independently verifies the signed access token.
+
+Local tests: `npm test` and `npx tsc --noEmit` from `app/`. Staging sign-in also
+requires the auth service's game-resource change and the configured stock-market
+Worker. A rendered login button does not establish that hosted login or trading
+works. The staging auth upload currently needs permission to use the existing
+Cloudflare Secrets Store bindings; the game connector also needs Hyperdrive Admin.

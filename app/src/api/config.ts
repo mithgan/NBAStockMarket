@@ -1,19 +1,59 @@
-export interface PublicAppConfig {
+interface ApiConfiguration {
   apiUrl: string;
   apiPrefix: string;
+}
+
+export interface SupabaseAppConfig extends ApiConfiguration {
+  authProvider?: 'supabase';
   supabaseUrl: string;
   supabasePublishableKey: string;
 }
+
+export interface DataballrOAuthConfig {
+  issuer: string;
+  clientId: string;
+  audience: string;
+  redirectUri: string;
+}
+
+export interface DataballrAppConfig extends ApiConfiguration {
+  authProvider: 'databallr';
+  oauth: DataballrOAuthConfig;
+}
+
+export type PublicAppConfig = SupabaseAppConfig | DataballrAppConfig;
 
 export type PublicAppConfigResult =
   | { config: PublicAppConfig; error: null }
   | { config: null; error: string };
 
 interface PublicAppEnvironment {
+  authProvider?: string;
   apiUrl?: string;
   apiPrefix?: string;
   supabaseUrl?: string;
   supabasePublishableKey?: string;
+  oauthIssuer?: string;
+  oauthClientId?: string;
+  oauthAudience?: string;
+  oauthRedirectUri?: string;
+}
+
+function oauthConfig(environment: PublicAppEnvironment): DataballrOAuthConfig {
+  const issuer = normalizedHttpUrl(environment.oauthIssuer, 'Databallr login issuer');
+  const audience = normalizedHttpUrl(environment.oauthAudience, 'Databallr game audience');
+  // This initial integration is the approved staging registration only.
+  if (issuer !== 'https://accounts.databallr.dev/api/auth'
+      || audience !== 'https://api.databallr.dev/v1/apps/stock-market') {
+    throw new Error('Databallr login must use the staging issuer and game audience.');
+  }
+  const clientId = environment.oauthClientId?.trim();
+  if (!clientId) throw new Error('Databallr OAuth client ID is missing.');
+  const redirectUri = environment.oauthRedirectUri?.trim();
+  if (redirectUri !== 'http://localhost:8080/') {
+    throw new Error('This staging login is registered for http://localhost:8080/.');
+  }
+  return { issuer, audience, clientId, redirectUri };
 }
 
 function normalizedApiPrefix(value: string | undefined, apiUrl: string): string {
@@ -82,13 +122,31 @@ function validatePublishableKey(value: string | undefined): string {
 
 export function resolvePublicAppConfig(
   environment: PublicAppEnvironment = {
+    authProvider: process.env.EXPO_PUBLIC_AUTH_PROVIDER,
     apiUrl: process.env.EXPO_PUBLIC_NBA_STOCK_API_URL,
     apiPrefix: process.env.EXPO_PUBLIC_NBA_STOCK_API_PREFIX,
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabasePublishableKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    oauthIssuer: process.env.EXPO_PUBLIC_DATABALLR_OAUTH_ISSUER,
+    oauthClientId: process.env.EXPO_PUBLIC_DATABALLR_OAUTH_CLIENT_ID,
+    oauthAudience: process.env.EXPO_PUBLIC_DATABALLR_OAUTH_AUDIENCE,
+    oauthRedirectUri: process.env.EXPO_PUBLIC_DATABALLR_OAUTH_REDIRECT_URI,
   },
 ): PublicAppConfigResult {
   try {
+    const provider = environment.authProvider?.trim() || 'supabase';
+    if (provider === 'databallr') {
+      const apiUrl = normalizedHttpUrl(environment.apiUrl, 'API URL');
+      return {
+        config: {
+          authProvider: 'databallr', apiUrl,
+          apiPrefix: normalizedApiPrefix(environment.apiPrefix, apiUrl),
+          oauth: oauthConfig(environment),
+        },
+        error: null,
+      };
+    }
+    if (provider !== 'supabase') throw new Error('Unknown authentication provider.');
     const supabasePublishableKey = validatePublishableKey(environment.supabasePublishableKey);
     const apiUrl = normalizedHttpUrl(environment.apiUrl, 'API URL');
     return {

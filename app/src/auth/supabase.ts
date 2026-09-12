@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, processLock, type SupabaseClient } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
 
-import type { PublicAppConfig } from '../api/config';
+import type { SupabaseAppConfig } from '../api/config';
 import { oauthCallbackErrorFromUrl } from './authMessages';
 
 let client: SupabaseClient | null = null;
@@ -12,7 +12,7 @@ let clientFingerprint: string | null = null;
 let appStateListenerInstalled = false;
 let pendingOAuthCallbackError: string | null = null;
 
-export function getSupabaseClient(config: PublicAppConfig): SupabaseClient {
+export function getSupabaseClient(config: SupabaseAppConfig): SupabaseClient {
   const fingerprint = `${config.supabaseUrl}\n${config.supabasePublishableKey}`;
   if (client && clientFingerprint === fingerprint) return client;
 

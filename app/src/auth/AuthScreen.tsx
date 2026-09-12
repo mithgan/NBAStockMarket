@@ -19,11 +19,15 @@ export function AuthScreen() {
   const reducedMotion = useReducedMotion();
   const {
     clearMessage,
+    provider,
+    canSignIn,
+    cancelSignIn,
     error,
     isSubmitting,
     notice,
     signIn,
     signInWithGoogle,
+    signInWithDataballr,
     signUp,
   } = useAuth();
   const [email, setEmail] = useState('');
@@ -58,6 +62,26 @@ export function AuthScreen() {
         ) : null}
 
         <View style={styles.form}>
+          {provider === 'databallr' ? <>
+            <Pressable
+              accessibilityLabel="Sign in with Databallr"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canSignIn, busy: isSubmitting }}
+              disabled={!canSignIn}
+              onPress={() => void signInWithDataballr()}
+              style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.primaryText}>
+                {isSubmitting ? 'WORKING…' : 'SIGN IN WITH DATABALLR'}
+              </Text>
+            </Pressable>
+            {isSubmitting ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Cancel sign-in"
+                onPress={cancelSignIn} style={styles.secondaryButton}>
+                <Text style={styles.secondaryText}>CANCEL SIGN-IN</Text>
+              </Pressable>
+            ) : null}
+          </> : <>
           {Platform.OS === 'web' ? (
             <>
               <Pressable
@@ -135,6 +159,7 @@ export function AuthScreen() {
           >
             <Text style={styles.secondaryText}>CREATE ACCOUNT</Text>
           </Pressable>
+          </>}
           {typeof window !== 'undefined' ? (
             <Pressable
               accessibilityLabel="Explore the sandbox season without an account"

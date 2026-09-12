@@ -1,6 +1,5 @@
-import type { Session, User } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 import {
-  createContext,
   useCallback,
   useContext,
   useEffect,
@@ -11,27 +10,12 @@ import {
 } from 'react';
 
 import type { AccessTokenProvider } from '../api/client';
-import type { PublicAppConfig } from '../api/config';
+import type { PublicAppConfig, SupabaseAppConfig } from '../api/config';
+import { AuthContext, type AuthContextValue } from './authTypes';
+import { DataballrAuthProvider } from './DataballrAuthProvider';
 import { authErrorMessage } from './authMessages';
 import { oauthRedirectUrl } from './oauthRedirect';
 import { getSupabaseClient, takeOAuthCallbackError } from './supabase';
-
-interface AuthContextValue {
-  session: Session | null;
-  user: User | null;
-  isLoading: boolean;
-  isSubmitting: boolean;
-  error: string | null;
-  notice: string | null;
-  signInWithGoogle: () => Promise<boolean>;
-  signIn: (email: string, password: string) => Promise<boolean>;
-  signUp: (email: string, password: string) => Promise<boolean>;
-  signOut: () => Promise<void>;
-  clearMessage: () => void;
-  getAccessToken: AccessTokenProvider;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
 
 function normalizedCredentials(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase();
@@ -45,6 +29,12 @@ function normalizedCredentials(email: string, password: string) {
 }
 
 export function AuthProvider({ config, children }: { config: PublicAppConfig; children: ReactNode }) {
+  return config.authProvider === 'databallr'
+    ? <DataballrAuthProvider config={config}>{children}</DataballrAuthProvider>
+    : <SupabaseAuthProvider config={config}>{children}</SupabaseAuthProvider>;
+}
+
+function SupabaseAuthProvider({ config, children }: { config: SupabaseAppConfig; children: ReactNode }) {
   const supabase = useMemo(() => getSupabaseClient(config), [config]);
   const oauthCallbackError = useRef<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -207,6 +197,10 @@ export function AuthProvider({ config, children }: { config: PublicAppConfig; ch
   }, [supabase]);
 
   const value = useMemo<AuthContextValue>(() => ({
+    provider: 'supabase',
+    canSignIn: !isSubmitting,
+    signInWithDataballr: async () => false,
+    cancelSignIn: () => {},
     session,
     user: session?.user ?? null,
     isLoading,
