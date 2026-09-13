@@ -18,6 +18,7 @@ export interface PerGameAuthenticatedAccessToken {
 
 export type PerGameAccessTokenProvider = (
   forceRefresh: boolean,
+  rejectedAccessToken?: string,
 ) => Promise<PerGameAuthenticatedAccessToken | null>;
 
 export class PerGameApiError extends Error {
@@ -231,13 +232,15 @@ export class PerGameApiClient {
   private async request<T>(path: string, options: RequestOptions<T>): Promise<T> {
     const method = options.method ?? 'GET';
     let forceRefresh = false;
+    let rejectedAccessToken: string | undefined;
     let authRefreshUsed = false;
     let transportRetryUsed = false;
     let mutationMayHaveCommitted = false;
 
     while (true) {
-      const credentials = await this.getAccessToken(forceRefresh);
+      const credentials = await this.getAccessToken(forceRefresh, rejectedAccessToken);
       forceRefresh = false;
+      rejectedAccessToken = undefined;
       if (!credentials) {
         throw new PerGameApiError(
           'Sign in again to continue.',
@@ -298,6 +301,7 @@ export class PerGameApiClient {
       if (response.status === 401 && !authRefreshUsed) {
         authRefreshUsed = true;
         forceRefresh = true;
+        rejectedAccessToken = credentials.accessToken;
         continue;
       }
       if (response.status >= 500 && !transportRetryUsed) {

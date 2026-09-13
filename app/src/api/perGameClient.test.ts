@@ -305,3 +305,44 @@ test('paginated bootstrap rejects a regressive account snapshot before exposing 
     return true;
   });
 });
+
+test('a position auth retry forwards its rejected bearer and keeps the exact command key and body', async () => {
+  const auth: unknown[] = [];
+  const sent: RequestInit[] = [];
+  const api = new PerGameApiClient({
+    baseUrl: 'https://api.example.test', expectedUserId: 'user-1',
+    getAccessToken: async (force, rejectedAccessToken) => {
+      auth.push([force, rejectedAccessToken]);
+      return { userId: 'user-1', accessToken: force ? 'rotated' : 'original' };
+    },
+    idempotencyKeyFactory: () => 'same-position-auth-retry',
+    fetchImpl: async (_url, init) => {
+      sent.push(init!);
+      return sent.length === 1
+        ? Response.json({ error: { code: 'unauthorized', message: 'Expired' } }, { status: 401 })
+        : envelope(example.open_position_response);
+    },
+  });
+  await api.openPosition({ playerId: 'player-2', side: 'short', expectedAccountVersion: 8,
+    expectedQuoteVersion: 5 });
+  assert.deepEqual(auth, [[false, undefined], [true, 'original']]);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[0].body, sent[1].body);
+  assert.deepEqual(sent.map((init) => new Headers(init.headers).get('idempotency-key')),
+    ['same-position-auth-retry', 'same-position-auth-retry']);
+  assert.deepEqual(sent.map((init) => new Headers(init.headers).get('authorization')),
+    ['Bearer original', 'Bearer rotated']);
+});
+
+test('a position cannot retry with a different user returned by token refresh', async () => {
+  let calls = 0;
+  const api = new PerGameApiClient({
+    baseUrl: 'https://api.example.test', expectedUserId: 'user-1',
+    getAccessToken: async (force) => ({ userId: force ? 'user-2' : 'user-1', accessToken: 'fixture' }),
+    fetchImpl: async () => { calls++; return Response.json({ error: 'expired' }, { status: 401 }); },
+  });
+  await assert.rejects(api.openPosition({ playerId: 'player-2', side: 'long', expectedAccountVersion: 8,
+    expectedQuoteVersion: 5 }),
+    (error: unknown) => error instanceof PerGameApiError && error.code === 'account_changed');
+  assert.equal(calls, 1);
+});
