@@ -297,8 +297,17 @@ The migration branch adds `EXPO_PUBLIC_AUTH_PROVIDER=databallr`. Leaving it unse
 preserves the published app's Supabase login. A misconfigured Databallr login
 stops with an error; it never falls back to another issuer.
 
-Use `app/.env.staging.example` for the local preview, with the separate stock-market
-Worker running on port 8787. Copy it to `app/.env.local`, then run from `app/`:
+Copy `app/.env.staging.example` to `app/.env.local`. The example connects to a
+local stock-market Worker on port 8787. To use the deployed staging Worker instead,
+set these two values in `app/.env.local` and keep the example's OAuth settings:
+
+```dotenv
+EXPO_PUBLIC_NBA_STOCK_API_URL=https://databallr-stock-market-api-staging.databallr.workers.dev/v1/apps/stock-market
+EXPO_PUBLIC_NBA_STOCK_API_PREFIX=/v2
+```
+
+The game still runs locally on port 8080; changing the API address does not change
+the login return URL. Start the preview from `app/`:
 
 ```sh
 npm ci
@@ -319,8 +328,25 @@ The app checks the callback,
 state, and issuer, then obtains account identity from the issuer's authenticated
 userinfo endpoint. The Worker independently verifies the signed access token.
 
-Local tests: `npm test` and `npx tsc --noEmit` from `app/`. Staging sign-in also
-requires the auth service's game-resource change and the configured stock-market
-Worker. A rendered login button does not establish that hosted login or trading
-works. The staging auth upload currently needs permission to use the existing
-Cloudflare Secrets Store bindings; the game connector also needs Hyperdrive Admin.
+Local tests: `npm test` and `npx tsc --noEmit` from `app/`.
+
+On September 13, 2026, real Databallr sign-in and authenticated account loading
+were verified against the hosted Worker and its separate staging database.
+The required staging auth change, shared rate guard and game-only Hyperdrive
+connection are deployed; the earlier access issues no longer block this preview.
+Native Worker responses passed metadata and database-readiness checks separately.
+
+A temporary controlled replay also verified long/short trades, closing before
+tipoff, stale account rejection, exact payouts, recovery after a client timeout
+and a correction to a closed position. It used captured October 21–22, 2025 BDL
+data and an explicitly synthetic stat correction. This was hosted database/API
+validation, separate from the app's `?mock` sandbox and its day-advance controls.
+Normal staging was restored afterward; its original account had zero score and
+positions, with the roster locked while waiting for a schedule.
+
+The migration remains in progress. Remaining work includes exact legacy pricing
+parity, configuring the missing `DNT_API_KEY`, and validating live combined
+BDL/DNT processing and actual scheduled-event timing. The controlled replay does
+not prove those live flows or all failure cases. Production needs separate OAuth
+and configuration, a reviewed transfer of scheduler ownership and explicit
+approval; no production cutover has occurred.
