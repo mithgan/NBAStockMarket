@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { AppState, Platform } from 'react-native';
 
 import type { AccessTokenProvider } from '../api/client';
-import type { DataballrAppConfig } from '../api/config';
+import { databallrOAuthScopes, type DataballrAppConfig } from '../api/config';
 import { AuthContext, type AuthContextValue, type GameAuthSession } from './authTypes';
 import { DataballrSessionStore } from './databallrSession';
-import { completeDataballrPopup, openDataballrPopup, type DataballrPopup } from './databallrPopup';
+import { canStartDataballrLogin, completeDataballrPopup, openDataballrPopup, type DataballrPopup } from './databallrPopup';
 
 export function DataballrAuthProvider({
   config,
@@ -72,16 +72,16 @@ export function DataballrAuthProvider({
     if (
       Platform.OS !== 'web' ||
       typeof window === 'undefined' ||
-      window.location.origin + window.location.pathname !== config.oauth.redirectUri
+      !canStartDataballrLogin(config.oauth.redirectUri, window.location.href)
     ) {
-      setError('Open this staging preview at http://localhost:8080/ to sign in.');
+      setError(`Open the game at ${new URL(config.oauth.redirectUri).origin} to sign in.`);
       return;
     }
     try {
       const next = new AuthRequest({
         clientId: config.oauth.clientId,
         redirectUri: config.oauth.redirectUri,
-        scopes: ['openid', 'profile', 'email'],
+        scopes: databallrOAuthScopes(config.oauth),
         responseType: ResponseType.Code,
         usePKCE: true,
         codeChallengeMethod: CodeChallengeMethod.S256,
@@ -112,7 +112,7 @@ export function DataballrAuthProvider({
   useEffect(() => {
     if (!session?.expires_at) return;
     const expire = () => {
-      store.getAccessToken(false);
+      void store.getAccessToken(false, session);
     };
     const timer = setTimeout(expire, Math.max(0, session.expires_at * 1000 - Date.now()));
     const subscription = AppState.addEventListener('change', (state) => {
@@ -173,13 +173,14 @@ export function DataballrAuthProvider({
     actionVersion.current += 1;
     requestRef.current = null;
     setRequest(null);
-    store.clear();
+    const cleanup = store.signOut();
     popupRef.current?.cancel();
     popupRef.current = null;
     setSubmitting(false);
     setError(null);
     setNotice('Signed out of the game. Your Databallr account stays signed in.');
     setGeneration((value) => value + 1);
+    await cleanup;
   }, [store]);
   const cancelSignIn = useCallback(() => {
     actionVersion.current += 1;
@@ -193,9 +194,11 @@ export function DataballrAuthProvider({
     setNotice('Sign-in was cancelled. You can try again.');
     setGeneration((value) => value + 1);
   }, [store]);
+  const loginSession = store.getLoginSession(session);
   const getAccessToken = useCallback<AccessTokenProvider>(
-    async (forceRefresh) => store.getAccessToken(Boolean(forceRefresh), session),
-    [store, session],
+    async (forceRefresh, rejectedAccessToken) =>
+      store.getAccessToken(Boolean(forceRefresh), loginSession, rejectedAccessToken),
+    [store, loginSession],
   );
   const unavailable = useCallback(async () => {
     setError('Use Sign in with Databallr for this game.');

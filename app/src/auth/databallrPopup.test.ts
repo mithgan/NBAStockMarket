@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { completeDataballrPopup, openDataballrPopup } from './databallrPopup';
+import { canStartDataballrLogin, completeDataballrPopup, openDataballrPopup } from './databallrPopup';
 
 const redirect = 'http://localhost:8080/';
 const authUrl = 'https://accounts.databallr.dev/api/auth/oauth2/authorize';
@@ -124,4 +124,30 @@ test('callback completion sends only to the registered opener origin and cleans 
     } as Window),
     'invalid',
   );
+});
+
+test('the game root can start a dedicated-path login but callback delivery requires the exact path', () => {
+  const callback = 'https://game.example.test/oauth/callback';
+  assert.equal(canStartDataballrLogin(callback, 'https://game.example.test/'), true);
+  assert.equal(canStartDataballrLogin(callback, 'https://game.example.test/market'), true);
+  for (const current of ['https://evil.test/', 'http://game.example.test/',
+    'https://game.example.test:444/', 'https://user@game.example.test/', 'bad url']) {
+    assert.equal(canStartDataballrLogin(callback, current), false, current);
+  }
+  const sent: unknown[] = [];
+  const cleaned: unknown[] = [];
+  const host = {
+    location: { href: callback + '?code=fixture&state=fixture' },
+    opener: { postMessage: (...args: unknown[]) => sent.push(args) },
+    history: { state: null, replaceState: (...args: unknown[]) => cleaned.push(args) },
+  } as unknown as Window;
+  for (const path of ['/', '/oauth/callback/', '/oauth/other']) {
+    assert.equal(completeDataballrPopup(callback, { ...host,
+      location: { href: 'https://game.example.test' + path + '?code=fixture' } } as Window), 'invalid');
+  }
+  assert.equal(sent.length, 0);
+  assert.equal(completeDataballrPopup(callback, host), 'delivered');
+  assert.deepEqual(sent, [[{ type: 'databallr-oauth-callback', url: host.location.href },
+    'https://game.example.test']]);
+  assert.deepEqual(cleaned, [[null, '', callback]]);
 });

@@ -35,6 +35,7 @@ export interface AuthenticatedAccessToken {
 
 export type AccessTokenProvider = (
   forceRefresh: boolean,
+  rejectedAccessToken?: string,
 ) => Promise<AuthenticatedAccessToken | null>;
 
 export class MarketApiError extends Error {
@@ -306,13 +307,15 @@ export class MarketApiClient {
   private async request<T>(path: string, options: RequestOptions<T>): Promise<T> {
     const method = options.method ?? 'GET';
     let forceRefresh = false;
+    let rejectedAccessToken: string | undefined;
     let authRefreshUsed = false;
     let transportRetryUsed = false;
     let priorMutationAttemptMayHaveCommitted = false;
 
     while (true) {
-      const credentials = await this.getAccessToken(forceRefresh);
+      const credentials = await this.getAccessToken(forceRefresh, rejectedAccessToken);
       forceRefresh = false;
+      rejectedAccessToken = undefined;
       if (!credentials) {
         throw new MarketApiError(
           'Sign in again to continue.',
@@ -373,6 +376,7 @@ export class MarketApiClient {
       if (response.status === 401 && !authRefreshUsed) {
         authRefreshUsed = true;
         forceRefresh = true;
+        rejectedAccessToken = credentials.accessToken;
         continue;
       }
       if (response.status >= 500 && !transportRetryUsed) {

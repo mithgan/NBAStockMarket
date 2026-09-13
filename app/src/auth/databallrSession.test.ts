@@ -160,11 +160,11 @@ test('a session expires, or is discarded immediately when the API rejects it', a
     fakeFetch().fetcher,
     () => now,
   );
-  assert.equal(store.getAccessToken(false), null);
+  assert.equal(await store.getAccessToken(false), null);
   assert.equal(await store.complete(store.begin(), request), true);
-  assert.deepEqual(store.getAccessToken(false), { accessToken: token.access_token, userId });
+  assert.deepEqual(await store.getAccessToken(false), { accessToken: token.access_token, userId });
   now = 3_601_000;
-  assert.equal(store.getAccessToken(false), null);
+  assert.equal(await store.getAccessToken(false), null);
   assert.equal(snapshots.at(-1), null);
   const second = new DataballrSessionStore(
     config,
@@ -173,8 +173,8 @@ test('a session expires, or is discarded immediately when the API rejects it', a
     () => 1000,
   );
   await second.complete(second.begin(), request);
-  assert.equal(second.getAccessToken(true), null);
-  assert.equal(second.getAccessToken(false), null);
+  assert.equal(await second.getAccessToken(true), null);
+  assert.equal(await second.getAccessToken(false), null);
 });
 
 test('sign-out fences a delayed response and permits a new account attempt', async () => {
@@ -190,7 +190,7 @@ test('sign-out fences a delayed response and permits a new account attempt', asy
   store.clear();
   resolve(Response.json(token));
   assert.equal(await pending, false);
-  assert.equal(store.getAccessToken(false), null);
+  assert.equal(await store.getAccessToken(false), null);
   assert.equal(snapshots.at(-1), null);
   assert.notEqual(store.begin(), attempt);
 });
@@ -244,7 +244,7 @@ test('late API rejections cannot clear a newer session or an in-progress login',
       reply(Response.json({ error: 'expired' }, { status: 401 }));
       await assert.rejects(pending);
       if (!completeNewLogin) assert.equal(await store.complete(nextAttempt, request), true);
-      assert.deepEqual(store.getAccessToken(false), {
+      assert.deepEqual(await store.getAccessToken(false), {
         accessToken: 'new-token',
         userId: nextUser.sub,
       });

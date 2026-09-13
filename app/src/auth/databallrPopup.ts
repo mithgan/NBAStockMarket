@@ -4,6 +4,18 @@ export interface DataballrPopup {
   cancel: () => void;
 }
 
+/** Main pages may start login on the registered callback's origin. Only the
+ * exact callback path may complete it (checked separately below and at exchange). */
+export function canStartDataballrLogin(redirectUri: string, currentUrl: string): boolean {
+  try {
+    const current = new URL(currentUrl);
+    return !current.username && !current.password
+      && current.origin === new URL(redirectUri).origin;
+  } catch {
+    return false;
+  }
+}
+
 /** Expo 54's web dismiss leaves its auth promise pending. Own the web popup
  * lifetime while retaining Expo's AuthRequest for URL/state/S256 PKCE setup. */
 export function openDataballrPopup(

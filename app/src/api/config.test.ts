@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { resolvePublicAppConfig } from './config';
+import { databallrOAuthScopes, resolvePublicAppConfig } from './config';
 
 const stagingEnvironment = {
   authProvider: 'databallr',
@@ -111,4 +111,50 @@ test('public app config accepts only explicit HTTP URLs and a publishable key', 
     supabaseUrl: 'https://example.supabase.co',
     supabasePublishableKey: 'public-key',
   }).error ?? '', /URL path/);
+});
+
+const productionEnvironment = {
+  ...stagingEnvironment,
+  apiUrl: 'https://api.example.test/stock-market',
+  oauthIssuer: 'https://accounts.databallr.com/api/auth',
+  oauthAudience: 'https://api.databallr.com/v1/apps/stock-market',
+  oauthClientId: 'fixture-production-public-client',
+  oauthRedirectUri: 'https://game.example.test/oauth/callback',
+};
+
+test('production accepts an explicit fixture registration tuple without guessing any defaults', () => {
+  const result = resolvePublicAppConfig(productionEnvironment);
+  assert.equal(result.error, null);
+  assert.ok(result.config?.authProvider === 'databallr');
+  assert.deepEqual(result.config.oauth, {
+    issuer: productionEnvironment.oauthIssuer, audience: productionEnvironment.oauthAudience,
+    clientId: productionEnvironment.oauthClientId, redirectUri: productionEnvironment.oauthRedirectUri,
+  });
+  assert.equal('supabaseUrl' in result.config, false);
+  assert.deepEqual(databallrOAuthScopes(result.config.oauth), ['openid', 'profile', 'email', 'offline_access']);
+  const staging = resolvePublicAppConfig(stagingEnvironment);
+  assert.ok(staging.config?.authProvider === 'databallr');
+  assert.deepEqual(databallrOAuthScopes(staging.config.oauth), ['openid', 'profile', 'email']);
+});
+
+test('production requires its matching resource and an exact HTTPS callback with no fallback', () => {
+  for (const override of [
+    { oauthClientId: '' }, { oauthRedirectUri: '' },
+    { oauthIssuer: stagingEnvironment.oauthIssuer }, { oauthAudience: stagingEnvironment.oauthAudience },
+    { oauthAudience: 'https://api.databallr.com' },
+    { oauthIssuer: 'https://accounts.databallr.com/api/auth.evil' },
+    { oauthRedirectUri: 'http://game.example.test/oauth/callback' },
+    { oauthRedirectUri: 'http://localhost:8080/' },
+    { oauthRedirectUri: 'https://localhost:8080/' },
+    { oauthRedirectUri: 'https://game.example.test/oauth/callback?next=/game' },
+    { oauthRedirectUri: 'https://game.example.test/oauth/callback#code' },
+    { oauthRedirectUri: 'https://user:password@game.example.test/oauth/callback' },
+    { oauthRedirectUri: 'https://game.example.test/oauth/../callback' },
+    { oauthRedirectUri: 'https://game.example.test' },
+  ]) {
+    const result = resolvePublicAppConfig({ ...productionEnvironment,
+      supabaseUrl: 'https://example.supabase.co', supabasePublishableKey: 'public-key', ...override });
+    assert.equal(result.config, null, JSON.stringify(override));
+    assert.ok(result.error);
+  }
 });
