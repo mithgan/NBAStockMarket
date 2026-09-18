@@ -230,9 +230,14 @@ export type DividendBasis = 'raw_net_points' | 'surprise_vs_projection';
 export type PerGamePositionSide = 'long' | 'short';
 export type PerGamePositionStatus = 'active' | 'closed';
 export type PerGameResultKind = 'base' | 'correction';
-export type PerGameResultStatus = 'settled' | 'unsettled' | 'unsettled_missing_projection';
+export type PerGameResultStatus =
+  | 'settled'
+  | 'verified_dnp'
+  | 'unsettled'
+  | 'unsettled_missing_projection';
 export type PerGameLedgerKind =
   | 'game_cost'
+  | 'game_cost_correction'
   | 'game_dividend'
   | 'dividend_correction'
   | 'open_fee'
@@ -1052,6 +1057,7 @@ export function parsePerGameLedgerEntry(
       `${path}.kind`,
       [
         'game_cost',
+        'game_cost_correction',
         'game_dividend',
         'dividend_correction',
         'open_fee',
@@ -1084,6 +1090,21 @@ export function parsePerGameSettledResult(
   if ((kind === 'correction') !== (adjustsResultRevision !== null)) {
     throw new ContractError(`${path}.kind must agree with its adjusted revision.`);
   }
+  const status = oneOf(
+    row.status,
+    `${path}.status`,
+    ['settled', 'verified_dnp', 'unsettled', 'unsettled_missing_projection'] as const,
+  );
+  const dividendDollars = nullableInteger(row.dividend_dollars, `${path}.dividend_dollars`);
+  const netPnl = nullableInteger(row.net_pnl_dollars, `${path}.net_pnl_dollars`);
+  if (status === 'verified_dnp') {
+    if (dividendDollars !== 0) {
+      throw new ContractError(`${path}.dividend_dollars must be zero for a verified DNP.`);
+    }
+    if (netPnl !== 0) {
+      throw new ContractError(`${path}.net_pnl_dollars must be zero for a verified DNP.`);
+    }
+  }
   return {
     eventCursor: nonNegativeInteger(row.event_cursor, `${path}.event_cursor`),
     positionId: text(row.position_id, `${path}.position_id`),
@@ -1093,17 +1114,13 @@ export function parsePerGameSettledResult(
     resultRevision: positiveInteger(row.result_revision, `${path}.result_revision`),
     side: oneOf(row.side, `${path}.side`, ['long', 'short'] as const),
     kind,
-    status: oneOf(
-      row.status,
-      `${path}.status`,
-      ['settled', 'unsettled', 'unsettled_missing_projection'] as const,
-    ),
+    status,
     lockedGameCost: nonNegativeInteger(
       row.locked_game_cost_dollars,
       `${path}.locked_game_cost_dollars`,
     ),
-    dividendDollars: nullableInteger(row.dividend_dollars, `${path}.dividend_dollars`),
-    netPnl: nullableInteger(row.net_pnl_dollars, `${path}.net_pnl_dollars`),
+    dividendDollars,
+    netPnl,
     adjustsResultRevision,
   };
 }

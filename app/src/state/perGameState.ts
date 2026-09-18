@@ -105,23 +105,46 @@ function correctionAdjustment(
   result: PerGameSettledResult,
   ledger: readonly PerGameLedgerEntry[],
   results: readonly PerGameSettledResult[],
+  ledgerComplete: boolean,
 ): number | null {
-  const ledgerAdjustment = ledger.find((entry) => (
-    entry.positionId === result.positionId
-    && entry.gameId === result.gameId
-    && entry.resultRevision === result.resultRevision
-    && (entry.kind === 'dividend_correction' || entry.kind === 'correction')
-  ));
-  if (ledgerAdjustment) return ledgerAdjustment.amountDollars;
-
+  const sameGame = (entry: PerGameLedgerEntry) => (
+    entry.positionId === result.positionId && entry.gameId === result.gameId
+  );
   const prior = results.find((candidate) => (
     candidate.positionId === result.positionId
     && candidate.gameId === result.gameId
     && candidate.resultRevision === result.adjustsResultRevision
   ));
-  if (prior?.netPnl !== null && prior?.netPnl !== undefined && result.netPnl !== null) {
-    return result.netPnl - prior.netPnl;
+  const priorAdjustment = prior?.netPnl !== null
+    && prior?.netPnl !== undefined
+    && result.netPnl !== null
+    ? result.netPnl - prior.netPnl
+    : null;
+  const entries = ledger.filter((entry) => (
+    sameGame(entry)
+    && entry.resultRevision === result.resultRevision
+    && ['game_cost_correction', 'dividend_correction', 'correction'].includes(entry.kind)
+  ));
+  // Completed bootstrap loading follows every ledger page and merges all
+  // incremental history, so a missing row here really means no movement.
+  if (ledgerComplete) return entries.reduce((total, entry) => total + entry.amountDollars, 0);
+  if (entries.length > 0) {
+    const hasCost = entries.some((entry) => entry.kind === 'game_cost_correction');
+    const hasDividend = entries.some((entry) => entry.kind === 'dividend_correction');
+    const hasCombinedCorrection = entries.some((entry) => entry.kind === 'correction');
+    const costUnchanged = result.status === 'settled' && prior?.status === 'settled';
+    // Participation corrections change both cost and dividend. A paginated
+    // ledger may contain only one of those rows; do not label it the full delta.
+    if (
+      hasCombinedCorrection
+      || (hasCost && hasDividend)
+      || (!hasCost && hasDividend && costUnchanged)
+    ) return entries.reduce((total, entry) => total + entry.amountDollars, 0);
+    return priorAdjustment;
   }
+  if (priorAdjustment !== null) return priorAdjustment;
+  if (prior?.status === 'verified_dnp' || result.status === 'verified_dnp') return null;
+
   if (
     prior?.dividendDollars !== null
     && prior?.dividendDollars !== undefined
@@ -137,9 +160,25 @@ export function settlementEquation(
   result: PerGameSettledResult,
   ledger: readonly PerGameLedgerEntry[] = [],
   results: readonly PerGameSettledResult[] = [],
+  context: { ledgerComplete?: boolean } = {},
 ): SettlementEquation {
   const correction = result.kind === 'correction';
-  const adjustment = correction ? correctionAdjustment(result, ledger, results) : null;
+  const adjustment = correction
+    ? correctionAdjustment(result, ledger, results, context.ledgerComplete === true)
+    : null;
+  if (result.status === 'verified_dnp') {
+    return {
+      firstLabel: result.side === 'long' ? 'Dividend' : 'Game cost credit',
+      firstAmount: result.side === 'long' ? result.dividendDollars : 0,
+      secondLabel: result.side === 'long' ? 'Game cost charged' : 'Dividend paid',
+      secondAmount: result.side === 'long' ? 0 : result.dividendDollars,
+      operator: '-',
+      netPnl: result.netPnl,
+      reconciles: result.dividendDollars === 0 && result.netPnl === 0,
+      correction,
+      correctionAdjustment: adjustment,
+    };
+  }
   if (
     result.status !== 'settled'
     || result.dividendDollars === null

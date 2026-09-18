@@ -54,7 +54,8 @@ test('inverse language explains cash flow without stock-price claims', () => {
 test('settled games show arithmetic and visibly preserve corrections', () => {
   assert.match(results, /CORRECTION/);
   assert.match(results, /P&L adjustment/);
-  assert.match(results, /locked game cost was not charged again/);
+  assert.match(results, /Adjustment amount unavailable/);
+  assert.doesNotMatch(results, /locked game cost was not charged again/);
   assert.match(state, /Locked game cost/);
   assert.match(state, /Game cost credit/);
   assert.match(results, /does not reconcile/);

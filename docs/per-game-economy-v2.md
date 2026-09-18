@@ -26,7 +26,13 @@ short game P&L = locked cost - dividend
 account P&L    = all game P&L - explicit fees and penalties
 ```
 
-A game is charged once. If the box score is corrected later, the ledger receives only the change in dividend; it does not charge the per-game cost again.
+A played game is charged once. A later scoring correction changes only the dividend. If authoritative participation is corrected between played and did-not-play, the ledger also reverses or applies that game's cost through `game_cost_correction`.
+
+### Verified did-not-play results
+
+The Cloudflare backend uses `verified_dnp` only when the provider explicitly confirms that a player did not play. Neither a long nor a short receives a game-cost charge, game-cost credit, or dividend for that game; its net P&L is zero. The originally locked cost remains position metadata and is not subtracted from a did-not-play result.
+
+The app accepts this completed result and shows **DID NOT PLAY · No game cost or payout**. Missing or conflicting provider data remains unresolved; it is not silently converted into a did-not-play result. For participation corrections, the displayed adjustment includes both the cost correction and the dividend correction, so it matches the account's actual ledger change.
 
 Each result stores the dividend basis and dollar rate used for its first settlement. Later box-score corrections reuse that original policy even if the active ruleset has changed, so a correction cannot retroactively move a game onto a new economy.
 

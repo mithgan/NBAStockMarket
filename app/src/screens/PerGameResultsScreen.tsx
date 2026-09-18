@@ -1,7 +1,7 @@
 import { FlatList, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import type { PerGameLedgerEntry, PerGameSettledResult } from '../api/contracts';
-import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
+import { formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePerGame } from '../state/PerGameContext';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import {
@@ -31,8 +31,8 @@ function ResultRow({ compact, result, playerName }: {
     result,
     bootstrap?.ledger.items,
     bootstrap?.settledResults,
+    { ledgerComplete: bootstrap?.ledger.nextCursor === null },
   );
-  const gameCost = result.lockedGameCost;
   const positive = equation.netPnl !== null && equation.netPnl >= 0;
   const arithmetic = (
     result.status === 'settled'
@@ -72,17 +72,18 @@ function ResultRow({ compact, result, playerName }: {
           )}
         </View>
       </View>
-      {result.status === 'unsettled_missing_projection' ? (
+      {result.status === 'verified_dnp' ? (
+        <Text style={styles.didNotPlay}>DID NOT PLAY · No game cost or payout.</Text>
+      ) : result.status === 'unsettled_missing_projection' ? (
         <Text style={styles.unsettled}>UNSETTLED · missing saved pregame projection</Text>
       ) : result.status !== 'settled' ? (
         <Text style={styles.unsettled}>UNSETTLED · waiting for a valid result input</Text>
       ) : null}
-      {equation.correction && arithmetic ? (
+      {equation.correction && (arithmetic || result.status === 'verified_dnp') ? (
         <Text style={styles.adjustment}>
           {equation.correctionAdjustment === null
-            ? 'P&L adjustment recorded.'
-            : `P&L adjustment ${formatCompactSignedMoney(equation.correctionAdjustment)}.`}{' '}
-          The locked game cost was not charged again ({formatCompactMoney(gameCost)}).
+            ? 'Adjustment amount unavailable.'
+            : `P&L adjustment ${formatCompactSignedMoney(equation.correctionAdjustment)}.`}
         </Text>
       ) : null}
       {arithmetic ? (
@@ -335,6 +336,11 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: type.body,
     lineHeight: 20,
+  },
+  didNotPlay: {
+    ...labelStyle,
+    marginTop: space.md,
+    color: colors.muted,
   },
   unsettled: {
     ...labelStyle,

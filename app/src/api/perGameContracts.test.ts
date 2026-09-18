@@ -157,6 +157,140 @@ test('v2 accepts lifecycle ledger rows and keeps missing projections unsettled',
   assert.equal(parsed.settledResults[0].netPnl, null);
 });
 
+test('v2 loads played and verified DNP results without charging either side for a DNP', () => {
+  const value = fixture();
+  const results = value.settled_results as Record<string, unknown>[];
+  const played = results[0];
+  for (const side of ['long', 'short']) {
+    results.push({
+      ...played,
+      position_id: `dnp-${side}`,
+      player_id: `dnp-player-${side}`,
+      side,
+      status: 'verified_dnp',
+      locked_game_cost_dollars: 346_925,
+      dividend_dollars: 0,
+      net_pnl_dollars: 0,
+    });
+  }
+
+  const parsed = parsePerGameBootstrap(value);
+  assert.equal(parsed.settledResults[0].status, 'settled');
+  assert.equal(parsed.settledResults[0].netPnl, 24_000);
+  for (const [index, side] of ['long', 'short'].entries()) {
+    const result = parsed.settledResults[index + 1];
+    assert.equal(result.status, 'verified_dnp');
+    assert.equal(result.side, side);
+    assert.equal(result.lockedGameCost, 346_925);
+    assert.equal(result.dividendDollars, 0);
+    assert.equal(result.netPnl, 0);
+  }
+});
+
+test('v2 preserves correction revisions when participation changes to or from DNP', () => {
+  for (const side of ['long', 'short']) {
+    for (const status of ['verified_dnp', 'settled']) {
+      const value = fixture();
+      const results = value.settled_results as Record<string, unknown>[];
+      const direction = side === 'long' ? 1 : -1;
+      const correctionDirection = status === 'verified_dnp' ? -1 : 1;
+      results[0] = {
+        ...results[0],
+        side,
+        status,
+        kind: 'correction',
+        result_revision: 2,
+        adjusts_result_revision: 1,
+        dividend_dollars: status === 'verified_dnp' ? 0 : 504_000,
+        net_pnl_dollars: status === 'verified_dnp' ? 0 : direction * 24_000,
+      };
+      const ledger = (value.ledger as Record<string, unknown>).items as Record<string, unknown>[];
+      ledger[0] = {
+        ...ledger[0],
+        entry_id: 'corrected-cost',
+        kind: 'game_cost_correction',
+        result_revision: 2,
+        amount_dollars: correctionDirection * direction * -480_000,
+        adjusts_entry_id: status === 'verified_dnp' ? 'previous-cost' : null,
+      };
+      ledger.push({
+        ...ledger[0],
+        entry_id: 'corrected-dividend',
+        kind: 'dividend_correction',
+        amount_dollars: correctionDirection * direction * 504_000,
+        adjusts_entry_id: status === 'verified_dnp' ? 'previous-dividend' : null,
+      });
+
+      const bootstrap = parsePerGameBootstrap(value);
+      const parsed = bootstrap.settledResults[0];
+      assert.equal(parsed.status, status);
+      assert.equal(parsed.side, side);
+      assert.equal(parsed.kind, 'correction');
+      assert.equal(parsed.resultRevision, 2);
+      assert.equal(parsed.adjustsResultRevision, 1);
+      assert.equal(parsed.lockedGameCost, 480_000);
+      assert.equal(bootstrap.ledger.items[0].kind, 'game_cost_correction');
+      assert.equal(bootstrap.ledger.items[1].kind, 'dividend_correction');
+      assert.equal(
+        bootstrap.ledger.items.reduce((sum, row) => sum + row.amountDollars, 0),
+        correctionDirection * direction * 24_000,
+      );
+
+      results[0].adjusts_result_revision = null;
+      assert.throws(() => parsePerGameBootstrap(value), /kind must agree/);
+    }
+  }
+});
+
+test('v2 rejects nonzero or unavailable money on a verified DNP result', () => {
+  for (const side of ['long', 'short']) {
+    for (const field of ['dividend_dollars', 'net_pnl_dollars']) {
+      for (const amount of [1, -1, null]) {
+        const value = fixture();
+        const results = value.settled_results as Record<string, unknown>[];
+        results[0] = {
+          ...results[0],
+          side,
+          status: 'verified_dnp',
+          dividend_dollars: 0,
+          net_pnl_dollars: 0,
+          [field]: amount,
+        };
+        assert.throws(
+          () => parsePerGameBootstrap(value),
+          new RegExp(`${field} must be zero for a verified DNP`),
+        );
+      }
+    }
+  }
+});
+
+test('v2 continues to reject unknown result statuses rather than guessing participation', () => {
+  for (const status of ['dnp', 'did_not_play', 'pending', undefined]) {
+    const value = fixture();
+    const results = value.settled_results as Record<string, unknown>[];
+    results[0].status = status;
+    assert.throws(
+      () => parsePerGameBootstrap(value),
+      status === undefined ? /status must be a string/ : /status has an unsupported value/,
+    );
+  }
+});
+
+test('v2 accepts only known ledger kinds after adding game-cost corrections', () => {
+  const value = fixture();
+  const ledger = (value.ledger as Record<string, unknown>).items as Record<string, unknown>[];
+  ledger[0].kind = 'game_cost_correction';
+  assert.equal(parsePerGameBootstrap(value).ledger.items[0].kind, 'game_cost_correction');
+  for (const kind of ['cost_correction', 'arbitrary_payment', undefined]) {
+    ledger[0].kind = kind;
+    assert.throws(
+      () => parsePerGameBootstrap(value),
+      kind === undefined ? /kind must be a string/ : /kind has an unsupported value/,
+    );
+  }
+});
+
 test('v2 accepts an immediate close at the same event sequence', () => {
   const value = fixture();
   const positions = value.positions as Record<string, unknown>[];
