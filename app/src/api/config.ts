@@ -52,8 +52,9 @@ function oauthConfig(environment: PublicAppEnvironment): DataballrOAuthConfig {
   const clientId = environment.oauthClientId?.trim();
   if (!clientId) throw new Error('Databallr OAuth client ID is missing.');
   const redirectUri = environment.oauthRedirectUri?.trim();
-  if (staging && redirectUri !== 'http://localhost:8080/') {
-    throw new Error('This staging login is registered for http://localhost:8080/.');
+  if (staging && redirectUri !== 'http://localhost:8080/'
+      && redirectUri !== 'https://databallr.dev/market/oauth/callback') {
+    throw new Error('Staging login requires its exact registered localhost or /market callback.');
   }
   if (!redirectUri) throw new Error('Databallr OAuth redirect URI is missing.');
   if (production) {
@@ -69,8 +70,12 @@ function oauthConfig(environment: PublicAppEnvironment): DataballrOAuthConfig {
 }
 
 export function databallrOAuthScopes(config: DataballrOAuthConfig): string[] {
-  if (config.issuer === 'https://accounts.databallr.com/api/auth'
-      && config.audience === 'https://api.databallr.com/v1/apps/stock-market') {
+  const production = config.issuer === 'https://accounts.databallr.com/api/auth'
+    && config.audience === 'https://api.databallr.com/v1/apps/stock-market';
+  const hostedStaging = config.issuer === 'https://accounts.databallr.dev/api/auth'
+    && config.audience === 'https://api.databallr.dev/v1/apps/stock-market'
+    && config.redirectUri === 'https://databallr.dev/market/oauth/callback';
+  if (production || hostedStaging) {
     return ['openid', 'profile', 'email', 'offline_access'];
   }
   return ['openid', 'profile', 'email'];
@@ -157,11 +162,26 @@ export function resolvePublicAppConfig(
     const provider = environment.authProvider?.trim() || 'supabase';
     if (provider === 'databallr') {
       const apiUrl = normalizedHttpUrl(environment.apiUrl, 'API URL');
+      const oauth = oauthConfig(environment);
+      if (oauth.redirectUri === 'https://databallr.dev/market/oauth/callback'
+          && apiUrl !== 'https://api.databallr.dev/v1/apps/stock-market'
+          && apiUrl !== 'https://databallr-stock-market-api-staging.databallr.workers.dev/v1/apps/stock-market') {
+        throw new Error('Hosted staging requires the staging stock-market API.');
+      }
+      if (oauth.redirectUri === 'https://databallr.com/market/oauth/callback'
+          && (oauth.issuer !== 'https://accounts.databallr.com/api/auth'
+            || apiUrl !== 'https://api.databallr.com/v1/apps/stock-market')) {
+        throw new Error('Hosted production requires the production login and stock-market API.');
+      }
+      if (oauth.redirectUri === 'https://databallr.dev/market/oauth/callback'
+          && oauth.issuer !== 'https://accounts.databallr.dev/api/auth') {
+        throw new Error('Hosted staging requires the staging login.');
+      }
       return {
         config: {
           authProvider: 'databallr', apiUrl,
           apiPrefix: normalizedApiPrefix(environment.apiPrefix, apiUrl),
-          oauth: oauthConfig(environment),
+          oauth,
         },
         error: null,
       };

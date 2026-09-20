@@ -39,6 +39,25 @@ test('invalid Databallr configuration cannot fall back to valid Supabase credent
   }
 });
 
+test('hosted staging accepts its exact callback, matching API and refresh scope while retaining localhost', () => {
+  for (const apiUrl of ['https://api.databallr.dev/v1/apps/stock-market',
+    'https://databallr-stock-market-api-staging.databallr.workers.dev/v1/apps/stock-market']) {
+    const result = resolvePublicAppConfig({ ...stagingEnvironment, apiUrl,
+      oauthRedirectUri: 'https://databallr.dev/market/oauth/callback' });
+    assert.equal(result.error, null);
+    assert.ok(result.config?.authProvider === 'databallr');
+    assert.deepEqual(databallrOAuthScopes(result.config.oauth), ['openid', 'profile', 'email', 'offline_access']);
+  }
+  for (const oauthRedirectUri of ['https://databallr.dev/market/oauth/callback/',
+    'https://databallr.dev/market/oauth/callback?next=other',
+    'https://databallr.com/market/oauth/callback', 'https://databallr.dev/market/']) {
+    assert.equal(resolvePublicAppConfig({ ...stagingEnvironment, oauthRedirectUri }).config, null);
+  }
+  assert.equal(resolvePublicAppConfig({ ...stagingEnvironment,
+    apiUrl: 'https://api.databallr.com/v1/apps/stock-market',
+    oauthRedirectUri: 'https://databallr.dev/market/oauth/callback' }).config, null);
+});
+
 test('public app config accepts only explicit HTTP URLs and a publishable key', () => {
   assert.deepEqual(resolvePublicAppConfig({
     apiUrl: 'http://127.0.0.1:8011/',
@@ -121,6 +140,17 @@ const productionEnvironment = {
   oauthClientId: 'fixture-production-public-client',
   oauthRedirectUri: 'https://game.example.test/oauth/callback',
 };
+
+test('the hosted production callback rejects staging API or issuer inputs', () => {
+  const hosted = { ...productionEnvironment,
+    apiUrl: 'https://api.databallr.com/v1/apps/stock-market',
+    oauthRedirectUri: 'https://databallr.com/market/oauth/callback' };
+  assert.equal(resolvePublicAppConfig(hosted).error, null);
+  assert.equal(resolvePublicAppConfig({ ...hosted, apiUrl: 'https://api.databallr.dev/v1/apps/stock-market' }).config, null);
+  assert.equal(resolvePublicAppConfig({ ...hosted,
+    oauthRedirectUri: 'https://databallr.dev/market/oauth/callback',
+    apiUrl: 'https://api.databallr.dev/v1/apps/stock-market' }).config, null);
+});
 
 test('production accepts an explicit fixture registration tuple without guessing any defaults', () => {
   const result = resolvePublicAppConfig(productionEnvironment);

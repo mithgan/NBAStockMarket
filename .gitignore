@@ -6,6 +6,7 @@ __pycache__/
 .venv/
 build/
 dist/
+.wrangler/
 *.egg-info/
 data/raw/
 output/*

@@ -28,7 +28,11 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "tsx --test src/*.test.ts src/**/*.test.ts"
+    "test": "tsx --test src/*.test.ts src/**/*.test.ts scripts/*.test.ts hosting/*.test.ts",
+    "test:hosting": "tsx --test scripts/*.test.ts hosting/*.test.ts",
+    "test:market-export-cache": "tsx scripts/check-market-export-cache.ts",
+    "export:market:staging": "tsx scripts/export-market.ts staging",
+    "export:market:production": "tsx scripts/export-market.ts production"
   },
   "private": true
 }
