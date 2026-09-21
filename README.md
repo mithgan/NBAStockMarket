@@ -290,3 +290,87 @@ report generation makes no network calls. The replay selects the top 150 players
 (with reported salary fallbacks), and evaluates 100 seeded buy-and-hold 10-player portfolios. The default expectation
 model is cached Dunks & Threes; missing projection rows use the salary-implied cold-start prior.
 Trading and live Dunks & Threes calls are deliberately disabled during replay.
+
+## Shared Databallr login — staging preview
+
+The migration branch adds `EXPO_PUBLIC_AUTH_PROVIDER=databallr`. Leaving it unset
+preserves the published app's Supabase login. A misconfigured Databallr login
+stops with an error; it never falls back to another issuer.
+
+Copy `app/.env.staging.example` to `app/.env.local`. The example connects to a
+local stock-market Worker on port 8787. To use the deployed staging Worker instead,
+set these two values in `app/.env.local` and keep the example's OAuth settings:
+
+```dotenv
+EXPO_PUBLIC_NBA_STOCK_API_URL=https://databallr-stock-market-api-staging.databallr.workers.dev/v1/apps/stock-market
+EXPO_PUBLIC_NBA_STOCK_API_PREFIX=/v2
+```
+
+The game still runs locally on port 8080; changing the API address does not change
+the login return URL. Start the preview from `app/`:
+
+```sh
+npm ci
+npm run web -- --localhost --port 8080
+```
+
+Open `http://localhost:8080/`, not `127.0.0.1`. This exact return URL is registered
+for the Official staging public/native client. The app requests only `openid`,
+`profile`, and `email`, with code flow and S256 PKCE. No client secret belongs in
+the frontend. The staging example retains its exact registered issuer, audience and callback.
+Hosted production support is configured separately and requires an approved
+public client ID and exact HTTPS callback; no production registration is supplied
+by this branch.
+
+Staging access tokens stay in memory. Reloading, expiry, or an API authentication
+rejection requires signing in again with the current three-scope registration.
+Signing out clears this game's session; it does not
+sign you out of the Databallr platform. The popup hands its callback directly to
+the originating game window; no auth state or token is saved in browser storage.
+The app checks the callback,
+state, and issuer, then obtains account identity from the issuer's authenticated
+userinfo endpoint. The Worker independently verifies the signed access token.
+
+Production configuration uses issuer `https://accounts.databallr.com/api/auth`
+and audience `https://api.databallr.com/v1/apps/stock-market`, public Code + S256
+PKCE, and `openid profile email offline_access`. The callback must be explicitly
+configured; `https://market.databallr.com/oauth/callback` is only a proposed
+address until the team registers it. The game root may initiate login on the
+callback's approved origin; popup completion still checks the exact callback path.
+
+Production refresh tokens remain private in memory, outside React auth state and
+browser storage. Concurrent requests share one refresh; a delayed 401 for an old
+access token reuses the newer token. Ambiguous refresh failures require sign-in
+rather than retrying a possibly consumed token. Reloading still requires sign-in.
+Game logout clears local state and attempts to revoke the current refresh token
+once; it keeps the Databallr SSO session. Every successful refresh confirms the
+same user through HTTPS userinfo. The provider may reject userinfo after its
+browser session expires even when refresh succeeds, so the game then requires a
+new sign-in. This is not a promise of persistent login after the issuer session
+ends. Public release additionally requires the team's legacy identity merge.
+
+Local tests: `npm test` and `npx tsc --noEmit` from `app/`.
+
+On September 13, 2026, real Databallr sign-in and authenticated account loading
+were verified against the hosted Worker and its separate staging database.
+The staging auth change and game-only Hyperdrive connection were deployed.
+A later shared API redeployment removed the required rate-guard method and caused
+503 responses; backend PR #464 supplies the additive fix for the current shared
+code. Confirm its deployment before claiming current staging readiness.
+Native Worker responses passed metadata and database-readiness checks separately.
+
+A temporary controlled replay also verified long/short trades, closing before
+tipoff, stale account rejection, exact payouts, recovery after a client timeout
+and a correction to a closed position. It used captured October 21–22, 2025 BDL
+data and an explicitly synthetic stat correction. This was hosted database/API
+validation, separate from the app's `?mock` sandbox and its day-advance controls.
+Normal staging was restored afterward; its original account had zero score and
+positions, with the roster locked while waiting for a schedule.
+
+The migration remains in progress. Remaining work includes exact legacy pricing
+parity and validating live combined BDL/DNT processing and actual scheduled-event
+timing. The existing DNT key was verified and added to staging; bounded historical
+provider reads passed, which does not prove the complete scheduled live path. The controlled replay does
+not prove those live flows or all failure cases. Production needs separate OAuth
+and configuration, a reviewed transfer of scheduler ownership and explicit
+approval; no production cutover has occurred.

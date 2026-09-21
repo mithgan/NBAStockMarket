@@ -119,6 +119,266 @@ test('correction equation uses the ledger delta but reconciles corrected game to
   assert.equal(equation.reconciles, true);
 });
 
+test('verified DNP has zero cash flow on both sides while retaining the saved game cost', () => {
+  const base = bootstrap().settledResults[0];
+  for (const side of ['long', 'short'] as const) {
+    const dnp: PerGameSettledResult = {
+      ...base,
+      side,
+      status: 'verified_dnp',
+      dividendDollars: 0,
+      netPnl: 0,
+    };
+    const equation = settlementEquation(dnp);
+    assert.equal(equation.firstAmount, 0);
+    assert.equal(equation.secondAmount, 0);
+    assert.equal(equation.operator, '-');
+    assert.equal(equation.netPnl, 0);
+    assert.equal(equation.reconciles, true);
+    assert.equal(dnp.lockedGameCost, 480_000);
+  }
+});
+
+test('played-to-DNP corrections reverse both game cost and dividend on either side', () => {
+  const value = bootstrap();
+  const base = value.settledResults[0];
+  for (const side of ['long', 'short'] as const) {
+    for (const dividend of [0, 504_000]) {
+      const direction = side === 'long' ? 1 : -1;
+      const prior: PerGameSettledResult = {
+        ...base,
+        side,
+        dividendDollars: dividend,
+        netPnl: direction * (dividend - base.lockedGameCost),
+      };
+      const dnp: PerGameSettledResult = {
+        ...prior,
+        status: 'verified_dnp',
+        kind: 'correction',
+        resultRevision: 2,
+        adjustsResultRevision: 1,
+        dividendDollars: 0,
+        netPnl: 0,
+      };
+      const costCorrection = {
+        ...value.ledger.items[0],
+        entryId: 'dnp-cost-reversal',
+        resultRevision: 2,
+        kind: 'game_cost_correction' as const,
+        amountDollars: direction * base.lockedGameCost,
+      };
+      const ledger = [
+        costCorrection,
+        {
+          ...costCorrection,
+          entryId: 'dnp-dividend-reversal',
+          kind: 'dividend_correction' as const,
+          amountDollars: -direction * dividend,
+        },
+        { ...costCorrection, entryId: 'other-position', positionId: 'another-position' },
+        { ...costCorrection, entryId: 'other-game', gameId: 'another-game' },
+        { ...costCorrection, entryId: 'other-revision', resultRevision: 3 },
+        { ...costCorrection, entryId: 'fee', kind: 'fee' as const },
+      ];
+      // Incremental bootstrap keeps only the latest result, so the ledger must
+      // explain a participation reversal without relying on a retained prior row.
+      const equation = settlementEquation(dnp, ledger, [dnp]);
+      assert.equal(equation.correctionAdjustment, -prior.netPnl!);
+      assert.equal(equation.firstAmount, 0);
+      assert.equal(equation.secondAmount, 0);
+      assert.equal(equation.netPnl, 0);
+      assert.equal(equation.reconciles, true);
+      assert.equal(settlementEquation(dnp, [], [prior]).correctionAdjustment, -prior.netPnl!);
+    }
+  }
+});
+
+test('DNP-to-played corrections include the newly applicable cost and dividend', () => {
+  const value = bootstrap();
+  for (const side of ['long', 'short'] as const) {
+    const direction = side === 'long' ? 1 : -1;
+    const prior: PerGameSettledResult = {
+      ...value.settledResults[0],
+      side,
+      status: 'verified_dnp',
+      dividendDollars: 0,
+      netPnl: 0,
+    };
+    const correction: PerGameSettledResult = {
+      ...prior,
+      status: 'settled',
+      kind: 'correction',
+      resultRevision: 2,
+      adjustsResultRevision: 1,
+      dividendDollars: 504_000,
+      netPnl: direction * 24_000,
+    };
+    const costCorrection = {
+      ...value.ledger.items[0],
+      entryId: 'played-cost',
+      resultRevision: 2,
+      kind: 'game_cost_correction' as const,
+      amountDollars: -direction * 480_000,
+    };
+    const equation = settlementEquation(correction, [
+      costCorrection,
+      {
+        ...costCorrection,
+        entryId: 'played-dividend',
+        kind: 'dividend_correction',
+        amountDollars: direction * 504_000,
+      },
+    ]);
+    assert.equal(equation.correctionAdjustment, direction * 24_000);
+    assert.equal(equation.netPnl, direction * 24_000);
+    assert.equal(equation.reconciles, true);
+    assert.equal(settlementEquation(correction, [], [prior]).correctionAdjustment, direction * 24_000);
+  }
+});
+
+test('complete ledger retains ordinary long and short adjustments with only the latest result', () => {
+  const value = bootstrap();
+  for (const side of ['long', 'short'] as const) {
+    const direction = side === 'long' ? 1 : -1;
+    const correction: PerGameSettledResult = {
+      ...value.settledResults[0],
+      side,
+      kind: 'correction',
+      resultRevision: 2,
+      adjustsResultRevision: 1,
+      dividendDollars: 532_000,
+      netPnl: direction * 52_000,
+    };
+    const ledger = [
+      {
+        ...value.ledger.items[0],
+        entryId: 'ordinary-original-cost',
+        resultRevision: 1,
+        kind: 'game_cost' as const,
+        amountDollars: -direction * 480_000,
+      },
+      {
+        ...value.ledger.items[0],
+        entryId: 'ordinary-original-dividend',
+        resultRevision: 1,
+        kind: 'game_dividend' as const,
+        amountDollars: direction * 504_000,
+      },
+      {
+        ...value.ledger.items[0],
+        entryId: 'ordinary-dividend-correction',
+        resultRevision: 2,
+        kind: 'dividend_correction' as const,
+        amountDollars: direction * 28_000,
+      },
+    ];
+    const equation = settlementEquation(correction, ledger, [correction], { ledgerComplete: true });
+    assert.equal(equation.correctionAdjustment, direction * 28_000);
+    assert.equal(equation.netPnl, direction * 52_000);
+    assert.equal(equation.reconciles, true);
+    // Arbitrary partial input remains conservative, even with an older cost row.
+    assert.equal(settlementEquation(correction, ledger, [correction]).correctionAdjustment, null);
+    assert.equal(settlementEquation(correction, ledger, [correction], {
+      ledgerComplete: false,
+    }).correctionAdjustment, null);
+  }
+});
+
+test('complete history proves a zero adjustment for a revised DNP with no money movements', () => {
+  const correction: PerGameSettledResult = {
+    ...bootstrap().settledResults[0],
+    status: 'verified_dnp',
+    kind: 'correction',
+    resultRevision: 2,
+    adjustsResultRevision: 1,
+    dividendDollars: 0,
+    netPnl: 0,
+  };
+  assert.equal(settlementEquation(correction, [], [correction], {
+    ledgerComplete: true,
+  }).correctionAdjustment, 0);
+  assert.equal(settlementEquation(correction, [], [correction]).correctionAdjustment, null);
+});
+
+test('a DNP status change cannot infer its adjustment from dividends alone', () => {
+  const prior: PerGameSettledResult = {
+    ...bootstrap().settledResults[0],
+    netPnl: null,
+  };
+  const dnp: PerGameSettledResult = {
+    ...prior,
+    status: 'verified_dnp',
+    kind: 'correction',
+    resultRevision: 2,
+    adjustsResultRevision: 1,
+    dividendDollars: 0,
+    netPnl: 0,
+  };
+  assert.equal(settlementEquation(dnp, [], [prior]).correctionAdjustment, null);
+});
+
+test('partial participation-correction ledger rows do not claim a complete adjustment', () => {
+  const value = bootstrap();
+  const correction: PerGameSettledResult = {
+    ...value.settledResults[0],
+    status: 'verified_dnp',
+    kind: 'correction',
+    resultRevision: 2,
+    adjustsResultRevision: 1,
+    dividendDollars: 0,
+    netPnl: 0,
+  };
+  const cost = {
+    ...value.ledger.items[0],
+    resultRevision: 2,
+    kind: 'game_cost_correction' as const,
+    amountDollars: 480_000,
+  };
+  const dividend = { ...cost, kind: 'dividend_correction' as const, amountDollars: -504_000 };
+  assert.equal(settlementEquation(correction, [cost]).correctionAdjustment, null);
+  assert.equal(settlementEquation(correction, [dividend]).correctionAdjustment, null);
+  assert.equal(settlementEquation(correction, [cost], value.settledResults).correctionAdjustment, -24_000);
+  assert.equal(settlementEquation(correction, [dividend], value.settledResults).correctionAdjustment, -24_000);
+
+  const playedCorrection: PerGameSettledResult = {
+    ...correction,
+    status: 'settled',
+    dividendDollars: 492_000,
+    netPnl: 12_000,
+  };
+  const playedDividend = { ...dividend, amountDollars: -12_000 };
+  assert.equal(settlementEquation(playedCorrection, [playedDividend]).correctionAdjustment, null);
+  assert.equal(settlementEquation(playedCorrection, [
+    { ...cost, resultRevision: 1, kind: 'game_cost', amountDollars: -480_000 },
+    playedDividend,
+  ]).correctionAdjustment, null);
+});
+
+test('incremental history replaces a played result with DNP without changing saved costs', () => {
+  const previous = bootstrap();
+  const correction: PerGameSettledResult = {
+    ...previous.settledResults[0],
+    status: 'verified_dnp',
+    kind: 'correction',
+    eventCursor: 49,
+    resultRevision: 2,
+    adjustsResultRevision: 1,
+    dividendDollars: 0,
+    netPnl: 0,
+  };
+  const merged = mergePerGameBootstrap(previous, {
+    ...previous,
+    game: { ...previous.game, eventCursor: 49 },
+    settledResults: [correction],
+  });
+  assert.ok(merged);
+  assert.equal(merged.settledResults.length, 1);
+  assert.equal(merged.settledResults[0].status, 'verified_dnp');
+  assert.equal(merged.settledResults[0].lockedGameCost, 480_000);
+  assert.equal(merged.positions[0].lockedGameCost, 480_000);
+  assert.equal(buildPerGameActivity(merged)[0].type, 'result');
+});
+
 test('missing-projection results remain unsettled without invented arithmetic', () => {
   const base = bootstrap().settledResults[0];
   const missing: PerGameSettledResult = {

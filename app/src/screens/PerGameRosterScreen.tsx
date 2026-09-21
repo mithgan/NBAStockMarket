@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import type { PerGameLedgerEntry, PerGamePosition } from '../api/contracts';
+import type { PerGamePosition } from '../api/contracts';
 import { isMockActive, mockPlayerTrends } from '../api/mockPerGameClient';
 import { PerGamePnlChart } from '../components/PerGamePnlChart';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
 import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
 import { usePerGame } from '../state/PerGameContext';
+import { scoreComponents } from '../state/perGameScoreComponents';
 import { colors, fonts, headingStyle, heroNumber, labelStyle, space, type, weight } from '../theme';
 
 function formatTermDate(value: string): string {
@@ -16,22 +17,6 @@ function formatTermDate(value: string): string {
     day: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(`${value}T00:00:00Z`));
-}
-
-const DIVIDEND_KINDS = new Set(['game_dividend', 'dividend', 'dividend_correction', 'correction']);
-const FEE_KINDS = new Set(['open_fee', 'drop_fee', 'fee', 'penalty']);
-
-/** The hero decomposed: score = dividends − game costs − fees, from the ledger. */
-function scoreComponents(entries: PerGameLedgerEntry[]) {
-  let dividends = 0;
-  let gameCosts = 0;
-  let fees = 0;
-  for (const entry of entries) {
-    if (entry.kind === 'game_cost') gameCosts += entry.amountDollars;
-    else if (DIVIDEND_KINDS.has(entry.kind)) dividends += entry.amountDollars;
-    else if (FEE_KINDS.has(entry.kind)) fees += entry.amountDollars;
-  }
-  return { dividends, gameCosts, fees };
 }
 
 function StatCell({ label, value }: { label: string; value: number }) {

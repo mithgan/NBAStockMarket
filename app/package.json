@@ -6,6 +6,8 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.110.8",
     "expo": "~54.0.35",
+    "expo-auth-session": "~7.0.11",
+    "expo-crypto": "~15.0.9",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -26,7 +28,11 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "tsx --test src/*.test.ts src/**/*.test.ts"
+    "test": "tsx --test src/*.test.ts src/**/*.test.ts scripts/*.test.ts hosting/*.test.ts",
+    "test:hosting": "tsx --test scripts/*.test.ts hosting/*.test.ts",
+    "test:market-export-cache": "tsx scripts/check-market-export-cache.ts",
+    "export:market:staging": "tsx scripts/export-market.ts staging",
+    "export:market:production": "tsx scripts/export-market.ts production"
   },
   "private": true
 }

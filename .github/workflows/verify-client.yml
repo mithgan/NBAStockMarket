@@ -1,0 +1,41 @@
+name: Verify stock-market client
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - '.github/workflows/verify-client.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-client-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install client dependencies
+        working-directory: app
+        run: npm ci --no-audit --no-fund
+      - name: Test and typecheck
+        working-directory: app
+        run: |
+          npm test
+          npx tsc --noEmit
+      - name: Export staging login preview
+        working-directory: app
+        run: |
+          cp .env.staging.example .env.local
+          npx expo export --platform web --output-dir dist

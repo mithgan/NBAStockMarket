@@ -647,3 +647,42 @@ test('bootstrap rejects future-result contract corruption before it becomes app 
     (error: unknown) => error instanceof MarketApiError && error.code === 'invalid_response',
   );
 });
+
+test('a trade auth retry forwards its rejected bearer and keeps the exact command key and body', async () => {
+  const auth: unknown[] = [];
+  const sent: RequestInit[] = [];
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.test', expectedUserId: 'alice',
+    getAccessToken: async (force, rejectedAccessToken) => {
+      auth.push([force, rejectedAccessToken]);
+      return { userId: 'alice', accessToken: force ? 'rotated' : 'original' };
+    },
+    idempotencyKeyFactory: () => 'same-auth-retry-key',
+    fetchImpl: async (_url, init) => {
+      sent.push(init!);
+      return sent.length === 1
+        ? Response.json({ error: { code: 'unauthorized', message: 'Expired' } }, { status: 401 })
+        : Response.json({ data: { replayed: false, portfolio, trade } });
+    },
+  });
+  await client.trade('3112335', 'buy', 4);
+  assert.deepEqual(auth, [[false, undefined], [true, 'original']]);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[0].body, sent[1].body);
+  assert.deepEqual(sent.map((init) => new Headers(init.headers).get('idempotency-key')),
+    ['same-auth-retry-key', 'same-auth-retry-key']);
+  assert.deepEqual(sent.map((init) => new Headers(init.headers).get('authorization')),
+    ['Bearer original', 'Bearer rotated']);
+});
+
+test('a trade cannot retry with a different user returned by token refresh', async () => {
+  let calls = 0;
+  const client = new MarketApiClient({
+    baseUrl: 'https://api.example.test', expectedUserId: 'alice',
+    getAccessToken: async (force) => ({ userId: force ? 'bob' : 'alice', accessToken: 'fixture' }),
+    fetchImpl: async () => { calls++; return Response.json({ error: 'expired' }, { status: 401 }); },
+  });
+  await assert.rejects(client.trade('3112335', 'buy', 4),
+    (error: unknown) => error instanceof MarketApiError && error.code === 'account_changed');
+  assert.equal(calls, 1);
+});
