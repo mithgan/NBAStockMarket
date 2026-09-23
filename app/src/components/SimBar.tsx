@@ -5,7 +5,6 @@ import {
   advanceMockNights,
   isMockActive,
   mockSeasonStart,
-  resetMock,
 } from '../api/mockPerGameClient';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, fonts, labelStyle, space, type, weight } from '../theme';
@@ -92,7 +91,7 @@ export function SimBar() {
             <Text style={styles.resetText}>EXIT</Text>
           </Pressable>
         ) : null}
-        {mockDriving ? (
+        {mockDriving && canEnterSandbox ? (
           <Pressable
             accessibilityLabel={confirmingReset
               ? 'Confirm restarting the sandbox season'
@@ -103,8 +102,9 @@ export function SimBar() {
             onPress={() => {
               if (confirmingReset) {
                 setConfirmingReset(false);
-                resetMock();
-                refreshData();
+                // Restart the in-memory client and its provider together. An
+                // ordinary refresh must still reject older account snapshots.
+                window.location.reload();
               } else {
                 setConfirmingReset(true);
               }
