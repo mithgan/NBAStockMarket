@@ -52,7 +52,7 @@ async function main() {
   }, null, 2) + '\n');
   console.log(`Verified ${environment} /market export: ${output}`);
   console.log(options.includes('--with-routes')
-    ? 'Generated only the two /market route patterns; no deployment was performed.'
+    ? 'Generated the environment-specific /market route patterns; no deployment was performed.'
     : 'Generated an unrouted Worker configuration; no deployment was performed.');
 }
 

@@ -33,6 +33,13 @@ function marketBuildEnvironment(environment, inputs) {
 function marketWorkerConfig(environment, withRoutes = false) {
   const target = Object.hasOwn(TARGETS, environment) && TARGETS[environment];
   if (!target) throw new Error('Market environment must be staging or production.');
+  const routes = withRoutes ? ['/market', '/market/*'].map(path => ({
+    pattern: `${target.domain}${path}`, zone_name: target.domain,
+  })) : [];
+  if (withRoutes && environment === 'production') {
+    // Netlify forwards the apex site's /market/ paths through this proxied origin.
+    routes.push({ pattern: 'api.databallr.com/market/*', zone_name: target.domain });
+  }
   return {
     name: `databallr-market-web-${environment}`,
     account_id: 'c106bf9fdebefc994effa68697f1d8fe',
@@ -41,9 +48,7 @@ function marketWorkerConfig(environment, withRoutes = false) {
     workers_dev: false,
     preview_urls: false,
     vars: { ENVIRONMENT: environment },
-    routes: withRoutes ? ['/market', '/market/*'].map(path => ({
-      pattern: `${target.domain}${path}`, zone_name: target.domain,
-    })) : [],
+    routes,
     assets: {
       directory: './assets', binding: 'ASSETS', run_worker_first: true,
       html_handling: 'none', not_found_handling: 'none',

@@ -64,12 +64,23 @@ test('Expo retains the existing config and Pages path unless a market export is 
 });
 
 test('Worker configuration is unrouted by default and opt-in routes cannot claim adjacent paths', () => {
-  for (const [environment, domain] of [['staging', 'databallr.dev'], ['production', 'databallr.com']]) {
+  const expectedRoutes = {
+    staging: [
+      { pattern: 'databallr.dev/market', zone_name: 'databallr.dev' },
+      { pattern: 'databallr.dev/market/*', zone_name: 'databallr.dev' },
+    ],
+    production: [
+      { pattern: 'databallr.com/market', zone_name: 'databallr.com' },
+      { pattern: 'databallr.com/market/*', zone_name: 'databallr.com' },
+      { pattern: 'api.databallr.com/market/*', zone_name: 'databallr.com' },
+    ],
+  };
+  for (const environment of ['staging', 'production'] as const) {
     assert.deepEqual(marketWorkerConfig(environment).routes, []);
     const config = marketWorkerConfig(environment, true);
     assert.equal(config.account_id, 'c106bf9fdebefc994effa68697f1d8fe');
     assert.deepEqual(config.vars, { ENVIRONMENT: environment });
-    assert.deepEqual(config.routes, ['/market', '/market/*'].map(path => ({ pattern: domain + path, zone_name: domain })));
+    assert.deepEqual(config.routes, expectedRoutes[environment]);
     assert.equal(config.workers_dev, false);
     assert.equal(config.preview_urls, false);
     assert.equal(config.assets.run_worker_first, true);
