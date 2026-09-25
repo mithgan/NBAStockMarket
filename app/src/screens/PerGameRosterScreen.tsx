@@ -1,165 +1,176 @@
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useMemo, useState, type ReactNode } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 import type { PerGamePosition } from '../api/contracts';
 import { isMockActive, mockPlayerTrends } from '../api/mockPerGameClient';
 import { PerGamePnlChart } from '../components/PerGamePnlChart';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
-import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
+import { StackedFigures, TableFigures, TableHeader } from '../components/roster/RowFigures';
+import { ScoreHeader } from '../components/roster/ScoreHeader';
+import {
+  closeVerb,
+  exactMoney,
+  exactSignedMoney,
+  humanDate,
+  ROSTER_EXPLAINER,
+  SHORT_EXPLAINER,
+  sideHeading,
+} from '../copy/terms';
+import { recentEarnings } from '../data/perGameMetrics';
+import { rankLine, rosterRowView, slotLine } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
 import { scoreComponents } from '../state/perGameScoreComponents';
-import { colors, fonts, headingStyle, heroNumber, labelStyle, space, type, weight } from '../theme';
+import { colors, control, fonts, radius, space, type, weight } from '../theme';
+import { Button, EmptyState, SectionHeader, Tag } from '../ui/kit';
 
-function formatTermDate(value: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(`${value}T00:00:00Z`));
-}
+/** Desktop: score and chart beside the lists. */
+const WIDE_MIN_WIDTH = 1024;
+/** Lists at least this wide read as a table with a header row. */
+const TABLE_MIN_WIDTH = 700;
+const SUMMARY_WIDTH = 340;
+const ACTION_WIDTH = 72;
 
-function StatCell({ label, value }: { label: string; value: number }) {
-  return (
-    <View style={styles.statCell}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text
-        accessibilityLabel={`${label} ${formatSignedMoney(value)}`}
-        style={[styles.statValue, value >= 0 ? styles.positive : styles.negative]}
-      >
-        {formatCompactSignedMoney(value)}
-      </Text>
-    </View>
-  );
-}
-
-function PositionRow({ position, onOpenProfile }: {
+function PositionRow({ position, table, largeText, onOpenProfile }: {
   position: PerGamePosition;
+  table: boolean;
+  largeText: boolean;
   onOpenProfile: (playerId: string) => void;
 }) {
   const { bootstrap, closePosition, pendingActions } = usePerGame();
-  const { fontScale, width } = useWindowDimensions();
   const actionKey = `position:${position.side}:${position.playerId}`;
   const pending = pendingActions.has(actionKey);
   const locked = pendingActions.has('account-mutation');
   const rosterLocked = bootstrap?.ruleset.rosterMutationsLocked ?? true;
   const rosterLockDate = bootstrap?.ruleset.rosterLockGameDate ?? null;
   const rosterLockHint = rosterLockDate
-    ? `Roster changes are locked for the ${formatTermDate(rosterLockDate)} game.`
-    : 'Roster changes are locked while the current game is in progress.';
+    ? `Roster changes are locked for the ${humanDate(rosterLockDate)} games.`
+    : 'Roster changes are locked while the current games are in progress.';
   const disabled = pending || locked || rosterLocked;
-  const inverse = position.side === 'short';
-  const kicker = [
-    `${formatCompactMoney(position.lockedGameCost)}/GM LOCKED`,
-    inverse && position.expiresOn ? `THRU ${formatTermDate(position.expiresOn).toUpperCase()}` : null,
-  ].filter(Boolean).join(' · ');
+  const settled = bootstrap?.settledResults;
+  const view = useMemo(() => rosterRowView(position, settled ?? []), [position, settled]);
+  const short = position.side === 'short';
+  const verb = closeVerb(position.side);
+  const target = short ? `short on ${position.playerName}` : position.playerName;
+
+  // Screen readers hear the whole row in one breath, lifetime totals included.
+  const profileLabel = [
+    position.playerName,
+    view.tag.label,
+    `${short ? 'credited' : 'price'} ${exactMoney(position.lockedGameCost)} a game, locked`,
+    view.games || 'no games yet',
+    view.summary.avgDividend === null ? null : `dividend ${exactMoney(view.summary.avgDividend)} a game`,
+    view.summary.avgNet === null ? null : `net ${exactSignedMoney(view.summary.avgNet)} a game`,
+    `total ${exactSignedMoney(position.cumulativePnl)}`,
+    short
+      ? `${exactMoney(position.cumulativeGameCost)} credited and ${exactMoney(position.cumulativeDividend)} paid out`
+      : `${exactMoney(position.cumulativeDividend)} in dividends against ${exactMoney(position.cumulativeGameCost)} in prices`,
+    view.expiry,
+    'View profile',
+  ].filter(Boolean).join(', ');
+
+  const identity = (
+    <View style={styles.identity}>
+      <Text style={styles.name}>{position.playerName}</Text>
+      <View style={styles.meta}>
+        <Tag tone={view.tag.tone}>{view.tag.label}</Tag>
+        {view.games ? <Text style={styles.metaText}>{view.games}</Text> : null}
+        {view.expiry ? <Text style={styles.metaText}>{view.expiry}</Text> : null}
+      </View>
+    </View>
+  );
+  const figures = {
+    side: position.side,
+    price: position.lockedGameCost,
+    dividend: view.summary.avgDividend,
+    net: view.summary.avgNet,
+    total: position.cumulativePnl,
+  };
+  const action = (
+    <Pressable
+      accessibilityHint={rosterLocked ? rosterLockHint : undefined}
+      accessibilityLabel={rosterLocked
+        ? `${verb} ${target} unavailable while roster changes are locked`
+        : pending ? `${verb === 'Drop' ? 'Dropping' : 'Closing'} ${target}` : `${verb} ${target}`}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={() => {
+        if (!disabled) closePosition(position);
+      }}
+      style={({ pressed }) => [
+        styles.action,
+        disabled && styles.disabled,
+        pressed && !disabled && styles.pressed,
+      ]}
+    >
+      {pending && !rosterLocked ? (
+        <ActivityIndicator color={colors.muted} size="small" />
+      ) : (
+        <Text style={styles.actionText}>{rosterLocked ? 'LOCKED' : verb.toUpperCase()}</Text>
+      )}
+    </Pressable>
+  );
+
+  if (table) {
+    return (
+      <View style={styles.tableRow}>
+        <Pressable
+          accessibilityLabel={profileLabel}
+          accessibilityRole="button"
+          onPress={() => onOpenProfile(position.playerId)}
+          style={({ pressed }) => [styles.tableProfile, pressed && styles.pressed]}
+        >
+          <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
+          {identity}
+          <TableFigures {...figures} />
+        </Pressable>
+        {action}
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.positionRow}>
-      <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
+    <View style={styles.stackRow}>
       <Pressable
-        accessibilityLabel={[
-          position.playerName,
-          `locked game cost ${formatMoney(position.lockedGameCost)}`,
-          `${inverse ? 'cost credits' : 'game costs'} ${formatMoney(position.cumulativeGameCost)}`,
-          `dividends ${formatMoney(position.cumulativeDividend)}`,
-          `profit and loss ${formatSignedMoney(position.cumulativePnl)}`,
-          'View profile',
-        ].join(', ')}
+        accessibilityLabel={profileLabel}
         accessibilityRole="button"
         onPress={() => onOpenProfile(position.playerId)}
-        style={({ pressed }) => [styles.positionCopy, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.stackProfile, pressed && styles.pressed]}
       >
-        <Text style={styles.positionKicker}>{kicker}</Text>
-        <Text numberOfLines={fontScale > 1.25 ? undefined : width < 420 ? 2 : 1} style={styles.positionName}>
-          {position.playerName}
-        </Text>
-        <Text style={styles.positionDetail}>
-          {inverse ? 'credits' : 'costs'} {formatCompactMoney(position.cumulativeGameCost)}
-          {' · '}divs {formatCompactMoney(position.cumulativeDividend)}
-        </Text>
+        <View style={styles.stackTop}>
+          <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
+          {identity}
+        </View>
+        <View style={styles.stackFigures}>
+          <StackedFigures {...figures} twoByTwo={largeText} />
+        </View>
       </Pressable>
-      <Text
-        accessibilityLabel={`Profit and loss ${formatSignedMoney(position.cumulativePnl)}`}
-        style={[
-          styles.positionPnl,
-          position.cumulativePnl >= 0 ? styles.positive : styles.negative,
-        ]}
-      >
-        {formatCompactSignedMoney(position.cumulativePnl)}
-      </Text>
-      <Pressable
-        accessibilityHint={rosterLocked ? rosterLockHint : undefined}
-        accessibilityLabel={rosterLocked
-          ? `${inverse ? 'Close inverse position on' : 'Drop'} ${position.playerName} unavailable while roster changes are locked`
-          : `${inverse ? 'Close inverse position on' : 'Drop'} ${position.playerName}`}
-        accessibilityRole="button"
-        accessibilityState={{ disabled }}
-        disabled={disabled}
-        onPress={() => {
-          if (!disabled) closePosition(position);
-        }}
-        style={({ pressed }) => [
-          styles.dropButton,
-          disabled && styles.disabled,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Text style={styles.dropButtonText}>
-          {rosterLocked ? 'LOCKED' : pending ? 'WAIT' : inverse ? 'CLOSE' : 'DROP'}
-        </Text>
-      </Pressable>
+      <View style={styles.stackAction}>{action}</View>
     </View>
   );
 }
 
-function PositionSection({
-  title,
-  caption,
-  used,
-  limit,
-  positions,
-  emptyCopy,
-  onOpenMarket,
-  onOpenProfile,
-}: {
+function Section({ title, meta, caption, header, children }: {
   title: string;
+  meta: string;
   caption?: string;
-  used: number;
-  limit: number;
-  positions: PerGamePosition[];
-  emptyCopy: string;
-  onOpenMarket: () => void;
-  onOpenProfile: (playerId: string) => void;
+  header?: ReactNode;
+  children: ReactNode;
 }) {
   return (
     <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <View style={styles.sectionCopy}>
-          <Text accessibilityRole="header" style={styles.sectionTitle}>{title}</Text>
-          {caption ? <Text style={styles.sectionCaption}>{caption}</Text> : null}
-        </View>
-        <Text style={styles.slotCount}>{used} / {limit}</Text>
-      </View>
-      {positions.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyCopy}>{emptyCopy}</Text>
-          <Pressable
-            accessibilityLabel="Open the player market"
-            accessibilityRole="button"
-            onPress={onOpenMarket}
-            style={({ pressed }) => [styles.marketButton, pressed && styles.pressed]}
-          >
-            <Text style={styles.marketButtonText}>OPEN MARKET</Text>
-          </Pressable>
-        </View>
-      ) : positions.map((position) => (
-        <PositionRow
-          key={position.positionId}
-          onOpenProfile={onOpenProfile}
-          position={position}
-        />
-      ))}
+      <SectionHeader caption={caption} meta={meta} style={styles.sectionHeader} title={title} />
+      {header}
+      {children}
     </View>
   );
 }
@@ -170,10 +181,15 @@ export function PerGameRosterScreen({
   onOpenMarket: (side: PerGamePosition['side']) => void;
 }) {
   const { bootstrap } = usePerGame();
+  const { width, fontScale } = useWindowDimensions();
   const [profileId, setProfileId] = useState<string | null>(null);
   const components = useMemo(
     () => scoreComponents(bootstrap?.ledger.items ?? []),
     [bootstrap?.ledger.items],
+  );
+  const recent = useMemo(
+    () => recentEarnings(bootstrap?.ledger.items, bootstrap?.game.lastSettledDate),
+    [bootstrap?.game.lastSettledDate, bootstrap?.ledger.items],
   );
   if (!bootstrap) return null;
   const profilePosition = profileId
@@ -200,46 +216,115 @@ export function PerGameRosterScreen({
   const active = bootstrap.positions.filter((position) => position.status === 'active');
   const longs = active.filter((position) => position.side === 'long');
   const shorts = active.filter((position) => position.side === 'short');
-  const pnl = bootstrap.account.cumulativePnl;
+  const score = bootstrap.account.cumulativePnl;
+  const started = bootstrap.ledger.items.some((entry) => entry.gameDate !== null);
+  const rosterLocked = bootstrap.ruleset.rosterMutationsLocked;
+  const wide = width >= WIDE_MIN_WIDTH;
+  // Very large text needs the stacked rows' room; fixed table columns would collide.
+  const largeText = fontScale > 1.3;
+  const table = width >= TABLE_MIN_WIDTH && !largeText;
+  const hadLongs = bootstrap.positions.some((position) => position.side === 'long' && position.status === 'closed');
+  const hadShorts = bootstrap.positions.some((position) => position.side === 'short' && position.status === 'closed');
+  const { longSlots, shortSlots } = bootstrap.account;
+  // The lock stops adds as well as drops, so it shows even on an empty roster.
+  const slotMeta = (used: number, limit: number) => (
+    rosterLocked ? `Locked · ${used} of ${limit}` : `${used} of ${limit}`
+  );
+  const rows = (positions: PerGamePosition[]) => positions.map((position) => (
+    <PositionRow
+      key={position.positionId}
+      largeText={largeText}
+      onOpenProfile={setProfileId}
+      position={position}
+      table={table}
+    />
+  ));
+
+  const summary = (
+    <>
+      <ScoreHeader
+        breakdown={bootstrap.ledger.items.length > 0 ? components : null}
+        nextGameDate={bootstrap.game.nextGameDate}
+        rank={rankLine(bootstrap.leaderboard)}
+        recent={recent}
+        score={score}
+        slots={wide ? slotLine(bootstrap.account) : null}
+        started={started}
+        title="Your score"
+        variant={wide ? 'panel' : 'compact'}
+      />
+      <PerGamePnlChart
+        entries={bootstrap.ledger.items}
+        fill={wide}
+        // Phones keep the plot short so roster rows start high; tablets can afford more.
+        plotHeight={wide ? 168 : table ? 120 : 76}
+      />
+    </>
+  );
+  const lists = (
+    <>
+      <Section
+        header={table && longs.length > 0 ? <TableHeader actionWidth={ACTION_WIDTH} side="long" /> : null}
+        meta={slotMeta(longSlots.used, longSlots.limit)}
+        title={sideHeading('long')}
+      >
+        {longs.length > 0 ? rows(longs) : (
+          <EmptyState
+            action={(
+              <Button
+                accessibilityLabel="Open the player market"
+                label="Open market"
+                onPress={() => onOpenMarket('long')}
+                variant="primary"
+              />
+            )}
+            copy={ROSTER_EXPLAINER}
+            style={styles.empty}
+            title={hadLongs ? 'Your roster is empty' : 'Add your first player'}
+          />
+        )}
+      </Section>
+      <Section
+        caption={shorts.length > 0 ? SHORT_EXPLAINER : undefined}
+        header={table && shorts.length > 0 ? <TableHeader actionWidth={ACTION_WIDTH} side="short" /> : null}
+        meta={slotMeta(shortSlots.used, shortSlots.limit)}
+        title={sideHeading('short')}
+      >
+        {shorts.length > 0 ? rows(shorts) : (
+          <EmptyState
+            action={(
+              <Button
+                accessibilityLabel="Open the player market to short a player"
+                label="Open market"
+                onPress={() => onOpenMarket('short')}
+              />
+            )}
+            copy={SHORT_EXPLAINER}
+            style={styles.empty}
+            title={hadShorts ? 'No open shorts' : 'No shorts yet'}
+          />
+        )}
+      </Section>
+    </>
+  );
 
   return (
-    <ScrollView contentContainerStyle={styles.content} style={styles.scroll}>
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>YOUR SCORE</Text>
-        <Text
-          accessibilityLabel={`Cumulative profit and loss ${formatSignedMoney(pnl)}`}
-          style={[styles.heroValue, pnl >= 0 ? styles.positive : styles.negative]}
-        >
-          {formatCompactSignedMoney(pnl)}
-        </Text>
-      </View>
-      <View style={styles.statBar}>
-        <StatCell label="DIVIDENDS" value={components.dividends} />
-        <View style={styles.statRule} />
-        <StatCell label="GAME COSTS" value={components.gameCosts} />
-        <View style={styles.statRule} />
-        <StatCell label="FEES" value={components.fees} />
-      </View>
-      <PerGamePnlChart entries={bootstrap.ledger.items} />
-      <PositionSection
-        emptyCopy="Add a player to lock today's per-game cost. Your score starts at $0."
-        limit={bootstrap.account.longSlots.limit}
-        onOpenMarket={() => onOpenMarket('long')}
-        onOpenProfile={setProfileId}
-        positions={longs}
-        title="Your roster"
-        used={bootstrap.account.longSlots.used}
-      />
-      <PositionSection
-        caption="Each game credits your locked cost, then subtracts the player's dividend."
-        emptyCopy="Inverse positions profit when a player's dividend finishes below your locked game-cost credit."
-        limit={bootstrap.account.shortSlots.limit}
-        onOpenMarket={() => onOpenMarket('short')}
-        onOpenProfile={setProfileId}
-        positions={shorts}
-        title="Inverse positions"
-        used={bootstrap.account.shortSlots.used}
-      />
+    <View style={styles.screen}>
+      {wide ? (
+        <View style={styles.columns}>
+          <ScrollView contentContainerStyle={styles.summaryContent} style={styles.summaryColumn}>
+            {summary}
+          </ScrollView>
+          <ScrollView contentContainerStyle={styles.columnContent} style={styles.listColumn}>
+            {lists}
+          </ScrollView>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.columnContent} style={styles.scroll}>
+          {summary}
+          {lists}
+        </ScrollView>
+      )}
       <PlayerProfileSheet
         dividendRate={bootstrap.ruleset.dividendDollarsPerNetPoint}
         latestSettledDate={bootstrap.game.lastSettledDate}
@@ -250,181 +335,141 @@ export function PerGameRosterScreen({
         trends={profileId !== null && isMockActive() ? mockPlayerTrends(profileId) : undefined}
         visible={profileId !== null && profilePlayer !== null}
       />
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    minHeight: 0,
+  },
   scroll: {
     flex: 1,
   },
-  content: {
-    paddingBottom: 110,
-  },
-  hero: {
-    justifyContent: 'center',
-    paddingHorizontal: space.lg,
-    paddingTop: space.xl,
-    paddingBottom: space.lg,
-    backgroundColor: colors.surface,
-  },
-  eyebrow: {
-    ...labelStyle,
-    marginBottom: space.sm,
-  },
-  heroValue: {
-    ...heroNumber,
-  },
-  statBar: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    paddingVertical: space.md,
-    backgroundColor: colors.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderStrong,
-  },
-  statCell: {
+  columns: {
     flex: 1,
-    paddingHorizontal: space.lg,
+    minHeight: 0,
+    flexDirection: 'row',
   },
-  statRule: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
+  summaryColumn: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: SUMMARY_WIDTH,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: colors.borderStrong,
   },
-  statLabel: {
-    ...labelStyle,
-    marginBottom: 3,
+  listColumn: {
+    flex: 1,
   },
-  statValue: {
-    fontFamily: fonts.display,
-    fontSize: type.value,
-    fontWeight: weight.heavy,
-    fontVariant: ['tabular-nums'],
+  columnContent: {
+    paddingBottom: space.xxl,
+  },
+  summaryContent: {
+    // The chart grows into whatever height the score block leaves.
+    flexGrow: 1,
   },
   section: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
   },
   sectionHeader: {
-    minHeight: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: space.lg,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
+    minHeight: 40,
+    paddingVertical: space.sm - 2,
     backgroundColor: colors.surface,
   },
-  sectionCopy: {
-    minWidth: 0,
-    flexShrink: 1,
+  empty: {
+    paddingVertical: space.lg,
+    paddingHorizontal: space.lg,
   },
-  sectionTitle: {
-    ...headingStyle,
-    letterSpacing: 0,
+  stackRow: {
+    position: 'relative',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
-  sectionCaption: {
-    marginTop: 3,
-    color: colors.faint,
-    fontSize: type.label,
-    lineHeight: 15,
+  stackProfile: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    paddingBottom: space.sm,
   },
-  slotCount: {
-    ...labelStyle,
-    color: colors.goldInk,
-    fontVariant: ['tabular-nums'],
-    flexShrink: 0,
-    minWidth: 48,
-    textAlign: 'right',
-  },
-  positionRow: {
-    minHeight: 72,
+  stackTop: {
+    minHeight: control.height,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
+    // Keeps the name and verdict clear of the Drop button that sits over this corner.
+    paddingRight: ACTION_WIDTH + space.sm,
+  },
+  stackFigures: {
+    marginTop: 6,
+  },
+  stackAction: {
+    position: 'absolute',
+    top: space.sm,
+    right: space.lg,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: space.sm,
+    paddingRight: space.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
-    backgroundColor: colors.background,
   },
-  positionCopy: {
-    minWidth: 0,
+  tableProfile: {
     flex: 1,
+    minHeight: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingLeft: space.lg,
+    paddingVertical: space.sm,
   },
-  positionKicker: {
-    ...labelStyle,
-    fontSize: type.label,
-    letterSpacing: 0.6,
+  identity: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 4,
   },
-  positionName: {
-    marginTop: 1,
+  name: {
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: type.value,
     fontWeight: weight.heavy,
   },
-  positionDetail: {
-    marginTop: 2,
-    color: colors.faint,
+  meta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: space.sm,
+    rowGap: 2,
+    marginTop: 3,
+  },
+  metaText: {
+    color: colors.muted,
     fontFamily: fonts.display,
-    fontSize: type.label,
+    fontSize: type.caption,
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
   },
-  positionPnl: {
-    fontFamily: fonts.display,
-    fontSize: type.title,
-    fontWeight: weight.heavy,
-    fontVariant: ['tabular-nums'],
-  },
-  dropButton: {
-    minWidth: 64,
-    minHeight: 44,
+  action: {
+    alignSelf: 'center',
+    width: ACTION_WIDTH,
+    minHeight: control.height,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.borderStrong,
-    backgroundColor: colors.surfaceRaised,
+    // Outlined, not filled: dropping is a secondary move on a row whose job
+    // is to show how the player is doing.
+    backgroundColor: 'transparent',
   },
-  dropButtonText: {
-    color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.heavy,
-  },
-  empty: {
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    padding: space.xl,
-    backgroundColor: colors.background,
-  },
-  emptyCopy: {
-    maxWidth: 520,
-    marginBottom: space.lg,
+  actionText: {
     color: colors.muted,
-    fontSize: type.body,
-    lineHeight: 20,
-  },
-  marketButton: {
-    minHeight: 44,
-    minWidth: 132,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: space.lg,
-    backgroundColor: colors.gold,
-  },
-  marketButtonText: {
-    color: colors.background,
     fontFamily: fonts.display,
     fontSize: type.label,
     fontWeight: weight.black,
-  },
-  positive: {
-    color: colors.green,
-  },
-  negative: {
-    color: colors.red,
+    letterSpacing: 0.8,
   },
   disabled: {
     opacity: 0.45,
