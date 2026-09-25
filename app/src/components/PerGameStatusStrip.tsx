@@ -19,6 +19,7 @@ import {
   chromeLayout,
   dividendText,
   keepTogether,
+  lastNightFigure,
   nextGamesText,
   PRACTICE_OVER_TEXT,
   practiceDayText,
@@ -31,7 +32,7 @@ import { perGameRulesPresentation, positionSlotHint, rulesParagraphs } from '../
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, control, fonts, labelStyle, radius, space, type, weight } from '../theme';
-import { headingLevel, Money, Tag } from '../ui/kit';
+import { headingLevel, moneyColor, Tag } from '../ui/kit';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { PracticeIcon, RefreshIcon, RulesIcon } from './chrome/ChromeIcons';
 import { PracticeControls } from './SimBar';
@@ -39,7 +40,7 @@ import { PracticeControls } from './SimBar';
 /**
  * How the facts sit beside the controls.
  *  - wide: one line (clock with the day, last night, next games or the lock).
- *  - pair: practice on a phone. "Practice · Nov 5 · Last night +$323K" over
+ *  - pair: practice on a phone. "Practice · Nov 5 · Last night +$322.5K" over
  *    "Day 16 of 174 · Next Thu, Nov 6"; on a locked night the lock and when it
  *    lifts take the whole second line.
  *  - stack: one short fact per tight line. Signed in on a phone (three
@@ -125,20 +126,21 @@ export function PerGameStatusStrip() {
   // ---- facts ---------------------------------------------------------------
   const settledDate = lastSettled ? keepTogether(humanDate(lastSettled)) : null;
   const dayText = progress ? keepTogether(practiceDayText(progress)) : null;
-  const money = lastNight === null ? null : (
-    <Money size={tight ? 'label' : 'body'} style={tight ? styles.moneyTight : undefined} value={lastNight} />
-  );
+  const money = lastNight === null ? null : <LastNightMoney tight={tight} value={lastNight} />;
+  // The narrowest phones single-space the dots, so the first line keeps to
+  // one row even with last night at its finer precision.
+  const dot = layout.tightDots ? ' · ' : '  ·  ';
 
   // First line. Practice: the mode and its date, plus the day on a wide screen
   // or last night on a phone. Signed in: how far the results go.
   const lead = practice ? (
     <Text key="lead" maxFontSizeMultiplier={1.5} style={[styles.lead, tight && styles.tight]}>
       <Text style={styles.practiceWord}>{PRACTICE_LABEL}</Text>
-      {settledDate ? `  ·  ${settledDate}` : null}
-      {arrangement === 'wide' && dayText ? <Text style={styles.leadMuted}>{`  ·  ${dayText}`}</Text> : null}
+      {settledDate ? `${dot}${settledDate}` : null}
+      {arrangement === 'wide' && dayText ? <Text style={styles.leadMuted}>{`${dot}${dayText}`}</Text> : null}
       {arrangement === 'pair' && money ? (
         <Text style={styles.leadMuted}>
-          {'  ·  Last night '}
+          {`${dot}Last night `}
           {money}
         </Text>
       ) : null}
@@ -312,6 +314,25 @@ export function PerGameStatusStrip() {
       </View>
       <RulesSheet onClose={() => setRulesOpen(false)} rules={rules} visible={rulesOpen} />
     </View>
+  );
+}
+
+/**
+ * Last night's figure inside a line of facts (green, red, or muted at $0), at
+ * the Results night header's precision ("+$322.5K" rather than "+$323K"), so
+ * the bar and that night's header read the same (chromeView.lastNightFigure).
+ * Styled as kit Money, which has no fine precision.
+ */
+function LastNightMoney({ tight, value }: { tight: boolean; value: number }) {
+  const figure = lastNightFigure(value);
+  return (
+    <Text
+      accessibilityLabel={figure.accessibilityLabel}
+      maxFontSizeMultiplier={1.4}
+      style={[styles.money, tight ? styles.moneyTight : styles.moneyBody, { color: moneyColor(value) }]}
+    >
+      {figure.text}
+    </Text>
   );
 }
 
@@ -512,6 +533,14 @@ const styles = StyleSheet.create({
   lockLine: {
     color: colors.goldInk,
     fontWeight: weight.bold,
+  },
+  money: {
+    fontFamily: fonts.display,
+    fontVariant: ['tabular-nums'],
+    fontWeight: weight.heavy,
+  },
+  moneyBody: {
+    fontSize: type.body,
   },
   // One size per line keeps the tight lines at exactly their height.
   moneyTight: {

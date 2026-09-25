@@ -4,12 +4,14 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 
 import { parsePerGameBootstrap } from '../api/contracts';
+import { signedMoneyFine } from '../copy/terms';
 import {
   chromeLayout,
   daysBetween,
   dividendBasisText,
   dividendText,
   keepTogether,
+  lastNightFigure,
   nextGamesText,
   practiceDayText,
   practiceProgress,
@@ -70,7 +72,9 @@ test('short phrases hold together when large text wraps', () => {
 });
 
 test('layout: phones stack two short lines, wide screens use one line, large text wraps', () => {
-  const base = { wide: false, merged: false, largeText: false, iconOnly: false, narrow: false, compact: false };
+  const base = {
+    wide: false, merged: false, largeText: false, iconOnly: false, narrow: false, compact: false, tightDots: false,
+  };
   assert.deepEqual(chromeLayout(390, 1), base);
   // 360px phones take the tighter gutters, so a tag and the lock sentence fit.
   assert.deepEqual(chromeLayout(360, 1), { ...base, iconOnly: true, narrow: true });
@@ -84,17 +88,26 @@ test('layout: phones stack two short lines, wide screens use one line, large tex
 test('layout: narrow phones tighten, and a phone at 200% zoom goes compact', () => {
   // 340-359: tighter gutters, and the signed-in toolbar still icon-only beside the facts.
   assert.deepEqual(chromeLayout(350, 1), {
-    wide: false, merged: false, largeText: false, iconOnly: true, narrow: true, compact: false,
+    wide: false, merged: false, largeText: false, iconOnly: true, narrow: true, compact: false, tightDots: false,
   });
   // 320-339: the signed-in toolbar drops under the facts, so it keeps its labels.
   assert.equal(chromeLayout(330, 1).iconOnly, false);
   assert.equal(chromeLayout(330, 1).compact, false);
   // 390px at 200% zoom is 195 CSS px: compact.
   assert.deepEqual(chromeLayout(195, 1), {
-    wide: false, merged: false, largeText: false, iconOnly: false, narrow: true, compact: true,
+    wide: false, merged: false, largeText: false, iconOnly: false, narrow: true, compact: true, tightDots: false,
   });
   assert.equal(chromeLayout(319, 1).compact, true);
   assert.equal(chromeLayout(320, 1).compact, false);
+});
+
+test('layout: the narrowest phones single-space the first line\'s dots so it keeps to one line', () => {
+  assert.equal(chromeLayout(320, 1).tightDots, true);
+  assert.equal(chromeLayout(343, 1).tightDots, true);
+  assert.equal(chromeLayout(344, 1).tightDots, false);
+  assert.equal(chromeLayout(390, 1).tightDots, false);
+  // Compact rows give last night its own line, so their dots stay roomy.
+  assert.equal(chromeLayout(319, 1).tightDots, false);
 });
 
 test('next games read as a day, never an ISO date', () => {
@@ -148,6 +161,17 @@ test('the live status sentence names the last settled night and the lock', () =>
     statusSummary({ mode: 'live', lastSettledDate: null, nextGameDate: null, lastNight: null }),
     'No games settled yet. Next games not scheduled yet.',
   );
+});
+
+test('last night reads at the Results night precision, and to the dollar for screen readers', () => {
+  assert.deepEqual(lastNightFigure(322_500), { text: '+$322.5K', accessibilityLabel: '+$322,500' });
+  assert.deepEqual(lastNightFigure(-178_500), { text: '-$178.5K', accessibilityLabel: '-$178,500' });
+  assert.deepEqual(lastNightFigure(-3_500), { text: '-$3,500', accessibilityLabel: '-$3,500' });
+  assert.deepEqual(lastNightFigure(0), { text: '$0', accessibilityLabel: '$0' });
+  // Whatever the size, the bar uses the fine formatter itself, never the compact one.
+  for (const amount of [224_000, -96_000, 12_000, 999_949, 1_339_000, -1_756_500]) {
+    assert.equal(lastNightFigure(amount).text, signedMoneyFine(amount));
+  }
 });
 
 test('rule wording matches the shared rules copy for both dividend bases', () => {

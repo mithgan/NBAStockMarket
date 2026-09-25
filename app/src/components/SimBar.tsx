@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import {
+  advanceMockDays,
   advanceMockNights,
   isMockActive,
-  mockPerGameClient,
   mockSeasonStart,
 } from '../api/mockPerGameClient';
-import { chromeLayout, daysBetween, practiceProgress, practiceSeasonEnd } from '../data/chromeView';
+import { chromeLayout, practiceProgress, practiceSeasonEnd } from '../data/chromeView';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, space } from '../theme';
 import { Button } from '../ui/kit';
@@ -29,38 +29,28 @@ const ADVANCE_RETRY_MS = 150;
  */
 const STACKED_LABEL_MAX_WIDTH = 240;
 
-/**
- * Practice schedules each game one or two days after the last, so a run of
- * nights spans at most two days a night. Within three days a night of the
- * season's last day, nights are played one at a time so the run can stop there.
- */
-const MAX_DAYS_PER_NIGHT = 3;
-
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Plays up to `nights` practice nights, stopping once a night on or after the
- * season's last day (day 174) has settled, which is exactly when
- * practiceProgress calls the season complete. Near the end, +1 week plays only
- * the nights left instead of running days past the track. Far from the end a
- * run cannot reach the last day, so it plays in one go.
+ * +1 night settles the next game night: the night "Last night" and the notice
+ * after it both report. Once a night on or after the season's last day
+ * (day 174) has settled, which is exactly when practiceProgress calls the
+ * season complete, there is no night left to play.
  */
-async function playPracticeNights(
-  nights: number,
-  lastSettled: string | null,
-  seasonEnd: string | null,
-): Promise<void> {
-  if (!lastSettled || !seasonEnd || daysBetween(lastSettled, seasonEnd) > nights * MAX_DAYS_PER_NIGHT) {
-    advanceMockNights(nights);
-    return;
-  }
-  let settled = lastSettled;
-  for (let night = 0; night < nights && settled < seasonEnd; night += 1) {
-    advanceMockNights(1);
-    // The client's clock, read straight back (its bootstrap copies the state
-    // at the moment of the call), decides whether another night fits.
-    settled = (await mockPerGameClient().bootstrap()).game.lastSettledDate ?? seasonEnd;
-  }
+function playPracticeNight(lastSettled: string | null, seasonEnd: string | null): void {
+  if (lastSettled && seasonEnd && lastSettled >= seasonEnd) return;
+  advanceMockNights(1);
+}
+
+/**
+ * +1 week is seven calendar days on the track (Day 16 → Day 23): every game
+ * night in them settles and the clock moves the full seven even when the last
+ * day has no games, so the notice after it covers the same seven days as the
+ * Roster's week figure. It never runs past the season's last day (day 174);
+ * the final press stops there.
+ */
+function playPracticeWeek(): void {
+  advanceMockDays(7, practiceSeasonEnd(mockSeasonStart()));
 }
 
 /**
@@ -102,12 +92,13 @@ export function PracticeControls({ inline = false }: { inline?: boolean }) {
 
   // One night (or week) per tap, and never a second one before the screen has
   // caught up with the first: the client and the screen stay on the same day.
-  const advance = async (nights: number) => {
+  const advance = async (step: 'night' | 'week') => {
     if (advancingRef.current) return;
     advancingRef.current = true;
     setAdvancing(true);
     try {
-      await playPracticeNights(nights, bootstrap.game.lastSettledDate, practiceSeasonEnd(mockSeasonStart()));
+      if (step === 'week') playPracticeWeek();
+      else playPracticeNight(bootstrap.game.lastSettledDate, practiceSeasonEnd(mockSeasonStart()));
       for (let attempt = 0; attempt < ADVANCE_REFRESH_ATTEMPTS; attempt += 1) {
         if (await refreshData()) break;
         await wait(ADVANCE_RETRY_MS);
@@ -126,7 +117,7 @@ export function PracticeControls({ inline = false }: { inline?: boolean }) {
         disabled={advanceDisabled}
         label={stackLabels ? '+1\nnight' : '+1 night'}
         onPress={() => {
-          void advance(1);
+          void advance('night');
         }}
         style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact]}
         textStyle={styles.advanceText}
@@ -137,7 +128,7 @@ export function PracticeControls({ inline = false }: { inline?: boolean }) {
         disabled={advanceDisabled}
         label={stackLabels ? '+1\nweek' : '+1 week'}
         onPress={() => {
-          void advance(7);
+          void advance('week');
         }}
         style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact]}
         textStyle={styles.advanceText}

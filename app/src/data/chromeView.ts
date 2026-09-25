@@ -6,7 +6,7 @@
  * themselves live in components/PerGameStatusStrip.tsx and components/SimBar.tsx.
  */
 import type { DividendBasis } from '../api/contracts';
-import { exactSignedMoney, humanDate, humanDay } from '../copy/terms';
+import { exactSignedMoney, humanDate, humanDay, signedMoneyFine } from '../copy/terms';
 import { formatMoney } from '../format';
 
 /** Length of the practice season: opening-night eve (day 0) to the last night. */
@@ -108,6 +108,14 @@ export const CHROME_LOCK_TAG_MIN_WIDTH = 356;
  */
 export const CHROME_COMPACT_MAX_WIDTH = 320;
 /**
+ * Below this width (down to compact) a practice phone row's first line
+ * single-spaces its dots, so "Practice · Dec 30 · Last night +$999.9K", with
+ * last night at the Results precision, still fits one line beside Rules. With
+ * the roomy dots the widest such line wraps at 330px and narrower; 344px
+ * keeps a margin.
+ */
+export const CHROME_ROOMY_DOTS_MIN_WIDTH = 344;
+/**
  * The signed-in toolbar shows icons only in this band: narrow enough that
  * labels would squeeze the facts, wide enough that the toolbar still shares
  * the facts' row. Below it the toolbar drops under the facts, with labels.
@@ -133,6 +141,8 @@ export interface ChromeLayout {
   narrow: boolean;
   /** A phone at high zoom: short facts, and Restart and Exit behind More. */
   compact: boolean;
+  /** The narrowest phones short of compact: the first line's dots lose their extra spaces. */
+  tightDots: boolean;
 }
 
 export function chromeLayout(width: number, fontScale: number): ChromeLayout {
@@ -144,6 +154,7 @@ export function chromeLayout(width: number, fontScale: number): ChromeLayout {
     iconOnly: width < CHROME_ICON_ONLY_MAX_WIDTH && width >= CHROME_ICON_ONLY_MIN_WIDTH && !largeText,
     narrow: width < CHROME_NARROW_MAX_WIDTH,
     compact: width < CHROME_COMPACT_MAX_WIDTH,
+    tightDots: width < CHROME_ROOMY_DOTS_MIN_WIDTH && width >= CHROME_COMPACT_MAX_WIDTH,
   };
 }
 
@@ -161,7 +172,10 @@ export interface StatusSummaryInput {
   mode: ChromeMode;
   lastSettledDate: string | null;
   nextGameDate: string | null;
-  /** Score change on the last settled night (fees included), or null before any games. */
+  /**
+   * What your players made on the last settled night, games only
+   * (perGameMetrics.recentEarnings), or null before any games.
+   */
   lastNight: number | null;
   /** Practice only. */
   progress?: PracticeProgress;
@@ -198,6 +212,16 @@ export function statusSummary({
   else parts.push('Next games not scheduled yet.');
   if (lockSentence) parts.push(lockSentence);
   return parts.join(' ');
+}
+
+/**
+ * "Last night" in the bars, at the precision of that night's header on
+ * Results (signedMoneyFine: "+$322.5K", "-$3,500", "$0"), so the two read the
+ * same rather than "+$323K" above "+$322.5K". Screen readers get the amount
+ * to the dollar.
+ */
+export function lastNightFigure(amount: number): { text: string; accessibilityLabel: string } {
+  return { text: signedMoneyFine(amount), accessibilityLabel: exactSignedMoney(amount) };
 }
 
 /**
