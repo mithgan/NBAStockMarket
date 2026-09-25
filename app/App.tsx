@@ -137,8 +137,18 @@ function CenteredState({
   );
 }
 
-/** A success notice clears itself after this long; a problem waits for the player. */
+/**
+ * A success notice clears itself; a problem waits for the player. Longer
+ * notices stay up longer (about 17 characters a second on top of the base),
+ * so the money at the end of "…Your short on Shai Gilgeous-Alexander ended:
+ * +$378K." can be read before it goes.
+ */
 const SUCCESS_NOTICE_MS = 5000;
+const SUCCESS_NOTICE_MAX_MS = 10000;
+
+function successNoticeMs(message: string): number {
+  return Math.min(SUCCESS_NOTICE_MAX_MS, SUCCESS_NOTICE_MS + Math.max(0, message.length - 60) * 60);
+}
 
 /**
  * Notices float over the bottom of the screen instead of pushing it down, so
@@ -161,7 +171,7 @@ function NoticeToast({
 }) {
   useEffect(() => {
     if (tone !== 'success') return undefined;
-    const timer = setTimeout(onDismiss, SUCCESS_NOTICE_MS);
+    const timer = setTimeout(onDismiss, successNoticeMs(message));
     return () => clearTimeout(timer);
   }, [message, onDismiss, tone]);
   const problem = tone === 'problem';
@@ -175,7 +185,7 @@ function NoticeToast({
         importantForAccessibility={problem ? 'auto' : 'no-hide-descendants'}
         style={[styles.notice, problem ? styles.noticeProblem : styles.noticePassThrough]}
       >
-        <Text numberOfLines={problem ? undefined : 2} style={styles.noticeText}>{message}</Text>
+        <Text style={styles.noticeText}>{message}</Text>
         {problem ? (
           <Pressable
             accessibilityLabel={`Dismiss: ${message}`}
@@ -197,6 +207,11 @@ function NoticeToast({
  * on a phone.
  */
 const WIDE_LAYOUT_MIN_WIDTH = 900;
+
+function treatmentsRequested(): boolean {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).has('treatments');
+}
 const NARROW_LAYOUT_MAX_WIDTH = 300;
 
 function AppBody() {
@@ -375,8 +390,9 @@ function AppBody() {
         listedPlayers={players.length}
         ruleset={bootstrap?.ruleset}
         // The treatments gallery renders design samples from the old share
-        // market; it is a design-review tool, so it stays out of production.
-        onOpenTreatments={!__DEV__ || typeof window === 'undefined' ? undefined : () => {
+        // market; it is a design-review tool, so Settings only links to it
+        // when the page is opened with ?treatments.
+        onOpenTreatments={!treatmentsRequested() ? undefined : () => {
           window.location.assign(treatmentNavigation(window.location.href).galleryUrl);
         }}
         onClose={() => setSettingsOpen(false)}
@@ -730,7 +746,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
+    paddingHorizontal: 1,
     paddingTop: space.sm,
     paddingBottom: space.sm,
   },

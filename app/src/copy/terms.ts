@@ -161,3 +161,31 @@ export function gamesCount(count: number): string {
 export function nightsCount(count: number): string {
   return `${count} ${count === 1 ? 'night' : 'nights'}`;
 }
+
+/**
+ * When roster changes reopen. One sentence everywhere a lock shows: the
+ * server keeps roster changes locked while that date's games are played and
+ * settled, then unlocks, so the promise is "after" that date.
+ */
+export function rosterReopensLine(lockGameDate: string | null | undefined): string {
+  return lockGameDate ? `Roster reopens after ${humanDate(lockGameDate)}` : 'Roster reopens after these games';
+}
+
+/** Label on a Drop or Close button while it waits for the second tap. */
+export const CONFIRM_LABEL = 'Confirm';
+
+/** Accessible name of the armed Drop or Close button. */
+export function confirmCloseName(side: PerGamePositionSide, playerName: string): string {
+  return side === 'long' ? `Confirm dropping ${playerName}` : `Confirm closing your short on ${playerName}`;
+}
+
+/**
+ * The line under an armed Drop or Close: what it costs and what stays. The
+ * total is what the position made while you held it, which stays in the
+ * score after it closes.
+ */
+export function confirmCloseLine(side: PerGamePositionSide, feeDollars: number, total: number): string {
+  const stays = side === 'long' ? `his ${signedMoneyFine(total)}` : `this short's ${signedMoneyFine(total)}`;
+  const fee = feeDollars > 0 ? `${exactMoney(feeDollars)} fee · ` : '';
+  return `${fee}${stays} stays in your score`;
+}

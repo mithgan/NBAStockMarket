@@ -196,33 +196,64 @@ function addDays(isoDate: string, days: number): string {
 
 /**
  * The calendar day a ledger entry belongs to: its game date, or for an entry
- * without one (an add or drop fee) the UTC day it was booked.
+ * without one (an add or drop fee) the UTC day it was booked. In live play a
+ * fee booked on a US evening therefore lands on the next UTC day; practice
+ * books its fees in the simulated calendar, so the two always line up there.
  */
-function entryDay(entry: PerGameLedgerEntry): string | null {
+export function entryDay(entry: PerGameLedgerEntry): string | null {
   if (entry.gameDate) return entry.gameDate;
   return entry.createdAt ? entry.createdAt.slice(0, 10) : null;
 }
 
 /**
- * Score change on the last settled day and over the seven calendar days
- * ending on it, from the ledger, fees included: a game entry counts on its
- * game date, an add or drop fee on the day it was booked.
+ * Score change over a run of days: every ledger entry whose day falls after
+ * `afterDay` (exclusive; null means from the start) and on or before
+ * `throughDay`. Game entries and fees both count, exactly as in the score.
+ */
+export function earningsBetween(
+  ledger: readonly PerGameLedgerEntry[] | undefined,
+  afterDay: string | null,
+  throughDay: string,
+): number {
+  if (!ledger) return 0;
+  let total = 0;
+  for (const entry of ledger) {
+    const day = entryDay(entry);
+    if (!day || day > throughDay) continue;
+    if (afterDay !== null && day <= afterDay) continue;
+    total += entry.amountDollars;
+  }
+  return total;
+}
+
+/** How many game nights `recentEarnings` sums for its week figure. */
+export const RECENT_NIGHTS = 7;
+
+/**
+ * Score change on the last settled night and over the last seven game nights,
+ * from the ledger, fees included (a game entry counts on its game date, an add
+ * or drop fee on the day it was booked). Game nights, not calendar days, so
+ * the figure matches practice's +1 week, which plays seven game nights, and a
+ * refresh notice that reports the same run of nights. `weekNights` is how many
+ * nights the week figure covers (fewer than seven early in the season).
  */
 export function recentEarnings(
   ledger: readonly PerGameLedgerEntry[] | undefined,
   lastSettledDate: string | null | undefined,
-): { night: number; week: number } | null {
+): { night: number; week: number; weekNights: number } | null {
   if (!ledger || !lastSettledDate) return null;
-  const weekStart = addDays(lastSettledDate, -6);
-  let night = 0;
-  let week = 0;
-  for (const entry of ledger) {
-    const day = entryDay(entry);
-    if (!day) continue;
-    if (day === lastSettledDate) night += entry.amountDollars;
-    if (day >= weekStart && day <= lastSettledDate) week += entry.amountDollars;
-  }
-  return { night, week };
+  const nights = [...new Set(
+    ledger
+      .filter((entry) => entry.gameDate && entry.gameDate <= lastSettledDate)
+      .map((entry) => entry.gameDate as string),
+  )].sort();
+  const window = nights.slice(-RECENT_NIGHTS);
+  const weekStart = window[0] ?? lastSettledDate;
+  return {
+    night: earningsBetween(ledger, addDays(lastSettledDate, -1), lastSettledDate),
+    week: earningsBetween(ledger, addDays(weekStart, -1), lastSettledDate),
+    weekNights: window.length,
+  };
 }
 
 const FEE_KINDS = new Set(['open_fee', 'drop_fee', 'fee', 'penalty']);

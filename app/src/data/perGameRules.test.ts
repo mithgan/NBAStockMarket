@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import test from 'node:test';
 import { parsePerGameBootstrap } from '../api/contracts';
-import { perGameRulesPresentation, positionSlotHint } from './perGameRules';
+import { perGameRulesPresentation, positionSlotHint, rulesParagraphs } from './perGameRules';
 
 const example = JSON.parse(readFileSync(resolve(import.meta.dirname, '../api/fixtures/perGameApiExample.json'), 'utf8'));
 const rules = parsePerGameBootstrap(example.bootstrap).ruleset;
@@ -31,4 +31,12 @@ test('comparison rules name projection surprise only when that basis is active',
 test('market accessibility hints use current server slot limits', () => {
   assert.equal(positionSlotHint('long', 4), 'Add players to your 4-player roster');
   assert.equal(positionSlotHint('short', 2), 'Short up to 2 players');
+});
+
+test('the rules read as short paragraphs without losing a word', () => {
+  const { explanation } = perGameRulesPresentation(rules);
+  const paragraphs = rulesParagraphs(explanation);
+  assert.ok(paragraphs.length >= 4);
+  assert.equal(paragraphs.join(' '), explanation);
+  assert.match(paragraphs[paragraphs.length - 1], /negative/);
 });

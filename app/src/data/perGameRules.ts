@@ -34,3 +34,21 @@ export function positionSlotHint(side: PerGamePositionSide, limit: number) {
     ? `Add players to your ${limit}-player roster`
     : `Short up to ${limit} players`;
 }
+
+/**
+ * The explanation in short paragraphs, split before the roster sentence, the
+ * short sentence and the bad-game sentence, without changing a word. The
+ * Rules sheet and Settings both read it this way.
+ */
+export function rulesParagraphs(explanation: string): string[] {
+  const paragraphs: string[] = [];
+  let rest = explanation;
+  for (const marker of [ROSTER_EXPLAINER, SHORT_EXPLAINER, NEGATIVE_DIVIDEND_EXPLAINER]) {
+    const at = rest.indexOf(marker);
+    if (at < 0) continue;
+    paragraphs.push(rest.slice(0, at), marker);
+    rest = rest.slice(at + marker.length);
+  }
+  paragraphs.push(rest);
+  return paragraphs.map((part) => part.trim()).filter(Boolean);
+}

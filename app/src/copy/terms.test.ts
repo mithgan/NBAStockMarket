@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  CONFIRM_LABEL,
   closeVerb,
+  confirmCloseLine,
+  confirmCloseName,
+  rosterReopensLine,
   exactSignedMoney,
   moneyFine,
   signedMoneyFine,
@@ -76,4 +80,15 @@ test('fine money keeps figures that sit side by side honest', () => {
 test('names keep their hyphen together', () => {
   assert.equal(unbrokenName('Shai Gilgeous-Alexander'), 'Shai Gilgeous\u2011Alexander');
   assert.equal(unbrokenName('Nikola Jokic'), 'Nikola Jokic');
+});
+
+test('one lock sentence and one confirm line everywhere', () => {
+  assert.equal(rosterReopensLine('2025-10-31'), 'Roster reopens after Oct 31');
+  assert.equal(rosterReopensLine(null), 'Roster reopens after these games');
+  assert.equal(CONFIRM_LABEL, 'Confirm');
+  assert.equal(confirmCloseName('long', 'Nikola Jokic'), 'Confirm dropping Nikola Jokic');
+  assert.equal(confirmCloseName('short', 'Tyrese Maxey'), 'Confirm closing your short on Tyrese Maxey');
+  assert.equal(confirmCloseLine('long', 250, 764_000), '$250 fee · his +$764K stays in your score');
+  assert.equal(confirmCloseLine('short', 250, -45_500), "$250 fee · this short's -$45.5K stays in your score");
+  assert.equal(confirmCloseLine('long', 0, 0), 'his $0 stays in your score');
 });

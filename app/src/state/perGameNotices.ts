@@ -1,5 +1,6 @@
 import type { PerGameBootstrap, PerGamePosition } from '../api/contracts';
 import { humanDate, humanDay, money, signedMoney } from '../copy/terms';
+import { earningsBetween } from '../data/perGameMetrics';
 
 /** Shorts that were open before this refresh and have now run their term. */
 function endedShorts(previous: PerGameBootstrap | null, next: PerGameBootstrap): PerGamePosition[] {
@@ -37,12 +38,13 @@ export function refreshHasNews(previous: PerGameBootstrap | null, next: PerGameB
 
 /**
  * The notice after a refresh says what changed for the player, not what the
- * app did. When new games settled it reports them and the score change, which
- * is the news the player refreshed (or pressed +1 night) for, plus any short
- * that ended; a score that moved without new games (a corrected result) is
- * reported as such; otherwise it confirms the account is current. The next
- * game date already sits in the status bar, so it is only repeated when there
- * is nothing else to say.
+ * app did. The money comes first and is read from the ledger over exactly the
+ * nights that just settled, so it matches "Last night" after +1 night and
+ * "Last 7 nights" after +1 week to the dollar (fees booked on those days
+ * included). Any short that ran its term is named. A score that moved without
+ * new games (a corrected result) is reported as such; otherwise the notice
+ * confirms the account is current. The next game date already sits in the
+ * status bar, so it is only repeated when there is nothing else to say.
  */
 export function refreshNotice(
   previous: PerGameBootstrap | null,
@@ -52,14 +54,21 @@ export function refreshNotice(
   if (reconciled) return 'Your account is back in sync. You can make roster moves again.';
   const before = previous?.game.lastSettledDate ?? null;
   const after = next.game.lastSettledDate;
-  const change = next.account.cumulativePnl - (previous?.account.cumulativePnl ?? 0);
   const ended = endedSentence(endedShorts(previous, next));
   if (after && after !== before) {
+    const change = earningsBetween(next.ledger?.items, before, after);
+    const nights = new Set(
+      (next.ledger?.items ?? [])
+        .filter((entry) => entry.gameDate && entry.gameDate <= after && (before === null || entry.gameDate > before))
+        .map((entry) => entry.gameDate),
+    ).size;
+    const when = nights > 1 ? `${nights} nights through ${humanDate(after)}` : humanDate(after);
     const score = change === 0
-      ? 'Your score is unchanged.'
-      : `Your score ${change > 0 ? 'rose' : 'fell'} ${money(Math.abs(change))}.`;
-    return `Games through ${humanDate(after)} are in. ${score}${ended}`;
+      ? 'no change to your score.'
+      : `your score ${change > 0 ? 'rose' : 'fell'} ${money(Math.abs(change))}.`;
+    return `${when}: ${score}${ended}`;
   }
+  const change = next.account.cumulativePnl - (previous?.account.cumulativePnl ?? 0);
   if (previous && change !== 0) {
     return `Your score changed by ${signedMoney(change)} since the last update.${ended}`;
   }

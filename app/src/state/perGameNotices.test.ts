@@ -1,11 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { PerGameBootstrap, PerGamePosition } from '../api/contracts';
+import type { PerGameBootstrap, PerGameLedgerEntry, PerGamePosition } from '../api/contracts';
 import { refreshHasNews, refreshNotice } from './perGameNotices';
 
 function short(positionId: string, playerName: string, status: 'active' | 'closed', cumulativePnl: number) {
   return { positionId, playerName, side: 'short', status, cumulativePnl } as PerGamePosition;
+}
+
+function night(gameDate: string, amountDollars: number): PerGameLedgerEntry {
+  return {
+    eventCursor: 1, entryId: `${gameDate}-${amountDollars}`, positionId: 'a', playerId: 'p', gameId: 'g',
+    gameDate, resultRevision: 1, kind: 'game_dividend', amountDollars, adjustsEntryId: null,
+    createdAt: `${gameDate}T23:30:00.000Z`,
+  };
 }
 
 function snapshot(
@@ -13,36 +21,43 @@ function snapshot(
   nextGameDate: string | null,
   cumulativePnl: number,
   positions: PerGamePosition[] = [],
+  ledger: PerGameLedgerEntry[] = [],
 ) {
   return {
     game: { seasonId: 's', lastSettledDate, nextGameDate, eventCursor: 0 },
     account: { cumulativePnl },
     positions,
+    ledger: { items: ledger, nextCursor: null },
   } as unknown as PerGameBootstrap;
 }
 
-test('newly settled games report the score change, not "prices updated"', () => {
-  const before = snapshot('2025-11-04', '2025-11-05', 100_000);
+test('newly settled games lead with the money, read from those nights in the ledger', () => {
+  const before = snapshot('2025-11-04', '2025-11-05', 100_000, [], [night('2025-11-04', 100_000)]);
+  const oneNight = [night('2025-11-04', 100_000), night('2025-11-05', 323_000)];
   assert.equal(
-    refreshNotice(before, snapshot('2025-11-05', '2025-11-06', 423_000), false),
-    'Games through Nov 5 are in. Your score rose $323K.',
+    refreshNotice(before, snapshot('2025-11-05', '2025-11-06', 423_000, [], oneNight), false),
+    'Nov 5: your score rose $323K.',
+  );
+  const week = [
+    night('2025-11-04', 100_000),
+    ...['2025-11-05', '2025-11-06', '2025-11-08', '2025-11-09', '2025-11-10', '2025-11-11', '2025-11-12'].map((day) => night(day, -10_000)),
+  ];
+  assert.equal(
+    refreshNotice(before, snapshot('2025-11-12', '2025-11-13', 30_000, [], week), false),
+    '7 nights through Nov 12: your score fell $70K.',
   );
   assert.equal(
-    refreshNotice(before, snapshot('2025-11-12', '2025-11-13', 33_000), false),
-    'Games through Nov 12 are in. Your score fell $67K.',
-  );
-  assert.equal(
-    refreshNotice(before, snapshot('2025-11-05', '2025-11-06', 100_000), false),
-    'Games through Nov 5 are in. Your score is unchanged.',
+    refreshNotice(before, snapshot('2025-11-05', '2025-11-06', 100_000, [], [night('2025-11-04', 100_000)]), false),
+    'Nov 5: no change to your score.',
   );
 });
 
 test('a short that ran its term is named with what it made', () => {
   const before = snapshot('2025-11-04', '2025-11-05', 0, [short('s1', 'Tyrese Maxey', 'active', 200_000)]);
-  const after = snapshot('2025-11-05', '2025-11-06', 345_000, [short('s1', 'Tyrese Maxey', 'closed', 345_000)]);
+  const after = snapshot('2025-11-05', '2025-11-06', 345_000, [short('s1', 'Tyrese Maxey', 'closed', 345_000)], [night('2025-11-05', 145_000)]);
   assert.equal(
     refreshNotice(before, after, false),
-    'Games through Nov 5 are in. Your score rose $345K. Your short on Tyrese Maxey ended: +$345K.',
+    'Nov 5: your score rose $145K. Your short on Tyrese Maxey ended: +$345K.',
   );
   const two = snapshot('2025-11-05', '2025-11-06', 0, [
     short('s1', 'A', 'closed', 345_000),

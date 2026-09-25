@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import Svg, { Circle, Line } from 'react-native-svg';
 
 import type { PerGameRuleset } from '../api/contracts';
-import { perGameRulesPresentation } from '../data/perGameRules';
+import { perGameRulesPresentation, rulesParagraphs } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useDesignVariant } from '../theme/ThemeProvider';
 import { APPEARANCE_CHOICES, VARIANTS } from '../theme/variants';
@@ -111,7 +111,9 @@ export function SettingsSheet({
           <Section title="How it works">
             {rules ? (
               <>
-                <Text style={styles.lede}>{rules.explanation}</Text>
+                {rulesParagraphs(rules.explanation).map((paragraph) => (
+                  <Text key={paragraph} style={styles.lede}>{paragraph}</Text>
+                ))}
                 {rules.facts.map((fact) => (
                   <View key={fact.label} style={styles.factRow}>
                     <Text style={styles.factLabel}>{fact.label}</Text>
@@ -368,7 +370,7 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     lineHeight: 19,
     paddingHorizontal: space.lg,
-    paddingBottom: space.sm,
+    paddingBottom: space.md,
   },
   note: {
     color: colors.faint,
