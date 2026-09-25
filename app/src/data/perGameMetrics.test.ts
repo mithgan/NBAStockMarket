@@ -11,6 +11,7 @@ import {
   positionValue,
   recentEarnings,
   scoreBreakdown,
+  seasonSummary,
   valueVerdict,
 } from './perGameMetrics';
 
@@ -184,4 +185,36 @@ test('the score breakdown adds up by source, shorts and closed positions include
     other: 0,
   });
   assert.equal(scoreBreakdown(330_000, positions, [fee(-250), fee(-250)]).other, 500);
+});
+
+test('season summary: final score, place by your own score, best and worst player, moves', () => {
+  const position = (playerId: string, playerName: string, side: 'long' | 'short', cumulativePnl: number): PerGamePosition => ({
+    positionId: `${playerId}-${side}-${cumulativePnl}`, playerId, playerName, side, status: 'closed', lockedGameCost: 100_000,
+    openedEventSequence: 1, closedEventSequence: 2, expiresOn: null, cumulativeGameCost: 0, cumulativeDividend: 0, cumulativePnl,
+  });
+  const fee = (id: string): PerGameLedgerEntry => ({
+    eventCursor: 1, entryId: id, positionId: 'x', playerId: 'p', gameId: null, gameDate: null, resultRevision: null,
+    kind: 'open_fee', amountDollars: -250, adjustsEntryId: null, createdAt: '2025-11-01T23:45:00Z',
+  });
+  const summary = seasonSummary({
+    score: 1_062_500,
+    positions: [
+      position('p1', 'Nikola Jokic', 'long', 1_600_000),
+      position('p1', 'Nikola Jokic', 'long', -100_000),
+      position('p2', 'Luka Doncic', 'long', -400_000),
+      position('p3', 'Tyrese Maxey', 'short', 50_000),
+    ],
+    ledger: [fee('a'), fee('b'), fee('c')],
+    leaderboard: [
+      { cumulativePnl: 2_000_000, isCurrentUser: false },
+      { cumulativePnl: 0, isCurrentUser: true },
+      { cumulativePnl: -5_000, isCurrentUser: false },
+    ],
+  });
+  assert.equal(summary.rank, 2);
+  assert.equal(summary.of, 3);
+  assert.deepEqual(summary.best, { name: 'Nikola Jokic', total: 1_500_000 });
+  assert.deepEqual(summary.worst, { name: 'Luka Doncic', total: -400_000 });
+  assert.equal(summary.moves, 3);
+  assert.equal(summary.shortsMade, 1);
 });

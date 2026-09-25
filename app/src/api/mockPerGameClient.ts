@@ -29,8 +29,11 @@ import { rosterReopensLine } from '../copy/terms';
  * September 2026 beside October 2025 games.
  */
 function simulatedTime(day: string, when: 'move' | 'settlement'): string {
-  return `${day}T${when === 'move' ? '12:00:00' : '23:30:00'}.000Z`;
+  return `${day}T${when === 'move' ? '23:45:00' : '23:30:00'}.000Z`;
 }
+
+/** Other players on the practice leaderboard. */
+const PRACTICE_RIVALS = ['Fast Break FC', 'Deep Threes', 'Glass Cleaners', 'Pick and Roll Club', 'Bench Mob'];
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -104,14 +107,27 @@ export class MockPerGameApiClient {
       rosterMutationsLocked: false,
       rosterLockGameDate: null,
     };
-    snapshot.account = { ...snapshot.account, displayName: 'Mock preview' };
+    snapshot.account = { ...snapshot.account, displayName: 'You' };
     // A practice season starts everyone at $0, as the Leaders screen says;
     // the fixture's standings belong to the live sample, not to night zero.
+    // Rivals get readable names instead of account hashes.
+    let rival = 0;
     snapshot.leaderboard = snapshot.leaderboard.map((row, index) => ({
       ...row,
       rank: index + 1,
+      displayName: row.isCurrentUser ? 'You' : PRACTICE_RIVALS[rival++ % PRACTICE_RIVALS.length],
       cumulativePnl: row.isCurrentUser ? snapshot.account.cumulativePnl : 0,
     }));
+    // Last season's value per game, varied per player (the fixture puts every
+    // player exactly $20K from his price, which makes a Value sort pointless).
+    // About one in ten has no last season (a rookie). Seeded, so every
+    // practice season starts from the same market.
+    const valueRng = makeRng(20_262_028);
+    snapshot.market = snapshot.market.map((player) => {
+      if (valueRng() < 0.1) return { ...player, priorSeasonValuePerGame: null };
+      const ratio = 0.72 + valueRng() * 0.56;
+      return { ...player, priorSeasonValuePerGame: Math.round((player.currentGameCost * ratio) / 500) * 500 };
+    });
     return snapshot;
   }
 
@@ -172,8 +188,10 @@ export class MockPerGameApiClient {
       lockedGameCost: player.currentGameCost,
       openedEventSequence: this.sequence,
       closedEventSequence: null,
+      // The last day the short counts: a 7-day short opened before the Oct 21
+      // games plays Oct 21-27 and ends when the Oct 27 games are in.
       expiresOn: side === 'short' && state.ruleset.shortTermDays !== null && state.game.nextGameDate
-        ? addDays(state.game.nextGameDate, state.ruleset.shortTermDays)
+        ? addDays(state.game.nextGameDate, Math.max(0, state.ruleset.shortTermDays - 1))
         : null,
       cumulativeGameCost: 0,
       cumulativeDividend: 0,
@@ -264,6 +282,8 @@ export class MockPerGameApiClient {
     const state = this.snapshot;
     const date = state.game.nextGameDate;
     if (!date) return;
+    // A lock covers one night; tonight's lock ends when tonight's games are in.
+    const lockedTonight = state.ruleset.rosterMutationsLocked && state.ruleset.rosterLockGameDate === date;
     state.ruleset.rosterMutationsLocked = false;
     state.ruleset.rosterLockGameDate = null;
 
@@ -275,8 +295,12 @@ export class MockPerGameApiClient {
     for (const player of state.market) {
       if (this.rng() > 0.55) continue;
       const expectedNp = player.currentGameCost / rate;
-      const noise = (this.rng() + this.rng() + this.rng() - 1.5) * 14;
-      const actualNp = Math.round((expectedNp + noise) * 10) / 10;
+      // Most nights land within about half his price either way; now and
+      // then a bad night goes below zero, as the rules say it can.
+      const swing = (this.rng() + this.rng() + this.rng() - 1.5) * 0.5;
+      const badNight = this.rng() < 0.06;
+      const rawNp = badNight ? -expectedNp * (0.2 + 0.5 * this.rng()) : expectedNp * (1 + swing);
+      const actualNp = Math.round(rawNp * 10) / 10;
       actualByPlayer.set(player.playerId, actualNp);
       const trend = this.trendsByPlayer[player.playerId]
         ?? (this.trendsByPlayer[player.playerId] = []);
@@ -290,15 +314,6 @@ export class MockPerGameApiClient {
     let nightPnl = 0;
     for (const position of state.positions) {
       if (position.status !== 'active') continue;
-      if (position.expiresOn !== null && position.expiresOn < date) {
-        this.sequence += 1;
-        position.status = 'closed';
-        position.closedEventSequence = this.sequence;
-        const slots = position.side === 'long' ? state.account.longSlots : state.account.shortSlots;
-        slots.used = Math.max(0, slots.used - 1);
-        slots.remaining = Math.max(0, slots.limit - slots.used);
-        continue;
-      }
       const actualNp = actualByPlayer.get(position.playerId);
       if (actualNp === undefined) continue;
       const dividend = Math.round(actualNp * rate);
@@ -359,6 +374,18 @@ export class MockPerGameApiClient {
     state.account.latestGamePnl = nightPnl;
     state.account.cumulativePnl += nightPnl;
 
+    // A short ends once its last game is in, so its slot is free for the
+    // next night's games (no $250 to close a short that is already over).
+    for (const position of state.positions) {
+      if (position.status !== 'active' || position.expiresOn === null || position.expiresOn > date) continue;
+      this.sequence += 1;
+      position.status = 'closed';
+      position.closedEventSequence = this.sequence;
+      const slots = position.side === 'long' ? state.account.longSlots : state.account.shortSlots;
+      slots.used = Math.max(0, slots.used - 1);
+      slots.remaining = Math.max(0, slots.limit - slots.used);
+    }
+
     for (const player of state.market) {
       const drift = 1 + (this.rng() - 0.5) * 0.04;
       const next = Math.max(25_000, Math.round(player.currentGameCost * drift));
@@ -386,7 +413,8 @@ export class MockPerGameApiClient {
 
     // A quarter of nights close with the next slate already locked, so the
     // LOCKED chip and disabled mutation states stay reviewable in the mock.
-    if (this.rng() < 0.25) {
+    // Never two nights in a row: "Roster reopens after <date>" must hold.
+    if (!lockedTonight && this.rng() < 0.25) {
       state.ruleset.rosterMutationsLocked = true;
       state.ruleset.rosterLockGameDate = state.game.nextGameDate;
     }
@@ -429,8 +457,10 @@ export class MockPerGameApiClient {
       kind,
       amountDollars: -fee,
       adjustsEntryId: null,
+      // Booked on the day the status bar shows (the move is made after that
+      // day's games), so Results files it where the player made it.
       createdAt: simulatedTime(
-        this.snapshot.game.nextGameDate ?? this.snapshot.game.lastSettledDate ?? SANDBOX_OPENING_EVE,
+        this.snapshot.game.lastSettledDate ?? SANDBOX_OPENING_EVE,
         'move',
       ),
     });

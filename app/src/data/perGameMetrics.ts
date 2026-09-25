@@ -310,3 +310,48 @@ export function scoreBreakdown(
   const other = score - roster - shorts - closed - fees;
   return { roster, shorts, closed, closedCount, fees, other: Math.abs(other) < 1 ? 0 : other };
 }
+
+export interface SeasonSummary {
+  finalScore: number;
+  /** Your place by your own score among the board's other rows (1-based). */
+  rank: number | null;
+  of: number | null;
+  best: { name: string; total: number } | null;
+  worst: { name: string; total: number } | null;
+  /** Add, drop, open and close moves (fee entries). */
+  moves: number;
+  shortsMade: number;
+}
+
+/**
+ * The end-of-season card's numbers: final score, place, best and worst
+ * player (by what each made across all your stints with him) and how many
+ * moves you made.
+ */
+export function seasonSummary(input: {
+  score: number;
+  positions: readonly PerGamePosition[];
+  ledger: readonly PerGameLedgerEntry[];
+  leaderboard: readonly { cumulativePnl: number; isCurrentUser: boolean }[];
+}): SeasonSummary {
+  const byPlayer = new Map<string, { name: string; total: number }>();
+  let shortsMade = 0;
+  for (const position of input.positions) {
+    const entry = byPlayer.get(position.playerId) ?? { name: position.playerName, total: 0 };
+    entry.total += position.cumulativePnl;
+    byPlayer.set(position.playerId, entry);
+    if (position.side === 'short') shortsMade += 1;
+  }
+  const players = [...byPlayer.values()].sort((left, right) => right.total - left.total);
+  const others = input.leaderboard.filter((row) => !row.isCurrentUser);
+  const hasBoard = input.leaderboard.length > 0;
+  return {
+    finalScore: input.score,
+    rank: hasBoard ? 1 + others.filter((row) => row.cumulativePnl > input.score).length : null,
+    of: hasBoard ? others.length + 1 : null,
+    best: players.length > 0 && players[0].total > 0 ? players[0] : null,
+    worst: players.length > 0 && players[players.length - 1].total < 0 ? players[players.length - 1] : null,
+    moves: input.ledger.filter((entry) => FEE_KINDS.has(entry.kind)).length,
+    shortsMade,
+  };
+}

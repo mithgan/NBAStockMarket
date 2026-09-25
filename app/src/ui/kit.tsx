@@ -12,8 +12,9 @@
  *  - radius stays at or under `radius.lg` (8) and text at or over 11px;
  *  - green means a gain, red a loss, and nothing else is green or red.
  */
-import type { ReactNode } from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -172,57 +173,78 @@ export function Tag({ children, tone = 'neutral', style }: {
 // ---------------------------------------------------------------------------
 // Button
 
-export type ButtonVariant = 'primary' | 'secondary' | 'quiet';
+export type ButtonVariant = 'primary' | 'secondary' | 'quiet' | 'danger';
 
-/**
- * A 44px-tall action. `primary` is gold and reserved for the one thing a row or
- * screen most wants you to do; `secondary` is an outlined neutral; `quiet` is
- * text-only for low-stakes actions such as Exit.
- */
-export function Button({
-  label,
-  onPress,
-  variant = 'secondary',
-  disabled = false,
-  accessibilityLabel,
-  accessibilityHint,
-  width,
-  style,
-  textStyle,
-}: {
+export type ButtonProps = {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
   disabled?: boolean;
+  /**
+   * Keep a disabled button in the Tab order (aria-disabled) so a keyboard or
+   * screen-reader user can reach it and hear why it is disabled.
+   */
+  focusableWhenDisabled?: boolean;
   accessibilityLabel?: string;
   accessibilityHint?: string;
   width?: number;
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
-}) {
+};
+
+/**
+ * A 44px-tall action. `primary` is gold and reserved for the one thing a row or
+ * screen most wants you to do; `secondary` is an outlined neutral; `quiet` is
+ * text-only for low-stakes actions such as Exit; `danger` is for the second,
+ * deliberate step of something that costs money or loses progress.
+ * Forwards its ref so callers can move keyboard focus onto it.
+ */
+export const Button = forwardRef<View, ButtonProps>(function Button({
+  label,
+  onPress,
+  variant = 'secondary',
+  disabled = false,
+  focusableWhenDisabled = false,
+  accessibilityLabel,
+  accessibilityHint,
+  width,
+  style,
+  textStyle,
+}, ref) {
   const name = accessibilityLabel ?? label;
+  // A focusable disabled button stays enabled for the browser (so it keeps its
+  // Tab stop) but ignores presses and says it is disabled.
+  const hardDisabled = disabled && !focusableWhenDisabled;
   return (
     <Pressable
+      ref={ref}
       accessibilityHint={accessibilityHint}
       // react-native-web drops accessibilityHint, so a disabled button would
       // never say why. Carry the reason in the name while it applies.
       accessibilityLabel={disabled && accessibilityHint ? `${name}. ${accessibilityHint}` : name}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
-      disabled={disabled}
+      aria-disabled={disabled}
+      disabled={hardDisabled}
       onPress={() => {
         if (!disabled) onPress();
       }}
-      style={({ pressed }) => [
-        styles.button,
-        variant === 'primary' && styles.buttonPrimary,
-        variant === 'secondary' && styles.buttonSecondary,
-        variant === 'quiet' && styles.buttonQuiet,
-        width !== undefined && { width },
-        disabled && styles.disabled,
-        pressed && !disabled && styles.pressed,
-        style,
-      ]}
+      style={(state) => {
+        const { pressed } = state;
+        const hovered = (state as { hovered?: boolean }).hovered === true;
+        return [
+          styles.button,
+          variant === 'primary' && styles.buttonPrimary,
+          variant === 'secondary' && styles.buttonSecondary,
+          variant === 'quiet' && styles.buttonQuiet,
+          variant === 'danger' && styles.buttonDanger,
+          width !== undefined && { width },
+          hovered && !disabled && (variant === 'primary' ? styles.hoverPrimary : styles.hover),
+          disabled && styles.disabled,
+          pressed && !disabled && styles.pressed,
+          style,
+        ];
+      }}
     >
       <Text
         maxFontSizeMultiplier={1.3}
@@ -230,12 +252,183 @@ export function Button({
           styles.buttonText,
           variant === 'primary' && styles.buttonTextPrimary,
           variant === 'quiet' && styles.buttonTextQuiet,
+          variant === 'danger' && styles.buttonTextDanger,
           textStyle,
         ]}
       >
         {label}
       </Text>
     </Pressable>
+  );
+});
+
+/**
+ * A short "it worked" state for a row's button after an action: while it is
+ * on, show a non-interactive confirmation (e.g. "Added ✓") in the button's
+ * place so a second, accidental tap lands on nothing.
+ */
+export function useCooldown(ms = 1200): [boolean, () => void] {
+  const [on, setOn] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const start = useCallback(() => {
+    setOn(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setOn(false), ms);
+  }, [ms]);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  return [on, start];
+}
+
+/** Presses that land sooner than this after a confirm appears are ignored. */
+const CONFIRM_TAP_GUARD_MS = 400;
+
+function useTapGuard() {
+  const openedAt = useRef(Date.now());
+  return useCallback((fn: () => void) => () => {
+    if (Date.now() - openedAt.current < CONFIRM_TAP_GUARD_MS) return;
+    fn();
+  }, []);
+}
+
+function focusNode(ref: { current: unknown }) {
+  const node = ref.current as { focus?: () => void } | null;
+  node?.focus?.();
+}
+
+/**
+ * The second, deliberate step before something that costs money: an inline
+ * strip under the row that says what happens and offers two real buttons.
+ * "Keep" sits on the right, where the row's Drop/Close button was, so a
+ * double tap lands on the safe choice; the costly button sits to its left.
+ * Taps in the first 400 ms are ignored, keyboard focus starts on Keep, Escape
+ * cancels, and nothing times out while the player reads it.
+ */
+export function ConfirmStrip({
+  message,
+  confirmLabel,
+  cancelLabel = 'Keep',
+  confirmAccessibilityLabel,
+  onConfirm,
+  onCancel,
+  style,
+}: {
+  message: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  confirmAccessibilityLabel?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const guard = useTapGuard();
+  const keepRef = useRef<View>(null);
+  useEffect(() => {
+    focusNode(keepRef);
+  }, []);
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onCancel();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+  return (
+    <View accessibilityRole="alert" style={[styles.confirmStrip, style]}>
+      <Text style={styles.confirmText}>{message}</Text>
+      <View style={styles.confirmButtons}>
+        <Button
+          accessibilityLabel={confirmAccessibilityLabel}
+          label={confirmLabel}
+          onPress={guard(onConfirm)}
+          variant="danger"
+        />
+        <Button ref={keepRef} label={cancelLabel} onPress={guard(onCancel)} variant="secondary" />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * A modal question for the few actions that lose a whole practice season
+ * (Restart, Exit). The safe choice is focused and sits where the original
+ * button was; the costly choice needs a deliberate second tap; Escape, Back
+ * and tapping outside all mean "no".
+ */
+export function ConfirmDialog({
+  visible,
+  title,
+  lines,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  onCancel,
+}: {
+  visible: boolean;
+  title: string;
+  lines: string[];
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!visible) return null;
+  return (
+    <Modal accessibilityLabel={title} animationType="none" onRequestClose={onCancel} transparent visible>
+      <ConfirmDialogBody
+        cancelLabel={cancelLabel}
+        confirmLabel={confirmLabel}
+        lines={lines}
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+        title={title}
+      />
+    </Modal>
+  );
+}
+
+function ConfirmDialogBody({
+  title,
+  lines,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  lines: string[];
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const guard = useTapGuard();
+  const cancelRef = useRef<View>(null);
+  useEffect(() => {
+    focusNode(cancelRef);
+  }, []);
+  return (
+    <View style={styles.dialogLayer}>
+      {/* A plain view, not a button: tapping outside cancels, but the scrim
+          never takes keyboard focus. */}
+      <View
+        onResponderRelease={onCancel}
+        onStartShouldSetResponder={() => true}
+        style={styles.dialogScrim}
+      />
+      <View style={styles.dialogPanel}>
+        <Text accessibilityRole="header" {...headingLevel(2)} style={styles.dialogTitle}>{title}</Text>
+        {lines.map((line) => (
+          <Text key={line} style={styles.dialogLine}>{line}</Text>
+        ))}
+        <View style={styles.dialogButtons}>
+          <Button label={confirmLabel} onPress={guard(onConfirm)} variant="danger" />
+          <Button ref={cancelRef} label={cancelLabel} onPress={guard(onCancel)} variant="primary" />
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -244,7 +437,11 @@ export function Button({
 
 export type SegmentOption<K extends string> = { key: K; label: string; hint?: string };
 
-/** Two to four mutually exclusive choices, e.g. Roster / Short. */
+/**
+ * Two to four mutually exclusive choices, e.g. Roster / Short. Works like a
+ * tab list for keyboards: one Tab stop (the selected choice), arrow keys and
+ * Home/End move and select, Space and Enter select.
+ */
 export function Segmented<K extends string>({
   options,
   value,
@@ -258,25 +455,56 @@ export function Segmented<K extends string>({
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 }) {
+  const refs = useRef<Array<View | null>>([]);
+  const selectedIndex = Math.max(0, options.findIndex((option) => option.key === value));
+  const move = (to: number) => {
+    const index = (to + options.length) % options.length;
+    onChange(options[index].key);
+    focusNode({ current: refs.current[index] });
+  };
+  const onKeyDown = (event: { key: string; preventDefault: () => void }) => {
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); move(selectedIndex + 1); }
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); move(selectedIndex - 1); }
+    else if (event.key === 'Home') { event.preventDefault(); move(0); }
+    else if (event.key === 'End') { event.preventDefault(); move(options.length - 1); }
+  };
   return (
-    <View accessibilityLabel={accessibilityLabel} accessibilityRole="tablist" style={[styles.segmented, style]}>
+    <View
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="tablist"
+      style={[styles.segmented, style]}
+      {...({ onKeyDown } as object)}
+    >
       {options.map((option, index) => {
         const selected = option.key === value;
         return (
           <Pressable
             key={option.key}
+            ref={(node) => {
+              refs.current[index] = node;
+            }}
             accessibilityHint={option.hint}
             accessibilityLabel={option.label}
             accessibilityRole="tab"
             accessibilityState={{ selected }}
             aria-selected={selected}
             onPress={() => onChange(option.key)}
-            style={({ pressed }) => [
-              styles.segment,
-              index > 0 && styles.segmentDivider,
-              selected && styles.segmentSelected,
-              pressed && !selected && styles.pressed,
-            ]}
+            {...({
+              tabIndex: selected ? 0 : -1,
+              onKeyDown: (event: { key: string; preventDefault: () => void }) => {
+                if (event.key === ' ' || event.key === 'Spacebar') { event.preventDefault(); onChange(option.key); }
+              },
+            } as object)}
+            style={(state) => {
+              const hovered = (state as { hovered?: boolean }).hovered === true;
+              return [
+                styles.segment,
+                index > 0 && styles.segmentDivider,
+                selected && styles.segmentSelected,
+                hovered && !selected && styles.hover,
+                state.pressed && !selected && styles.pressed,
+              ];
+            }}
           >
             <Text maxFontSizeMultiplier={1.3} style={[styles.segmentText, selected && styles.segmentTextSelected]}>
               {option.label}
@@ -409,6 +637,78 @@ const styles = StyleSheet.create({
   },
   buttonQuiet: {
     backgroundColor: 'transparent',
+  },
+  buttonDanger: {
+    backgroundColor: colors.redSoft,
+    borderColor: colors.red,
+  },
+  buttonTextDanger: {
+    color: colors.red,
+  },
+  hover: {
+    backgroundColor: colors.surfaceHigh,
+  },
+  hoverPrimary: {
+    opacity: 0.9,
+  },
+  confirmStrip: {
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    backgroundColor: colors.surfaceRaised,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderStrong,
+  },
+  confirmText: {
+    color: colors.text,
+    fontSize: type.body,
+    lineHeight: 19,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: space.sm,
+  },
+  dialogLayer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: space.lg,
+  },
+  dialogScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  dialogPanel: {
+    width: '100%',
+    maxWidth: 420,
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  dialogTitle: {
+    ...headingStyle,
+    letterSpacing: 0,
+  },
+  dialogLine: {
+    color: colors.text,
+    fontSize: type.body,
+    lineHeight: 19,
+  },
+  dialogButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: space.sm,
+    marginTop: space.sm,
   },
   buttonText: {
     color: colors.text,

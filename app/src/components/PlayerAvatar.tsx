@@ -26,6 +26,7 @@ function initials(name: string) {
  */
 export function PlayerAvatar({ player, size = 38 }: { player: AvatarPlayer; size?: number }) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   return (
     // Every caller renders the player's name in text right next to the tile,
@@ -36,21 +37,28 @@ export function PlayerAvatar({ player, size = 38 }: { player: AvatarPlayer; size
       importantForAccessibility="no-hide-descendants"
       style={[styles.avatar, { width: size, height: size }]}
     >
-      {failed ? (
+      {/* Initials sit underneath until the photo arrives (and stay if it never
+          does), so a slow network shows a name, not an empty square. */}
+      {loaded ? null : (
         <Text
           maxFontSizeMultiplier={1.2}
           style={[styles.avatarInitials, { fontSize: Math.max(11, Math.round(size * 0.34)) }]}
         >
           {initials(player.name)}
         </Text>
-      ) : (
+      )}
+      {failed ? null : (
         <Image
           accessibilityIgnoresInvertColors
           accessibilityLabel={`${player.name} headshot`}
           onError={() => setFailed(true)}
+          onLoad={() => setLoaded(true)}
           resizeMode="cover"
           source={{ uri: `https://a.espncdn.com/i/headshots/nba/players/full/${player.id}.png` }}
-          style={{ width: size, height: size * 1.16, marginTop: size * 0.1 }}
+          style={[
+            styles.photo,
+            { width: size, height: size * 1.16, top: size * 0.1, opacity: loaded ? 1 : 0 },
+          ]}
         />
       )}
     </View>
@@ -65,6 +73,10 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     borderRadius: radius.sm,
     backgroundColor: colors.surfaceRaised,
+  },
+  photo: {
+    position: 'absolute',
+    left: 0,
   },
   avatarInitials: {
     color: colors.faint,

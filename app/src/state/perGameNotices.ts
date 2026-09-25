@@ -18,10 +18,31 @@ function endedShorts(previous: PerGameBootstrap | null, next: PerGameBootstrap):
 function endedSentence(ended: PerGamePosition[]): string {
   if (ended.length === 0) return '';
   if (ended.length === 1) {
-    return ` Your short on ${ended[0].playerName} ended: ${signedMoneyFine(ended[0].cumulativePnl)}.`;
+    return ` Your short on ${ended[0].playerName} is over: it made ${signedMoneyFine(ended[0].cumulativePnl)} in all, already in your score.`;
   }
   const total = ended.reduce((sum, position) => sum + position.cumulativePnl, 0);
-  return ` ${ended.length} shorts ended: ${signedMoneyFine(total)} in all.`;
+  return ` ${ended.length} shorts are over: they made ${signedMoneyFine(total)} in all, already in your score.`;
+}
+
+/** A roster lock that begins with these games, in one sentence. */
+function lockSentence(previous: PerGameBootstrap | null, next: PerGameBootstrap): string {
+  const locked = next.ruleset?.rosterMutationsLocked === true;
+  const wasLocked = previous?.ruleset?.rosterMutationsLocked === true;
+  if (!locked || wasLocked) return '';
+  const date = next.ruleset.rosterLockGameDate;
+  return date
+    ? ` Roster moves pause for the ${humanDate(date)} games.`
+    : ' Roster moves pause for the next games.';
+}
+
+/** Your place on the board, by your own score. */
+function standing(next: PerGameBootstrap): string {
+  const board = next.leaderboard ?? [];
+  if (board.length === 0) return '';
+  const score = next.account.cumulativePnl;
+  const others = board.filter((row) => !row.isCurrentUser);
+  const rank = 1 + others.filter((row) => row.cumulativePnl > score).length;
+  return `, #${rank} of ${others.length + 1}`;
 }
 
 /**
@@ -51,8 +72,13 @@ export function refreshNotice(
   previous: PerGameBootstrap | null,
   next: PerGameBootstrap,
   reconciled: boolean,
+  options: { seasonComplete?: (snapshot: PerGameBootstrap) => boolean } = {},
 ): string {
   if (reconciled) return 'Your account is back in sync. You can make roster moves again.';
+  const complete = options.seasonComplete;
+  if (complete && complete(next) && !(previous && complete(previous))) {
+    return `Season complete. Final score ${signedMoneyFine(next.account.cumulativePnl)}${standing(next)}.`;
+  }
   const before = previous?.game.lastSettledDate ?? null;
   const after = next.game.lastSettledDate;
   const ended = endedSentence(endedShorts(previous, next));
@@ -60,10 +86,15 @@ export function refreshNotice(
     const change = earningsBetween(next.ledger?.items, before, after, { gamesOnly: true });
     const span = before ? daysBetween(before, after) : 1;
     const when = span > 1 ? `Games through ${humanDate(after)}` : `${humanDate(after)} games`;
-    const score = change === 0
-      ? 'no change to your score.'
-      : `your score ${change > 0 ? 'rose' : 'fell'} ${moneyFine(Math.abs(change))}.`;
-    return `${when}: ${score}${ended}`;
+    const played = (next.ledger?.items ?? []).some((entry) => (
+      entry.gameDate !== null && entry.gameDate <= after && (before === null || entry.gameDate > before)
+    ));
+    const score = !played
+      ? 'none of your players played.'
+      : change === 0
+        ? 'your players broke even.'
+        : `your score ${change > 0 ? 'rose' : 'fell'} ${moneyFine(Math.abs(change))}.`;
+    return `${when}: ${score}${ended}${lockSentence(previous, next)}`;
   }
   const change = next.account.cumulativePnl - (previous?.account.cumulativePnl ?? 0);
   if (previous && change !== 0) {

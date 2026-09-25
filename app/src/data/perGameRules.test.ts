@@ -38,5 +38,9 @@ test('the rules read as short paragraphs without losing a word', () => {
   const paragraphs = rulesParagraphs(explanation);
   assert.ok(paragraphs.length >= 4);
   assert.equal(paragraphs.join(' '), explanation);
-  assert.match(paragraphs[paragraphs.length - 1], /negative/);
+  assert.ok(paragraphs.some((paragraph) => /negative/.test(paragraph)));
+  assert.ok(paragraphs.some((paragraph) => /locked for as long as you hold him/.test(paragraph)));
+  assert.match(paragraphs[paragraphs.length - 1], /moves pause/);
+  assert.match(explanation, /minus a \$\d[\d,]* fee each time you add, drop, open or close/);
+  assert.equal(perGameRulesPresentation(rules).glossary.length, 6);
 });

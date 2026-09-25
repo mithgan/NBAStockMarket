@@ -10,11 +10,11 @@
  * from state code as well as from components.
  */
 import type { PerGamePositionSide } from '../api/contracts';
-import { formatCompactMoney, formatCompactSignedMoney, formatMoney, formatSignedMoney } from '../format';
+import { formatMoney, formatSignedMoney } from '../format';
 
 /** How a short works, in one breath. Used wherever a short is explained. */
 export const SHORT_EXPLAINER =
-  "A short pays you when he scores less than his price. Each game you're credited his price, then pay out his dividend.";
+  "A short pays you when his dividend comes in under his price. Each game you're credited his price, then pay out his dividend.";
 
 /** How a roster spot works, in one breath. */
 export const ROSTER_EXPLAINER =
@@ -86,15 +86,18 @@ export function humanDateWithYear(value: string | null | undefined): string {
   }).format(date);
 }
 
-/** Compact money: "$238K", "-$1.2M". */
+/**
+ * Money, the one way the app writes it: "$3,500", "$237.5K", "$1.06M". Every
+ * screen, notice and screen-reader label uses this (or `signedMoney`), so the
+ * same amount never reads two ways. See `moneyFine` for the rule.
+ */
 export function money(amount: number): string {
-  return formatCompactMoney(amount);
+  return moneyFine(amount);
 }
 
-/** Compact signed money: "+$238K", "-$1.2M". Zero is plain "$0", never "+$0". */
+/** Signed money: "+$237.5K", "-$1.06M", and plain "$0" for zero. */
 export function signedMoney(amount: number): string {
-  if (Math.round(amount) === 0) return '$0';
-  return formatCompactSignedMoney(amount);
+  return signedMoneyFine(amount);
 }
 
 /** Exact money for screen readers and equations: "$237,500". */
@@ -142,14 +145,14 @@ export function unbrokenName(name: string): string {
   return name.replace(/-/g, '\u2011');
 }
 
-/** "$105K a game" — the price of a player, in words. */
+/** "$104.6K a game" — the price of a player, in words. */
 export function perGame(amount: number): string {
-  return `${formatCompactMoney(amount)} a game`;
+  return `${moneyFine(amount)} a game`;
 }
 
-/** "$105K/game" — the same price where space is tight. */
+/** "$104.6K/game" — the same price where space is tight. */
 export function perGameShort(amount: number): string {
-  return `${formatCompactMoney(amount)}/game`;
+  return `${moneyFine(amount)}/game`;
 }
 
 /** "1 game", "12 games". */
@@ -188,4 +191,24 @@ export function confirmCloseLine(side: PerGamePositionSide, feeDollars: number, 
   const stays = side === 'long' ? `his ${signedMoneyFine(total)}` : `this short's ${signedMoneyFine(total)}`;
   const fee = feeDollars > 0 ? `${exactMoney(feeDollars)} fee · ` : '';
   return `${fee}${stays} stays in your score`;
+}
+
+/** Accessible name of a row's Drop or Close button, the same on every screen. */
+export function closeActionName(side: PerGamePositionSide, playerName: string): string {
+  return side === 'long' ? `Drop ${playerName}` : `Close your short on ${playerName}`;
+}
+
+/** Label on the destructive button of a Drop or Close confirm: "Drop for $250". */
+export function confirmCloseButton(side: PerGamePositionSide, feeDollars: number): string {
+  const verb = side === 'long' ? 'Drop' : 'Close';
+  return feeDollars > 0 ? `${verb} for ${exactMoney(feeDollars)}` : verb;
+}
+
+/** Why a roster lock exists, in one breath. */
+export const LOCK_EXPLAINER =
+  "On some nights roster moves pause while that night's games are played. Your players still play; moves reopen once those games are in.";
+
+/** Text for screen readers: separators a speech engine reads aloud become pauses. */
+export function spoken(text: string): string {
+  return text.replace(/\s·\s/g, ', ').replace(/\s+·/g, ',');
 }

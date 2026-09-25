@@ -83,7 +83,7 @@ test('market rows expose both decision anchors and one duplicate-safe action', (
 });
 
 test('the short explainer is one shared sentence in plain English', () => {
-  assert.match(terms, /A short pays you when he scores less than his price/);
+  assert.match(terms, /A short pays you when his dividend comes in under his price/);
   assert.match(rules, /SHORT_EXPLAINER/);
 });
 

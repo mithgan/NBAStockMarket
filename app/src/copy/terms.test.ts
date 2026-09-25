@@ -3,6 +3,9 @@ import test from 'node:test';
 
 import {
   CONFIRM_LABEL,
+  closeActionName,
+  confirmCloseButton,
+  spoken,
   closeVerb,
   confirmCloseLine,
   confirmCloseName,
@@ -35,7 +38,7 @@ test('sides are called Roster and Short, never inverse', () => {
   assert.equal(closeVerb('long'), 'Drop');
   assert.equal(closeVerb('short'), 'Close');
   assert.doesNotMatch(SHORT_EXPLAINER, /inverse/i);
-  assert.match(SHORT_EXPLAINER, /short pays you when he scores less than his price/);
+  assert.match(SHORT_EXPLAINER, /short pays you when his dividend comes in under his price/);
 });
 
 test('game dates read as people say them, not as ISO strings', () => {
@@ -48,10 +51,10 @@ test('game dates read as people say them, not as ISO strings', () => {
 });
 
 test('prices are per game in words, never /GM or spelled-out dollars', () => {
-  assert.equal(perGame(237_500), '$238K a game');
+  assert.equal(perGame(237_500), '$237.5K a game');
   assert.equal(perGameShort(105_000), '$105K/game');
   assert.equal(money(1_300_000), '$1.3M');
-  assert.equal(signedMoney(-66_500), '-$67K');
+  assert.equal(signedMoney(-66_500), '-$66.5K');
   assert.equal(signedMoney(0), '$0');
   assert.equal(signedMoney(-0.4), '$0');
   assert.doesNotMatch(perGame(237_500), /GM|dollars/);
@@ -91,4 +94,15 @@ test('one lock sentence and one confirm line everywhere', () => {
   assert.equal(confirmCloseLine('long', 250, 764_000), '$250 fee · his +$764K stays in your score');
   assert.equal(confirmCloseLine('short', 250, -45_500), "$250 fee · this short's -$45.5K stays in your score");
   assert.equal(confirmCloseLine('long', 0, 0), 'his $0 stays in your score');
+});
+
+test('one money format everywhere, and shared action wording', () => {
+  assert.equal(money(237_500), '$237.5K');
+  assert.equal(signedMoney(1_062_500), '+$1.06M');
+  assert.equal(signedMoney(3_500), '+$3,500');
+  assert.equal(closeActionName('long', 'Nikola Jokic'), 'Drop Nikola Jokic');
+  assert.equal(closeActionName('short', 'Luka Doncic'), 'Close your short on Luka Doncic');
+  assert.equal(confirmCloseButton('long', 250), 'Drop for $250');
+  assert.equal(confirmCloseButton('short', 250), 'Close for $250');
+  assert.equal(spoken('Paid $584K · price $137.5K'), 'Paid $584K, price $137.5K');
 });

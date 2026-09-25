@@ -20,7 +20,9 @@ import type {
   PerGameOpenPositionIntent,
   PerGamePosition,
 } from '../api/contracts';
-import { perGame } from '../copy/terms';
+import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
+import { exactMoney, perGame } from '../copy/terms';
+import { practiceProgress } from '../data/chromeView';
 import { isAppResume } from './appResume';
 import { ActionLock } from './actionLock';
 import { loadPerGameBootstrapSnapshot } from './perGameBootstrapLoader';
@@ -76,6 +78,15 @@ function errorMessage(error: unknown): string {
   return 'The per-game market could not load. Try again.';
 }
 
+/**
+ * Whether the season is over: practice ends on its 174th day; a live season
+ * ends when games have settled and none are scheduled.
+ */
+function seasonComplete(snapshot: PerGameBootstrap): boolean {
+  if (isMockActive()) return practiceProgress(mockSeasonStart(), snapshot.game.lastSettledDate).complete;
+  return snapshot.game.lastSettledDate !== null && snapshot.game.nextGameDate === null;
+}
+
 export function PerGameProvider({
   apiClient,
   children,
@@ -89,6 +100,11 @@ export function PerGameProvider({
   const minimumSnapshotRef = useRef<PerGameBootstrap | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<NoticeTone>('problem');
+  // The fee is part of every move's confirmation, so it is never a surprise.
+  const feeNote = () => {
+    const fee = bootstrapRef.current?.ruleset.transactionFeeDollars ?? 0;
+    return fee > 0 ? ` ${exactMoney(fee)} fee.` : '';
+  };
   const say = useCallback((text: string, tone: NoticeTone = 'problem') => {
     setNoticeTone(tone);
     setMessage(text);
@@ -198,7 +214,7 @@ export function PerGameProvider({
         refreshed && mounted.current
         && (!quietUnlessChanged || refreshHasNews(previous, refreshed) || attempt.reconciliationReason)
       ) {
-        say(refreshNotice(previous, refreshed, Boolean(attempt.reconciliationReason)), 'success');
+        say(refreshNotice(previous, refreshed, Boolean(attempt.reconciliationReason), { seasonComplete }), 'success');
       }
       return succeeded;
     } finally {
@@ -289,8 +305,8 @@ export function PerGameProvider({
         expectedQuoteVersion,
       }),
       (result) => result.side === 'long'
-        ? `${playerName} added at ${perGame(result.lockedGameCost)}, locked in.`
-        : `Shorted ${playerName} at ${perGame(result.lockedGameCost)}, locked in.`,
+        ? `${playerName} added at ${perGame(result.lockedGameCost)}, locked in.${feeNote()}`
+        : `Shorted ${playerName} at ${perGame(result.lockedGameCost)}, locked in.${feeNote()}`,
     );
   }, [apiClient, runPositionAction]);
 
@@ -301,8 +317,8 @@ export function PerGameProvider({
       `position:${position.side}:${position.playerId}`,
       () => apiClient.closePosition(position.positionId, accountVersion),
       position.side === 'long'
-        ? `${position.playerName} dropped. His next games won't count toward your score.`
-        : `Short on ${position.playerName} closed.`,
+        ? `${position.playerName} dropped. His next games won't count toward your score.${feeNote()}`
+        : `Short on ${position.playerName} closed.${feeNote()}`,
     );
   }, [apiClient, runPositionAction]);
 

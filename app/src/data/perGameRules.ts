@@ -1,10 +1,14 @@
 import type { PerGamePositionSide, PerGameRuleset } from '../api/contracts';
-import { ROSTER_EXPLAINER, SHORT_EXPLAINER } from '../copy/terms';
+import { LOCK_EXPLAINER, ROSTER_EXPLAINER, SHORT_EXPLAINER } from '../copy/terms';
 import { formatMoney } from '../format';
 
 /** What net points are, in box-score terms a fan already knows. */
 export const NET_POINTS_EXPLAINER =
-  'Net points are a box-score score: points, rebounds, assists, steals and blocks count for him; turnovers, missed shots and minutes count against him.';
+  'Net points boil his box score down to one number: points, rebounds, assists, steals and blocks add to it; turnovers, missed shots and minutes played take away.';
+
+/** Why prices move, and why yours does not. */
+export const PRICE_EXPLAINER =
+  "A player's price can change from game to game. The price you add him at is locked for as long as you hold him.";
 
 /** Why a dividend can be below zero, and who pays it. */
 export const NEGATIVE_DIVIDEND_EXPLAINER =
@@ -25,7 +29,16 @@ export function perGameRulesPresentation(rules: PerGameRuleset) {
     ],
     explanation: `${raw
       ? "A player's dividend comes from his net points each game."
-      : "A player's dividend comes from how far his net points beat his pregame projection."} ${NET_POINTS_EXPLAINER} ${ROSTER_EXPLAINER} ${SHORT_EXPLAINER} Your score is the total of those games plus fees. ${NEGATIVE_DIVIDEND_EXPLAINER}`,
+      : "A player's dividend comes from how far his net points beat his pregame projection."} ${NET_POINTS_EXPLAINER} ${ROSTER_EXPLAINER} ${SHORT_EXPLAINER} Your score adds up those games, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add, drop, open or close. ${NEGATIVE_DIVIDEND_EXPLAINER} ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
+    /** Plain definitions of the words the screens use. */
+    glossary: [
+      { term: 'Price', meaning: 'What one game of a player costs. The price you add him at stays locked while you hold him.' },
+      { term: 'Dividend', meaning: 'What he pays out for one game: his net points times the dividend rate. It can be below zero.' },
+      { term: 'Profit', meaning: 'Dividend minus price for a roster spot; price minus dividend for a short.' },
+      { term: 'Short', meaning: 'A bet that he comes in under his price. It lasts a set number of days.' },
+      { term: 'Net points', meaning: 'His box score in one number. Scoring and hustle add; turnovers, misses and minutes take away.' },
+      { term: 'Roster lock', meaning: "Some nights, moves pause while that night's games are played." },
+    ],
   };
 }
 
@@ -37,13 +50,14 @@ export function positionSlotHint(side: PerGamePositionSide, limit: number) {
 
 /**
  * The explanation in short paragraphs, split before the roster sentence, the
- * short sentence and the bad-game sentence, without changing a word. The
+ * short sentence, the bad-game sentence, the price sentence and the lock
+ * sentence, without changing a word. The
  * Rules sheet and Settings both read it this way.
  */
 export function rulesParagraphs(explanation: string): string[] {
   const paragraphs: string[] = [];
   let rest = explanation;
-  for (const marker of [ROSTER_EXPLAINER, SHORT_EXPLAINER, NEGATIVE_DIVIDEND_EXPLAINER]) {
+  for (const marker of [ROSTER_EXPLAINER, SHORT_EXPLAINER, NEGATIVE_DIVIDEND_EXPLAINER, PRICE_EXPLAINER, LOCK_EXPLAINER]) {
     const at = rest.indexOf(marker);
     if (at < 0) continue;
     paragraphs.push(rest.slice(0, at), marker);

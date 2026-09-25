@@ -52,7 +52,7 @@ test('newly settled games lead with what your players made over exactly those da
   );
   assert.equal(
     refreshNotice(before, snapshot('2025-11-05', '2025-11-06', 100_000, [], [night('2025-11-04', 100_000)]), false),
-    'Nov 5 games: no change to your score.',
+    'Nov 5 games: none of your players played.',
   );
 });
 
@@ -61,14 +61,14 @@ test('a short that ran its term is named with what it made', () => {
   const after = snapshot('2025-11-05', '2025-11-06', 345_000, [short('s1', 'Tyrese Maxey', 'closed', 345_000)], [night('2025-11-05', 145_000)]);
   assert.equal(
     refreshNotice(before, after, false),
-    'Nov 5 games: your score rose $145K. Your short on Tyrese Maxey ended: +$345K.',
+    'Nov 5 games: your score rose $145K. Your short on Tyrese Maxey is over: it made +$345K in all, already in your score.',
   );
   const two = snapshot('2025-11-05', '2025-11-06', 0, [
     short('s1', 'A', 'closed', 345_000),
     short('s2', 'B', 'closed', -45_000),
   ]);
   const twoBefore = snapshot('2025-11-04', '2025-11-05', 0, [short('s1', 'A', 'active', 0), short('s2', 'B', 'active', 0)]);
-  assert.match(refreshNotice(twoBefore, two, false), /2 shorts ended: \+\$300K in all\.$/);
+  assert.match(refreshNotice(twoBefore, two, false), /2 shorts are over: they made \+\$300K in all, already in your score\.$/);
 });
 
 test('a score that moved without new games is reported as a change', () => {
@@ -97,4 +97,29 @@ test('reconciliation keeps its own message', () => {
     refreshNotice(same, same, true),
     'Your account is back in sync. You can make roster moves again.',
   );
+});
+
+test('a night that breaks even says so, and a new roster lock is announced', () => {
+  const before = snapshot('2025-11-04', '2025-11-05', 0, [], []);
+  const even = snapshot('2025-11-05', '2025-11-06', 0, [], [night('2025-11-05', 50_000), night('2025-11-05', -50_000)]);
+  assert.equal(refreshNotice(before, even, false), 'Nov 5 games: your players broke even.');
+  const locked = { ...even, ruleset: { rosterMutationsLocked: true, rosterLockGameDate: '2025-11-06' } } as unknown as PerGameBootstrap;
+  assert.equal(
+    refreshNotice(before, locked, false),
+    'Nov 5 games: your players broke even. Roster moves pause for the Nov 6 games.',
+  );
+});
+
+test('the last night of the season announces the final result', () => {
+  const before = snapshot('2026-04-11', '2026-04-12', 900_000);
+  const after = {
+    ...snapshot('2026-04-12', null, 1_062_500),
+    leaderboard: [
+      { rank: 1, entryId: 'a', displayName: 'Fast Break FC', cumulativePnl: 2_000_000, isCurrentUser: false },
+      { rank: 2, entryId: 'b', displayName: 'You', cumulativePnl: 1_062_500, isCurrentUser: true },
+      { rank: 3, entryId: 'c', displayName: 'Deep Threes', cumulativePnl: -5_000, isCurrentUser: false },
+    ],
+  } as unknown as PerGameBootstrap;
+  const complete = (b: PerGameBootstrap) => b.game.nextGameDate === null;
+  assert.equal(refreshNotice(before, after, false, { seasonComplete: complete }), 'Season complete. Final score +$1.06M, #2 of 3.');
 });
