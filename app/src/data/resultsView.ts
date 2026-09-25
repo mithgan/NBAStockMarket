@@ -5,11 +5,14 @@
  *
  * - A day lists each player's game once, at its latest revision: a correction
  *   replaces its base result (perGameMetrics.currentResults).
- * - A day's total is perGameMetrics.nightTotals — the same game number every
- *   screen uses — plus the fees that belong to that day. A fee belongs to its
- *   game date, or, for an add or drop fee, to the day it was booked
- *   (perGameMetrics.entryDay, the rule recentEarnings uses), so the newest
- *   night here is the "Last night" the chrome and the Roster show.
+ * - A day's total is what your players made that night: its settled games,
+ *   perGameMetrics.nightTotals, the figure every screen uses. Games only, like
+ *   recentEarnings, so the newest night here is the "Last night" the chrome
+ *   and the Roster show.
+ * - The day's fees sit on their own "Roster moves" line with their own amount,
+ *   so the night still adds up on screen: the header is its game rows, the
+ *   fees line is its fee rows. A fee belongs to its game date or, for an add
+ *   or drop fee, to the day it was booked (perGameMetrics.entryDay).
  * - A day with fees but no games (moves made for games still to come, or a
  *   night none of your players played) is still a day in the feed.
  */
@@ -81,10 +84,10 @@ export function feeDay(entry: PerGameLedgerEntry): string | null {
 export interface NightSummary {
   /** The day, "2025-11-05". */
   date: string;
-  /** What the day did to your score: its settled games plus its fees. */
+  /** What your players made: the day's settled games alone (nightTotals), fees apart. */
   total: number;
-  /** Net of the day's settled games alone (nightTotals). */
-  gamesNet: number;
+  /** Everything the day did to your score: `total` plus `fees`. */
+  scoreChange: number;
   /** Game rows listed under the day (every status). */
   results: number;
   /** Settled games with a known result, and how many made money. */
@@ -177,7 +180,8 @@ function summarizeNight(
   const feeTotal = fees.reduce((sum, entry) => sum + entry.amountDollars, 0);
   const gamesNet = total?.net ?? 0;
   const shown = [
-    gamesNet + feeTotal,
+    gamesNet,
+    feeTotal,
     ...fees.map((entry) => entry.amountDollars),
     ...results.flatMap((result) => (isCounted(result)
       ? [result.netPnl ?? 0, result.dividendDollars ?? 0, result.lockedGameCost]
@@ -185,8 +189,8 @@ function summarizeNight(
   ];
   return {
     date,
-    total: gamesNet + feeTotal,
-    gamesNet,
+    total: gamesNet,
+    scoreChange: gamesNet + feeTotal,
     results: results.length,
     games: total?.games ?? 0,
     wins: total?.wins ?? 0,
@@ -245,7 +249,7 @@ export function buildResultsFeed(
     for (const result of results) {
       items.push({ type: 'result', key: `result:${result.positionId}:${result.gameId}`, date, exact, result });
     }
-    if (fees.length > 0 && results.length > 0) {
+    if (fees.length > 0) {
       items.push({
         type: 'fees',
         key: `fees:${date}`,
@@ -268,15 +272,11 @@ export function feedNights(items: readonly ResultsFeedItem[]): NightSummary[] {
   return items.flatMap((item) => (item.type === 'night' ? [item.night] : []));
 }
 
-function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
 /**
  * One plain line under a day's date: "5 of 8 beat their price · 1 of 2
- * shorts paid off · 2 didn't play · fees -$500". A short pays off when its
- * player stays under his price, so shorts are counted apart instead of
- * "beating" it. A day with only fees says why there are no games.
+ * shorts paid off · 2 didn't play". A short pays off when its player stays
+ * under his price, so shorts are counted apart instead of "beating" it. A day
+ * with only fees says why there are no games; the fees have their own line.
  */
 export function nightSummaryLine(night: NightSummary): string {
   const parts: string[] = [];
@@ -288,21 +288,20 @@ export function nightSummaryLine(night: NightSummary): string {
   if (night.dnp > 0) parts.push(`${night.dnp} didn't play`);
   if (night.corrections > 0) parts.push(`${night.corrections} corrected`);
   if (night.results === 0) {
-    parts.push(night.moves === night.feeCount
-      ? plural(night.feeCount, 'roster move', 'roster moves')
-      : plural(night.feeCount, 'fee', 'fees'));
     if (night.upcoming) parts.push('games still to come');
     else if (night.date !== NO_DAY) parts.push('none of your players played');
-  } else if (night.feeCount > 0) {
-    // A no-break space keeps "fees" with its amount when the line wraps.
-    parts.push(`fees\u00a0${signedAmountFine(night.fees)}`);
   }
   return parts.join(' · ');
 }
 
-/** True when a day's total is still unknown: nothing settled yet, games still waiting. */
+/** True when what your players made is still unknown: nothing settled yet, games still waiting. */
 export function nightTotalPending(night: NightSummary): boolean {
-  return night.games === 0 && night.pending > 0 && night.feeCount === 0;
+  return night.games === 0 && night.pending > 0;
+}
+
+/** The heading of a day's fees line: add and drop fees are "Roster moves". */
+export function feesLineName(moves: boolean): string {
+  return moves ? 'Roster moves' : 'Fees';
 }
 
 // ---------------------------------------------------------------------------

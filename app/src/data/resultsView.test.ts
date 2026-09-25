@@ -7,7 +7,7 @@ import type {
   PerGameSettledResult,
 } from '../api/contracts';
 import { settlementEquation } from '../state/perGameState';
-import { recentEarnings } from './perGameMetrics';
+import { earningsBetween, recentEarnings } from './perGameMetrics';
 import {
   amountFine,
   buildResultsFeed,
@@ -238,17 +238,17 @@ test('a fee counts on its game date, or else on the day it was booked', () => {
   assert.equal(feeDay(fee({ createdAt: '' })), null);
 });
 
-test('a fee dated to a game night sits in that night, under a heading, and counts in its total', () => {
+test('a fee dated to a game night sits in that night on its own line, apart from what the players made', () => {
   const game = result({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-02', netPnl: 60_000 });
   const penalty = fee({ kind: 'penalty', gameDate: '2025-11-02', amountDollars: -5_000 });
   const feed = buildResultsFeed(source([game], [penalty], [position('pos-1', 'long')]));
   assert.deepEqual(shape(feed), ['night:2025-11-02', 'result:pos-1:g1', 'fees:2025-11-02', `fee:${penalty.entryId}`]);
   const [night] = feedNights(feed);
-  assert.equal(night.gamesNet, 60_000);
+  assert.equal(night.total, 60_000, 'the header is games only');
   assert.equal(night.fees, -5_000);
   assert.equal(night.feeCount, 1);
-  assert.equal(night.total, 55_000);
-  assert.equal(nightSummaryLine(night), '1 of 1 beat their price · fees\u00a0-$5,000');
+  assert.equal(night.scoreChange, 55_000);
+  assert.equal(nightSummaryLine(night), '1 of 1 beat their price');
   const heading = feed[2];
   assert.ok(heading.type === 'fees');
   assert.equal(heading.moves, false, 'a penalty is a fee, not a roster move');
@@ -274,10 +274,12 @@ test('add and drop fees join the night they were booked on, or make a day of the
   );
   assert.deepEqual(shape(feed), [
     'night:2025-11-04',
+    'fees:2025-11-04',
     'fee:open-c',
     'night:2025-11-03',
     'result:pos-2:g3',
     'night:2025-11-02',
+    'fees:2025-11-02',
     'fee:drop-a',
     'night:2025-11-01',
     'result:pos-1:g1',
@@ -287,13 +289,16 @@ test('add and drop fees join the night they were booked on, or make a day of the
   ]);
   const [upcoming, , quiet, opener] = feedNights(feed);
   assert.equal(upcoming.upcoming, true);
-  assert.equal(upcoming.total, -250);
-  assert.equal(nightSummaryLine(upcoming), '1 roster move · games still to come');
+  assert.equal(upcoming.total, 0, 'no games yet: nothing made');
+  assert.equal(upcoming.fees, -250);
+  assert.equal(nightSummaryLine(upcoming), 'games still to come');
   assert.equal(quiet.upcoming, false);
-  assert.equal(nightSummaryLine(quiet), '1 roster move · none of your players played');
-  assert.equal(opener.total, 50_000 - 500, 'the night the moves were made for carries their fees');
-  assert.equal(nightSummaryLine(opener), '1 of 1 beat their price · fees\u00a0-$500');
-  const heading = feed.find((item) => item.type === 'fees');
+  assert.equal(nightSummaryLine(quiet), 'none of your players played');
+  assert.equal(opener.total, 50_000, 'the header is what the players made');
+  assert.equal(opener.fees, -500, 'the moves made for that night are on their own line');
+  assert.equal(opener.scoreChange, 49_500);
+  assert.equal(nightSummaryLine(opener), '1 of 1 beat their price');
+  const heading = feed.find((item) => item.key === 'fees:2025-11-01');
   assert.ok(heading && heading.type === 'fees');
   assert.deepEqual({ count: heading.count, total: heading.total, moves: heading.moves }, { count: 2, total: -500, moves: true });
   const shortFee = feed.find((item) => item.key === 'fee:open-b');
@@ -310,13 +315,14 @@ test('a fee with no date at all still shows, after every dated day', () => {
     [result({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-01' })],
     [fee({ entryId: 'nodate', createdAt: '' })],
   ));
-  assert.deepEqual(shape(feed), ['night:2025-11-01', 'result:pos-1:g1', 'night:', 'fee:nodate']);
+  assert.deepEqual(shape(feed), ['night:2025-11-01', 'result:pos-1:g1', 'night:', 'fees:', 'fee:nodate']);
   const undated = feedNights(feed)[1];
   assert.equal(undated.upcoming, false);
-  assert.equal(nightSummaryLine(undated), '1 roster move');
+  assert.equal(undated.fees, -250);
+  assert.equal(nightSummaryLine(undated), '');
 });
 
-test("every night's total matches recentEarnings for that day: corrections, dated fees and booked moves included", () => {
+test("each night's header is what the players made, equal to recentEarnings' games-only night; its fees line holds the rest", () => {
   cursor = 300;
   const base = result({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-05', dividendDollars: 150_000, netPnl: 50_000 });
   const correction = result({
@@ -354,8 +360,15 @@ test("every night's total matches recentEarnings for that day: corrections, date
   const nov5 = nights.find((night) => night.date === '2025-11-05');
   const earnings = recentEarnings(ledger, '2025-11-05');
   assert.ok(nov5 && earnings);
-  assert.equal(nov5.total, 3_750);
-  assert.equal(nov5.total, earnings.night);
+  // The header: the corrected +$20K and the short's -$15K, and no fees.
+  assert.equal(nov5.total, 5_000);
+  assert.equal(nov5.total, earnings.night, 'the newest night equals "Last night"');
+  // The fees line: the add booked that day and the penalty dated to it.
+  assert.equal(nov5.fees, -1_250);
+  assert.equal(nov5.feeCount, 2);
+  // Together they are everything the day did to the score.
+  assert.equal(nov5.scoreChange, earningsBetween(ledger, '2025-11-04', '2025-11-05'));
+  assert.equal(nov5.scoreChange, 3_750);
   assert.equal(nights[0].date, '2025-11-06');
   assert.equal(nights[0].upcoming, true);
 });
@@ -633,23 +646,25 @@ test("a round night's shown total equals the sum of its rows at a tenth of a tho
   const feed = buildResultsFeed(source(results, [fee({ kind: 'open_fee', amountDollars: -3_000, createdAt: '2025-10-28T12:00:00.000Z' })]));
   const [night] = feedNights(feed);
   assert.equal(night.exact, false, 'whole hundreds everywhere: the short form adds up');
-  assert.equal(night.total, 1_276_000);
-  assert.equal(signedAmountFine(night.total), '+$1,276K');
-  const rows = [...nets, -3_000].map((amount) => shown(amount, night.exact));
-  assert.equal(shown(night.total, night.exact), rows.reduce((sum, amount) => sum + amount, 0));
+  assert.equal(night.total, 1_279_000);
+  assert.equal(signedAmountFine(night.total), '+$1,279K');
+  const rows = nets.map((amount) => shown(amount, night.exact));
+  assert.equal(shown(night.total, night.exact), rows.reduce((sum, amount) => sum + amount, 0), 'the header is its game rows');
+  assert.equal(shown(night.fees, night.exact), -3_000, 'the fees line is its fee row');
   assert.ok(feed.filter((item) => item.type !== 'night').every((item) => 'exact' in item && item.exact === false));
 });
 
-test('a night that would not add up at a tenth of a thousand is shown to the dollar', () => {
+test('a lone fee keeps the short form; a night that would not add up at a tenth of a thousand is shown to the dollar', () => {
   cursor = 700;
-  // A single $250 fee under round games leaves a total in tens of dollars.
+  // A lone $250 fee is on its own line to the dollar, so round games keep the short form.
   const games = [446_500, -66_500].map((netPnl, index) => result({
     positionId: `pos-${index}`, gameId: `f-${index}`, gameDate: '2025-11-05', netPnl, dividendDollars: 100_000 + netPnl,
   }));
   const withFee = feedNights(buildResultsFeed(source(games, [fee({ kind: 'drop_fee', createdAt: '2025-11-05T12:00:00.000Z' })])))[0];
-  assert.equal(withFee.total, 379_750);
-  assert.equal(withFee.exact, true);
-  assert.equal(shown(withFee.total, true), [446_500, -66_500, -250].reduce((sum, amount) => sum + amount, 0));
+  assert.equal(withFee.total, 380_000);
+  assert.equal(withFee.fees, -250);
+  assert.equal(withFee.exact, false);
+  assert.equal(shown(withFee.total, false), [446_500, -66_500].reduce((sum, amount) => sum + amount, 0));
 
   // A price locked after the market drifted is in odd dollars.
   const drifted = result({ positionId: 'pos-d', gameId: 'd1', gameDate: '2025-11-06', lockedGameCost: 137_851, dividendDollars: 584_000, netPnl: 446_149 });

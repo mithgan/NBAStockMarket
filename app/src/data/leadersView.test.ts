@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { boardLag, boardPlaces, leaderStanding, sortBoard, standingLines, standingPlace, type Standing } from './leadersView';
+import { boardLag, boardList, leaderStanding, sortBoard, standingLines, standingPlace, type Standing } from './leadersView';
 
 function board(scores: Array<[string, number, boolean?]>): PerGameLeaderboardRow[] {
   return scores.map(([displayName, cumulativePnl, isCurrentUser], index) => ({
@@ -129,13 +129,38 @@ test('the board is shown in rank order even when the payload is not', () => {
   assert.equal(ranked(leaderStanding(rows)).rank, 3);
 });
 
+/** The list as "place name score [board note]" lines. */
+function listed(entries: ReturnType<typeof boardList>): string[] {
+  return entries.map((entry) => `#${entry.place}${entry.tied ? '=' : ''} ${entry.row.displayName} ${entry.score}${entry.boardScore === null ? '' : ` (board ${entry.boardScore})`}`);
+}
+
 test('the list shows a tie as one shared place, matching "Tied for #2"', () => {
   const rows = board([['Ava', 900_000], ['Ben', 125_000], ['You', 125_000, true], ['Cal', 10_000]]);
-  const places = boardPlaces(rows);
-  assert.deepEqual(places.get('entry-Ben'), { place: 2, tied: true });
-  assert.deepEqual(places.get('entry-You'), { place: 2, tied: true });
-  assert.deepEqual(places.get('entry-Ava'), { place: 1, tied: false });
-  assert.deepEqual(places.get('entry-Cal'), { place: 4, tied: false });
+  assert.deepEqual(listed(boardList(rows, 125_000)), [
+    '#1 Ava 900000',
+    '#2= Ben 125000',
+    '#2= You 125000',
+    '#4 Cal 10000',
+  ]);
+  assert.deepEqual(listed(boardList(rows)), listed(boardList(rows, 125_000)), 'no account score: the board as it is');
+});
+
+test('while the board lags, your row sits at the score shown, with the board figure as a note', () => {
+  // Day 0 after one add: everyone else at $0, you at -$250; the board still says $0.
+  const day0 = boardList(board([['Ava', 0], ['Ben', 0], ['You', 0, true], ['Cal', 0], ['Dee', 0]]), -250);
+  assert.deepEqual(listed(day0), [
+    '#1= Ava 0',
+    '#1= Ben 0',
+    '#1= Cal 0',
+    '#1= Dee 0',
+    '#5 You -250 (board 0)',
+  ]);
+  const standing = ranked(leaderStanding(board([['Ava', 0], ['Ben', 0], ['You', 0, true], ['Cal', 0], ['Dee', 0]]), -250));
+  assert.equal(standingPlace(standing), '#5', 'the headline and the list agree');
+
+  // A score that has moved past someone takes their place in the list too.
+  const passed = boardList(board([['Ava', 100_000], ['Ben', 60_000], ['You', 50_000, true], ['Cal', 10_000]]), 70_000);
+  assert.deepEqual(listed(passed), ['#1 Ava 100000', '#2 You 70000 (board 50000)', '#3 Ben 60000', '#4 Cal 10000']);
 });
 
 test('gaps carry one more digit, so two different scores never read the same', () => {

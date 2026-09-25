@@ -29,6 +29,7 @@ import {
   amountFine,
   buildResultsFeed,
   feedNights,
+  feesLineName,
   nightSummaryLine,
   nightTotalPending,
   resultRowModel,
@@ -341,15 +342,23 @@ function FeeActivityRow({
 // ---------------------------------------------------------------------------
 // Group headers
 
+/**
+ * A day's header: its date and what your players made that night (games
+ * only, the same figure as "Last night"). A day with no games shows no figure;
+ * its fees have their own line below.
+ */
 function NightHeader({ night, layout }: { night: NightSummary; layout: Layout }) {
   const summary = nightSummaryLine(night);
   const pending = nightTotalPending(night);
+  const played = night.results > 0;
   const title = night.date ? humanDay(night.date) : 'Undated fees';
-  const totalWords = pending ? 'total not settled yet' : `total ${netWords(night.total)}`;
+  const totalWords = !played ? '' : pending
+    ? ' games not settled yet.'
+    : ` your players made ${netWords(night.total)}.`;
   const edge = edges(layout);
   return (
     <View
-      accessibilityLabel={`${title}: ${totalWords}.${summary ? ` ${summary}.` : ''}`}
+      accessibilityLabel={`${title}:${totalWords}${summary ? ` ${summary}.` : ''}`}
       accessibilityRole="header"
       accessible
       {...headingLevel(2)}
@@ -363,19 +372,21 @@ function NightHeader({ night, layout }: { night: NightSummary; layout: Layout })
         <Text style={styles.groupTitle}>{title}</Text>
         {summary ? <Text style={styles.groupSummary}>{summary}</Text> : null}
       </View>
-      <View style={[styles.groupTotal, layout.compact && styles.netCellCompact]}>
-        {pending ? (
-          <Text style={styles.netUnavailable}>—</Text>
-        ) : (
-          // At the rows' own precision, so the total is their sum as shown.
-          <NightMoney exact={night.exact} size="title" value={night.total} />
-        )}
-      </View>
+      {played ? (
+        <View style={[styles.groupTotal, layout.compact && styles.netCellCompact]}>
+          {pending ? (
+            <Text style={styles.netUnavailable}>—</Text>
+          ) : (
+            // At the game rows' own precision, so the total is their sum as shown.
+            <NightMoney exact={night.exact} size="title" value={night.total} />
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }
 
-/** Introduces the fees under a day that also had games. */
+/** The day's fees on their own line, with their own amount: "Roster moves · 3  -$750". */
 function FeesHeader({
   count,
   exact,
@@ -390,17 +401,17 @@ function FeesHeader({
   total: number;
 }) {
   const edge = edges(layout);
-  const name = moves ? 'Roster moves' : 'Fees';
+  const name = feesLineName(moves);
   return (
     <View
-      accessibilityLabel={`${name}: ${count}, ${netWords(total)}.`}
+      accessibilityLabel={`${name}: ${count} ${count === 1 ? 'fee' : 'fees'}, ${netWords(total)}.`}
       accessibilityRole="header"
       accessible
       {...headingLevel(3)}
       style={[styles.feesHeader, { paddingLeft: edge.text, paddingRight: edge.right }]}
     >
       <Text style={styles.feesTitle}>{name} · {count}</Text>
-      <NightMoney exact={exact} size="body" value={total} />
+      <NightMoney exact={exact} value={total} />
     </View>
   );
 }

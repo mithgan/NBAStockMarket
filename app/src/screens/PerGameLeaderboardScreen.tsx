@@ -1,16 +1,15 @@
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import type { PerGameLeaderboardRow } from '../api/contracts';
 import { exactMoney, exactSignedMoney, signedMoney } from '../copy/terms';
 import { NetMoney } from '../components/results/NetMoney';
 import {
   boardLag,
-  boardPlaces,
+  boardList,
   leaderStanding,
   sortBoard,
   standingLines,
   standingPlace,
-  type BoardPlace,
+  type BoardEntry,
   type Standing,
 } from '../data/leadersView';
 import { usePerGame } from '../state/PerGameContext';
@@ -103,28 +102,25 @@ function StandingBlock({
   );
 }
 
-function BoardRow({
-  compact,
-  place,
-  row,
-}: {
-  compact: boolean;
-  place: BoardPlace;
-  row: PerGameLeaderboardRow;
-}) {
+function BoardRow({ compact, entry }: { compact: boolean; entry: BoardEntry }) {
+  const { row, place, tied, score, boardScore } = entry;
+  const you = row.isCurrentUser;
   return (
     <View
-      accessibilityLabel={`${place.tied ? 'Tied for ' : ''}#${place.place}, ${row.displayName}${row.isCurrentUser ? ', you' : ''}, score ${scoreWords(row.cumulativePnl)}`}
+      accessibilityLabel={`${tied ? 'Tied for ' : ''}#${place}, ${row.displayName}${you ? ', you' : ''}, score ${scoreWords(score)}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`}
       accessible
-      style={[styles.row, compact && styles.rowCompact, row.isCurrentUser && styles.currentRow]}
+      style={[styles.row, compact && styles.rowCompact, you && styles.currentRow]}
     >
-      <Text style={[styles.rank, compact && styles.rankCompact]}>#{place.place}</Text>
+      <Text style={[styles.rank, compact && styles.rankCompact]}>#{place}</Text>
       <View style={[styles.nameCell, compact && styles.nameCompact]}>
         <Text style={styles.name}>{row.displayName}</Text>
-        {row.isCurrentUser ? <Tag tone="gold">You</Tag> : null}
+        {you ? <Tag tone="gold">You</Tag> : null}
       </View>
       <View style={[styles.scoreCell, compact && styles.scoreCompact]}>
-        <NetMoney value={row.cumulativePnl} />
+        <NetMoney value={score} />
+        {boardScore === null ? null : (
+          <Text style={[styles.boardNote, compact && styles.boardNoteCompact]}>board {signedMoney(boardScore)}</Text>
+        )}
       </View>
     </View>
   );
@@ -141,7 +137,8 @@ export function PerGameLeaderboardScreen() {
   const rows = sortBoard(bootstrap.leaderboard);
   // You are placed by your account score, the figure shown; the others by their rows.
   const standing = leaderStanding(rows, bootstrap.account.cumulativePnl);
-  const places = boardPlaces(rows);
+  // The list places you by the same score, with the board's figure as a note while it lags.
+  const list = boardList(rows, bootstrap.account.cumulativePnl);
 
   return (
     <ScrollView
@@ -176,13 +173,8 @@ export function PerGameLeaderboardScreen() {
               <Text style={[styles.headLabel, styles.headScore]}>Score</Text>
             </View>
           ) : null}
-          {rows.map((row) => (
-            <BoardRow
-              compact={compact}
-              key={row.entryId}
-              place={places.get(row.entryId) ?? { place: row.rank, tied: false }}
-              row={row}
-            />
+          {list.map((entry) => (
+            <BoardRow compact={compact} entry={entry} key={entry.row.entryId} />
           ))}
         </>
       )}
@@ -401,5 +393,16 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flexBasis: '100%',
     alignItems: 'flex-start',
+  },
+  // Your row while the board lags: the board's own figure, small, under yours.
+  boardNote: {
+    marginTop: 1,
+    color: colors.faint,
+    fontSize: type.caption,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'right',
+  },
+  boardNoteCompact: {
+    textAlign: 'left',
   },
 });

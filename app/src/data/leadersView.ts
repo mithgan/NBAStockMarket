@@ -62,26 +62,41 @@ function gapTo(row: PerGameLeaderboardRow, score: number, rank = row.rank): Boar
   return { rank, name: row.displayName, gap: Math.abs(row.cumulativePnl - score) };
 }
 
-/** The best (lowest) rank among rows holding exactly `score`. */
-function placeOf(board: readonly PerGameLeaderboardRow[], score: number): number {
-  return Math.min(...board.filter((row) => row.cumulativePnl === score).map((row) => row.rank));
-}
-
-export interface BoardPlace {
-  /** The place shown on the row: an exact tie shares the best rank in it. */
+export interface BoardEntry {
+  row: PerGameLeaderboardRow;
+  /** The score this row is placed and shown by: your account's for you, the board's for everyone else. */
+  score: number;
+  /** Its place: an exact tie shares the best place in it. */
   place: number;
   tied: boolean;
+  /** Your row only, while the board lags your score: the board's own figure, shown as a note. */
+  boardScore: number | null;
 }
 
-/** Each row's shown place by entry id, so the list agrees with "Tied for #2". */
-export function boardPlaces(rows: readonly PerGameLeaderboardRow[]): Map<string, BoardPlace> {
-  const board = sortBoard(rows);
-  const counts = new Map<number, number>();
-  for (const row of board) counts.set(row.cumulativePnl, (counts.get(row.cumulativePnl) ?? 0) + 1);
-  return new Map(board.map((row) => [row.entryId, {
-    place: placeOf(board, row.cumulativePnl),
-    tied: (counts.get(row.cumulativePnl) ?? 0) > 1,
-  }]));
+/**
+ * The list under the standing. Everyone else sits where the board has them;
+ * you sit where the score shown puts you (your account's, when given), so
+ * the list never says "#1 … YOU $0" under a "#5 of 5" headline. Your row
+ * keeps the board's own figure as a note while the two differ.
+ */
+export function boardList(
+  rows: readonly PerGameLeaderboardRow[],
+  accountScore?: number,
+): BoardEntry[] {
+  const scored = sortBoard(rows).map((row, order) => {
+    const live = row.isCurrentUser && accountScore !== undefined ? accountScore : row.cumulativePnl;
+    return { row, order, score: live };
+  });
+  const scores = scored.map((entry) => entry.score);
+  return scored
+    .sort((left, right) => right.score - left.score || left.order - right.order)
+    .map(({ row, score }) => ({
+      row,
+      score,
+      place: 1 + scores.filter((other) => other > score).length,
+      tied: scores.filter((other) => other === score).length > 1,
+      boardScore: row.isCurrentUser && Math.abs(score - row.cumulativePnl) >= 1 ? row.cumulativePnl : null,
+    }));
 }
 
 /**
