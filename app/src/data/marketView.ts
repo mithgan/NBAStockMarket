@@ -236,14 +236,11 @@ export function heldDetail(summary: ValueSummary | undefined, lockedGameCost: nu
   return { text: `locked at ${moneyFine(lockedGameCost)}`, tone: 'none' };
 }
 
-/** On a button whose season has ended, as FULL and LOCKED are shown. */
-export const SEASON_OVER_LABEL = 'Season over';
-
 /**
- * The action button's visible word. A pending action waits; an ended season
- * or a lock or a full side says so on the button itself, so a dimmed button
- * never goes unexplained; an armed Drop or Close reads "Confirm", the word
- * the Roster and Restart use.
+ * The action button's visible word. A pending action waits; a lock or a full
+ * side says so on the button itself, so a dimmed button never goes
+ * unexplained; an armed Drop or Close reads "Confirm", the word the Roster
+ * and Restart use. (At season end there are no buttons: see `rowActions`.)
  */
 export function actionWord({
   side,
@@ -252,7 +249,6 @@ export function actionWord({
   confirming,
   rosterLocked,
   full,
-  seasonOver = false,
 }: {
   side: PerGamePositionSide;
   held: boolean;
@@ -260,11 +256,9 @@ export function actionWord({
   confirming: boolean;
   rosterLocked: boolean;
   full: boolean;
-  seasonOver?: boolean;
 }): string {
   const verb = held ? closeVerb(side) : openVerb(side);
   if (pending) return 'Wait';
-  if (seasonOver) return SEASON_OVER_LABEL;
   if (rosterLocked) return 'Locked';
   if (held && confirming) return CONFIRM_LABEL;
   if (!held && full) return 'Full';
@@ -301,8 +295,15 @@ export function isSeasonOver({
   return practiceComplete || (lastSettledDate !== null && nextGameDate === null);
 }
 
-/** Why an action is unavailable at season end, for its accessible name. */
-export const SEASON_OVER_REASON = 'The season is over.';
+/**
+ * Whether market rows carry Add, Drop and Short at all. Once the season is
+ * over nothing can be bought or sold, so the rows go quiet (no button column,
+ * nothing that could charge a fee) and the header's one line, "The season is
+ * over", says why: one clear state instead of a column of dead buttons.
+ */
+export function rowActions(seasonOver: boolean): boolean {
+  return !seasonOver;
+}
 
 export interface HeaderStatus {
   /** The line under the slot count, or null. */
@@ -343,6 +344,18 @@ export const COLLAPSE_CONTROLS_BELOW = 300;
 
 export function collapseControls(width: number): boolean {
   return width < COLLAPSE_CONTROLS_BELOW;
+}
+
+/**
+ * From this width the kicker names the tier ("KARL-ANTHONY · STAR"). The
+ * phone row puts the kicker and the price on one line, and below 380px the
+ * longest given names only fit there without the tier.
+ */
+export const KICKER_TIER_MIN_WIDTH = 380;
+
+/** "NIKOLA · STAR", or just "NIKOLA" below KICKER_TIER_MIN_WIDTH. */
+export function rowKicker(given: string, tier: string | null | undefined, width: number): string {
+  return [given, width >= KICKER_TIER_MIN_WIDTH ? tier : null].filter(Boolean).join(' · ');
 }
 
 /** How long a Drop or Close waits for its second tap. */

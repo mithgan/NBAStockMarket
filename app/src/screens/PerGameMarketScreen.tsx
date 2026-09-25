@@ -44,8 +44,9 @@ import {
   marketColumns,
   marketLayout,
   netTone,
+  rowActions,
+  rowKicker,
   rowProfileLabel,
-  SEASON_OVER_REASON,
   slotSummary,
   sortMarketRows,
   valueByPosition,
@@ -96,6 +97,7 @@ function MarketRow({
   fee,
   wholeNames,
   seasonOver,
+  width,
   onOpenProfile,
   onAnnounce,
 }: {
@@ -109,8 +111,10 @@ function MarketRow({
   fee: number;
   /** Keep hyphenated names whole (there is room for them on this width). */
   wholeNames: boolean;
-  /** No games are left: nothing can be added, dropped or shorted (and charged a fee). */
+  /** No games are left: the row carries no button, so nothing can charge a fee. */
   seasonOver: boolean;
+  /** The screen width: below 380px the kicker leaves out the tier. */
+  width: number;
   onOpenProfile: (playerId: string) => void;
   onAnnounce: (message: string) => void;
 }) {
@@ -126,7 +130,7 @@ function MarketRow({
   const priorSeasonValuePerGame = player.priorSeasonValuePerGame;
   const { given, surname } = splitPlayerName(player.name);
   const whole = (text: string) => (wholeNames ? unbrokenName(text) : text);
-  const kicker = whole([given, player.tier].filter(Boolean).join(' · '));
+  const kicker = whole(rowKicker(given, player.tier, width));
   const [priceAmount, priceUnit] = perGameShort(currentGameCost).split('/');
 
   // Drop and Close take a second tap within the confirm window.
@@ -198,7 +202,9 @@ function MarketRow({
   });
 
   const openProfile = () => onOpenProfile(player.playerId);
-  const action = (
+  // At season end the row is quiet: no button at all, and the header's one
+  // line says the season is over.
+  const action = !rowActions(seasonOver) ? null : (
     <View
       accessibilityState={{ disabled }}
       style={[
@@ -211,9 +217,7 @@ function MarketRow({
           accessibilityHint={rosterLocked ? rosterLockHint : row.unavailableReason ?? undefined}
           accessibilityLabel={confirming && position
             ? confirmCloseName(side, player.name)
-            : seasonOver
-              ? `${actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}. ${SEASON_OVER_REASON}`
-              : actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}
+            : actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}
           disabled={disabled}
           label={actionWord({
             side,
@@ -222,7 +226,6 @@ function MarketRow({
             confirming,
             rosterLocked,
             full: row.isFull,
-            seasonOver,
           })}
           onPress={() => {
             if (disabled) return;
@@ -342,13 +345,15 @@ function MarketRow({
             </>
           ) : (
             // The action floats over the top band's right edge, so the band
-            // leaves it room; the value line below runs the full width.
-            // The price shares the top line with the given name and tier, so a
-            // long surname ("Gilgeous-Alexander") keeps the whole second line.
-            <View style={[styles.topBand, { paddingRight: actionWidth + space.sm }]}>
+            // leaves it room (none at season end); the value line below runs
+            // the full width. The price shares the top line with the kicker,
+            // so a long surname ("Gilgeous-Alexander") keeps the whole second
+            // line; if a very long given name leaves no room on a very narrow
+            // phone, the price wraps under it rather than overlapping it.
+            <View style={[styles.topBand, { paddingRight: action ? actionWidth + space.sm : 0 }]}>
               <View style={styles.kickerPriceLine}>
                 <Text maxFontSizeMultiplier={1.6} style={[styles.kicker, styles.kickerShrink]}>{kicker}</Text>
-                {priceBox}
+                <View style={styles.priceEnd}>{priceBox}</View>
               </View>
               <Text maxFontSizeMultiplier={1.6} style={styles.surname}>{whole(surname)}</Text>
             </View>
@@ -540,7 +545,13 @@ export function PerGameMarketScreen({
         </View>
       )}
       {wide && shortExplainer ? <View style={styles.explainerWide}>{shortExplainer}</View> : null}
-      {wide ? <MarketColumnHeader columns={columns} edgeLabel={side === 'long' ? 'Edge a game' : 'Edge as a short'} /> : null}
+      {wide ? (
+        <MarketColumnHeader
+          // No button column at season end, so the labels line up with quiet rows.
+          columns={rowActions(seasonOver) ? columns : { ...columns, action: 0 }}
+          edgeLabel={side === 'long' ? 'Edge a game' : 'Edge as a short'}
+        />
+      ) : null}
     </View>
   );
 
@@ -596,6 +607,7 @@ export function PerGameMarketScreen({
             layout={layout}
             seasonOver={seasonOver}
             wholeNames={keepNamesWhole(width)}
+            width={width}
             onAnnounce={announce}
             onOpenProfile={openProfile}
             pastValue={item.position ? undefined : pastValues.get(item.player.playerId)}
@@ -793,9 +805,13 @@ const styles = StyleSheet.create({
   },
   kickerPriceLine: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'baseline',
-    justifyContent: 'space-between',
     columnGap: space.sm,
+  },
+  priceEnd: {
+    // Right-aligned on the kicker's line, or on its own line when it wraps.
+    marginLeft: 'auto',
   },
   kickerShrink: {
     flexShrink: 1,

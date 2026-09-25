@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameSettledResult } from '../api/contracts';
+import { moneyFine } from '../copy/terms';
 import { positionValue } from './perGameMetrics';
 import {
   buildProfileNights,
@@ -276,8 +277,39 @@ test('the price is labelled by where it came from', () => {
   assert.equal(nightSourceLabel(nights[3], 'short'), 'your credit');
 });
 
+test('after a drop and re-add the price is plainly an average of your two prices (rigor round-3 L-2)', () => {
+  // Jokic held for 11 games at $100K, dropped, re-added at $104,250: 12 nights, all yours.
+  const stints: ProfileNight[] = [
+    ...Array.from({ length: 11 }, (_, index) => ({ date: `2025-10-${21 + index}`, dividend: 150_000, price: 100_000, net: 50_000, source: 'yours' as const })),
+    { date: '2025-11-02', dividend: 90_000, price: 104_250, net: -14_250, source: 'yours' },
+  ];
+  const summary = summarizeNights(stints);
+  assert.equal(summary.yourPrices, 2);
+  assert.equal(moneyFine(summary.avgPrice ?? 0), '$100.4K');
+  assert.equal(priceSourceCaption(summary, 'long'), 'average of your prices', 'never "your price" beside "Locked in at $104.3K"');
+  assert.equal(priceSourceCaption(summary, 'short'), 'average of your credits');
+  assert.equal(mixNote(stints, 'long'), 'These 12 games were at your prices: 11 at $100K, 1 at $104.3K.');
+  assert.equal(priceSourceCaption(summarizeNights(stints.slice(0, 11)), 'long'), 'your price', 'one stint');
+  assert.equal(mixNote(stints.slice(0, 11), 'long'), null, 'one stint: the caption says it');
+  // Two stints that read the same are one price to the reader.
+  const alike = stints.map((night, index) => (index === 11 ? { ...night, price: 100_040 } : night));
+  assert.equal(summarizeNights(alike).yourPrices, 1);
+  assert.equal(mixNote(alike, 'long'), null);
+  // Two stints and market nights: the stints are spelled out inside the mix.
+  const withMarket: ProfileNight[] = [
+    { date: '2025-10-20', dividend: 120_000, price: 99_000, net: 21_000, source: 'market' },
+    ...stints,
+  ];
+  assert.equal(priceSourceCaption(summarizeNights(withMarket), 'long'), 'average of both');
+  assert.equal(
+    mixNote(withMarket, 'long'),
+    'These 13 games: 12 with you (11 at $100K, 1 at $104.3K), 1 at his market price.',
+  );
+});
+
 test('a mixed range says which games were yours and at what price (grader N-S3)', () => {
-  assert.equal(mixNote(nights, 'long'), 'These 6 games: 4 with you at your locked prices, 2 at his market price.');
+  assert.equal(mixNote(nights, 'long'), 'These 6 games: 4 with you at $102K to $105K, 2 at his market price.');
+  assert.equal(mixNote(nights.slice(2), 'long'), 'These 4 games were at your prices, $102K to $105K.');
   const white: ProfileNight[] = [
     ...Array.from({ length: 9 }, (_, index) => ({ date: `2025-10-${21 + index}`, dividend: 150_000, price: 171_000, net: -21_000, source: 'market' as const })),
     { date: '2025-11-10', dividend: 340_000, price: 169_000, net: 171_000, source: 'yours' },
@@ -287,7 +319,7 @@ test('a mixed range says which games were yours and at what price (grader N-S3)'
   assert.equal(mixNote(white.slice(9), 'long'), null, 'all yours');
   assert.equal(mixNote(white.slice(0, 9), 'long'), null, 'all market');
   const twoPrices = white.map((night, index) => (index === 10 ? { ...night, price: 172_500 } : night));
-  assert.equal(mixNote(twoPrices, 'short'), 'These 11 games: 2 with you at your locked credits, 9 at his market credit.');
+  assert.equal(mixNote(twoPrices, 'short'), 'These 11 games: 2 with you (1 at $169K, 1 at $172.5K), 9 at his market credit.');
 });
 
 test('did-not-play and unsettled nights keep a line in the log and a note (rigor S-6)', () => {

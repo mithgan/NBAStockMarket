@@ -17,9 +17,12 @@ import {
   heldDetail,
   isSeasonOver,
   keepNamesWhole,
+  KICKER_TIER_MIN_WIDTH,
   marketColumns,
   marketLayout,
   netTone,
+  rowActions,
+  rowKicker,
   rowProfileLabel,
   searchKey,
   slotSummary,
@@ -211,10 +214,6 @@ test('the button says why it is dimmed, asks before a drop, and waits while pend
   assert.equal(actionWord({ ...base, held: true, confirming: true }), CONFIRM_LABEL);
   assert.equal(actionWord({ ...base, side: 'short', held: true, confirming: true }), 'Confirm');
   assert.equal(actionWord({ ...base, held: true, confirming: true, rosterLocked: true }), 'Locked');
-  // At season end nothing sells (grader N-M3), whatever else is true.
-  assert.equal(actionWord({ ...base, seasonOver: true }), 'Season over');
-  assert.equal(actionWord({ ...base, held: true, seasonOver: true, rosterLocked: true }), 'Season over');
-  assert.equal(actionWord({ ...base, full: true, seasonOver: true }), 'Season over');
   assert.equal(
     confirmAnnouncement('long', 'LeBron James', 250, 764_000),
     'Tap Confirm to drop LeBron James. $250 fee · his +$764K stays in your score.',
@@ -250,6 +249,23 @@ test('the header adds one status line: season over, then the lock, then full (gr
   );
   assert.equal(headerStatus({ ...base, rosterLocked: true, lockGameDate: '2025-10-31' }).text, 'Roster reopens after Oct 31');
   assert.deepEqual(headerStatus({ ...base, seasonOver: true, rosterLocked: true, full: true }), { text: 'The season is over', kind: 'season' });
+});
+
+test('at season end the rows carry no buttons: one header line instead of 30 dead ones (product round-3 #5)', () => {
+  assert.equal(rowActions(false), true);
+  assert.equal(rowActions(true), false);
+  const status = headerStatus({ side: 'short', seasonOver: true, rosterLocked: false, lockGameDate: null, full: false });
+  assert.deepEqual(status, { text: 'The season is over', kind: 'season' });
+});
+
+test('below 380px the kicker drops the tier so the given name and price share a line (product round-3 #3)', () => {
+  assert.equal(KICKER_TIER_MIN_WIDTH, 380);
+  assert.equal(rowKicker('Karl-Anthony', 'star', 360), 'Karl-Anthony');
+  assert.equal(rowKicker('Karl-Anthony', 'star', 379), 'Karl-Anthony');
+  assert.equal(rowKicker('Karl-Anthony', 'star', 380), 'Karl-Anthony · star');
+  assert.equal(rowKicker('Nikola', 'star', 1440), 'Nikola · star');
+  assert.equal(rowKicker('Nikola', 'star', 195), 'Nikola');
+  assert.equal(rowKicker('Nene', '', 390), 'Nene', 'no tier, no separator');
 });
 
 test('search, sort and Watching fold behind one toggle below 300px', () => {

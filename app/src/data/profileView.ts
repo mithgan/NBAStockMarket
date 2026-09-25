@@ -130,6 +130,12 @@ export interface NightsSummary {
   worst: ProfileNight | null;
   /** How many of the nights are your own results. */
   yours: number;
+  /**
+   * How many different locked prices (credits) your nights carry, as the
+   * reader sees them: more than one after a drop and re-add, when the average
+   * mixes two stints.
+   */
+  yourPrices: number;
 }
 
 export function summarizeNights(nights: readonly ProfileNight[]): NightsSummary {
@@ -138,6 +144,7 @@ export function summarizeNights(nights: readonly ProfileNight[]): NightsSummary 
   let total = 0;
   let beat = 0;
   let yours = 0;
+  const yourPrices = new Set<string>();
   let best: ProfileNight | null = null;
   let worst: ProfileNight | null = null;
   for (const night of nights) {
@@ -145,7 +152,10 @@ export function summarizeNights(nights: readonly ProfileNight[]): NightsSummary 
     prices += night.price;
     total += night.net;
     if (night.net > 0) beat += 1;
-    if (night.source === 'yours') yours += 1;
+    if (night.source === 'yours') {
+      yours += 1;
+      yourPrices.add(moneyFine(night.price));
+    }
     if (!best || night.net > best.net) best = night;
     if (!worst || night.net < worst.net) worst = night;
   }
@@ -160,6 +170,7 @@ export function summarizeNights(nights: readonly ProfileNight[]): NightsSummary 
     best,
     worst,
     yours,
+    yourPrices: yourPrices.size,
   };
 }
 
@@ -245,29 +256,68 @@ export function sideWords(side: PerGamePositionSide): {
       };
 }
 
-/** What the "price a game" figure is made of: your locked price, his market price, or both. */
-export function priceSourceCaption(summary: Pick<NightsSummary, 'games' | 'yours'>, side: PerGamePositionSide): string {
-  const yourWord = side === 'long' ? 'your price' : 'your credit';
+/**
+ * What the "price a game" figure is made of: your locked price, his market
+ * price, or both. After a drop and re-add your nights carry two locked
+ * prices, so the figure is plainly an average of them, never "your price"
+ * beside a different "Locked in at".
+ */
+export function priceSourceCaption(
+  summary: Pick<NightsSummary, 'games' | 'yours'> & Partial<Pick<NightsSummary, 'yourPrices'>>,
+  side: PerGamePositionSide,
+): string {
+  const noun = side === 'long' ? 'price' : 'credit';
   if (summary.games === 0) return '';
-  if (summary.yours === summary.games) return yourWord;
+  if (summary.yours === summary.games) return (summary.yourPrices ?? 1) > 1 ? `average of your ${noun}s` : `your ${noun}`;
   if (summary.yours === 0) return 'his market price';
   return 'average of both';
 }
 
 /**
- * Which of the shown games were yours, when they are a mix: "These 11 games:
- * 2 with you at $169K, 9 at his market price." Null when every game is yours
- * or none is, since the price caption already says so.
+ * Your nights' locked prices, grouped as the reader sees them (so two stints
+ * never read "1 at $104.3K, 1 at $104.3K"): one price ("$169K"), a few in the
+ * order you held them ("11 at $100K, 1 at $104.3K"), or a range for more.
+ */
+type YourPrices =
+  | { kind: 'one'; text: string }
+  | { kind: 'few'; text: string }
+  | { kind: 'range'; text: string };
+
+function yourPrices(yours: readonly ProfileNight[]): YourPrices {
+  const counts = new Map<string, number>();
+  for (const night of yours) {
+    const shown = moneyFine(night.price);
+    counts.set(shown, (counts.get(shown) ?? 0) + 1);
+  }
+  if (counts.size === 1) return { kind: 'one', text: moneyFine(yours[0].price) };
+  if (counts.size <= 3) return { kind: 'few', text: [...counts].map(([shown, count]) => `${count} at ${shown}`).join(', ') };
+  const prices = yours.map((night) => night.price);
+  return { kind: 'range', text: `${moneyFine(Math.min(...prices))} to ${moneyFine(Math.max(...prices))}` };
+}
+
+/**
+ * Where the shown games' prices came from, when one caption can't say it:
+ * "These 11 games: 2 with you at $169K, 9 at his market price.", or after a
+ * drop and re-add "These 12 games were at your prices: 11 at $100K, 1 at
+ * $104.3K." Null when every game is at one locked price, or none is yours,
+ * since the price caption already says so.
  */
 export function mixNote(nights: readonly ProfileNight[], side: PerGamePositionSide): string | null {
   const yours = nights.filter((night) => night.source === 'yours');
-  if (yours.length === 0 || yours.length === nights.length) return null;
-  const prices = new Set(yours.map((night) => Math.round(night.price)));
-  const at = prices.size === 1
-    ? `at ${moneyFine(yours[0].price)}`
-    : `at your locked ${side === 'long' ? 'prices' : 'credits'}`;
-  const market = nights.length - yours.length;
-  return `These ${gamesCount(nights.length)}: ${yours.length} with you ${at}, ${market} at his market ${side === 'long' ? 'price' : 'credit'}.`;
+  if (yours.length === 0) return null;
+  const noun = side === 'long' ? 'price' : 'credit';
+  const prices = yourPrices(yours);
+  const these = `These ${gamesCount(nights.length)}`;
+  if (yours.length === nights.length) {
+    if (prices.kind === 'one') return null;
+    return prices.kind === 'few'
+      ? `${these} were at your ${noun}s: ${prices.text}.`
+      : `${these} were at your ${noun}s, ${prices.text}.`;
+  }
+  const withYou = prices.kind === 'few'
+    ? `${yours.length} with you (${prices.text})`
+    : `${yours.length} with you at ${prices.text}`;
+  return `${these}: ${withYou}, ${nights.length - yours.length} at his market ${noun}.`;
 }
 
 export interface StatusNight {
