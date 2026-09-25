@@ -1,38 +1,80 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
 
 import type { PerGamePositionSide } from '../api/contracts';
 import { isMockActive, mockPlayerTrends } from '../api/mockPerGameClient';
-import { positionSlotHint } from '../data/perGameRules';
-import { splitPlayerName } from '../data/playerName';
+import { MARKET_COLUMNS, MarketColumnHeader, MarketSearch, WatchingToggle } from '../components/market/MarketControls';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
-import { formatCompactMoney, formatMoney } from '../format';
+import { SHORT_EXPLAINER, humanDate, money, perGameShort, signedMoney } from '../copy/terms';
+import {
+  accountValueByPlayer,
+  actionableFirst,
+  actionName,
+  filterMarketRows,
+  heldDetail,
+  MARKET_SORT_OPTIONS,
+  netTone,
+  rowProfileLabel,
+  slotSummary,
+  sortMarketRows,
+  valueSignal,
+  type MarketSort,
+  type SignalTone,
+} from '../data/marketView';
+import type { ValueSummary } from '../data/perGameMetrics';
+import { positionSlotHint } from '../data/perGameRules';
+import { splitPlayerName } from '../data/playerName';
 import { usePerGame } from '../state/PerGameContext';
 import { buildPerGameMarketRows, type PerGameMarketRow } from '../state/perGameState';
-import { colors, fonts, headingStyle, labelStyle, space, type, weight } from '../theme';
+import { useWatchlist } from '../state/watchlist';
+import { colors, fonts, labelStyle, space, type, weight } from '../theme';
+import { rowMarker } from '../ui/domMarkers';
+import { Button, EmptyState, Segmented, Tag } from '../ui/kit';
+
+/**
+ * phone: name and price side by side · stacked: a narrow phone, price under the
+ * name · large: big text or a zoomed browser, the action drops below the
+ * player so nothing is squeezed · table: desktop columns.
+ */
+type RowLayout = 'phone' | 'stacked' | 'large' | 'table';
+
+const PHONE_ACTION_WIDTH = 76;
+
+/** The tag a player carries when he is held on a side. */
+function sideTag(side: PerGamePositionSide): 'On your roster' | 'Shorted' {
+  return side === 'long' ? 'On your roster' : 'Shorted';
+}
 
 function rosterLockMessage(gameDate: string | null): string {
   if (!gameDate) return 'Roster changes are locked while the current game is in progress.';
-  const date = new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(`${gameDate}T00:00:00Z`));
-  return `Roster changes are locked for the ${date} game.`;
+  return `Roster changes are locked for the ${humanDate(gameDate)} game.`;
 }
 
-function MarketRow({ row, compact, onOpenProfile }: {
+const TONE_COLOR: Record<SignalTone, string> = {
+  gain: colors.green,
+  loss: colors.red,
+  even: colors.muted,
+  none: colors.faint,
+};
+
+function MarketRow({
+  row,
+  layout,
+  accountValue,
+  onOpenProfile,
+}: {
   row: PerGameMarketRow;
-  compact: boolean;
+  layout: RowLayout;
+  /** This account's settled games with him on this side, if any. */
+  accountValue: ValueSummary | undefined;
   onOpenProfile: (playerId: string) => void;
 }) {
   const { bootstrap, closePosition, openPosition, pendingActions } = usePerGame();
@@ -45,100 +87,167 @@ function MarketRow({ row, compact, onOpenProfile }: {
   const disabled = !row.canSubmit || pending || locked || rosterLocked;
   const currentGameCost = player.currentGameCost;
   const priorSeasonValuePerGame = player.priorSeasonValuePerGame;
-  const inverse = side === 'short';
-  const actionLabel = pending
-    ? 'WAIT'
-    : position
-      ? inverse ? 'CLOSE' : 'DROP'
-      : inverse ? 'SHORT' : 'ADD';
-  const blockedActionLabel = row.blockedByOpposingPosition
-    ? 'BLOCKED'
-    : row.isFull
-      ? 'FULL'
-      : 'UNAVAILABLE';
-  const visibleActionLabel = rosterLocked
-    ? 'LOCKED'
-    : row.unavailableReason && !position
-      ? blockedActionLabel
-      : actionLabel;
   const { given, surname } = splitPlayerName(player.name);
-  const kicker = [given.toUpperCase(), player.tier.toUpperCase()]
-    .filter(Boolean)
-    .join(' · ');
+  const kicker = [given, player.tier].filter(Boolean).join(' · ');
+  const [priceAmount, priceUnit] = perGameShort(currentGameCost).split('/');
+
+  // One line of meaning under the name: your stake when you hold him on this
+  // side, the opposite side's tag when that blocks this side, otherwise what
+  // one game at today's price would have made last season.
+  const signal = valueSignal(player, side);
+  const held = position ? heldDetail(accountValue, position.lockedGameCost) : null;
+  const blocked = row.blockedByOpposingPosition;
+  const tagText = position ? sideTag(side) : blocked ? sideTag(side === 'long' ? 'short' : 'long') : null;
+  const detailText = held ? held.text : blocked ? '' : signal.text;
+  const detailTone: SignalTone = held ? held.tone : signal.tone;
+
+  const verb = position ? (side === 'long' ? 'Drop' : 'Close') : side === 'long' ? 'Add' : 'Short';
+  const visibleActionLabel = pending ? 'Wait' : verb;
+  const table = layout === 'table';
+  const large = layout === 'large';
+  const showAction = !(blocked && !position) || table;
+
+  const priceText = (
+    <Text maxFontSizeMultiplier={1.6} style={styles.price}>
+      {priceAmount}
+      <Text style={styles.priceUnit}>/{priceUnit}</Text>
+    </Text>
+  );
+  // Held on this side: one quiet line, "On your roster · +$32K a game so far".
+  // Held on the other side: one compact tag instead of an action.
+  const detailLine = position ? (
+    <Text maxFontSizeMultiplier={1.6} style={styles.detailText}>
+      <Text style={styles.heldText}>{tagText}</Text>
+      <Text style={styles.detailDot}>{'  ·  '}</Text>
+      <Text style={{ color: TONE_COLOR[detailTone] }}>{detailText}</Text>
+    </Text>
+  ) : blocked ? (
+    <View style={styles.detailLine}>
+      <Tag>{tagText}</Tag>
+    </View>
+  ) : (
+    <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[detailTone] }]}>
+      {detailText}
+    </Text>
+  );
 
   return (
-    <View style={[styles.row, compact && styles.rowTight]}>
-      <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={compact ? 32 : 36} />
+    <View style={[styles.row, table && styles.rowTable, large && styles.rowLarge]} {...rowMarker}>
       <Pressable
-        accessibilityLabel={[
-          player.name,
-          `${formatMoney(currentGameCost)} current game cost`,
-          priorSeasonValuePerGame === null
-            ? 'prior season value unavailable'
-            : `${formatMoney(priorSeasonValuePerGame)} prior season value per game`,
-          position ? `${inverse ? 'inverse' : 'roster'} position active` : 'not rostered',
-          'View profile',
-        ].join(', ')}
+        accessibilityLabel={rowProfileLabel({
+          name: player.name,
+          tier: player.tier,
+          price: currentGameCost,
+          // A blocked row says why in the reason sentence instead.
+          detail: blocked && !position ? '' : [tagText, detailText].filter(Boolean).join(', '),
+          reason: blocked && !position ? row.unavailableReason : null,
+        })}
         accessibilityRole="button"
         onPress={() => onOpenProfile(player.playerId)}
-        style={({ pressed }) => [styles.details, pressed && styles.pressed]}
-      >
-        <View style={styles.identity}>
-          <Text numberOfLines={1} style={styles.playerKicker}>{kicker}</Text>
-          <Text numberOfLines={compact ? 2 : 1} style={styles.playerName}>{surname}</Text>
-          {row.blockedByOpposingPosition ? (
-            <Text numberOfLines={compact ? 2 : 1} style={styles.blockedReason}>
-              {row.unavailableReason}
-            </Text>
-          ) : null}
-        </View>
-        <View style={styles.priceColumn}>
-          <Text style={styles.currentPrice}>
-            {formatCompactMoney(currentGameCost)}
-            <Text style={styles.perGame}>/GM</Text>
-          </Text>
-          <Text style={styles.priorValue}>
-            {priorSeasonValuePerGame === null
-              ? 'LAST YEAR  —'
-              : `LAST YEAR  ${formatCompactMoney(priorSeasonValuePerGame)}`}
-          </Text>
-        </View>
-      </Pressable>
-      <Pressable
-        accessibilityHint={rosterLocked ? rosterLockHint : row.unavailableReason ?? undefined}
-        accessibilityLabel={rosterLocked
-          ? `${inverse ? 'Inverse' : 'Roster'} action for ${player.name} unavailable while roster changes are locked`
-          : `${visibleActionLabel.toLowerCase()} ${inverse ? 'inverse position for' : ''} ${player.name}`.trim()}
-        accessibilityRole="button"
-        accessibilityState={{ disabled }}
-        disabled={disabled}
-        onPress={() => {
-          if (disabled) return;
-          if (position) closePosition(position);
-          else {
-            openPosition({
-              playerId: player.playerId,
-              playerName: player.name,
-              side,
-              expectedQuoteVersion: player.quoteVersion,
-            });
-          }
-        }}
         style={({ pressed }) => [
-          styles.action,
-          compact && styles.actionCompact,
-          position ? styles.closeAction : inverse ? styles.inverseAction : styles.addAction,
-          disabled && styles.disabled,
+          styles.profileArea,
+          table && styles.profileAreaTable,
+          large && styles.profileAreaLarge,
           pressed && styles.pressed,
         ]}
       >
-        <Text style={[
-          styles.actionText,
-          !position && (inverse ? styles.inverseActionText : styles.addActionText),
-        ]}>
-          {visibleActionLabel}
-        </Text>
+        <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={table ? MARKET_COLUMNS.avatar : 34} />
+        {table ? (
+          <>
+            <View style={styles.identity}>
+              <Text maxFontSizeMultiplier={1.4} style={styles.kicker}>
+                {kicker}
+                {position ? <Text style={styles.heldText}>{`  ·  ${tagText}`}</Text> : null}
+              </Text>
+              <Text maxFontSizeMultiplier={1.4} style={styles.surname}>{surname}</Text>
+            </View>
+            <View style={[styles.cell, { width: MARKET_COLUMNS.price }]}>
+              <Text maxFontSizeMultiplier={1.4} style={styles.cellValue}>{money(currentGameCost)}</Text>
+            </View>
+            <View style={[styles.cell, { width: MARKET_COLUMNS.lastSeason }]}>
+              <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, priorSeasonValuePerGame === null && styles.cellQuiet]}>
+                {priorSeasonValuePerGame === null ? 'None' : money(priorSeasonValuePerGame)}
+              </Text>
+            </View>
+            <View style={[styles.cell, { width: MARKET_COLUMNS.edge }]}>
+              <Text
+                maxFontSizeMultiplier={1.4}
+                style={[styles.cellValue, signal.edge === null && styles.cellQuiet, { color: TONE_COLOR[signal.tone] }]}
+              >
+                {signal.edge === null ? 'No last season' : signal.tone === 'even' ? 'Even' : signedMoney(signal.edge)}
+              </Text>
+            </View>
+            <View style={[styles.cell, { width: MARKET_COLUMNS.yours }]}>
+              {accountValue && accountValue.avgNet !== null ? (
+                <>
+                  <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, { color: TONE_COLOR[netTone(accountValue.avgNet)] }]}>
+                    {signedMoney(accountValue.avgNet)}
+                  </Text>
+                  <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>
+                    {accountValue.games === 1 ? '1 game' : `${accountValue.games} games`}
+                  </Text>
+                </>
+              ) : position ? (
+                <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, styles.cellQuiet]}>
+                  {`Locked at ${money(position.lockedGameCost)}`}
+                </Text>
+              ) : (
+                <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, styles.cellQuiet]}>—</Text>
+              )}
+            </View>
+          </>
+        ) : (
+          <View style={styles.rowContent}>
+            {layout === 'stacked' || large ? (
+              <>
+                <Text maxFontSizeMultiplier={1.6} style={styles.kicker}>{kicker}</Text>
+                <Text maxFontSizeMultiplier={1.6} style={styles.surname}>{surname}</Text>
+                {priceText}
+              </>
+            ) : (
+              <View style={styles.topLine}>
+                <View style={styles.identity}>
+                  <Text maxFontSizeMultiplier={1.6} style={styles.kicker}>{kicker}</Text>
+                  <Text maxFontSizeMultiplier={1.6} style={styles.surname}>{surname}</Text>
+                </View>
+                {priceText}
+              </View>
+            )}
+            {detailLine}
+          </View>
+        )}
       </Pressable>
+      <View
+        accessibilityState={{ disabled }}
+        style={[
+          styles.actionCell,
+          large ? styles.actionCellLarge : { width: table ? MARKET_COLUMNS.action : PHONE_ACTION_WIDTH },
+          !showAction && large && styles.actionCellEmpty,
+        ]}
+      >
+        {blocked && !position ? (table ? <Tag style={styles.cellTag}>{tagText}</Tag> : null) : (
+          <Button
+            accessibilityHint={rosterLocked ? rosterLockHint : row.unavailableReason ?? undefined}
+            accessibilityLabel={actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}
+            disabled={disabled}
+            label={visibleActionLabel}
+            onPress={() => {
+              if (disabled) return;
+              if (position) closePosition(position);
+              else {
+                openPosition({
+                  playerId: player.playerId,
+                  playerName: player.name,
+                  side,
+                  expectedQuoteVersion: player.quoteVersion,
+                });
+              }
+            }}
+            textStyle={position ? undefined : styles.openText}
+            width={table ? MARKET_COLUMNS.action : PHONE_ACTION_WIDTH}
+          />
+        )}
+      </View>
     </View>
   );
 }
@@ -150,22 +259,47 @@ export function PerGameMarketScreen({
 }) {
   const { bootstrap } = usePerGame();
   const { fontScale, width } = useWindowDimensions();
+  const watchlist = useWatchlist();
   const [query, setQuery] = useState('');
   const [side, setSide] = useState<PerGamePositionSide>(initialSide);
+  const [sort, setSort] = useState<MarketSort>('price');
+  const [watchedOnly, setWatchedOnly] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
-  const compact = width < 420 || fontScale > 1.25;
-  const rows = useMemo(() => {
-    if (!bootstrap) return [];
-    const normalized = query.trim().toLocaleLowerCase();
-    return buildPerGameMarketRows(bootstrap, side)
-      .filter((row) => normalized === '' || row.player.name.toLocaleLowerCase().includes(normalized))
-      .sort((left, right) => (
-        left.player.currentGameCost - right.player.currentGameCost
-        || left.player.name.localeCompare(right.player.name)
-      ));
-  }, [bootstrap, query, side]);
+  const layout: RowLayout = width >= 1024 && fontScale <= 1.3
+    ? 'table'
+    : fontScale > 1.3 || width < 300
+      ? 'large'
+      : width < 350
+        ? 'stacked'
+        : 'phone';
+  const wide = layout === 'table';
+
+  const allRows = useMemo(
+    () => (bootstrap ? buildPerGameMarketRows(bootstrap, side) : []),
+    [bootstrap, side],
+  );
+  const rows = useMemo(
+    () => actionableFirst(sortMarketRows(
+      filterMarketRows(allRows, { query, watchedOnly, watched: watchlist.watched }),
+      sort,
+      side,
+    )),
+    [allRows, query, side, sort, watchedOnly, watchlist.watched],
+  );
+  const accountValues = useMemo(
+    () => accountValueByPlayer(bootstrap?.settledResults ?? [], side),
+    [bootstrap?.settledResults, side],
+  );
+  const openProfile = useCallback((playerId: string) => setProfileId(playerId), []);
+  const clearFilters = useCallback(() => {
+    setQuery('');
+    setWatchedOnly(false);
+  }, []);
+
   if (!bootstrap) return null;
   const slots = side === 'long' ? bootstrap.account.longSlots : bootstrap.account.shortSlots;
+  const rosterLocked = bootstrap.ruleset.rosterMutationsLocked;
+  const lockDate = bootstrap.ruleset.rosterLockGameDate;
   const profilePlayer = profileId
     ? bootstrap.market.find((row) => row.playerId === profileId) ?? null
     : null;
@@ -178,92 +312,142 @@ export function PerGameMarketScreen({
     ? bootstrap.settledResults.filter((result) => result.playerId === profileId)
     : [];
 
-  const listHeader = (
-    <View style={styles.header}>
-      <View style={styles.titleLine}>
-        <Text accessibilityRole="header" style={styles.title}>Market</Text>
-        <Text style={styles.slots}>{slots.used} / {slots.limit}</Text>
-      </View>
-      <View accessibilityRole="tablist" style={styles.sideTabs}>
-        {([
-          { key: 'long' as const, label: 'ROSTER', hint: positionSlotHint('long', bootstrap.account.longSlots.limit) },
-          { key: 'short' as const, label: 'INVERSE', hint: positionSlotHint('short', bootstrap.account.shortSlots.limit) },
-        ]).map((option) => {
-          const selected = side === option.key;
-          return (
-            <Pressable
-              key={option.key}
-              accessibilityHint={option.hint}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              aria-selected={selected}
-              onPress={() => setSide(option.key)}
-              style={[styles.sideTab, selected && styles.sideTabSelected]}
-            >
-              <Text style={[styles.sideTabText, selected && styles.sideTabTextSelected]}>
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      {side === 'short' ? (
-        <Text style={styles.inverseExplainer}>
-          Inverse P&amp;L is your locked game-cost credit minus the player's dividend.
+  const sideToggle = (
+    <Segmented
+      accessibilityLabel="Market side"
+      onChange={setSide}
+      options={[
+        { key: 'long', label: 'Roster', hint: positionSlotHint('long', bootstrap.account.longSlots.limit) },
+        { key: 'short', label: 'Short', hint: positionSlotHint('short', bootstrap.account.shortSlots.limit) },
+      ]}
+      style={wide ? styles.sideToggleWide : styles.sideToggle}
+      value={side}
+    />
+  );
+  const slotStatus = (
+    <View style={[styles.slotStatus, wide && styles.slotStatusWide]}>
+      <Text
+        maxFontSizeMultiplier={1.4}
+        style={[styles.slotText, slots.remaining === 0 && styles.slotTextFull]}
+      >
+        {slotSummary(side, slots)}
+      </Text>
+      {rosterLocked ? (
+        <Text maxFontSizeMultiplier={1.4} style={styles.lockText}>
+          {lockDate ? `Locked for the ${humanDate(lockDate)} game` : 'Locked during the game'}
         </Text>
       ) : null}
-      <TextInput
-        accessibilityLabel="Search players"
-        autoCapitalize="none"
-        autoCorrect={false}
-        onChangeText={setQuery}
-        placeholder="Search players"
-        placeholderTextColor={colors.faint}
-        returnKeyType="search"
-        style={styles.search}
-        value={query}
-      />
-      {!compact ? (
-        <View style={styles.columnLabels}>
-          <Text style={styles.columnPlayer}>PLAYER</Text>
-          <Text style={styles.columnCost}>COST / GAME</Text>
-          <Text style={styles.columnAction}>ACTION</Text>
-        </View>
-      ) : null}
     </View>
+  );
+  const sortToggle = (
+    <Segmented
+      accessibilityLabel="Sort players"
+      onChange={setSort}
+      options={MARKET_SORT_OPTIONS}
+      style={wide ? styles.sortToggleWide : styles.sortToggle}
+      value={sort}
+    />
+  );
+  const watchingToggle = (
+    <WatchingToggle count={watchlist.watched.length} on={watchedOnly} onChange={setWatchedOnly} />
+  );
+  const shortExplainer = side === 'short' ? (
+    <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{SHORT_EXPLAINER}</Text>
+  ) : null;
+
+  const listHeader = (
+    <View style={styles.header}>
+      {wide ? (
+        <View style={styles.controlsWide}>
+          {sideToggle}
+          {slotStatus}
+          <MarketSearch onChange={setQuery} style={styles.searchWide} value={query} />
+          {sortToggle}
+          {watchingToggle}
+        </View>
+      ) : (
+        <View style={styles.controls}>
+          <View style={styles.controlRow}>
+            {sideToggle}
+            {slotStatus}
+          </View>
+          {shortExplainer}
+          <MarketSearch onChange={setQuery} value={query} />
+          <View style={styles.controlRow}>
+            {sortToggle}
+            {watchingToggle}
+          </View>
+        </View>
+      )}
+      {wide && shortExplainer ? <View style={styles.explainerWide}>{shortExplainer}</View> : null}
+      {wide ? <MarketColumnHeader edgeLabel={side === 'long' ? 'Edge a game' : 'Edge as a short'} /> : null}
+    </View>
+  );
+
+  const trimmed = query.trim();
+  const emptyState = watchedOnly && watchlist.watched.length === 0 ? (
+    <EmptyState
+      action={<Button label="Show everyone" onPress={() => setWatchedOnly(false)} />}
+      copy="Open a player and tap Watch to keep him here."
+      title="You're not watching anyone yet"
+    />
+  ) : trimmed ? (
+    <EmptyState
+      action={(
+        <View style={styles.emptyActions}>
+          <Button label="Clear search" onPress={() => setQuery('')} variant="secondary" />
+          {watchedOnly ? <Button label="Show everyone" onPress={clearFilters} variant="quiet" /> : null}
+        </View>
+      )}
+      copy={watchedOnly
+        ? 'None of the players you watch match that name.'
+        : 'Check the spelling, or clear the search to see the whole market.'}
+      title={`No players match "${trimmed}"`}
+    />
+  ) : watchedOnly ? (
+    <EmptyState
+      action={<Button label="Show everyone" onPress={() => setWatchedOnly(false)} />}
+      copy="The players you watch are not listed right now."
+      title="No watched players listed"
+    />
+  ) : (
+    <EmptyState copy="Players appear here once prices are posted." title="The market is empty" />
   );
 
   return (
     <>
-    <FlatList
-      contentContainerStyle={styles.content}
-      data={rows}
-      initialNumToRender={18}
-      keyboardShouldPersistTaps="handled"
-      keyExtractor={(row) => row.player.playerId}
-      ListEmptyComponent={(
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No players match</Text>
-          <Text style={styles.emptyCopy}>Clear the search to see the full market.</Text>
-        </View>
-      )}
-      ListHeaderComponent={listHeader}
-      renderItem={({ item }) => (
-        <MarketRow compact={compact} onOpenProfile={setProfileId} row={item} />
-      )}
-      style={styles.list}
-      windowSize={9}
-    />
-    <PlayerProfileSheet
-      dividendRate={bootstrap.ruleset.dividendDollarsPerNetPoint}
-      latestSettledDate={bootstrap.game.lastSettledDate}
-      onClose={() => setProfileId(null)}
-      player={profilePlayer}
-      position={profilePosition}
-      results={profileResults}
-      trends={profileId !== null && isMockActive() ? mockPlayerTrends(profileId) : undefined}
-      visible={profileId !== null && profilePlayer !== null}
-    />
+      <FlatList
+        contentContainerStyle={styles.content}
+        data={rows}
+        extraData={[layout, accountValues]}
+        initialNumToRender={18}
+        keyboardShouldPersistTaps="handled"
+        keyExtractor={(row) => row.player.playerId}
+        ListEmptyComponent={emptyState}
+        ListHeaderComponent={listHeader}
+        renderItem={({ item }) => (
+          <MarketRow
+            accountValue={accountValues.get(item.player.playerId)}
+            layout={layout}
+            onOpenProfile={openProfile}
+            row={item}
+          />
+        )}
+        style={styles.list}
+        windowSize={9}
+      />
+      <PlayerProfileSheet
+        dividendRate={bootstrap.ruleset.dividendDollarsPerNetPoint}
+        latestSettledDate={bootstrap.game.lastSettledDate}
+        onClose={() => setProfileId(null)}
+        onToggleWatch={profileId ? () => watchlist.toggle(profileId) : undefined}
+        player={profilePlayer}
+        position={profilePosition}
+        results={profileResults}
+        trends={profileId !== null && isMockActive() ? mockPlayerTrends(profileId) : undefined}
+        visible={profileId !== null && profilePlayer !== null}
+        watching={profileId ? watchlist.isWatched(profileId) : undefined}
+      />
     </>
   );
 }
@@ -278,213 +462,228 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: colors.surface,
   },
-  titleLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: space.lg,
+  controls: {
+    gap: space.sm,
     paddingHorizontal: space.lg,
-    paddingTop: space.lg,
+    paddingTop: space.md,
     paddingBottom: space.md,
   },
-  title: {
-    ...headingStyle,
-  },
-  slots: {
-    ...labelStyle,
-    color: colors.goldInk,
-    fontVariant: ['tabular-nums'],
-  },
-  sideTabs: {
+  controlRow: {
     flexDirection: 'row',
-    marginHorizontal: space.lg,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-  },
-  sideTab: {
-    minHeight: 44,
-    flex: 1,
+    flexWrap: 'wrap',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
+    gap: space.sm,
   },
-  sideTabSelected: {
-    backgroundColor: colors.goldSoft,
-  },
-  sideTabText: {
-    color: colors.muted,
-    fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.heavy,
-    letterSpacing: 1.1,
-  },
-  sideTabTextSelected: {
-    color: colors.goldInk,
-  },
-  inverseExplainer: {
-    marginHorizontal: space.lg,
-    marginTop: space.md,
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  search: {
-    minHeight: 44,
-    marginHorizontal: space.lg,
-    marginTop: space.md,
-    marginBottom: space.md,
-    paddingHorizontal: space.md,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    color: colors.text,
-    backgroundColor: colors.background,
-    fontSize: type.body,
-  },
-  columnLabels: {
-    minHeight: 30,
+  controlsWide: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: space.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.borderStrong,
-  },
-  columnPlayer: {
-    ...labelStyle,
-    flex: 1,
-  },
-  columnCost: {
-    ...labelStyle,
-    width: 132,
-    textAlign: 'right',
-  },
-  columnAction: {
-    ...labelStyle,
-    width: 82,
-    marginLeft: space.md,
-    textAlign: 'center',
-  },
-  row: {
-    minHeight: 64,
-    flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: space.md,
     paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
+    paddingVertical: space.lg,
+  },
+  sideToggle: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 160,
+    minWidth: 132,
+    maxWidth: 220,
+  },
+  sideToggleWide: {
+    width: 200,
+  },
+  slotStatus: {
+    flexGrow: 1,
+    flexBasis: 120,
+    alignItems: 'flex-end',
+  },
+  slotStatusWide: {
+    flexGrow: 0,
+    flexBasis: 'auto',
+    alignItems: 'flex-start',
+    minWidth: 150,
+  },
+  slotText: {
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
+    fontVariant: ['tabular-nums'],
+    lineHeight: 16,
+  },
+  slotTextFull: {
+    color: colors.goldInk,
+  },
+  lockText: {
+    marginTop: 1,
+    color: colors.goldInk,
+    fontSize: type.label,
+    fontWeight: weight.bold,
+    lineHeight: 15,
+  },
+  explainer: {
+    color: colors.muted,
+    fontSize: type.caption,
+    lineHeight: 17,
+  },
+  explainerWide: {
+    paddingHorizontal: space.lg,
+    paddingBottom: space.md,
+    marginTop: -space.xs,
+  },
+  searchWide: {
+    flexGrow: 1,
+    flexBasis: 200,
+  },
+  sortToggle: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 200,
+    minWidth: 144,
+  },
+  sortToggleWide: {
+    width: 216,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     backgroundColor: colors.background,
+    paddingRight: space.md,
   },
-  rowTight: {
-    gap: space.sm,
-    paddingHorizontal: space.md,
+  rowTable: {
+    paddingRight: space.lg,
   },
-  details: {
+  rowLarge: {
+    flexDirection: 'column',
+  },
+  profileArea: {
     minWidth: 0,
+    minHeight: 64,
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
+    gap: 10,
+    paddingLeft: space.md,
+    paddingRight: space.sm,
+    paddingVertical: 10,
+  },
+  profileAreaLarge: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 'auto',
+  },
+  profileAreaTable: {
+    minHeight: 60,
+    gap: MARKET_COLUMNS.gap,
+    paddingLeft: space.lg,
+    paddingRight: MARKET_COLUMNS.gap,
+    paddingVertical: space.sm,
+  },
+  rowContent: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  topLine: {
+    flexDirection: 'row',
+    // The price sits on the surname's line, so name and price read as one line.
+    alignItems: 'flex-end',
+    gap: space.sm,
   },
   identity: {
     minWidth: 0,
     flex: 1,
   },
-  playerKicker: {
+  kicker: {
     ...labelStyle,
-    fontSize: type.label,
     letterSpacing: 0.6,
   },
-  playerName: {
-    marginTop: 1,
+  surname: {
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: type.value,
     fontWeight: weight.heavy,
+    lineHeight: 20,
   },
-  blockedReason: {
-    marginTop: 2,
-    color: colors.goldInk,
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  priceColumn: {
-    alignItems: 'flex-end',
+  price: {
     flexShrink: 0,
-  },
-  currentPrice: {
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: type.value,
     fontWeight: weight.heavy,
     fontVariant: ['tabular-nums'],
   },
-  perGame: {
+  priceUnit: {
     color: colors.faint,
     fontSize: type.label,
     fontWeight: weight.bold,
   },
-  priorValue: {
+  detailLine: {
+    flexDirection: 'row',
     marginTop: 2,
-    color: colors.faint,
+  },
+  detailText: {
     fontFamily: fonts.display,
-    fontSize: 11,
+    fontSize: type.caption,
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
+    lineHeight: 17,
   },
-  action: {
-    width: 82,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  actionCompact: {
-    width: 64,
-  },
-  addAction: {
-    borderColor: colors.gold,
-    backgroundColor: colors.gold,
-  },
-  inverseAction: {
-    borderColor: colors.goldLine,
-    backgroundColor: colors.goldSoft,
-  },
-  closeAction: {
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.surfaceRaised,
-  },
-  actionText: {
-    color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.black,
-  },
-  addActionText: {
-    color: colors.background,
-  },
-  inverseActionText: {
+  heldText: {
     color: colors.goldInk,
   },
-  empty: {
-    minHeight: 220,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: space.xl,
+  detailDot: {
+    color: colors.faint,
   },
-  emptyTitle: {
+  cell: {
+    alignItems: 'flex-end',
+  },
+  cellValue: {
     color: colors.text,
     fontFamily: fonts.display,
-    fontSize: type.title,
+    fontSize: type.value,
     fontWeight: weight.heavy,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'right',
   },
-  emptyCopy: {
-    marginTop: space.sm,
-    color: colors.muted,
-    fontSize: type.body,
-    textAlign: 'center',
+  cellQuiet: {
+    color: colors.faint,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
   },
-  disabled: {
-    opacity: 0.45,
+  cellCaption: {
+    marginTop: 1,
+    color: colors.faint,
+    fontSize: type.label,
+    fontVariant: ['tabular-nums'],
+  },
+  cellTag: {
+    alignSelf: 'center',
+  },
+  actionCell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: space.sm,
+  },
+  actionCellLarge: {
+    alignItems: 'flex-start',
+    // Lines the button up with the name above it: row inset + avatar + gap.
+    paddingLeft: space.md + 34 + 10,
+    paddingTop: 0,
+    paddingBottom: space.md,
+  },
+  actionCellEmpty: {
+    paddingBottom: 0,
+  },
+  openText: {
+    color: colors.goldInk,
+  },
+  emptyActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.sm,
   },
   pressed: {
     opacity: 0.72,
