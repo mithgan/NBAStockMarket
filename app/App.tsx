@@ -298,7 +298,9 @@ function AppBody() {
       ) : message ? (
         <NoticeBanner message={message} onDismiss={dismissNotice} />
       ) : null}
-      <View style={styles.screen}>{body}</View>
+      {/* nativeID lets the QA harness measure how much chrome sits above the
+          content on each tab (the content-first budget in the design doc). */}
+      <View nativeID="app-screen" style={styles.screen}>{body}</View>
       {ready ? (wide ? null : renderTabBar('bottom')) : null}
       <SettingsSheet
         listedPlayers={players.length}
