@@ -1,8 +1,111 @@
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { formatCompactSignedMoney, formatSignedMoney } from '../format';
+import type { PerGameLeaderboardRow } from '../api/contracts';
+import { exactMoney, exactSignedMoney } from '../copy/terms';
+import { NetMoney } from '../components/results/NetMoney';
+import {
+  boardPlaces,
+  leaderStanding,
+  sortBoard,
+  standingLines,
+  standingPlace,
+  type BoardPlace,
+  type Standing,
+} from '../data/leadersView';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, fonts, headingStyle, labelStyle, space, type, weight } from '../theme';
+import { EmptyState, Label, Tag } from '../ui/kit';
+
+/** At this width the board becomes a centred column, not a stretched phone. */
+const DESKTOP_MIN_WIDTH = 1024;
+const BOARD_MAX_WIDTH = 720;
+const RANK_WIDTH = 52;
+
+/** "$0" for exactly nothing, otherwise the signed exact amount. */
+function scoreWords(value: number): string {
+  return Math.round(value) === 0 ? exactMoney(0) : exactSignedMoney(value);
+}
+
+/** Your rank and how far you are from the next place up and from #1. */
+function StandingBlock({
+  accountScore,
+  compact,
+  standing,
+}: {
+  accountScore: number;
+  compact: boolean;
+  standing: Standing;
+}) {
+  if (standing.kind === 'empty') return null;
+  const lines = standingLines(standing);
+  if (standing.kind === 'absent') {
+    return (
+      <View style={styles.standing}>
+        <Label>Your standing</Label>
+        <Text style={styles.absent}>{lines[0]}</Text>
+        <Text style={styles.absentScore}>
+          Your score is <NetMoney size="body" value={accountScore} />.
+        </Text>
+      </View>
+    );
+  }
+  const place = standingPlace(standing);
+  const tied = standing.tiedWith.length > 0;
+  return (
+    <View
+      accessibilityLabel={`Your standing: ${place} of ${standing.of}, score ${scoreWords(standing.score)}. ${lines.join('. ')}.`}
+      accessible
+      style={styles.standing}
+    >
+      <Label>Your standing</Label>
+      <View style={[styles.standingTop, compact && styles.standingTopCompact]}>
+        <View style={styles.placeLine}>
+          {tied ? <Text style={styles.tiedWord}>Tied for</Text> : null}
+          <Text style={styles.place}>#{standing.rank}</Text>
+          <Text style={styles.of}>of {standing.of}</Text>
+        </View>
+        <View style={[styles.scoreBlock, compact && styles.scoreBlockCompact]}>
+          <NetMoney size="title" value={standing.score} />
+          <Text style={styles.scoreLabel}>your score</Text>
+        </View>
+      </View>
+      {lines.length > 0 ? (
+        <View style={styles.gaps}>
+          {lines.map((line) => (
+            <Text key={line} style={styles.gap}>{line}</Text>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function BoardRow({
+  compact,
+  place,
+  row,
+}: {
+  compact: boolean;
+  place: BoardPlace;
+  row: PerGameLeaderboardRow;
+}) {
+  return (
+    <View
+      accessibilityLabel={`${place.tied ? 'Tied for ' : ''}#${place.place}, ${row.displayName}${row.isCurrentUser ? ', you' : ''}, score ${scoreWords(row.cumulativePnl)}`}
+      accessible
+      style={[styles.row, compact && styles.rowCompact, row.isCurrentUser && styles.currentRow]}
+    >
+      <Text style={[styles.rank, compact && styles.rankCompact]}>#{place.place}</Text>
+      <View style={[styles.nameCell, compact && styles.nameCompact]}>
+        <Text style={styles.name}>{row.displayName}</Text>
+        {row.isCurrentUser ? <Tag tone="gold">You</Tag> : null}
+      </View>
+      <View style={[styles.scoreCell, compact && styles.scoreCompact]}>
+        <NetMoney value={row.cumulativePnl} />
+      </View>
+    </View>
+  );
+}
 
 export function PerGameLeaderboardScreen() {
   const { bootstrap } = usePerGame();
@@ -10,65 +113,51 @@ export function PerGameLeaderboardScreen() {
   if (!bootstrap) return null;
   // Rows wrap only for large text; a narrow phone still reads one row per line.
   const compact = fontScale > 1.2;
-  const narrow = width < 520 || compact;
-  const rows = [...bootstrap.leaderboard].sort((left, right) => left.rank - right.rank);
-  const current = rows.find((row) => row.isCurrentUser) ?? null;
+  const wide = width >= DESKTOP_MIN_WIDTH;
+  // Ranked on each row's cumulativePnl: the total score since the season began at $0.
+  const rows = sortBoard(bootstrap.leaderboard);
+  const standing = leaderStanding(rows);
+  const places = boardPlaces(rows);
 
   return (
-    <ScrollView contentContainerStyle={styles.content} style={styles.scroll}>
+    <ScrollView
+      contentContainerStyle={[styles.content, wide && styles.contentWide]}
+      style={styles.scroll}
+    >
       <View style={styles.header}>
         <Text accessibilityRole="header" style={styles.title}>Leaders</Text>
-        <Text style={styles.subtitle}>Ranked by cumulative game P&amp;L from a $0 starting score.</Text>
-        {current ? (
-          <View style={[styles.currentSummary, narrow && styles.currentSummaryCompact]}>
-            <Text style={styles.currentLabel}>YOUR RANK</Text>
-            <Text style={styles.currentRank}>#{current.rank}</Text>
-            <Text
-              accessibilityLabel={`Your cumulative profit and loss ${formatSignedMoney(current.cumulativePnl)}`}
-              style={[
-                styles.currentPnl,
-                narrow && styles.currentPnlCompact,
-                current.cumulativePnl >= 0 ? styles.positive : styles.negative,
-              ]}
-            >
-              {formatCompactSignedMoney(current.cumulativePnl)}
-            </Text>
-          </View>
-        ) : null}
+        <Text style={styles.subtitle}>Ranked by total score. Everyone started the season at $0.</Text>
       </View>
-      {!narrow ? (
-        <View style={styles.tableHead}>
-          <Text style={styles.rankLabel}>RANK</Text>
-          <Text style={styles.nameLabel}>PLAYER</Text>
-          <Text style={styles.pnlLabel}>CUMULATIVE P&amp;L</Text>
-        </View>
-      ) : null}
+      <StandingBlock
+        accountScore={bootstrap.account.cumulativePnl}
+        compact={compact}
+        standing={standing}
+      />
       {rows.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>The leaderboard will appear after accounts settle games.</Text>
-        </View>
-      ) : rows.map((row) => (
-        <View
-          key={row.entryId}
-          style={[styles.row, compact && styles.rowCompact, row.isCurrentUser && styles.currentRow]}
-        >
-          <Text style={[styles.rank, compact && styles.rankCompact]}>#{row.rank}</Text>
-          <Text style={[styles.name, compact && styles.nameCompact]}>
-            {row.displayName}
-            {row.isCurrentUser ? <Text style={styles.youTag}>{'  YOU'}</Text> : null}
-          </Text>
-          <Text
-            accessibilityLabel={`${row.displayName}, ${formatSignedMoney(row.cumulativePnl)} cumulative profit and loss`}
-            style={[
-              styles.pnl,
-              compact && styles.pnlCompact,
-              row.cumulativePnl >= 0 ? styles.positive : styles.negative,
-            ]}
-          >
-            {formatCompactSignedMoney(row.cumulativePnl)}
-          </Text>
-        </View>
-      ))}
+        <EmptyState
+          copy="The board fills in once the first games settle."
+          style={styles.empty}
+          title="No one is on the board yet"
+        />
+      ) : (
+        <>
+          {!compact ? (
+            <View style={styles.tableHead}>
+              <Text style={[styles.headLabel, styles.headRank]}>Rank</Text>
+              <Text style={[styles.headLabel, styles.headName]}>Name</Text>
+              <Text style={[styles.headLabel, styles.headScore]}>Score</Text>
+            </View>
+          ) : null}
+          {rows.map((row) => (
+            <BoardRow
+              compact={compact}
+              key={row.entryId}
+              place={places.get(row.entryId) ?? { place: row.rank, tied: false }}
+              row={row}
+            />
+          ))}
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -80,74 +169,118 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: 110,
   },
+  contentWide: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: BOARD_MAX_WIDTH,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
   header: {
     paddingHorizontal: space.lg,
-    paddingVertical: space.xl,
-    backgroundColor: colors.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderStrong,
+    paddingTop: space.lg,
+    paddingBottom: space.md,
+    backgroundColor: colors.background,
+  },
+  empty: {
+    backgroundColor: colors.background,
   },
   title: {
     ...headingStyle,
   },
   subtitle: {
-    marginTop: space.sm,
-    color: colors.muted,
-    fontSize: type.body,
+    marginTop: 2,
+    color: colors.faint,
+    fontSize: type.caption,
+    lineHeight: 17,
   },
-  currentSummary: {
-    marginTop: space.xl,
+  standing: {
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+  },
+  standingTop: {
+    marginTop: space.xs,
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
     flexWrap: 'wrap',
     gap: space.md,
   },
-  currentSummaryCompact: {
+  standingTopCompact: {
     alignItems: 'flex-start',
   },
-  currentLabel: {
-    ...labelStyle,
+  placeLine: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    columnGap: space.sm,
   },
-  currentRank: {
+  tiedWord: {
     color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: 28,
-    fontWeight: weight.black,
-    fontVariant: ['tabular-nums'],
-  },
-  currentPnl: {
-    marginLeft: 'auto',
     fontFamily: fonts.display,
     fontSize: type.title,
     fontWeight: weight.heavy,
+  },
+  place: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.display,
+    fontWeight: weight.black,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.8,
+  },
+  of: {
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
   },
-  currentPnlCompact: {
-    flexBasis: '100%',
-    marginLeft: 0,
+  scoreBlock: {
+    alignItems: 'flex-end',
+    paddingBottom: 4,
+  },
+  scoreBlockCompact: {
+    alignItems: 'flex-start',
+  },
+  scoreLabel: {
+    marginTop: 1,
+    color: colors.faint,
+    fontSize: type.caption,
+  },
+  gaps: {
+    marginTop: space.sm,
+    gap: 2,
+  },
+  gap: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.bold,
+    fontVariant: ['tabular-nums'],
+    lineHeight: 21,
+  },
+  absent: {
+    marginTop: space.sm,
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.bold,
+    lineHeight: 21,
+  },
+  absentScore: {
+    marginTop: 2,
+    color: colors.muted,
+    fontSize: type.body,
+    lineHeight: 20,
   },
   tableHead: {
-    minHeight: 38,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: space.lg,
-    backgroundColor: colors.surface,
-  },
-  rankLabel: {
-    ...labelStyle,
-    width: 58,
-  },
-  nameLabel: {
-    ...labelStyle,
-    flex: 1,
-  },
-  pnlLabel: {
-    ...labelStyle,
-    width: 150,
-    textAlign: 'right',
-  },
-  row: {
-    minHeight: 64,
+    minHeight: 36,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: space.lg,
@@ -155,27 +288,41 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     backgroundColor: colors.background,
   },
+  headLabel: {
+    ...labelStyle,
+  },
+  headRank: {
+    width: RANK_WIDTH,
+  },
+  headName: {
+    flex: 1,
+  },
+  headScore: {
+    textAlign: 'right',
+  },
+  row: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.background,
+  },
   rowCompact: {
-    minHeight: 88,
     flexWrap: 'wrap',
     alignItems: 'flex-start',
-    gap: space.sm,
+    rowGap: space.xs,
     paddingVertical: space.md,
   },
-  // You are marked in gold ink and a gold rule, not by tinting your whole row.
+  // You: a flat tint and a YOU tag. No coloured side stripe.
   currentRow: {
-    borderLeftWidth: 3,
-    borderLeftColor: colors.gold,
-    backgroundColor: colors.surface,
-  },
-  youTag: {
-    color: colors.goldInk,
-    fontSize: type.label,
-    fontWeight: weight.heavy,
-    letterSpacing: 1.1,
+    backgroundColor: colors.surfaceRaised,
   },
   rank: {
-    width: 58,
+    width: RANK_WIDTH - space.sm,
     color: colors.faint,
     fontFamily: fonts.display,
     fontSize: type.body,
@@ -186,47 +333,32 @@ const styles = StyleSheet.create({
     width: 'auto',
     flexShrink: 0,
   },
-  name: {
+  nameCell: {
     minWidth: 0,
     flex: 1,
-    color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: type.body,
-    fontWeight: weight.bold,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: space.sm,
   },
   nameCompact: {
     flexBasis: '70%',
     flexGrow: 1,
   },
-  pnl: {
-    width: 150,
-    textAlign: 'right',
+  name: {
+    flexShrink: 1,
+    color: colors.text,
     fontFamily: fonts.display,
-    fontSize: type.value,
-    fontWeight: weight.heavy,
-    fontVariant: ['tabular-nums'],
-  },
-  pnlCompact: {
-    width: '100%',
-    flexBasis: '100%',
-    textAlign: 'left',
-  },
-  empty: {
-    minHeight: 240,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: space.xl,
-  },
-  emptyText: {
-    maxWidth: 360,
-    color: colors.muted,
     fontSize: type.body,
-    textAlign: 'center',
+    fontWeight: weight.bold,
   },
-  positive: {
-    color: colors.green,
+  scoreCell: {
+    minWidth: 88,
+    alignItems: 'flex-end',
   },
-  negative: {
-    color: colors.red,
+  scoreCompact: {
+    minWidth: 0,
+    flexBasis: '100%',
+    alignItems: 'flex-start',
   },
 });
