@@ -4,9 +4,10 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   advanceMockNights,
   isMockActive,
+  mockPerGameClient,
   mockSeasonStart,
 } from '../api/mockPerGameClient';
-import { chromeLayout, practiceProgress } from '../data/chromeView';
+import { chromeLayout, daysBetween, practiceProgress, practiceSeasonEnd } from '../data/chromeView';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, space } from '../theme';
 import { Button } from '../ui/kit';
@@ -28,7 +29,39 @@ const ADVANCE_RETRY_MS = 150;
  */
 const STACKED_LABEL_MAX_WIDTH = 240;
 
+/**
+ * Practice schedules each game one or two days after the last, so a run of
+ * nights spans at most two days a night. Within three days a night of the
+ * season's last day, nights are played one at a time so the run can stop there.
+ */
+const MAX_DAYS_PER_NIGHT = 3;
+
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Plays up to `nights` practice nights, stopping once a night on or after the
+ * season's last day (day 174) has settled, which is exactly when
+ * practiceProgress calls the season complete. Near the end, +1 week plays only
+ * the nights left instead of running days past the track. Far from the end a
+ * run cannot reach the last day, so it plays in one go.
+ */
+async function playPracticeNights(
+  nights: number,
+  lastSettled: string | null,
+  seasonEnd: string | null,
+): Promise<void> {
+  if (!lastSettled || !seasonEnd || daysBetween(lastSettled, seasonEnd) > nights * MAX_DAYS_PER_NIGHT) {
+    advanceMockNights(nights);
+    return;
+  }
+  let settled = lastSettled;
+  for (let night = 0; night < nights && settled < seasonEnd; night += 1) {
+    advanceMockNights(1);
+    // The client's clock, read straight back (its bootstrap copies the state
+    // at the moment of the call), decides whether another night fits.
+    settled = (await mockPerGameClient().bootstrap()).game.lastSettledDate ?? seasonEnd;
+  }
+}
 
 /**
  * The practice clock controls: +1 night and +1 week (the point of practice,
@@ -74,7 +107,7 @@ export function PracticeControls({ inline = false }: { inline?: boolean }) {
     advancingRef.current = true;
     setAdvancing(true);
     try {
-      advanceMockNights(nights);
+      await playPracticeNights(nights, bootstrap.game.lastSettledDate, practiceSeasonEnd(mockSeasonStart()));
       for (let attempt = 0; attempt < ADVANCE_REFRESH_ATTEMPTS; attempt += 1) {
         if (await refreshData()) break;
         await wait(ADVANCE_RETRY_MS);

@@ -4,24 +4,21 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 
 import { parsePerGameBootstrap } from '../api/contracts';
-import { ROSTER_EXPLAINER, SHORT_EXPLAINER } from '../copy/terms';
 import {
   chromeLayout,
   daysBetween,
   dividendBasisText,
   dividendText,
-  explanationParagraphs,
   keepTogether,
-  lockLineText,
-  lockReopensText,
   nextGamesText,
   practiceDayText,
   practiceProgress,
+  practiceSeasonEnd,
   SEASON_TOTAL_DAYS,
   shortTermText,
   statusSummary,
 } from './chromeView';
-import { NEGATIVE_DIVIDEND_EXPLAINER, NET_POINTS_EXPLAINER, perGameRulesPresentation } from './perGameRules';
+import { perGameRulesPresentation } from './perGameRules';
 
 const example = JSON.parse(readFileSync(resolve(import.meta.dirname, '../api/fixtures/perGameApiExample.json'), 'utf8'));
 const rules = parsePerGameBootstrap(example.bootstrap).ruleset;
@@ -56,6 +53,16 @@ test('the practice clock starts at day 0 and stops at the last night', () => {
   assert.equal(past.accessibilityLabel, 'Practice progress: day 174 of 174');
 });
 
+test('the practice season ends on day 174 of its track', () => {
+  // Opening-night eve of 2025-26 plus 174 days: the last day of the regular season.
+  assert.equal(practiceSeasonEnd(OPENING_EVE), '2026-04-12');
+  assert.equal(daysBetween(OPENING_EVE, practiceSeasonEnd(OPENING_EVE) ?? ''), SEASON_TOTAL_DAYS);
+  assert.equal(practiceSeasonEnd(null), null);
+  // Settling on the last day is exactly when the shared progress says complete.
+  assert.equal(practiceProgress(OPENING_EVE, '2026-04-11').complete, false);
+  assert.equal(practiceProgress(OPENING_EVE, practiceSeasonEnd(OPENING_EVE)).complete, true);
+});
+
 test('short phrases hold together when large text wraps', () => {
   assert.equal(keepTogether('Day 16 of 174'), 'Day\u00a016\u00a0of\u00a0174');
   assert.equal(keepTogether('Thu, Nov 6'), 'Thu,\u00a0Nov\u00a06');
@@ -65,11 +72,13 @@ test('short phrases hold together when large text wraps', () => {
 test('layout: phones stack two short lines, wide screens use one line, large text wraps', () => {
   const base = { wide: false, merged: false, largeText: false, iconOnly: false, narrow: false, compact: false };
   assert.deepEqual(chromeLayout(390, 1), base);
-  assert.deepEqual(chromeLayout(360, 1), { ...base, iconOnly: true });
+  // 360px phones take the tighter gutters, so a tag and the lock sentence fit.
+  assert.deepEqual(chromeLayout(360, 1), { ...base, iconOnly: true, narrow: true });
+  assert.equal(chromeLayout(370, 1).narrow, false);
   assert.deepEqual(chromeLayout(768, 1), { ...base, wide: true });
   assert.deepEqual(chromeLayout(1440, 1), { ...base, wide: true, merged: true });
   assert.deepEqual(chromeLayout(1440, 2), { ...base, largeText: true });
-  assert.deepEqual(chromeLayout(360, 2), { ...base, largeText: true });
+  assert.deepEqual(chromeLayout(360, 2), { ...base, largeText: true, narrow: true });
 });
 
 test('layout: narrow phones tighten, and a phone at 200% zoom goes compact', () => {
@@ -86,14 +95,6 @@ test('layout: narrow phones tighten, and a phone at 200% zoom goes compact', () 
   });
   assert.equal(chromeLayout(319, 1).compact, true);
   assert.equal(chromeLayout(320, 1).compact, false);
-});
-
-test('the roster lock says when changes reopen, never just a date', () => {
-  // A lock covers one game date and lifts once that date's games are settled.
-  assert.equal(lockReopensText('2025-11-06'), 'reopens after Nov 6');
-  assert.equal(lockReopensText(null), 'while games are on');
-  assert.equal(lockLineText('2025-11-16'), 'Roster reopens after Nov 16');
-  assert.equal(lockLineText(null), 'Roster locked for now');
 });
 
 test('next games read as a day, never an ISO date', () => {
@@ -160,29 +161,6 @@ test('rule wording matches the shared rules copy for both dividend bases', () =>
   assert.equal(shortTermText(null), 'A short stays open until you close it');
 });
 
-test('the rules explanation reads as short paragraphs without changing a word', () => {
-  const markers = [ROSTER_EXPLAINER, SHORT_EXPLAINER, NEGATIVE_DIVIDEND_EXPLAINER];
-  for (const dividendBasis of ['raw_net_points', 'surprise_vs_projection'] as const) {
-    const { explanation } = perGameRulesPresentation({ ...rules, dividendBasis });
-    const paragraphs = explanationParagraphs(explanation, markers);
-    // Dividends and what net points are; the roster; shorts; the score; bad games.
-    assert.equal(paragraphs.length, 5);
-    assert.match(paragraphs[0], /^A player's dividend comes from/);
-    assert.ok(paragraphs[0].endsWith(NET_POINTS_EXPLAINER));
-    assert.equal(paragraphs[1], ROSTER_EXPLAINER);
-    assert.equal(paragraphs[2], SHORT_EXPLAINER);
-    assert.match(paragraphs[3], /^Your score is the total/);
-    assert.equal(paragraphs[4], NEGATIVE_DIVIDEND_EXPLAINER);
-    assert.equal(paragraphs.join(' '), explanation);
-  }
-  // Copy that no longer contains a shared sentence still renders, whole.
-  assert.deepEqual(explanationParagraphs('Plain rules.', markers), ['Plain rules.']);
-  assert.deepEqual(
-    explanationParagraphs(`Intro. ${SHORT_EXPLAINER}`, markers),
-    ['Intro.', SHORT_EXPLAINER],
-  );
-});
-
 test('chrome copy never uses the words the design bans', () => {
   const copy = [
     statusSummary({
@@ -197,9 +175,6 @@ test('chrome copy never uses the words the design bans', () => {
     dividendText('surprise_vs_projection', 40_000),
     shortTermText(7),
     shortTermText(null),
-    lockReopensText('2025-11-06'),
-    lockLineText('2025-11-06'),
-    lockLineText(null),
   ].join('\n');
   assert.doesNotMatch(copy, /\binverse\b|\/GM\b|raw net points|cumulative|sandbox|\b\d{4}-\d{2}-\d{2}\b/i);
 });

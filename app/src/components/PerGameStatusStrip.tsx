@@ -13,20 +13,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { PerGameRuleset } from '../api/contracts';
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
+import { exactMoney, humanDate, PRACTICE_LABEL, rosterReopensLine } from '../copy/terms';
 import {
-  exactMoney,
-  humanDate,
-  PRACTICE_LABEL,
-  ROSTER_EXPLAINER,
-  SHORT_EXPLAINER,
-} from '../copy/terms';
-import {
+  CHROME_LOCK_TAG_MIN_WIDTH,
   chromeLayout,
   dividendText,
-  explanationParagraphs,
   keepTogether,
-  lockLineText,
-  lockReopensText,
   nextGamesText,
   PRACTICE_OVER_TEXT,
   practiceDayText,
@@ -35,11 +27,7 @@ import {
   statusSummary,
 } from '../data/chromeView';
 import { recentEarnings } from '../data/perGameMetrics';
-import {
-  NEGATIVE_DIVIDEND_EXPLAINER,
-  perGameRulesPresentation,
-  positionSlotHint,
-} from '../data/perGameRules';
+import { perGameRulesPresentation, positionSlotHint, rulesParagraphs } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, control, fonts, labelStyle, radius, space, type, weight } from '../theme';
@@ -171,21 +159,24 @@ export function PerGameStatusStrip() {
       {dayText}
     </Text>
   ) : null;
-  // Signed in on a phone the lock shares a 52px row with three controls, so
-  // it says the same thing without the tag.
-  const lockAsLine = tight && !practice;
+  // The lock says one sentence everywhere, the same one Roster and Market use
+  // (terms.rosterReopensLine). The ROSTER LOCKED tag rides along only where
+  // the tag and the sentence share one line: a wide row, or a practice phone
+  // row from 356px. Tight rows (signed in beside three controls, or 200% zoom)
+  // and the narrowest phones show the sentence alone, in gold.
+  const lockTag = arrangement === 'wide' || (arrangement === 'pair' && width >= CHROME_LOCK_TAG_MIN_WIDTH);
   const upcoming = locked ? (
-    lockAsLine ? (
-      <Text key="lock" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.lockLine, tight && styles.tight]}>
-        {lockLineText(lockDate)}
-      </Text>
-    ) : (
+    lockTag ? (
       <View key="lock" style={styles.lock}>
-        <Tag style={tight ? styles.tagTight : undefined} tone="gold">ROSTER LOCKED</Tag>
-        <Text maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel, tight && styles.tight]}>
-          {lockReopensText(lockDate)}
+        <Tag tone="gold">ROSTER LOCKED</Tag>
+        <Text maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel]}>
+          {rosterReopensLine(lockDate)}
         </Text>
       </View>
+    ) : (
+      <Text key="lock" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.lockLine, tight && styles.tight]}>
+        {rosterReopensLine(lockDate)}
+      </Text>
     )
   ) : progress?.complete ? (
     // Compact has no day line, so it states the fact; its Restart button sits
@@ -327,9 +318,6 @@ export function PerGameStatusStrip() {
 /** Below this width the rules sheet rises from the bottom; above it, it is a centred panel. */
 const RULES_SHEET_DOCKED_MAX_WIDTH = 640;
 
-/** The shared sentences the rules copy is split at, one paragraph each. */
-const RULES_PARAGRAPH_MARKERS = [ROSTER_EXPLAINER, SHORT_EXPLAINER, NEGATIVE_DIVIDEND_EXPLAINER];
-
 /**
  * The rules, over the screen. Plain English first (the shared rules copy, in
  * short paragraphs: dividends and net points, the roster, shorts, the score,
@@ -399,7 +387,7 @@ function RulesSheet({
         </View>
         <ScrollView contentContainerStyle={styles.sheetContent} style={styles.sheetBody}>
           <View style={styles.explanation}>
-            {explanationParagraphs(presentation.explanation, RULES_PARAGRAPH_MARKERS).map((paragraph) => (
+            {rulesParagraphs(presentation.explanation).map((paragraph) => (
               <Text key={paragraph} style={styles.paragraph}>{paragraph}</Text>
             ))}
           </View>
@@ -524,9 +512,6 @@ const styles = StyleSheet.create({
   lockLine: {
     color: colors.goldInk,
     fontWeight: weight.bold,
-  },
-  tagTight: {
-    paddingVertical: 0,
   },
   // One size per line keeps the tight lines at exactly their height.
   moneyTight: {

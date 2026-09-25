@@ -69,6 +69,18 @@ export function practiceDayText(progress: PracticeProgress): string {
   return progress.complete ? 'Season complete' : `Day ${progress.day} of ${progress.total}`;
 }
 
+/**
+ * The last day of the practice season's track: day 174 after opening-night eve
+ * ("2025-10-20" gives "2026-04-12"). Practice plays no night once a night on or
+ * after this day has settled, which is exactly when `practiceProgress` says
+ * the season is complete.
+ */
+export function practiceSeasonEnd(seasonStart: string | null | undefined): string | null {
+  if (!seasonStart) return null;
+  const end = new Date(utcDay(seasonStart) + SEASON_TOTAL_DAYS * DAY_MS);
+  return Number.isNaN(end.getTime()) ? null : end.toISOString().slice(0, 10);
+}
+
 /** At or above this width each bar lays out on one line. */
 export const CHROME_WIDE_MIN_WIDTH = 720;
 /**
@@ -77,8 +89,18 @@ export const CHROME_WIDE_MIN_WIDTH = 720;
  * breakpoint, where the tabs move to the top).
  */
 export const CHROME_MERGED_MIN_WIDTH = 900;
-/** Below this width the bars trade their 16px gutters and control padding for room. */
-export const CHROME_NARROW_MAX_WIDTH = 360;
+/**
+ * Below this width the bars trade their 16px gutters and control padding for
+ * room. 360px phones sit inside the band, which is what lets the ROSTER LOCKED
+ * tag and the lock sentence share one line there (see below).
+ */
+export const CHROME_NARROW_MAX_WIDTH = 370;
+/**
+ * From this width a phone's status row fits the ROSTER LOCKED tag (108px) and
+ * the lock sentence (161px) on one line beside the Rules control; narrower
+ * rows show the sentence alone.
+ */
+export const CHROME_LOCK_TAG_MIN_WIDTH = 356;
 /**
  * Below this width (a 390px phone at 125% zoom and beyond) the practice bars
  * go compact: three short lines of facts, and +1 night / +1 week beside a
@@ -123,21 +145,6 @@ export function chromeLayout(width: number, fontScale: number): ChromeLayout {
     narrow: width < CHROME_NARROW_MAX_WIDTH,
     compact: width < CHROME_COMPACT_MAX_WIDTH,
   };
-}
-
-/**
- * When roster changes reopen, beside the ROSTER LOCKED tag. A lock covers
- * one game date: the server keeps roster changes locked while that date's
- * games are played and settled, then unlocks; practice clears it when the
- * night is played. So the honest promise is "after" that date, not "on" it.
- */
-export function lockReopensText(lockGameDate: string | null): string {
-  return lockGameDate ? `reopens after ${humanDate(lockGameDate)}` : 'while games are on';
-}
-
-/** The same promise without the tag, where a row has no room for one. */
-export function lockLineText(lockGameDate: string | null): string {
-  return lockGameDate ? `Roster reopens after ${humanDate(lockGameDate)}` : 'Roster locked for now';
 }
 
 /** The next slate, in words: "Thu, Nov 6", or null when nothing is scheduled. */
@@ -213,24 +220,4 @@ export function dividendText(basis: DividendBasis, dollarsPerNetPoint: number): 
 export function shortTermText(shortTermDays: number | null): string {
   if (shortTermDays === null) return 'A short stays open until you close it';
   return `A short closes after ${shortTermDays} ${shortTermDays === 1 ? 'day' : 'days'}`;
-}
-
-/**
- * The shared rules explanation as short paragraphs, in the rules copy's own
- * order and words. Each marker (a shared sentence such as the roster or short
- * explainer) becomes its own paragraph, and the text between markers becomes
- * one too. A marker the copy no longer contains is simply skipped, so a
- * rewrite of the rules can never drop a sentence from the sheet.
- */
-export function explanationParagraphs(explanation: string, markers: readonly string[]): string[] {
-  const paragraphs: string[] = [];
-  let rest = explanation;
-  for (const marker of markers) {
-    const at = rest.indexOf(marker);
-    if (at < 0) continue;
-    paragraphs.push(rest.slice(0, at), marker);
-    rest = rest.slice(at + marker.length);
-  }
-  paragraphs.push(rest);
-  return paragraphs.map((part) => part.trim()).filter(Boolean);
 }

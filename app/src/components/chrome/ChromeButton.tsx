@@ -44,7 +44,11 @@ export function ChromeButton({
     <Pressable
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
+      // react-native-web turns only some accessibilityState keys into ARIA
+      // (not expanded or busy), so those two are passed as ARIA props as well.
       accessibilityState={{ disabled, busy, expanded }}
+      aria-busy={busy || undefined}
+      aria-expanded={expanded}
       disabled={disabled}
       onPress={() => {
         if (!disabled) onPress();
