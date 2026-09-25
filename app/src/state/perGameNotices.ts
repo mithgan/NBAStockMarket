@@ -38,13 +38,14 @@ export function refreshHasNews(previous: PerGameBootstrap | null, next: PerGameB
 
 /**
  * The notice after a refresh says what changed for the player, not what the
- * app did. The money comes first and is read from the ledger over exactly the
- * nights that just settled, so it matches "Last night" after +1 night and
- * "Last 7 nights" after +1 week to the dollar (fees booked on those days
- * included). Any short that ran its term is named. A score that moved without
- * new games (a corrected result) is reported as such; otherwise the notice
- * confirms the account is current. The next game date already sits in the
- * status bar, so it is only repeated when there is nothing else to say.
+ * app did. When games settled it leads with what your players made over
+ * exactly those days, games only, which is the score change the refresh
+ * brought (fees came off the score when each move was made). So it equals
+ * "Last night" after +1 night and "Last 7 days" after +1 week, to the dollar.
+ * Any short that ran its term is named. A score that moved without new games
+ * (a corrected result) is reported as such; otherwise the notice confirms the
+ * account is current. The next game date already sits in the status bar, so it
+ * is only repeated when there is nothing else to say.
  */
 export function refreshNotice(
   previous: PerGameBootstrap | null,
@@ -56,13 +57,9 @@ export function refreshNotice(
   const after = next.game.lastSettledDate;
   const ended = endedSentence(endedShorts(previous, next));
   if (after && after !== before) {
-    const change = earningsBetween(next.ledger?.items, before, after);
-    const nights = new Set(
-      (next.ledger?.items ?? [])
-        .filter((entry) => entry.gameDate && entry.gameDate <= after && (before === null || entry.gameDate > before))
-        .map((entry) => entry.gameDate),
-    ).size;
-    const when = nights > 1 ? `${nights} nights through ${humanDate(after)}` : humanDate(after);
+    const change = earningsBetween(next.ledger?.items, before, after, { gamesOnly: true });
+    const span = before ? daysBetween(before, after) : 1;
+    const when = span > 1 ? `Games through ${humanDate(after)}` : `${humanDate(after)} games`;
     const score = change === 0
       ? 'no change to your score.'
       : `your score ${change > 0 ? 'rose' : 'fell'} ${money(Math.abs(change))}.`;
@@ -75,4 +72,10 @@ export function refreshNotice(
   return next.game.nextGameDate
     ? `You're up to date. Next games ${humanDay(next.game.nextGameDate)}.`
     : "You're up to date. The next games are not scheduled yet.";
+}
+
+function daysBetween(fromDay: string, toDay: string): number {
+  const from = Date.parse(`${fromDay}T00:00:00Z`);
+  const to = Date.parse(`${toDay}T00:00:00Z`);
+  return Math.round((to - from) / 86_400_000);
 }

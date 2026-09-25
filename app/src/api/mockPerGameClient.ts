@@ -392,6 +392,24 @@ export class MockPerGameApiClient {
     }
   }
 
+  /**
+   * Settle every game night in the next `days` calendar days, then move the
+   * clock the full span, so a practice week is seven days on the track even
+   * when its last day has no games. Never runs past `lastDay` when given.
+   */
+  advanceDays(days: number, lastDay?: string | null): void {
+    const start = this.snapshot.game.lastSettledDate;
+    if (!start || days <= 0) return;
+    let target = addDays(start, days);
+    if (lastDay && target > lastDay) target = lastDay;
+    while (this.snapshot.game.nextGameDate && this.snapshot.game.nextGameDate <= target) {
+      this.advanceNight();
+    }
+    if ((this.snapshot.game.lastSettledDate ?? start) < target) {
+      this.snapshot.game.lastSettledDate = target;
+    }
+  }
+
   trendsFor(playerId: string): TrendPoint[] {
     return clone(this.trendsByPlayer[playerId] ?? []);
   }
@@ -447,6 +465,13 @@ export function mockSeasonStart(): string | null {
 export function advanceMockNights(count: number): boolean {
   if (!singleton) return false;
   for (let night = 0; night < count; night += 1) singleton.advanceNight();
+  return true;
+}
+
+/** Settle a practice span of calendar days (the practice bar's +1 week). */
+export function advanceMockDays(days: number, lastDay?: string | null): boolean {
+  if (!singleton) return false;
+  singleton.advanceDays(days, lastDay);
   return true;
 }
 

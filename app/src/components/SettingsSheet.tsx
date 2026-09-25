@@ -145,6 +145,9 @@ export function SettingsSheet({
                   accessibilityLabel={`${variant.name}. ${variant.blurb}`}
                   accessibilityRole="radio"
                   accessibilityState={{ selected, checked: selected }}
+                  // react-native-web drops accessibilityState.checked, so the
+                  // radio says which theme is in use through aria-checked.
+                  aria-checked={selected}
                   onPress={() => setVariant(choice)}
                   style={({ pressed }) => [styles.choice, selected && styles.choiceSelected, pressed && styles.pressed]}
                   {...rowMarker}

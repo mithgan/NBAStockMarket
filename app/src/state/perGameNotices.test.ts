@@ -31,24 +31,28 @@ function snapshot(
   } as unknown as PerGameBootstrap;
 }
 
-test('newly settled games lead with the money, read from those nights in the ledger', () => {
+test('newly settled games lead with what your players made over exactly those days', () => {
   const before = snapshot('2025-11-04', '2025-11-05', 100_000, [], [night('2025-11-04', 100_000)]);
   const oneNight = [night('2025-11-04', 100_000), night('2025-11-05', 323_000)];
   assert.equal(
     refreshNotice(before, snapshot('2025-11-05', '2025-11-06', 423_000, [], oneNight), false),
-    'Nov 5: your score rose $323K.',
+    'Nov 5 games: your score rose $323K.',
   );
+  // A practice week: seven calendar days, games on five of them, one fee
+  // booked before the week that must not be counted again.
+  const fee: PerGameLedgerEntry = { ...night('2025-11-05', -250), entryId: 'fee', kind: 'open_fee', gameDate: null, createdAt: '2025-11-05T12:00:00.000Z' };
   const week = [
     night('2025-11-04', 100_000),
-    ...['2025-11-05', '2025-11-06', '2025-11-08', '2025-11-09', '2025-11-10', '2025-11-11', '2025-11-12'].map((day) => night(day, -10_000)),
+    fee,
+    ...['2025-11-05', '2025-11-06', '2025-11-08', '2025-11-09', '2025-11-11'].map((day) => night(day, -14_000)),
   ];
   assert.equal(
-    refreshNotice(before, snapshot('2025-11-12', '2025-11-13', 30_000, [], week), false),
-    '7 nights through Nov 12: your score fell $70K.',
+    refreshNotice(before, snapshot('2025-11-11', '2025-11-12', 30_000, [], week), false),
+    'Games through Nov 11: your score fell $70K.',
   );
   assert.equal(
     refreshNotice(before, snapshot('2025-11-05', '2025-11-06', 100_000, [], [night('2025-11-04', 100_000)]), false),
-    'Nov 5: no change to your score.',
+    'Nov 5 games: no change to your score.',
   );
 });
 
@@ -57,7 +61,7 @@ test('a short that ran its term is named with what it made', () => {
   const after = snapshot('2025-11-05', '2025-11-06', 345_000, [short('s1', 'Tyrese Maxey', 'closed', 345_000)], [night('2025-11-05', 145_000)]);
   assert.equal(
     refreshNotice(before, after, false),
-    'Nov 5: your score rose $145K. Your short on Tyrese Maxey ended: +$345K.',
+    'Nov 5 games: your score rose $145K. Your short on Tyrese Maxey ended: +$345K.',
   );
   const two = snapshot('2025-11-05', '2025-11-06', 0, [
     short('s1', 'A', 'closed', 345_000),

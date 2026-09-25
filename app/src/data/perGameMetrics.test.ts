@@ -114,7 +114,7 @@ test('night totals are newest first and use corrected values', () => {
   assert.equal(nights[1].wins, 1);
 });
 
-test('recent earnings: last night and the last seven game nights, fees on the day they were booked', () => {
+test('recent earnings: what your players made last night and over the last seven days, fees apart', () => {
   const entry = (gameDate: string | null, amountDollars: number, createdAt = '2025-11-08T00:00:00Z'): PerGameLedgerEntry => ({
     eventCursor: 1,
     entryId: `${gameDate}-${amountDollars}-${createdAt}`,
@@ -128,24 +128,22 @@ test('recent earnings: last night and the last seven game nights, fees on the da
     adjustsEntryId: null,
     createdAt,
   });
-  // Nine game nights with skipped days in between; the week is the last seven.
   const nights = ['2025-10-28', '2025-10-29', '2025-10-31', '2025-11-01', '2025-11-03', '2025-11-04', '2025-11-05', '2025-11-07', '2025-11-08'];
   const ledger = [
     ...nights.map((day, index) => entry(day, (index + 1) * 1_000)),
     entry(null, -250, '2025-11-08T12:00:00.000Z'),
-    entry(null, -250, '2025-10-31T12:00:00.000Z'),
-    entry(null, -250, '2025-10-29T12:00:00.000Z'),
+    entry(null, -250, '2025-11-03T12:00:00.000Z'),
   ];
   const recent = recentEarnings(ledger, '2025-11-08');
-  // Last night: 9,000 minus the fee booked that day.
-  assert.equal(recent?.night, 8_750);
-  // Last seven game nights run Oct 31 .. Nov 8: 3+4+5+6+7+8+9 thousand, minus two fees.
-  assert.equal(recent?.week, 42_000 - 500);
-  assert.equal(recent?.weekNights, 7);
+  // Last night: the Nov 8 games only; the fee booked that day is not a game.
+  assert.equal(recent?.night, 9_000);
+  // Seven calendar days, Nov 2 .. Nov 8: games on Nov 3, 4, 5, 7 and 8.
+  assert.equal(recent?.week, 5_000 + 6_000 + 7_000 + 8_000 + 9_000);
+  assert.equal(recent?.weekNights, 5);
+  // earningsBetween keeps fees unless told otherwise.
   assert.equal(earningsBetween(ledger, '2025-11-05', '2025-11-08'), 8_000 + 9_000 - 250);
-  assert.equal(earningsBetween(ledger, null, '2025-10-29'), 1_000 + 2_000 - 250);
+  assert.equal(earningsBetween(ledger, '2025-11-05', '2025-11-08', { gamesOnly: true }), 17_000);
   assert.equal(recentEarnings(ledger, null), null);
-  assert.equal(recentEarnings(ledger.slice(0, 2), '2025-10-29')?.weekNights, 2);
 });
 
 test('the score breakdown adds up by source, shorts and closed positions included', () => {

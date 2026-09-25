@@ -205,19 +205,26 @@ export function entryDay(entry: PerGameLedgerEntry): string | null {
   return entry.createdAt ? entry.createdAt.slice(0, 10) : null;
 }
 
+const FEE_ENTRY_KINDS = new Set(['open_fee', 'drop_fee', 'fee', 'penalty']);
+
 /**
  * Score change over a run of days: every ledger entry whose day falls after
  * `afterDay` (exclusive; null means from the start) and on or before
- * `throughDay`. Game entries and fees both count, exactly as in the score.
+ * `throughDay`. With `gamesOnly`, add and drop fees are left out: that is
+ * what your players did, which is what "Last night", "Last 7 days" and the
+ * notice after a night settles report (fees have their own line in the score
+ * breakdown, and were already off the score when the move was made).
  */
 export function earningsBetween(
   ledger: readonly PerGameLedgerEntry[] | undefined,
   afterDay: string | null,
   throughDay: string,
+  options: { gamesOnly?: boolean } = {},
 ): number {
   if (!ledger) return 0;
   let total = 0;
   for (const entry of ledger) {
+    if (options.gamesOnly && FEE_ENTRY_KINDS.has(entry.kind)) continue;
     const day = entryDay(entry);
     if (!day || day > throughDay) continue;
     if (afterDay !== null && day <= afterDay) continue;
@@ -226,33 +233,29 @@ export function earningsBetween(
   return total;
 }
 
-/** How many game nights `recentEarnings` sums for its week figure. */
-export const RECENT_NIGHTS = 7;
-
 /**
- * Score change on the last settled night and over the last seven game nights,
- * from the ledger, fees included (a game entry counts on its game date, an add
- * or drop fee on the day it was booked). Game nights, not calendar days, so
- * the figure matches practice's +1 week, which plays seven game nights, and a
- * refresh notice that reports the same run of nights. `weekNights` is how many
- * nights the week figure covers (fewer than seven early in the season).
+ * What your players made on the last settled day and over the seven calendar
+ * days ending on it, from the ledger, games only. Calendar days because
+ * practice's +1 week moves the clock exactly seven days, so the notice after
+ * +1 week equals this week figure, and the notice after +1 night equals the
+ * night figure, whatever the size of the roster. `weekNights` is how many of
+ * those days had games for you.
  */
 export function recentEarnings(
   ledger: readonly PerGameLedgerEntry[] | undefined,
   lastSettledDate: string | null | undefined,
 ): { night: number; week: number; weekNights: number } | null {
   if (!ledger || !lastSettledDate) return null;
-  const nights = [...new Set(
+  const weekAfter = addDays(lastSettledDate, -7);
+  const nights = new Set(
     ledger
-      .filter((entry) => entry.gameDate && entry.gameDate <= lastSettledDate)
-      .map((entry) => entry.gameDate as string),
-  )].sort();
-  const window = nights.slice(-RECENT_NIGHTS);
-  const weekStart = window[0] ?? lastSettledDate;
+      .filter((entry) => entry.gameDate && entry.gameDate > weekAfter && entry.gameDate <= lastSettledDate)
+      .map((entry) => entry.gameDate),
+  );
   return {
-    night: earningsBetween(ledger, addDays(lastSettledDate, -1), lastSettledDate),
-    week: earningsBetween(ledger, addDays(weekStart, -1), lastSettledDate),
-    weekNights: window.length,
+    night: earningsBetween(ledger, addDays(lastSettledDate, -1), lastSettledDate, { gamesOnly: true }),
+    week: earningsBetween(ledger, weekAfter, lastSettledDate, { gamesOnly: true }),
+    weekNights: nights.size,
   };
 }
 
