@@ -294,6 +294,7 @@ function AppBody() {
 
   const renderTabBar = (position: 'top' | 'bottom') => (
     <View
+      accessibilityLabel="Sections"
       accessibilityRole="tablist"
       style={[styles.tabBar, position === 'top' ? styles.tabBarTop : { paddingBottom: insets.bottom + 9 }]}
     >

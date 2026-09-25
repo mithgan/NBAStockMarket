@@ -85,11 +85,14 @@ export function SettingsSheet({
       transparent
       visible={visible}
     >
+      {/* The scrim closes on a tap, but it is not a keyboard stop: Done and
+          Escape close the sheet for keyboard users. */}
       <Pressable
         accessibilityLabel="Close settings"
         accessibilityRole="button"
         onPress={onClose}
         style={styles.scrim}
+        tabIndex={-1}
       />
       <View style={styles.sheet}>
         <View style={styles.sheetHead}>
@@ -138,7 +141,7 @@ export function SettingsSheet({
                   key={choice}
                   accessibilityLabel={`${variant.name}. ${variant.blurb}`}
                   accessibilityRole="radio"
-                  accessibilityState={{ selected }}
+                  accessibilityState={{ selected, checked: selected }}
                   onPress={() => setVariant(choice)}
                   style={({ pressed }) => [styles.choice, selected && styles.choiceSelected, pressed && styles.pressed]}
                   {...rowMarker}
