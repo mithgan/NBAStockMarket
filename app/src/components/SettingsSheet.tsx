@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line } from 'react-native-svg';
 
@@ -8,6 +8,9 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useDesignVariant } from '../theme/ThemeProvider';
 import { APPEARANCE_CHOICES, VARIANTS } from '../theme/variants';
 import { rowMarker } from '../ui/domMarkers';
+import { headingLevel } from '../ui/kit';
+import { openRules } from '../state/uiActions';
+import { useSheetHistory } from '../web/appHistory';
 import { colors, fonts, numeric, radius, space, type, weight } from '../theme';
 
 /** Account facts the sheet can show; absent entirely in the local demo. */
@@ -46,7 +49,7 @@ export function SettingsButton({ onPress }: { onPress: () => void }) {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <View style={styles.section}>
-      <Text accessibilityRole="header" style={styles.sectionTitle}>{title}</Text>
+      <Text accessibilityRole="header" {...headingLevel(3)} style={styles.sectionTitle}>{title}</Text>
       {children}
     </View>
   );
@@ -78,8 +81,25 @@ export function SettingsSheet({
   const reducedMotion = useReducedMotion();
   const rules = ruleset ? perGameRulesPresentation(ruleset) : null;
   const { setVariant, variantId } = useDesignVariant();
+  // Back closes the sheet; the app behind it is inert while it is open.
+  useSheetHistory(visible, onClose);
+  const choiceRefs = useRef<Array<View | null>>([]);
+  // Appearance is a radio group: arrow keys move and choose, like any other
+  // radio group, and only the chosen theme is a Tab stop.
+  const onChoiceKey = (event: { key: string; preventDefault: () => void }) => {
+    const index = APPEARANCE_CHOICES.indexOf(variantId as (typeof APPEARANCE_CHOICES)[number]);
+    let next = -1;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') next = (Math.max(index, 0) + 1) % APPEARANCE_CHOICES.length;
+    else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') next = (Math.max(index, 0) - 1 + APPEARANCE_CHOICES.length) % APPEARANCE_CHOICES.length;
+    if (next < 0) return;
+    event.preventDefault();
+    setVariant(APPEARANCE_CHOICES[next]);
+    (choiceRefs.current[next] as unknown as { focus?: () => void } | null)?.focus?.();
+  };
+  const firstParagraph = rules ? rulesParagraphs(rules.explanation).slice(0, 2).join(' ') : null;
   return (
     <Modal
+      accessibilityLabel="Settings"
       animationType={reducedMotion ? 'none' : 'fade'}
       onRequestClose={onClose}
       transparent
@@ -97,7 +117,7 @@ export function SettingsSheet({
       />
       <View style={styles.sheet}>
         <View style={styles.sheetHead}>
-          <Text accessibilityRole="header" style={styles.sheetTitle}>Settings</Text>
+          <Text accessibilityRole="header" {...headingLevel(2)} style={styles.sheetTitle}>Settings</Text>
           <Pressable
             accessibilityLabel="Close settings"
             accessibilityRole="button"
@@ -108,20 +128,63 @@ export function SettingsSheet({
           </Pressable>
         </View>
         <ScrollView style={styles.sheetBody}>
-          <Section title="How it works">
-            {rules ? (
-              <>
-                {rulesParagraphs(rules.explanation).map((paragraph) => (
-                  <Text key={paragraph} style={styles.lede}>{paragraph}</Text>
-                ))}
-                {rules.facts.map((fact) => (
-                  <View key={fact.label} style={styles.factRow}>
-                    <Text style={styles.factLabel}>{fact.label}</Text>
-                    <Text style={styles.factValue}>{fact.value}</Text>
-                  </View>
-                ))}
-              </>
-            ) : <Text style={styles.note}>The rules will appear when your account loads.</Text>}
+          <Section title="Appearance">
+            <View accessibilityLabel="Theme" accessibilityRole="radiogroup" {...({ onKeyDown: onChoiceKey } as object)}>
+              {APPEARANCE_CHOICES.map((choice, index) => {
+                const variant = VARIANTS[choice];
+                const selected = choice === variantId;
+                return (
+                  <Pressable
+                    key={choice}
+                    ref={(node) => {
+                      choiceRefs.current[index] = node;
+                    }}
+                    accessibilityLabel={`${variant.name}. ${variant.blurb}`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected, checked: selected }}
+                    // react-native-web drops accessibilityState.checked, so the
+                    // radio says which theme is in use through aria-checked.
+                    aria-checked={selected}
+                    onPress={() => setVariant(choice)}
+                    style={({ pressed }) => [styles.choice, selected && styles.choiceSelected, pressed && styles.pressed]}
+                    {...rowMarker}
+                    {...({ tabIndex: selected ? 0 : -1 } as object)}
+                  >
+                    <View style={[styles.swatch, { backgroundColor: variant.palette.background }]}>
+                      <View style={[styles.swatchDot, { backgroundColor: variant.palette.gold }]} />
+                    </View>
+                    <View style={styles.choiceCopy}>
+                      <Text style={[styles.choiceName, selected && styles.choiceNameSelected]}>{variant.name}</Text>
+                      <Text numberOfLines={2} style={styles.choiceBlurb}>{variant.blurb}</Text>
+                    </View>
+                    {selected ? <Text style={styles.check}>IN USE</Text> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.note}>Every theme is checked to be easy to read.</Text>
+            {onOpenTreatments ? (
+              <Pressable accessibilityRole="button" onPress={onOpenTreatments} style={styles.choice}>
+                <Text style={[styles.choiceName, styles.choiceNameSelected]}>View all treatments</Text>
+              </Pressable>
+            ) : null}
+          </Section>
+
+          <Section title="How the game works">
+            {firstParagraph ? <Text style={styles.lede}>{firstParagraph}</Text> : (
+              <Text style={styles.note}>The rules will appear when your account loads.</Text>
+            )}
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                onClose();
+                // Let this sheet close first; two sheets never stack.
+                setTimeout(() => openRules(), 50);
+              }}
+              style={({ pressed }) => [styles.choice, pressed && styles.pressed]}
+            >
+              <Text style={[styles.choiceName, styles.choiceNameSelected]}>Read the full rules</Text>
+            </Pressable>
           </Section>
 
           <Section title="This season">
@@ -133,44 +196,12 @@ export function SettingsSheet({
               <Text style={styles.factLabel}>Listed players</Text>
               <Text style={styles.factValue}>{listedPlayers}</Text>
             </View>
-          </Section>
-
-          <Section title="Appearance">
-            {APPEARANCE_CHOICES.map((choice) => {
-              const variant = VARIANTS[choice];
-              const selected = choice === variantId;
-              return (
-                <Pressable
-                  key={choice}
-                  accessibilityLabel={`${variant.name}. ${variant.blurb}`}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected, checked: selected }}
-                  // react-native-web drops accessibilityState.checked, so the
-                  // radio says which theme is in use through aria-checked.
-                  aria-checked={selected}
-                  onPress={() => setVariant(choice)}
-                  style={({ pressed }) => [styles.choice, selected && styles.choiceSelected, pressed && styles.pressed]}
-                  {...rowMarker}
-                >
-                  <View style={[styles.swatch, { backgroundColor: variant.palette.background }]}>
-                    <View style={[styles.swatchDot, { backgroundColor: variant.palette.gold }]} />
-                  </View>
-                  <View style={styles.choiceCopy}>
-                    <Text style={[styles.choiceName, selected && styles.choiceNameSelected]}>{variant.name}</Text>
-                    <Text numberOfLines={2} style={styles.choiceBlurb}>{variant.blurb}</Text>
-                  </View>
-                  {selected ? <Text style={styles.check}>IN USE</Text> : null}
-                </Pressable>
-              );
-            })}
-            <Text style={styles.note}>
-              Every treatment here is checked against the same contrast floor the rest of the app holds.
-            </Text>
-            {onOpenTreatments ? (
-              <Pressable accessibilityRole="button" onPress={onOpenTreatments} style={styles.choice}>
-                <Text style={[styles.choiceName, styles.choiceNameSelected]}>View all treatments</Text>
-              </Pressable>
-            ) : null}
+            {rules ? rules.facts.filter((fact) => ['Roster slots', 'Short slots', 'Shorts last'].includes(fact.label)).map((fact) => (
+              <View key={fact.label} style={styles.factRow}>
+                <Text style={styles.factLabel}>{fact.label}</Text>
+                <Text style={styles.factValue}>{fact.value}</Text>
+              </View>
+            )) : null}
           </Section>
 
           {profile ? (
@@ -199,7 +230,7 @@ export function SettingsSheet({
               ) : null}
             </Section>
           ) : (
-            <Section title="Profile">
+            <Section title="Practice mode">
               <Text style={styles.note}>
                 This is practice. It plays generated games in this browser's memory and starts over when you reload. Your saved account is separate and untouched.
               </Text>

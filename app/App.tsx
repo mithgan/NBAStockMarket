@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PerGameApiClient as MarketApiClient } from './src/api/perGameClient';
-import { mockPerGameClient } from './src/api/mockPerGameClient';
+import { isMockActive, mockPerGameClient, mockSeasonStart } from './src/api/mockPerGameClient';
 import type { PerGamePositionSide } from './src/api/contracts';
 import { resolvePublicAppConfig, type PublicAppConfig } from './src/api/config';
 import { AuthProvider, useAuth, useOptionalAuth } from './src/auth/AuthContext';
@@ -19,8 +19,11 @@ import { PerGameMarketScreen as MarketScreen } from './src/screens/PerGameMarket
 import { PerGameResultsScreen as PlaysScreen } from './src/screens/PerGameResultsScreen';
 import { DesignPreviewScreen } from './src/screens/DesignPreviewScreen';
 import { PerGameRosterScreen as PortfolioScreen } from './src/screens/PerGameRosterScreen';
-import { humanDateWithYear } from './src/copy/terms';
+import { humanDateWithYear, spoken } from './src/copy/terms';
 import { visuallyHidden } from './src/ui/kit';
+import { registerSettingsOpener } from './src/state/uiActions';
+import { sheetIsOpen } from './src/web/appHistory';
+import { consumePracticeRestarted, setPracticeProgress } from './src/web/practiceSession';
 import {
   PerGameProvider as PortfolioProvider,
   usePerGame as usePortfolio,
@@ -98,6 +101,7 @@ function VariantTexture() {
 function CenteredState({
   title,
   copy,
+  details,
   actionLabel,
   actionDisabled = false,
   onAction,
@@ -105,6 +109,8 @@ function CenteredState({
 }: {
   title: string;
   copy: string;
+  /** Technical detail for developers, shown small under the action. */
+  details?: string;
   actionLabel?: string;
   actionDisabled?: boolean;
   onAction?: () => void;
@@ -133,6 +139,7 @@ function CenteredState({
           <Text style={styles.stateButtonText}>{actionLabel}</Text>
         </Pressable>
       ) : null}
+      {details ? <Text style={styles.stateDetails}>{details}</Text> : null}
     </View>
   );
 }
@@ -175,29 +182,61 @@ function NoticeToast({
     return () => clearTimeout(timer);
   }, [message, onDismiss, tone]);
   const problem = tone === 'problem';
+  if (!problem) {
+    // A success reads like a snackbar: tapping it dismisses it, and never
+    // presses whatever sits underneath. Screen readers already heard it
+    // through the live region, so the visual copy stays out of their way.
+    return (
+      <View style={styles.noticeLayer}>
+        <Pressable
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          onPress={onDismiss}
+          style={styles.notice}
+          {...({ tabIndex: -1 } as object)}
+        >
+          <Text style={styles.noticeText}>{message}</Text>
+        </Pressable>
+      </View>
+    );
+  }
   return (
     <View style={styles.noticeLayer}>
-      <View
-        // A success has nothing to press, and the live region already read
-        // it, so the visual copy stays out of the accessibility tree. A
-        // problem keeps its Dismiss button reachable.
-        accessibilityElementsHidden={!problem}
-        importantForAccessibility={problem ? 'auto' : 'no-hide-descendants'}
-        style={[styles.notice, problem ? styles.noticeProblem : styles.noticePassThrough]}
-      >
+      <View style={[styles.notice, styles.noticeProblem]}>
         <Text style={styles.noticeText}>{message}</Text>
-        {problem ? (
-          <Pressable
-            accessibilityLabel={`Dismiss: ${message}`}
-            accessibilityRole="button"
-            onPress={onDismiss}
-            style={({ pressed }) => [styles.noticeDismiss, pressed && styles.pressed]}
-          >
-            <Text style={styles.noticeClose}>Dismiss</Text>
-          </Pressable>
-        ) : null}
+        <Pressable
+          accessibilityLabel={`Dismiss: ${message}`}
+          accessibilityRole="button"
+          onPress={onDismiss}
+          style={({ pressed }) => [styles.noticeDismiss, pressed && styles.pressed]}
+        >
+          <Text style={styles.noticeClose}>Dismiss</Text>
+        </Pressable>
       </View>
     </View>
+  );
+}
+
+/**
+ * First stop for the Tab key: jump past the brand bar, tabs and practice
+ * controls straight to the screen. Invisible until focused.
+ */
+function SkipLink() {
+  const [focused, setFocused] = useState(false);
+  return (
+    <Pressable
+      accessibilityLabel="Skip to content"
+      accessibilityRole="link"
+      onBlur={() => setFocused(false)}
+      onFocus={() => setFocused(true)}
+      onPress={() => {
+        if (typeof document === 'undefined') return;
+        (document.getElementById('app-screen') as HTMLElement | null)?.focus?.();
+      }}
+      style={[styles.skipLink, !focused && visuallyHidden]}
+    >
+      <Text style={styles.skipLinkText}>Skip to content</Text>
+    </Pressable>
   );
 }
 
@@ -207,6 +246,12 @@ function NoticeToast({
  * on a phone.
  */
 const WIDE_LAYOUT_MIN_WIDTH = 900;
+/**
+ * Below this height (a phone on its side, a laptop at 400% zoom) the frame
+ * folds: the brand bar hides (the status row carries Settings instead) and
+ * the tab bar loses its extra padding, so the game keeps most of the screen.
+ */
+const SHORT_LAYOUT_MAX_HEIGHT = 500;
 
 function treatmentsRequested(): boolean {
   if (typeof window === 'undefined') return false;
@@ -219,8 +264,46 @@ function AppBody() {
   const [marketSide, setMarketSide] = useState<PerGamePositionSide>('long');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const wide = width >= WIDE_LAYOUT_MIN_WIDTH;
+  const short = height < SHORT_LAYOUT_MAX_HEIGHT;
+  const tabRefs = useRef<Array<View | null>>([]);
+  const [appNotice, setAppNotice] = useState<string | null>(null);
+
+  // Tabs live in browser history, so Back steps back through the tabs a
+  // player visited (after closing any open sheet) before it leaves the app.
+  const pushTab = useCallback((tab: Tab) => {
+    if (typeof window === 'undefined') return;
+    const current = (window.history.state as { tab?: Tab } | null)?.tab;
+    if (current !== tab) window.history.pushState({ tab }, '');
+  }, []);
+  const changeTab = (tab: Tab) => {
+    if (tab === activeTab) return;
+    pushTab(tab);
+    setActiveTab(tab);
+  };
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    window.history.replaceState({ ...(window.history.state ?? {}), tab: 'portfolio' }, '');
+    const onPop = (event: PopStateEvent) => {
+      // Back with a sheet open closes the sheet (the sheet handles it).
+      if (sheetIsOpen()) return;
+      const tab = (event.state as { tab?: Tab } | null)?.tab;
+      if (tab) setActiveTab(tab);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  useEffect(() => registerSettingsOpener(() => setSettingsOpen(true)), []);
+  // After Restart, say that a fresh season has begun and put focus on the
+  // screen, so nobody is left wondering what just happened.
+  useEffect(() => {
+    if (!consumePracticeRestarted()) return;
+    setAppNotice('New practice season. Build a roster in the Market, then press +1 night to play the first games.');
+    if (typeof document !== 'undefined') {
+      setTimeout(() => (document.getElementById('app-screen') as HTMLElement | null)?.focus?.(), 300);
+    }
+  }, []);
   // Under ~300 CSS px (a phone at 200% zoom) the four tab labels and the
   // brand line only fit at the smallest type size, without side padding.
   const narrow = width < NARROW_LAYOUT_MAX_WIDTH;
@@ -250,6 +333,9 @@ function AppBody() {
   } = usePortfolio();
   const seasonLabel = seasonLabelFor(latestSettledDate ?? nextGameDate);
   const ready = Boolean(state && !isLoading && !serverError && !transitionRequired && !isTransitioning);
+  useEffect(() => {
+    if (isMockActive()) setPracticeProgress(practiceHasProgress(bootstrap));
+  }, [bootstrap]);
 
   const body = (() => {
     if (isLoading) {
@@ -296,6 +382,7 @@ function AppBody() {
           <PortfolioScreen
             onOpenMarket={(side) => {
               setMarketSide(side);
+              pushTab('market');
               setActiveTab('market');
             }}
           />
@@ -307,49 +394,81 @@ function AppBody() {
     );
   })();
 
+  const tabIndexOf = (tab: Tab) => tabs.findIndex((item) => item.key === tab);
+  const onTabKeyDown = (event: { key: string; preventDefault: () => void }) => {
+    const index = tabIndexOf(activeTab);
+    let next = -1;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % tabs.length;
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = tabs.length - 1;
+    if (next < 0) return;
+    event.preventDefault();
+    changeTab(tabs[next].key);
+    (tabRefs.current[next] as unknown as { focus?: () => void } | null)?.focus?.();
+  };
+
   const renderTabBar = (position: 'top' | 'bottom') => (
-    <View
-      accessibilityLabel="Sections"
-      accessibilityRole="tablist"
-      style={[styles.tabBar, position === 'top' ? styles.tabBarTop : { paddingBottom: insets.bottom + 9 }]}
-    >
-      {tabs.map((tab) => {
-        const active = tab.key === activeTab;
-        return (
-          <Pressable
-            key={tab.key}
-            accessibilityLabel={tab.label}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
-            aria-selected={active}
-            onPress={() => setActiveTab(tab.key)}
-            style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
-          >
-            {/* Gold rule marks the active tab, matching the underline treatment
-                on the databallr.com nav. It sits on the edge nearest the
-                content: below the labels when the bar is on top, above when
-                the bar is at the bottom. */}
-            <View style={[styles.tabMarker, position === 'top' && styles.tabMarkerBottomEdge, active && styles.tabMarkerActive]} />
-            <Text
-              maxFontSizeMultiplier={1.5}
-              numberOfLines={1}
-              style={[styles.tabText, narrow && styles.tabTextNarrow, active && styles.activeTabText]}
+    <View role="navigation">
+      <View
+        accessibilityLabel="Sections"
+        accessibilityRole="tablist"
+        style={[styles.tabBar, position === 'top' ? styles.tabBarTop : { paddingBottom: insets.bottom + (short ? 0 : 9) }]}
+        {...({ onKeyDown: onTabKeyDown } as object)}
+      >
+        {tabs.map((tab, index) => {
+          const active = tab.key === activeTab;
+          return (
+            <Pressable
+              key={tab.key}
+              ref={(node) => {
+                tabRefs.current[index] = node;
+              }}
+              accessibilityLabel={tab.label}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              aria-selected={active}
+              onPress={() => changeTab(tab.key)}
+              {...({
+                tabIndex: active ? 0 : -1,
+                onKeyDown: (event: { key: string; preventDefault: () => void }) => {
+                  if (event.key === ' ' || event.key === 'Spacebar') {
+                    event.preventDefault();
+                    changeTab(tab.key);
+                  }
+                },
+              } as object)}
+              style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
             >
-              {tab.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+              {/* Gold rule marks the active tab, matching the underline treatment
+                  on the databallr.com nav. It sits on the edge nearest the
+                  content: below the labels when the bar is on top, above when
+                  the bar is at the bottom. */}
+              <View style={[styles.tabMarker, position === 'top' && styles.tabMarkerBottomEdge, active && styles.tabMarkerActive]} />
+              <Text
+                maxFontSizeMultiplier={1.5}
+                numberOfLines={1}
+                style={[styles.tabText, narrow && styles.tabTextNarrow, active && styles.activeTabText]}
+              >
+                {tab.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 
   return (
-    <View style={styles.app}>
+    <View nativeID="app-root" style={styles.app}>
       <StatusBar style="light" />
       <AmbientFields />
       <VariantTexture />
-      {/* Databallr brand bar: gold wordmark, a rule, then the product name. */}
-      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
+      <SkipLink />
+      {/* Databallr brand bar: gold wordmark, a rule, then the product name.
+          In a short window it folds away; the status row carries Settings. */}
+      {short ? null : (
+      <View role="banner" style={[styles.header, { paddingTop: insets.top + 4 }]}>
         <View style={styles.mark}>
           <Text maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text>
         </View>
@@ -366,24 +485,30 @@ function AppBody() {
         )}
         <SettingsButton onPress={() => setSettingsOpen(true)} />
       </View>
+      )}
       {ready && wide ? renderTabBar('top') : null}
-      {ready ? <SeasonControl /> : null}
-      {ready ? <SimBar /> : null}
+      <View accessibilityLabel="Season and practice controls" role="region">
+        {ready ? <SeasonControl /> : null}
+        {ready ? <SimBar /> : null}
+      </View>
       <View style={styles.stage}>
         {/* nativeID lets the QA harness measure how much chrome sits above the
-            content on each tab (the content-first budget in the design doc). */}
-        <View nativeID="app-screen" style={styles.screen}>{body}</View>
+            content on each tab (the content-first budget in the design doc).
+            It is also the skip link's target. */}
+        <View nativeID="app-screen" role="main" style={styles.screen} {...({ tabIndex: -1 } as object)}>{body}</View>
         {authError && clearAuthMessage ? (
           <NoticeToast message={authError} onDismiss={clearAuthMessage} tone="problem" />
         ) : message ? (
           <NoticeToast message={message} onDismiss={dismissNotice} tone={noticeTone} />
+        ) : appNotice ? (
+          <NoticeToast message={appNotice} onDismiss={() => setAppNotice(null)} tone="success" />
         ) : null}
       </View>
       {/* Mounted for the life of the app so a new notice is a change inside an
           existing live region; many screen readers skip text that arrives
           together with a brand-new region. */}
       <View accessibilityLiveRegion="polite" style={visuallyHidden}>
-        <Text>{authError ?? message ?? ''}</Text>
+        <Text>{spoken(authError ?? message ?? appNotice ?? '')}</Text>
       </View>
       {ready ? (wide ? null : renderTabBar('bottom')) : null}
       <SettingsSheet
@@ -472,7 +597,18 @@ function isDesignPreviewRoute(): boolean {
  */
 function isMockPreviewRoute(): boolean {
   if (typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).has('mock');
+  // Forgive the ways people type it: ?MOCK, ?mock/, ?mock%20, ?Mock=1.
+  return [...new URLSearchParams(window.location.search).keys()]
+    .some((key) => key.trim().toLowerCase().replace(/\/+$/, '') === 'mock');
+}
+
+/** Whether this practice season has anything a reload would throw away. */
+function practiceHasProgress(snapshot: { game: { lastSettledDate: string | null }; positions: unknown[]; ledger: { items: unknown[] } } | null): boolean {
+  if (!snapshot) return false;
+  const start = mockSeasonStart();
+  return snapshot.positions.length > 0
+    || snapshot.ledger.items.length > 0
+    || (start !== null && snapshot.game.lastSettledDate !== start);
 }
 
 function MockPreviewRuntime() {
@@ -517,7 +653,12 @@ export default function App() {
           <ConfiguredApp config={configResult.config} />
         ) : (
           <CenteredState
-            copy={`${configResult.error} Set the public API URL, API prefix, and Supabase auth configuration before starting Expo.`}
+            actionLabel="Back to practice"
+            copy="The live market isn't set up on this device yet. Practice works anywhere: it plays a generated season in this browser."
+            details={`For developers: ${configResult.error} Set the public API URL, API prefix, and Supabase auth configuration before starting Expo.`}
+            onAction={() => {
+              window.location.search = '?mock';
+            }}
             title="App configuration missing"
           />
         )}
@@ -645,10 +786,30 @@ const styles = StyleSheet.create({
     backgroundColor: colors.goldSoft,
     borderColor: colors.gold,
   },
-  noticePassThrough: {
-    pointerEvents: 'none',
-    paddingRight: space.md,
+  skipLink: {
+    position: 'absolute',
+    top: space.sm,
+    left: space.sm,
+    zIndex: 10,
     minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.gold,
+  },
+  skipLinkText: {
+    color: colors.onGold,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: '800',
+  },
+  stateDetails: {
+    maxWidth: 420,
+    marginTop: space.lg,
+    color: colors.faint,
+    fontSize: type.caption,
+    lineHeight: 17,
+    textAlign: 'center',
   },
   // The toast is where "LeBron James added at $105K a game" lands — body size,
   // not fine print: it is the confirmation the player tapped for.

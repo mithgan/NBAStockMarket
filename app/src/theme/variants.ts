@@ -79,7 +79,8 @@ export type VariantId =
   | 'monochrome'
   | 'ambient'
   | 'haze'
-  | 'nocturne';
+  | 'nocturne'
+  | 'contrast';
 
 export const VARIANTS: Record<VariantId, DesignVariant> = {
   default: {
@@ -193,7 +194,7 @@ export const VARIANTS: Record<VariantId, DesignVariant> = {
   grain: {
     id: 'grain',
     name: 'Default',
-    blurb: "The Databallr navy under a milled grain.",
+    blurb: 'Databallr navy. The standard look.',
     palette: variant({}),
     fonts: { ...BASE_FONTS },
     layout: 'chrome',
@@ -204,7 +205,7 @@ export const VARIANTS: Record<VariantId, DesignVariant> = {
   dark: {
     id: 'dark',
     name: 'Dark',
-    blurb: "The same grain, pushed to near-black.",
+    blurb: 'Near-black, easier on the eyes at night.',
     palette: variant({
       background: '#07090d',
       surface: '#10141b',
@@ -222,7 +223,7 @@ export const VARIANTS: Record<VariantId, DesignVariant> = {
   light: {
     id: 'light',
     name: 'Light',
-    blurb: "Cream and amber, almost monochrome. Blue carries information.",
+    blurb: 'Cream and ink, for bright rooms.',
     palette: variant({
       background: '#f3ecdf',
       surface: '#faf5ea',
@@ -243,10 +244,11 @@ export const VARIANTS: Record<VariantId, DesignVariant> = {
       onGold: '#231f1a',
       cyan: '#14567d',
       cyanSoft: '#dae8f2',
-      green: '#6a4e0d',
-      greenSoft: '#f0e2bd',
-      red: '#59544a',
-      redSoft: '#e6e0d3',
+      // Gains and losses must be told apart at a glance, not only by sign.
+      green: '#1d6b3c',
+      greenSoft: '#dcefe2',
+      red: '#a33a30',
+      redSoft: '#f6dfdb',
       focus: '#14567d',
     }),
     fonts: { ...BASE_FONTS },
@@ -342,7 +344,7 @@ export const VARIANTS: Record<VariantId, DesignVariant> = {
   nocturne: {
     id: 'nocturne',
     name: 'Aurora',
-    blurb: "Machined plates under a warm field of light.",
+    blurb: 'Soft navy with a warm glow.',
     palette: variant({
       background: '#161d2b',
       surface: '#1f2736',
@@ -365,6 +367,45 @@ export const VARIANTS: Record<VariantId, DesignVariant> = {
     texture: 'plate',
     isNew: true,
   },
+  contrast: {
+    id: 'contrast',
+    name: 'High contrast',
+    blurb: 'Bright text and strong edges. Gains in blue, losses in orange.',
+    // Built for low vision and colour-blind players: pure text on black,
+    // 3:1+ borders everywhere, and a blue/orange gain/loss pair that stays
+    // distinct for red-green colour blindness. Arrows mark every signed change.
+    palette: variant({
+      background: '#000000',
+      surface: '#0b0b0b',
+      surfaceRaised: '#161616',
+      surfaceHigh: '#1f1f1f',
+      chrome: '#000000',
+      chromeMid: '#0b0b0b',
+      chromeSoft: '#000000',
+      border: '#8a8a8a',
+      borderStrong: '#d6d6d6',
+      text: '#ffffff',
+      muted: '#ebebeb',
+      faint: '#d2d2d2',
+      gold: '#ffd21f',
+      goldInk: '#ffd21f',
+      goldSoft: '#2b2400',
+      goldLine: '#ffd21f',
+      onGold: '#000000',
+      cyan: '#62d4ff',
+      cyanSoft: '#00243a',
+      green: '#5cb8ff',
+      greenSoft: '#001c38',
+      red: '#ffa24d',
+      redSoft: '#381d00',
+      focus: '#ffffff',
+    }),
+    fonts: { ...BASE_FONTS },
+    layout: 'chrome',
+    chartHeight: 168,
+    signAs: 'arrow',
+    isNew: true,
+  },
 };
 
 /** Every variant, in the order the design picker lists them. */
@@ -376,6 +417,7 @@ export const VARIANT_ORDER: VariantId[] = [
   'ambient',
   'haze',
   'nocturne',
+  'contrast',
   'tape',
   'slab',
   'anvil',
@@ -386,7 +428,7 @@ export const VARIANT_ORDER: VariantId[] = [
 ];
 
 /** The short list surfaced as appearance choices in settings. */
-export const APPEARANCE_CHOICES: VariantId[] = ['grain', 'dark', 'nocturne', 'light'];
+export const APPEARANCE_CHOICES: VariantId[] = ['grain', 'dark', 'nocturne', 'light', 'contrast'];
 
 export const DEFAULT_VARIANT: VariantId = 'grain';
 

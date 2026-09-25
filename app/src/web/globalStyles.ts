@@ -174,6 +174,15 @@ input:focus-visible,
   border-radius: 4px;
 }
 
+/* Tabs sit flush against the screen edge on phones; draw their ring inside
+   so it is never cut off. */
+[role="tab"]:focus-visible {
+  outline-offset: -3px !important;
+}
+
+/* The screen container is a skip-link target, not a control: no ring. */
+#app-screen:focus { outline: none; }
+
 /* Dense data table: keep the scrollbar from stealing row width. */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: ${colors.background}; }
