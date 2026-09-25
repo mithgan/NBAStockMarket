@@ -30,6 +30,13 @@ import {
   type ReconciliationReason,
 } from './reconciliationCoordinator';
 
+/**
+ * How a notice should behave: a success confirms what the player just did and
+ * can clear itself; a problem needs the player to read it and stays until
+ * dismissed.
+ */
+export type NoticeTone = 'success' | 'problem';
+
 interface PerGameContextValue {
   state: PerGameBootstrap | null;
   bootstrap: PerGameBootstrap | null;
@@ -38,6 +45,7 @@ interface PerGameContextValue {
   latestSettledDate: string | null;
   nextGameDate: string | null;
   message: string | null;
+  noticeTone: NoticeTone;
   serverError: string | null;
   transitionError: null;
   transitionRequired: false;
@@ -74,6 +82,11 @@ export function PerGameProvider({
   const bootstrapRef = useRef<PerGameBootstrap | null>(null);
   const minimumSnapshotRef = useRef<PerGameBootstrap | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [noticeTone, setNoticeTone] = useState<NoticeTone>('problem');
+  const say = useCallback((text: string, tone: NoticeTone = 'problem') => {
+    setNoticeTone(tone);
+    setMessage(text);
+  }, []);
   const [serverError, setServerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -124,7 +137,7 @@ export function PerGameProvider({
       if (!mounted.current || generation !== requestGeneration.current) return null;
       if (!next) {
         if (mounted.current) {
-          setMessage('The server returned an older account snapshot. Reconcile again before making roster changes.');
+          say('The server returned an older account snapshot. Reconcile again before making roster changes.');
         }
         return null;
       }
@@ -136,7 +149,7 @@ export function PerGameProvider({
     } catch (error) {
       if (mounted.current && generation === requestGeneration.current) {
         if (bootstrapRef.current) {
-          setMessage(`The latest per-game market could not refresh. ${errorMessage(error)}`);
+          say(`The latest per-game market could not refresh. ${errorMessage(error)}`);
         } else {
           setServerError(errorMessage(error));
         }
@@ -148,7 +161,7 @@ export function PerGameProvider({
         setIsRefreshing(false);
       }
     }
-  }, [apiClient, installBootstrap]);
+  }, [apiClient, installBootstrap, say]);
 
   useEffect(() => {
     void loadSnapshot({ initial: true, incremental: false });
@@ -173,18 +186,18 @@ export function PerGameProvider({
       succeeded = refreshed !== null;
       if (refreshed && mounted.current) {
         const nextDate = refreshed.game.nextGameDate;
-        setMessage(attempt.reconciliationReason
+        say(attempt.reconciliationReason
           ? 'Your account is back in sync. You can make roster moves again.'
           : nextDate
             ? `Prices updated. Next games ${humanDay(nextDate)}.`
-            : 'Prices updated. The next games are not scheduled yet.');
+            : 'Prices updated. The next games are not scheduled yet.', 'success');
       }
       return succeeded;
     } finally {
       coordinator.finishRefresh(attempt, succeeded);
       updatePendingActions();
     }
-  }, [loadSnapshot, updatePendingActions]);
+  }, [loadSnapshot, say, updatePendingActions]);
 
   useEffect(() => {
     if (isLoading || bootstrapRef.current === null) return undefined;
@@ -229,10 +242,10 @@ export function PerGameProvider({
       if (!mounted.current) return false;
       if (outcome.result) {
         if (!outcome.refreshed) {
-          setMessage('Your roster action completed, but the latest account could not sync. Reconcile before making another roster change.');
+          say('Your roster action completed, but the latest account could not sync. Reconcile before making another roster change.');
           return false;
         }
-        setMessage(typeof successMessage === 'function' ? successMessage(outcome.result) : successMessage);
+        say(typeof successMessage === 'function' ? successMessage(outcome.result) : successMessage, 'success');
         return true;
       }
       const suffix = outcome.reconciliationReason === 'ambiguous'
@@ -242,14 +255,14 @@ export function PerGameProvider({
           : outcome.refreshed
             ? ' Market refreshed. Review the updated roster and quote before trying again.'
             : '';
-      setMessage(`${errorMessage(outcome.error)}${suffix}`);
+      say(`${errorMessage(outcome.error)}${suffix}`);
       return false;
     } finally {
       actionLock.current.release(key);
       coordinator.finishMutation(reconciliationReason);
       updatePendingActions();
     }
-  }, [loadSnapshot, updatePendingActions]);
+  }, [loadSnapshot, say, updatePendingActions]);
 
   const openPosition = useCallback(({
     playerId,
@@ -297,6 +310,7 @@ export function PerGameProvider({
     latestSettledDate: bootstrap?.game.lastSettledDate ?? null,
     nextGameDate: bootstrap?.game.nextGameDate ?? null,
     message,
+    noticeTone,
     serverError,
     transitionError: null,
     transitionRequired: false,
@@ -322,6 +336,7 @@ export function PerGameProvider({
     isRefreshing,
     reconciliationRequired,
     message,
+    noticeTone,
     openPosition,
     pendingActions,
     refreshData,

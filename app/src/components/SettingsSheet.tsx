@@ -104,6 +104,31 @@ export function SettingsSheet({
           </Pressable>
         </View>
         <ScrollView style={styles.sheetBody}>
+          <Section title="How it works">
+            {rules ? (
+              <>
+                <Text style={styles.lede}>{rules.explanation}</Text>
+                {rules.facts.map((fact) => (
+                  <View key={fact.label} style={styles.factRow}>
+                    <Text style={styles.factLabel}>{fact.label}</Text>
+                    <Text style={styles.factValue}>{fact.value}</Text>
+                  </View>
+                ))}
+              </>
+            ) : <Text style={styles.note}>The rules will appear when your account loads.</Text>}
+          </Section>
+
+          <Section title="This season">
+            <View style={styles.factRow}>
+              <Text style={styles.factLabel}>Season</Text>
+              <Text style={styles.factValue}>{seasonLabel}</Text>
+            </View>
+            <View style={styles.factRow}>
+              <Text style={styles.factLabel}>Listed players</Text>
+              <Text style={styles.factValue}>{listedPlayers}</Text>
+            </View>
+          </Section>
+
           <Section title="Appearance">
             {APPEARANCE_CHOICES.map((choice) => {
               const variant = VARIANTS[choice];
@@ -139,28 +164,6 @@ export function SettingsSheet({
             ) : null}
           </Section>
 
-          <Section title="This season">
-            <View style={styles.factRow}>
-              <Text style={styles.factLabel}>Season</Text>
-              <Text style={styles.factValue}>{seasonLabel}</Text>
-            </View>
-            <View style={styles.factRow}>
-              <Text style={styles.factLabel}>Listed players</Text>
-              <Text style={styles.factValue}>{listedPlayers}</Text>
-            </View>
-            {rules ? (
-              <>
-                {rules.facts.map((fact) => (
-                  <View key={fact.label} style={styles.factRow}>
-                    <Text style={styles.factLabel}>{fact.label}</Text>
-                    <Text style={styles.factValue}>{fact.value}</Text>
-                  </View>
-                ))}
-                <Text style={styles.note}>{rules.explanation}</Text>
-              </>
-            ) : <Text style={styles.note}>Current rules will appear when your account loads.</Text>}
-          </Section>
-
           {profile ? (
             <Section title="Profile">
               <View style={styles.factRow}>
@@ -189,7 +192,7 @@ export function SettingsSheet({
           ) : (
             <Section title="Profile">
               <Text style={styles.note}>
-                This is the shared demo, which has no account. Your season lives in this browser only, and nothing here is signed in.
+                This is practice. It plays generated games in this browser's memory and starts over when you reload. Your saved account is separate and untouched.
               </Text>
             </Section>
           )}
@@ -214,9 +217,10 @@ export function SettingsSheet({
 }
 
 const styles = StyleSheet.create({
+  // A full 44px target: the gear is the only way into settings on a phone.
   iconButton: {
-    width: 34,
-    height: 34,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -351,6 +355,16 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
     flexShrink: 1,
     textAlign: 'right',
+  },
+  // The one paragraph that explains the game reads at body size in full
+  // contrast; it is the answer to "how does this work?", not a footnote.
+  lede: {
+    color: colors.text,
+    fontFamily: fonts.body,
+    fontSize: type.body,
+    lineHeight: 19,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.sm,
   },
   note: {
     color: colors.faint,

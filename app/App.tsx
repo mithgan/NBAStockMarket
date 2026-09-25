@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,7 +19,12 @@ import { PerGameMarketScreen as MarketScreen } from './src/screens/PerGameMarket
 import { PerGameResultsScreen as PlaysScreen } from './src/screens/PerGameResultsScreen';
 import { DesignPreviewScreen } from './src/screens/DesignPreviewScreen';
 import { PerGameRosterScreen as PortfolioScreen } from './src/screens/PerGameRosterScreen';
-import { PerGameProvider as PortfolioProvider, usePerGame as usePortfolio } from './src/state/PerGameContext';
+import { humanDateWithYear } from './src/copy/terms';
+import {
+  PerGameProvider as PortfolioProvider,
+  usePerGame as usePortfolio,
+  type NoticeTone,
+} from './src/state/PerGameContext';
 import { ThemeProvider, useDesignVariant } from './src/theme/ThemeProvider';
 import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
 import { installGlobalWebStyles } from './src/web/globalStyles';
@@ -131,18 +136,46 @@ function CenteredState({
   );
 }
 
-function NoticeBanner({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+/** A success notice clears itself after this long; a problem waits for the player. */
+const SUCCESS_NOTICE_MS = 5000;
+
+/**
+ * Notices float over the bottom of the screen instead of pushing it down, so
+ * adding a player never shoves the list the player is tapping through. A
+ * success ("added at $105K a game") clears itself; a problem stays until the
+ * player dismisses it, because it asks them to do something.
+ */
+function NoticeToast({
+  message,
+  onDismiss,
+  tone,
+}: {
+  message: string;
+  onDismiss: () => void;
+  tone: NoticeTone;
+}) {
+  useEffect(() => {
+    if (tone !== 'success') return undefined;
+    const timer = setTimeout(onDismiss, SUCCESS_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [message, onDismiss, tone]);
   return (
-    <Pressable
-      accessibilityLabel={`${message}. Dismiss message`}
-      accessibilityLiveRegion="polite"
-      accessibilityRole="button"
-      onPress={onDismiss}
-      style={styles.notice}
-    >
-      <Text style={styles.noticeText}>{message}</Text>
-      <Text style={styles.noticeClose}>CLOSE</Text>
-    </Pressable>
+    <View style={styles.noticeLayer}>
+      <View
+        accessibilityLiveRegion="polite"
+        style={[styles.notice, tone === 'problem' && styles.noticeProblem]}
+      >
+        <Text style={styles.noticeText}>{message}</Text>
+        <Pressable
+          accessibilityLabel={`Dismiss: ${message}`}
+          accessibilityRole="button"
+          onPress={onDismiss}
+          style={({ pressed }) => [styles.noticeDismiss, pressed && styles.pressed]}
+        >
+          <Text style={styles.noticeClose}>Dismiss</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -176,6 +209,7 @@ function AppBody() {
     legacySavePresent,
     message,
     nextGameDate,
+    noticeTone,
     players,
     refreshData,
     serverError,
@@ -279,7 +313,7 @@ function AppBody() {
       <AmbientFields />
       <VariantTexture />
       {/* Databallr brand bar: gold wordmark, a rule, then the product name. */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
         <View style={styles.mark}>
           <Text maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text>
         </View>
@@ -293,14 +327,16 @@ function AppBody() {
       {ready && wide ? renderTabBar('top') : null}
       {ready ? <SeasonControl /> : null}
       {ready ? <SimBar /> : null}
-      {authError && clearAuthMessage ? (
-        <NoticeBanner message={authError} onDismiss={clearAuthMessage} />
-      ) : message ? (
-        <NoticeBanner message={message} onDismiss={dismissNotice} />
-      ) : null}
-      {/* nativeID lets the QA harness measure how much chrome sits above the
-          content on each tab (the content-first budget in the design doc). */}
-      <View nativeID="app-screen" style={styles.screen}>{body}</View>
+      <View style={styles.stage}>
+        {/* nativeID lets the QA harness measure how much chrome sits above the
+            content on each tab (the content-first budget in the design doc). */}
+        <View nativeID="app-screen" style={styles.screen}>{body}</View>
+        {authError && clearAuthMessage ? (
+          <NoticeToast message={authError} onDismiss={clearAuthMessage} tone="problem" />
+        ) : message ? (
+          <NoticeToast message={message} onDismiss={dismissNotice} tone={noticeTone} />
+        ) : null}
+      </View>
       {ready ? (wide ? null : renderTabBar('bottom')) : null}
       <SettingsSheet
         listedPlayers={players.length}
@@ -315,7 +351,7 @@ function AppBody() {
                 displayName: displayName ?? auth.user.email ?? 'Your account',
                 email: auth.user.email ?? null,
                 provider: auth.user.app_metadata?.provider ?? null,
-                memberSince: auth.user.created_at ? auth.user.created_at.slice(0, 10) : null,
+                memberSince: auth.user.created_at ? humanDateWithYear(auth.user.created_at) : null,
               }
             : undefined
         }
@@ -483,7 +519,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.sm,
     paddingHorizontal: space.md,
-    paddingBottom: space.sm,
+    paddingBottom: space.xs,
     backgroundColor: colors.chrome,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
@@ -526,20 +562,38 @@ const styles = StyleSheet.create({
     ...labelStyle,
     color: colors.muted,
   },
+  // The toast floats over the bottom of the screen; the layer itself lets
+  // taps through so only the toast catches them.
+  noticeLayer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: space.md,
+    alignItems: 'center',
+    paddingHorizontal: space.md,
+    pointerEvents: 'box-none',
+  },
   notice: {
-    minHeight: 44,
+    width: '100%',
+    maxWidth: 560,
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: space.sm,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    backgroundColor: colors.goldSoft,
-    borderBottomColor: colors.gold,
-    borderBottomWidth: 1,
+    paddingLeft: space.md,
+    paddingRight: space.xs,
+    paddingVertical: space.xs,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceRaised,
+    borderColor: colors.borderStrong,
+    borderWidth: 1,
   },
-  // The banner is where "Paid you +$1.2M across 7 nights" lands — body size,
-  // not fine print: it is the update the user opened the app for.
+  noticeProblem: {
+    backgroundColor: colors.goldSoft,
+    borderColor: colors.gold,
+  },
+  // The toast is where "LeBron James added at $105K a game" lands — body size,
+  // not fine print: it is the confirmation the player tapped for.
   noticeText: {
     flex: 1,
     color: colors.text,
@@ -547,10 +601,21 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '700',
   },
+  noticeDismiss: {
+    minWidth: 44,
+    minHeight: 44,
+    paddingHorizontal: space.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   noticeClose: {
     color: colors.goldInk,
     fontSize: type.label,
     fontWeight: '900',
+  },
+  stage: {
+    flex: 1,
+    minHeight: 0,
   },
   screen: {
     flex: 1,
