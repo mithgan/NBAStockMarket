@@ -39,6 +39,7 @@ import {
   unbrokenName,
 } from '../copy/terms';
 import { keepTogether, practiceProgress } from '../data/chromeView';
+import { isSeasonOver } from '../data/marketView';
 import { recentEarnings, scoreBreakdown } from '../data/perGameMetrics';
 import {
   breakdownParts,
@@ -296,10 +297,13 @@ export function PerGameRosterScreen({
   const started = bootstrap.ledger.items.some((entry) => entry.gameDate !== null);
   const rosterLocked = bootstrap.ruleset.rosterMutationsLocked;
   const rosterLockDate = bootstrap.ruleset.rosterLockGameDate;
-  // Practice ends on day 174; a live season ends when no games are left.
-  const seasonOver = isMockActive()
-    ? practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete
-    : bootstrap.game.lastSettledDate !== null && bootstrap.game.nextGameDate === null;
+  // One rule with the Market: practice ends on its last day, a live season
+  // when games have settled and none are left.
+  const seasonOver = isSeasonOver({
+    practiceComplete: isMockActive() && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete,
+    lastSettledDate: bootstrap.game.lastSettledDate,
+    nextGameDate: bootstrap.game.nextGameDate,
+  });
   const wide = width >= WIDE_MIN_WIDTH;
   const layout = rowLayout(listWidth ?? (wide ? width - summaryWidth(width) : width), width, fontScale);
   const totalInset = layout === 'table' ? ACTION_WIDTH + space.sm : 0;
@@ -348,7 +352,6 @@ export function PerGameRosterScreen({
         title="Your score"
         variant={wide ? 'panel' : layout === 'compact' ? 'narrow' : 'compact'}
         week={recent ? recent.week : null}
-        weekNights={recent ? recent.weekNights : 0}
       />
       <PerGamePnlChart
         entries={bootstrap.ledger.items}

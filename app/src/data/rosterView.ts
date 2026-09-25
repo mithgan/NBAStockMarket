@@ -20,7 +20,6 @@ import {
   exactSignedMoney,
   humanDate,
   moneyFine,
-  nightsCount,
   signedMoney,
   signedMoneyFine,
 } from '../copy/terms';
@@ -241,13 +240,13 @@ export function closedRows(
 }
 
 /**
- * Label for the header's week figure: "Last 7 nights" once seven game nights
- * have settled, "Last 3 nights" before that, and nothing after a single night
- * (the status bar already shows last night).
+ * Label for the header's week figure, `recentEarnings().week`: what your
+ * players made in the seven calendar days ending on the last settled day,
+ * games only. Practice's +1 week moves the clock exactly seven days and its
+ * notice reports the same games-only sum over the days that settled, so the
+ * two agree to the dollar whatever the size of the roster.
  */
-export function weekLabel(weekNights: number): string | null {
-  return weekNights >= 2 ? `Last ${nightsCount(weekNights)}` : null;
-}
+export const WEEK_LABEL = 'Last 7 days';
 
 /**
  * How precisely the breakdown shows its parts. `fine` is `moneyFine` ("$552.1K",

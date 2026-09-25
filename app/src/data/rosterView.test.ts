@@ -30,7 +30,7 @@ import {
   slotLine,
   valueTicks,
   verdictTag,
-  weekLabel,
+  WEEK_LABEL,
 } from './rosterView';
 
 function position(overrides: Partial<PerGamePosition> = {}): PerGamePosition {
@@ -352,11 +352,8 @@ test('closed rows keep dropped players and ended shorts, newest first, with how 
   ]);
 });
 
-test('the week figure is labelled by the game nights it covers', () => {
-  assert.equal(weekLabel(7), 'Last 7 nights');
-  assert.equal(weekLabel(3), 'Last 3 nights');
-  assert.equal(weekLabel(1), null);
-  assert.equal(weekLabel(0), null);
+test('the week figure is labelled in calendar days, as recentEarnings counts it', () => {
+  assert.equal(WEEK_LABEL, 'Last 7 days');
 });
 
 test('breakdown parts take the precision at which they visibly add up to the hero', () => {

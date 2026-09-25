@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { exactSignedMoney, humanDate } from '../../copy/terms';
-import { weekLabel, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
+import { WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
 import { useCountUp } from '../../hooks/useCountUp';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { Label, Money } from '../../ui/kit';
@@ -36,7 +36,6 @@ export function ScoreHeader({
   title,
   score,
   week,
-  weekNights,
   started,
   nextGameDate,
   rank,
@@ -47,10 +46,8 @@ export function ScoreHeader({
 }: {
   title: string;
   score: number;
-  /** The last seven game nights, from `recentEarnings`, fees included. */
+  /** The last seven days, from `recentEarnings`: games only (fees have their own part). */
   week: number | null;
-  /** How many game nights `week` covers (fewer than seven early on). */
-  weekNights: number;
   /** True once a game night has touched your score. */
   started: boolean;
   nextGameDate: string | null;
@@ -62,13 +59,12 @@ export function ScoreHeader({
   variant: 'compact' | 'narrow' | 'panel';
 }) {
   const shown = useCountUp(score);
-  const weekText = weekLabel(weekNights);
   // Before any game settles there is no week to report and no standing to
   // claim; the next game date is the one useful fact.
   const facts = started ? (
     <View style={[styles.stack, variant === 'panel' && styles.stackFull]}>
-      {week === null || weekText === null ? null : (
-        <StackRow label={weekText}>
+      {week === null ? null : (
+        <StackRow label={WEEK_LABEL}>
           <Money value={week} />
         </StackRow>
       )}
