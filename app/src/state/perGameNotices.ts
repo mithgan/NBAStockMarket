@@ -1,5 +1,5 @@
 import type { PerGameBootstrap, PerGamePosition } from '../api/contracts';
-import { humanDate, humanDay, money, signedMoney } from '../copy/terms';
+import { humanDate, humanDay, moneyFine, signedMoneyFine } from '../copy/terms';
 import { earningsBetween } from '../data/perGameMetrics';
 
 /** Shorts that were open before this refresh and have now run their term. */
@@ -18,10 +18,10 @@ function endedShorts(previous: PerGameBootstrap | null, next: PerGameBootstrap):
 function endedSentence(ended: PerGamePosition[]): string {
   if (ended.length === 0) return '';
   if (ended.length === 1) {
-    return ` Your short on ${ended[0].playerName} ended: ${signedMoney(ended[0].cumulativePnl)}.`;
+    return ` Your short on ${ended[0].playerName} ended: ${signedMoneyFine(ended[0].cumulativePnl)}.`;
   }
   const total = ended.reduce((sum, position) => sum + position.cumulativePnl, 0);
-  return ` ${ended.length} shorts ended: ${signedMoney(total)} in all.`;
+  return ` ${ended.length} shorts ended: ${signedMoneyFine(total)} in all.`;
 }
 
 /**
@@ -62,12 +62,12 @@ export function refreshNotice(
     const when = span > 1 ? `Games through ${humanDate(after)}` : `${humanDate(after)} games`;
     const score = change === 0
       ? 'no change to your score.'
-      : `your score ${change > 0 ? 'rose' : 'fell'} ${money(Math.abs(change))}.`;
+      : `your score ${change > 0 ? 'rose' : 'fell'} ${moneyFine(Math.abs(change))}.`;
     return `${when}: ${score}${ended}`;
   }
   const change = next.account.cumulativePnl - (previous?.account.cumulativePnl ?? 0);
   if (previous && change !== 0) {
-    return `Your score changed by ${signedMoney(change)} since the last update.${ended}`;
+    return `Your score changed by ${signedMoneyFine(change)} since the last update.${ended}`;
   }
   return next.game.nextGameDate
     ? `You're up to date. Next games ${humanDay(next.game.nextGameDate)}.`

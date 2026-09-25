@@ -65,7 +65,9 @@ export function ScoreHeader({
     <View style={[styles.stack, variant === 'panel' && styles.stackFull]}>
       {week === null ? null : (
         <StackRow label={WEEK_LABEL}>
-          <Money value={week} />
+          {/* Fine, like Last night in the bars and the results night headers,
+              so the notice after +1 week reads the same figure. */}
+          <FineMoney value={week} />
         </StackRow>
       )}
       {rank ? (

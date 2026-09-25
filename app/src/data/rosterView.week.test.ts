@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { MockPerGameApiClient } from '../api/mockPerGameClient';
-import { money, signedMoney } from '../copy/terms';
+import { moneyFine, signedMoneyFine } from '../copy/terms';
 import { refreshNotice } from '../state/perGameNotices';
 import { earningsBetween, recentEarnings } from './perGameMetrics';
 import { WEEK_LABEL } from './rosterView';
@@ -13,7 +13,7 @@ const daysBetween = (from: string, to: string) => Math.round(
 );
 
 /**
- * The Roster header shows `<Money value={recentEarnings().week} />` under
+ * The Roster header shows `<FineMoney value={recentEarnings().week} />` under
  * WEEK_LABEL. With a single rostered player most days have no game for him,
  * which is where a week of game nights and a week of calendar days part ways,
  * so this plays practice's real engine one player deep and checks the header
@@ -52,13 +52,13 @@ test('one rostered player: after each 7-day advance the notice equals the Last 7
     const notice = refreshNotice(previous, next, false);
     if (settled === 0) {
       assert.match(notice, /no change to your score/);
-      assert.equal(signedMoney(header.week), '$0');
+      assert.equal(signedMoneyFine(header.week), '$0');
     } else {
       assert.ok(
-        notice.includes(`your score ${settled > 0 ? 'rose' : 'fell'} ${money(Math.abs(settled))}.`),
+        notice.includes(`your score ${settled > 0 ? 'rose' : 'fell'} ${moneyFine(Math.abs(settled))}.`),
         notice,
       );
-      assert.equal(signedMoney(header.week), `${settled > 0 ? '+' : '-'}${money(Math.abs(settled))}`);
+      assert.equal(signedMoneyFine(header.week), `${settled > 0 ? '+' : '-'}${moneyFine(Math.abs(settled))}`);
       movingWeeks += 1;
     }
     if (header.weekNights < 7) thinWeeks += 1;

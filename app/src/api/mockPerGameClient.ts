@@ -461,7 +461,7 @@ export function mockSeasonStart(): string | null {
   return singleton?.seasonStart ?? null;
 }
 
-/** Settle several nights in one gesture (the sim bar's +1 WEEK). */
+/** Settle several game nights in one gesture (+1 night uses one; +1 week uses advanceMockDays). */
 export function advanceMockNights(count: number): boolean {
   if (!singleton) return false;
   for (let night = 0; night < count; night += 1) singleton.advanceNight();
