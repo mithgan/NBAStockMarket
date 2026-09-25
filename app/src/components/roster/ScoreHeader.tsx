@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { exactSignedMoney, humanDate } from '../../copy/terms';
-import type { BreakdownPart } from '../../data/rosterView';
+import { weekLabel, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
 import { useCountUp } from '../../hooks/useCountUp';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { Label, Money } from '../../ui/kit';
@@ -36,32 +36,39 @@ export function ScoreHeader({
   title,
   score,
   week,
+  weekNights,
   started,
   nextGameDate,
   rank,
   parts,
+  precision,
   slots,
   variant,
 }: {
   title: string;
   score: number;
-  /** The last seven days, from `recentEarnings`, fees included. */
+  /** The last seven game nights, from `recentEarnings`, fees included. */
   week: number | null;
+  /** How many game nights `week` covers (fewer than seven early on). */
+  weekNights: number;
   /** True once a game night has touched your score. */
   started: boolean;
   nextGameDate: string | null;
   rank: string | null;
   parts: readonly BreakdownPart[] | null;
+  /** The precision at which the parts visibly add up to the hero. */
+  precision: PartPrecision;
   slots: string | null;
   variant: 'compact' | 'narrow' | 'panel';
 }) {
   const shown = useCountUp(score);
+  const weekText = weekLabel(weekNights);
   // Before any game settles there is no week to report and no standing to
   // claim; the next game date is the one useful fact.
   const facts = started ? (
     <View style={[styles.stack, variant === 'panel' && styles.stackFull]}>
-      {week === null ? null : (
-        <StackRow label="Last 7 days">
+      {week === null || weekText === null ? null : (
+        <StackRow label={weekText}>
           <Money value={week} />
         </StackRow>
       )}
@@ -104,7 +111,7 @@ export function ScoreHeader({
               style={[styles.part, variant === 'compact' && styles.partHalf]}
             >
               <Text style={variant === 'panel' ? styles.statementLabel : styles.partLabel}>{part.label}</Text>
-              <FineMoney size="body" value={part.value} />
+              <FineMoney precision={precision} size="body" value={part.value} />
             </View>
           ))}
         </View>

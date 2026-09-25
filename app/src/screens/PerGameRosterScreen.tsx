@@ -27,19 +27,22 @@ import { ScoreHeader } from '../components/roster/ScoreHeader';
 import { SectionHead } from '../components/roster/SectionHead';
 import {
   closeVerb,
+  CONFIRM_LABEL,
+  confirmCloseLine,
+  confirmCloseName,
   exactMoney,
   exactSignedMoney,
-  humanDate,
   ROSTER_EXPLAINER,
+  rosterReopensLine,
   SHORT_EXPLAINER,
   sideHeading,
-  signedMoneyFine,
   unbrokenName,
 } from '../copy/terms';
 import { keepTogether, practiceProgress } from '../data/chromeView';
 import { recentEarnings, scoreBreakdown } from '../data/perGameMetrics';
 import {
   breakdownParts,
+  breakdownPrecision,
   closedRows,
   feeMoves,
   rankLine,
@@ -50,7 +53,7 @@ import {
 } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
-import { Button, EmptyState, Tag, visuallyHidden } from '../ui/kit';
+import { Button, EmptyState, headingLevel, Tag, visuallyHidden } from '../ui/kit';
 
 /** Desktop: score and chart beside the lists. */
 const WIDE_MIN_WIDTH = 1024;
@@ -72,9 +75,7 @@ function PositionRow({ position, layout, seasonOver, onOpenProfile }: {
   const locked = pendingActions.has('account-mutation');
   const rosterLocked = bootstrap?.ruleset.rosterMutationsLocked ?? true;
   const rosterLockDate = bootstrap?.ruleset.rosterLockGameDate ?? null;
-  const rosterLockHint = rosterLockDate
-    ? `Roster changes are locked for the ${humanDate(rosterLockDate)} games.`
-    : 'Roster changes are locked while the current games are in progress.';
+  const rosterLockHint = `${rosterReopensLine(rosterLockDate)}.`;
   const disabled = pending || locked || rosterLocked || seasonOver;
   const [confirming, setConfirming] = useState(false);
   useEffect(() => {
@@ -112,12 +113,10 @@ function PositionRow({ position, layout, seasonOver, onOpenProfile }: {
   ].filter(Boolean).join(', ');
 
   // The second tap's consequence, shown in place of the verdict while armed
-  // and spoken through the row's live region.
-  const stays = `${short ? 'its' : 'his'} ${signedMoneyFine(position.cumulativePnl)} stays in your score`;
-  const consequence = fee > 0 ? `${exactMoney(fee)} fee · ${stays}` : stays;
+  // and spoken through the row's live region. One wording app-wide (terms).
+  const consequence = confirmCloseLine(position.side, fee, position.cumulativePnl);
   const announcement = confirming
-    ? `Tap Confirm to ${verb.toLowerCase()} ${target}. ${fee > 0 ? `A ${exactMoney(fee)} fee applies. ` : ''}`
-      + `${short ? 'Its' : 'His'} ${exactSignedMoney(position.cumulativePnl)} so far stays in your score.`
+    ? `Tap ${CONFIRM_LABEL} to ${verb.toLowerCase()} ${target}. ${consequence}.`
     : '';
 
   const compact = layout === 'compact';
@@ -147,11 +146,12 @@ function PositionRow({ position, layout, seasonOver, onOpenProfile }: {
   const action = (
     <Pressable
       accessibilityHint={rosterLocked ? rosterLockHint : undefined}
+      // react-native-web drops the hint, so the name carries the reason.
       accessibilityLabel={rosterLocked
-        ? `${verb} ${target} unavailable while roster changes are locked`
+        ? `${verb} ${target} unavailable. ${rosterLockHint}`
         : seasonOver ? `${verb} ${target} unavailable: the season is over`
           : pending ? `${verb === 'Drop' ? 'Dropping' : 'Closing'} ${target}`
-            : confirming ? `Confirm: ${verb.toLowerCase()} ${target}` : `${verb} ${target}`}
+            : confirming ? confirmCloseName(position.side, position.playerName) : `${verb} ${target}`}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       disabled={disabled}
@@ -175,7 +175,7 @@ function PositionRow({ position, layout, seasonOver, onOpenProfile }: {
         <ActivityIndicator color={colors.muted} size="small" />
       ) : (
         <Text style={[styles.actionText, confirming && styles.actionTextArmed]}>
-          {rosterLocked ? 'LOCKED' : confirming ? 'CONFIRM' : verb.toUpperCase()}
+          {rosterLocked ? 'LOCKED' : confirming ? CONFIRM_LABEL.toUpperCase() : verb.toUpperCase()}
         </Text>
       )}
     </Pressable>
@@ -310,9 +310,13 @@ export function PerGameRosterScreen({
   // hint react-native-web drops).
   const actionNote = seasonOver
     ? 'The season is over. Your roster is final.'
-    : rosterLocked
-      ? `Locked until the ${rosterLockDate ? `${humanDate(rosterLockDate)} ` : 'current '}games settle.`
-      : undefined;
+    : rosterLocked ? `${rosterReopensLine(rosterLockDate)}.` : undefined;
+  const parts = bootstrap.ledger.items.length > 0 ? breakdownParts(breakdown) : null;
+  // One precision for every figure in the statement, the least at which the
+  // parts, as shown, add up to the hero figure.
+  const precision = parts ? breakdownPrecision(parts.map((part) => part.value), score) : 'fine';
+  const unplayed = closed.filter((row) => row.unplayed).length;
+  const sticky = layout === 'stacked';
   const legend = (side: PerGamePosition['side']) => (
     layout === 'table' ? <TableHeader actionWidth={ACTION_WIDTH} side={side} />
       : layout === 'stacked' ? <FigureLegend side={side} /> : null
@@ -335,7 +339,8 @@ export function PerGameRosterScreen({
     <>
       <ScoreHeader
         nextGameDate={bootstrap.game.nextGameDate}
-        parts={bootstrap.ledger.items.length > 0 ? breakdownParts(breakdown) : null}
+        parts={parts}
+        precision={precision}
         rank={started ? rankLine(bootstrap.leaderboard) : null}
         score={score}
         slots={wide ? slotLine(bootstrap.account) : null}
@@ -343,6 +348,7 @@ export function PerGameRosterScreen({
         title="Your score"
         variant={wide ? 'panel' : layout === 'compact' ? 'narrow' : 'compact'}
         week={recent ? recent.week : null}
+        weekNights={recent ? recent.weekNights : 0}
       />
       <PerGamePnlChart
         entries={bootstrap.ledger.items}
@@ -359,6 +365,8 @@ export function PerGameRosterScreen({
           count={`${longSlots.used} of ${longSlots.limit}`}
           legend={longs.length > 0 ? legend('long') : undefined}
           note={actionNote}
+          precision={precision}
+          sticky={sticky && longs.length > 0}
           title={sideHeading('long')}
           total={longs.length > 0 ? breakdown.roster : undefined}
           totalInset={totalInset}
@@ -385,6 +393,8 @@ export function PerGameRosterScreen({
           caption={shorts.length > 0 ? SHORT_EXPLAINER : undefined}
           count={`${shortSlots.used} of ${shortSlots.limit}`}
           legend={shorts.length > 0 ? legend('short') : undefined}
+          precision={precision}
+          sticky={sticky && shorts.length > 0}
           title={sideHeading('short')}
           total={shorts.length > 0 ? breakdown.shorts : undefined}
           totalInset={totalInset}
@@ -405,13 +415,23 @@ export function PerGameRosterScreen({
           />
         )}
       </View>
-      <ClosedSection rows={closed} total={breakdown.closed} totalInset={totalInset} />
-      <FeesLine fees={breakdown.fees} moves={feeMoves(bootstrap.ledger.items)} totalInset={totalInset} />
+      <ClosedSection precision={precision} rows={closed} total={breakdown.closed} totalInset={totalInset} />
+      <FeesLine
+        fees={breakdown.fees}
+        moves={feeMoves(bootstrap.ledger.items)}
+        precision={precision}
+        totalInset={totalInset}
+        unplayed={unplayed}
+      />
     </>
   );
 
   return (
     <View style={styles.screen}>
+      {/* The screen's title for screen readers (the tab bar names it on screen). */}
+      <View style={visuallyHidden}>
+        <Text accessibilityRole="header" {...headingLevel(1)}>Roster</Text>
+      </View>
       {wide ? (
         <View style={styles.columns}>
           <ScrollView contentContainerStyle={styles.summaryContent} style={[styles.summaryColumn, { width: summaryWidth(width) }]}>

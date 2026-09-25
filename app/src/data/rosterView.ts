@@ -15,7 +15,15 @@ import type {
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
-import { humanDate, signedMoney } from '../copy/terms';
+import {
+  exactMoney,
+  exactSignedMoney,
+  humanDate,
+  moneyFine,
+  nightsCount,
+  signedMoney,
+  signedMoneyFine,
+} from '../copy/terms';
 import type { PnlPoint } from '../state/perGameState';
 import type { TagTone } from '../ui/kit';
 import {
@@ -182,43 +190,112 @@ export interface ClosedRow {
   /** What the position made or lost while it was open. */
   total: number;
   games: number;
-  /** "Dropped Nov 6", "Short ended Oct 28", "Short closed Oct 25". */
+  /** "Dropped after Nov 5", "Short ended Oct 28", "Short closed after Oct 25". */
   how: string;
+  /**
+   * Closed before he played a game for you and nothing but fees moved: the
+   * screen folds these into the Fees line instead of listing a row of zeros.
+   */
+  unplayed: boolean;
 }
 
 /**
  * Dropped players and ended shorts, most recently closed first. Their money
  * stays in the score, so the screen keeps listing them: without these rows the
  * roster stops adding up to the score as soon as anything closes.
+ *
+ * A drop is dated by the last game he played for you ("Dropped after Nov 5"),
+ * which is always true; the fee's own stamp is the next game day in practice,
+ * a day after the practice date the player saw when he dropped him. A short
+ * that ran its term shows the day it ended.
  */
 export function closedRows(
   positions: readonly PerGamePosition[],
   ledger: readonly PerGameLedgerEntry[],
   results: readonly PerGameSettledResult[],
 ): ClosedRow[] {
-  const droppedOn = new Map<string, string>();
-  for (const entry of ledger) {
-    if (entry.kind === 'drop_fee' && entry.createdAt) droppedOn.set(entry.positionId, entry.createdAt);
-  }
+  const closedByYou = new Set(
+    ledger.filter((entry) => entry.kind === 'drop_fee').map((entry) => entry.positionId),
+  );
   return positions
     .filter((position) => position.status === 'closed')
     .sort((left, right) => (right.closedEventSequence ?? 0) - (left.closedEventSequence ?? 0))
     .map((position) => {
-      const dropped = droppedOn.get(position.positionId);
+      const value = positionValue(results, position.positionId);
+      const after = value.lastDate ? ` after ${humanDate(value.lastDate)}` : ' before he played';
       let how: string;
-      if (position.side === 'long') how = dropped ? `Dropped ${humanDate(dropped)}` : 'Dropped';
-      else if (dropped) how = `Short closed ${humanDate(dropped)}`;
-      else how = position.expiresOn ? `Short ended ${humanDate(position.expiresOn)}` : 'Short closed';
+      if (position.side === 'long') how = `Dropped${after}`;
+      else if (closedByYou.has(position.positionId) || !position.expiresOn) how = `Short closed${after}`;
+      else how = `Short ended ${humanDate(position.expiresOn)}`;
       return {
         positionId: position.positionId,
         playerId: position.playerId,
         name: position.playerName,
         side: position.side,
         total: position.cumulativePnl,
-        games: positionValue(results, position.positionId).games,
+        games: value.games,
         how,
+        unplayed: value.games === 0 && Math.round(position.cumulativePnl) === 0,
       };
     });
+}
+
+/**
+ * Label for the header's week figure: "Last 7 nights" once seven game nights
+ * have settled, "Last 3 nights" before that, and nothing after a single night
+ * (the status bar already shows last night).
+ */
+export function weekLabel(weekNights: number): string | null {
+  return weekNights >= 2 ? `Last ${nightsCount(weekNights)}` : null;
+}
+
+/**
+ * How precisely the breakdown shows its parts. `fine` is `moneyFine` ("$552.1K",
+ * "$1.05M"); `fine3` adds a digit to millions ("$1.052M"); `exact` is dollars.
+ */
+export type PartPrecision = 'fine' | 'fine3' | 'exact';
+
+const PRECISIONS: PartPrecision[] = ['fine', 'fine3', 'exact'];
+
+/** The value a reader sees once an amount is formatted at this precision. */
+function shownValue(amount: number, precision: PartPrecision): number {
+  const rounded = Math.round(amount);
+  const abs = Math.abs(rounded);
+  const sign = rounded < 0 ? -1 : 1;
+  if (precision === 'exact' || abs < 10_000) return rounded;
+  if (abs < 999_950) return sign * Math.round(abs / 100) * 100;
+  return sign * Math.round(abs / (precision === 'fine3' ? 1_000 : 10_000)) * (precision === 'fine3' ? 1_000 : 10_000);
+}
+
+function trimZeros(value: string): string {
+  return value.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+}
+
+/** Format money at a breakdown precision, signed ("+$1.052M") or plain. */
+export function formatAt(amount: number, precision: PartPrecision, signed: boolean): string {
+  if (precision === 'exact') return signed ? exactSignedMoney(amount) : exactMoney(amount);
+  const rounded = Math.round(amount);
+  if (precision === 'fine3' && Math.abs(rounded) >= 999_950) {
+    const text = `$${trimZeros((Math.abs(rounded) / 1_000_000).toFixed(3))}M`;
+    if (rounded < 0) return `-${text}`;
+    return signed ? `+${text}` : text;
+  }
+  return signed ? signedMoneyFine(amount) : moneyFine(amount);
+}
+
+/**
+ * The least precision at which the parts, as a reader sees them, add up to
+ * the score as the hero shows it. `moneyFine` rounds millions to $10K, so
+ * "-$1.05M + $552.1K - $3,000" reads -$500.9K beside a "-$503K" hero; one more
+ * digit ("-$1.052M") or, failing that, exact dollars makes the sum agree.
+ */
+export function breakdownPrecision(values: readonly number[], score: number): PartPrecision {
+  const hero = signedMoney(score);
+  for (const precision of PRECISIONS) {
+    const sum = values.reduce((total, value) => total + shownValue(value, precision), 0);
+    if (signedMoney(sum) === hero) return precision;
+  }
+  return 'exact';
 }
 
 // ---------------------------------------------------------------------------

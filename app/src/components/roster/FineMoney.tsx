@@ -1,6 +1,7 @@
 import { StyleSheet, Text, type StyleProp, type TextStyle } from 'react-native';
 
-import { exactMoney, exactSignedMoney, moneyFine, signedMoneyFine } from '../../copy/terms';
+import { exactMoney, exactSignedMoney } from '../../copy/terms';
+import { formatAt, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, type, weight } from '../../theme';
 import { moneyColor } from '../../ui/kit';
 
@@ -14,6 +15,7 @@ import { moneyColor } from '../../ui/kit';
 export function FineMoney({
   value,
   signed = true,
+  precision = 'fine',
   size = 'value',
   style,
   accessibilityLabel,
@@ -21,6 +23,8 @@ export function FineMoney({
   value: number;
   /** false for a price or a dividend, which is neither a gain nor a loss. */
   signed?: boolean;
+  /** More digits where figures must visibly add up (see `breakdownPrecision`). */
+  precision?: PartPrecision;
   size?: 'label' | 'body' | 'value' | 'title';
   style?: StyleProp<TextStyle>;
   accessibilityLabel?: string;
@@ -35,7 +39,7 @@ export function FineMoney({
         style,
       ]}
     >
-      {signed ? signedMoneyFine(value) : moneyFine(value)}
+      {formatAt(value, precision, signed)}
     </Text>
   );
 }

@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { exactSignedMoney, gamesCount, unbrokenName } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
-import type { ClosedRow } from '../../data/rosterView';
+import type { ClosedRow, PartPrecision } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { Button } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -22,18 +22,23 @@ function bindDates(text: string): string {
  * them stays in your score, so they stay on the screen: the section's total
  * is the "Closed" part of the score breakdown and the sum of these rows.
  */
-export function ClosedSection({ rows, total, totalInset = 0 }: {
+export function ClosedSection({ rows: allRows, total, totalInset = 0, precision = 'fine' }: {
   rows: readonly ClosedRow[];
   total: number;
   totalInset?: number;
+  precision?: PartPrecision;
 }) {
   const [showAll, setShowAll] = useState(false);
+  // A player dropped before his first game moved nothing but fees; the Fees
+  // line counts him instead of a row of zeros.
+  const rows = allRows.filter((row) => !row.unplayed);
   if (rows.length === 0) return null;
   const shown = showAll ? rows : rows.slice(0, COLLAPSED_COUNT);
   return (
     <View style={styles.section}>
       <SectionHead
         caption="Dropped players and ended shorts. What they made stays in your score."
+        precision={precision}
         title="Closed"
         total={total}
         totalInset={totalInset}
@@ -51,7 +56,7 @@ export function ClosedSection({ rows, total, totalInset = 0 }: {
             <Text style={styles.detail}>{bindDates(row.how)} · {keepTogether(gamesCount(row.games))}</Text>
           </View>
           <View style={{ marginRight: totalInset }}>
-            <FineMoney value={row.total} />
+            <FineMoney precision={precision} value={row.total} />
           </View>
         </View>
       ))}
@@ -69,21 +74,34 @@ export function ClosedSection({ rows, total, totalInset = 0 }: {
   );
 }
 
-/** The last line of the statement: add and drop fees, the score's final part. */
-export function FeesLine({ fees, moves, totalInset = 0 }: { fees: number; moves: number; totalInset?: number }) {
+/**
+ * The last line of the statement: add and drop fees, the score's final part,
+ * including the players dropped before they played (whose only effect on the
+ * score was their fees).
+ */
+export function FeesLine({ fees, moves, unplayed = 0, totalInset = 0, precision = 'fine' }: {
+  fees: number;
+  moves: number;
+  /** Closed positions that never played a game for you. */
+  unplayed?: number;
+  totalInset?: number;
+  precision?: PartPrecision;
+}) {
   if (moves === 0) return null;
+  const detail = `${moves} roster ${moves === 1 ? 'move' : 'moves'}`
+    + (unplayed > 0 ? ` · ${unplayed} dropped before playing` : '');
   return (
     <View
       accessible
-      accessibilityLabel={`Fees, ${moves} roster ${moves === 1 ? 'move' : 'moves'}, ${exactSignedMoney(fees)}`}
+      accessibilityLabel={`Fees, ${detail}, ${exactSignedMoney(fees)}`}
       style={[styles.row, styles.fees]}
     >
       <View style={styles.copy}>
         <Text style={styles.name}>Fees</Text>
-        <Text style={styles.detail}>{moves} roster {moves === 1 ? 'move' : 'moves'}</Text>
+        <Text style={styles.detail}>{detail}</Text>
       </View>
       <View style={{ marginRight: totalInset }}>
-        <FineMoney value={fees} />
+        <FineMoney precision={precision} value={fees} />
       </View>
     </View>
   );

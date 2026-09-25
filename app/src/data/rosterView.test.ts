@@ -12,11 +12,13 @@ import { scoreBreakdown } from './perGameMetrics';
 import {
   axisLabelIndexes,
   breakdownParts,
+  breakdownPrecision,
   chartSummary,
   closedRows,
   expiryLine,
   feeMoves,
   figureCaptions,
+  formatAt,
   gamesLine,
   hasNights,
   nearestIndex,
@@ -28,6 +30,7 @@ import {
   slotLine,
   valueTicks,
   verdictTag,
+  weekLabel,
 } from './rosterView';
 
 function position(overrides: Partial<PerGamePosition> = {}): PerGamePosition {
@@ -323,24 +326,56 @@ test('the breakdown reads by source, adds up to the score and names Other only w
 test('closed rows keep dropped players and ended shorts, newest first, with how each closed', () => {
   cursor = 0;
   const ledger = [
+    // Practice stamps a move on the next game day, so dates come from the games instead.
     entry({ positionId: 'dropped', kind: 'drop_fee', createdAt: '2025-11-06T12:00:00.000Z' }),
-    entry({ positionId: 'closedShort', kind: 'drop_fee', createdAt: '2025-10-25T12:00:00.000Z' }),
+    entry({ positionId: 'closedShort', kind: 'drop_fee', createdAt: '2025-10-26T12:00:00.000Z' }),
+    entry({ positionId: 'unplayed', kind: 'drop_fee', createdAt: '2025-10-21T12:00:00.000Z' }),
   ];
   const rows = closedRows([
     position({ positionId: 'active', status: 'active' }),
     position({ positionId: 'expired', playerName: 'Tyrese Maxey', side: 'short', status: 'closed', closedEventSequence: 5, expiresOn: '2025-10-28', cumulativePnl: 345_000 }),
     position({ positionId: 'dropped', playerName: 'Nikola Jokic', status: 'closed', closedEventSequence: 9, cumulativePnl: 1_632_000 }),
     position({ positionId: 'closedShort', playerName: 'Scottie Barnes', side: 'short', status: 'closed', closedEventSequence: 3, expiresOn: '2025-10-28', cumulativePnl: -194_000 }),
+    position({ positionId: 'unplayed', playerName: 'Derrick White', status: 'closed', closedEventSequence: 1 }),
   ], ledger, [
-    result({ positionId: 'dropped', gameId: 'a' }),
-    result({ positionId: 'dropped', gameId: 'b' }),
+    result({ positionId: 'dropped', gameId: 'a', gameDate: '2025-11-03' }),
+    result({ positionId: 'dropped', gameId: 'b', gameDate: '2025-11-05' }),
     result({ positionId: 'expired', gameId: 'c', side: 'short' }),
+    result({ positionId: 'closedShort', gameId: 'd', side: 'short', gameDate: '2025-10-25' }),
   ]);
-  assert.deepEqual(rows.map((row) => [row.name, row.how, row.games, row.total]), [
-    ['Nikola Jokic', 'Dropped Nov 6', 2, 1_632_000],
-    ['Tyrese Maxey', 'Short ended Oct 28', 1, 345_000],
-    ['Scottie Barnes', 'Short closed Oct 25', 0, -194_000],
+  assert.deepEqual(rows.map((row) => [row.name, row.how, row.games, row.total, row.unplayed]), [
+    ['Nikola Jokic', 'Dropped after Nov 5', 2, 1_632_000, false],
+    ['Tyrese Maxey', 'Short ended Oct 28', 1, 345_000, false],
+    ['Scottie Barnes', 'Short closed after Oct 25', 1, -194_000, false],
+    // Dropped before his first game: nothing but fees moved, so it folds into Fees.
+    ['Derrick White', 'Dropped before he played', 0, 0, true],
   ]);
+});
+
+test('the week figure is labelled by the game nights it covers', () => {
+  assert.equal(weekLabel(7), 'Last 7 nights');
+  assert.equal(weekLabel(3), 'Last 3 nights');
+  assert.equal(weekLabel(1), null);
+  assert.equal(weekLabel(0), null);
+});
+
+test('breakdown parts take the precision at which they visibly add up to the hero', () => {
+  // Rigor's case: "-$1.05M + $552.1K - $3,000" reads -$500.9K beside a "-$503K" hero.
+  const parts = [-1_052_100, 0, 552_100, -3_000];
+  const score = parts.reduce((sum, part) => sum + part, 0);
+  assert.equal(breakdownPrecision(parts, score), 'fine3');
+  assert.equal(formatAt(-1_052_100, 'fine3', true), '-$1.052M');
+  assert.equal(formatAt(552_100, 'fine3', true), '+$552.1K');
+  assert.equal(formatAt(-3_000, 'fine3', true), '-$3,000');
+  assert.equal(formatAt(1_050_000, 'fine3', true), '+$1.05M');
+  assert.equal(formatAt(0, 'fine3', true), '$0');
+  assert.equal(formatAt(-1_052_100, 'exact', true), '-$1,052,100');
+  // Parts that already add up keep the lighter precision.
+  assert.equal(breakdownPrecision([-418_500, 0, 546_500, -3_000], 125_000), 'fine');
+  // Million-scale parts beside a thousand-scale hero: $10K and $1K rounding
+  // both miss "+$500K" ($490K, $501K), so the parts fall back to exact dollars.
+  const edge = [1_004_500, 1_004_500, -1_508_999];
+  assert.equal(breakdownPrecision(edge, 500_001), 'exact');
 });
 
 test('x-axis dates never touch: the most recent date wins a crowded axis', () => {

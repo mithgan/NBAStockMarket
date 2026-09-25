@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 import { exactSignedMoney } from '../../copy/terms';
+import type { PartPrecision } from '../../data/rosterView';
 import { colors, fonts, headingStyle, space, type, weight } from '../../theme';
 import { headingLevel } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -18,6 +19,8 @@ export function SectionHead({
   total,
   totalLabel,
   totalInset = 0,
+  precision = 'fine',
+  sticky = false,
   caption,
   note,
   legend,
@@ -31,6 +34,14 @@ export function SectionHead({
   totalLabel?: string;
   /** Right inset that lines the total up with the rows' Total column. */
   totalInset?: number;
+  /** The breakdown's precision, so the total reads exactly as its part does. */
+  precision?: PartPrecision;
+  /**
+   * Keep the head (and its column legend) pinned under the top of the list
+   * while its rows scroll, so mid-list rows never lose their labels. Web
+   * only: CSS sticky, scoped to this section.
+   */
+  sticky?: boolean;
   /** A plain sentence about the list, e.g. how shorts work. */
   caption?: string;
   /** A warning about the list's actions: "Locked until the Oct 31 games settle." */
@@ -38,7 +49,7 @@ export function SectionHead({
   legend?: ReactNode;
 }) {
   return (
-    <View style={styles.head}>
+    <View style={[styles.head, sticky && STICKY]}>
       <View style={styles.titleRow}>
         <View style={styles.titleGroup}>
           <Text accessibilityRole="header" {...headingLevel(2)} style={styles.title}>{title}</Text>
@@ -48,6 +59,7 @@ export function SectionHead({
           <View style={{ marginRight: totalInset }}>
             <FineMoney
               accessibilityLabel={totalLabel ? `${totalLabel} ${exactSignedMoney(total)}` : undefined}
+              precision={precision}
               value={total}
             />
           </View>
@@ -59,6 +71,20 @@ export function SectionHead({
     </View>
   );
 }
+
+/**
+ * react-native-web passes `position: sticky` through to CSS. The head is the
+ * first child of its section, so it sticks only while its own rows scroll by.
+ */
+const STICKY = (Platform.OS === 'web'
+  ? {
+      position: 'sticky',
+      top: 0,
+      zIndex: 2,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    }
+  : {}) as unknown as ViewStyle;
 
 const styles = StyleSheet.create({
   head: {
