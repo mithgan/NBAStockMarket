@@ -3,7 +3,8 @@
  * font characters so they render the same on every platform and pick up the
  * theme's colour tokens.
  */
-import Svg, { Circle, Line, Polygon } from 'react-native-svg';
+import { View } from 'react-native';
+import Svg, { Circle, Line, Path, Polygon, Rect } from 'react-native-svg';
 
 import { colors } from '../../theme';
 
@@ -29,6 +30,18 @@ export function CloseIcon({ size = 16, color = colors.text }: { size?: number; c
       <Line stroke={color} strokeLinecap="round" strokeWidth={1.8} x1={3} x2={13} y1={3} y2={13} />
       <Line stroke={color} strokeLinecap="round" strokeWidth={1.8} x1={13} x2={3} y1={3} y2={13} />
     </Svg>
+  );
+}
+
+/** A padlock for the roster-lock warning. Decorative: the words beside it say it. */
+export function LockIcon({ color = colors.goldInk }: { color?: string }) {
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Svg height={11} viewBox="0 0 10 12" width={9}>
+        <Path d="M2.6 5.2V3.6a2.4 2.4 0 0 1 4.8 0v1.6" fill="none" stroke={color} strokeWidth={1.5} />
+        <Rect fill={color} height={6.6} rx={1.3} width={8.4} x={0.8} y={5} />
+      </Svg>
+    </View>
   );
 }
 

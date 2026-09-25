@@ -1,44 +1,64 @@
 /**
  * The per-game player profile: "is he worth his price, game by game?"
  *
- * Every number compares what he paid on a night (his dividend) with what a
- * game of him cost that night (his price). The range (L5 / L15 / L30 /
- * Season) drives the verdict, the stat grid and the chart together, so the
- * three always describe the same games.
+ * Every number compares his dividend on a night with what a game of him cost
+ * that night, from the side you look from: your roster (dividend minus price)
+ * or your short (credit minus dividend). Nights you held him are your settled
+ * results at your locked price, so they match Roster and Results; other nights
+ * are his market price and say so. The range (L5 / L15 / L30 / Season) drives
+ * the verdict, the stat grid and the chart together, so the three always
+ * describe the same games, and the sheet has one "net a game".
  */
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useMemo, useState, type ReactNode } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
 import type {
   PerGameMarketPlayer,
   PerGamePosition,
+  PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
-import { gamesCount, humanDate, money, perGame, signedMoney } from '../copy/terms';
-import { playerValue } from '../data/perGameMetrics';
+import { gamesCount, humanDate, money, perGame, signedMoney, unbrokenName } from '../copy/terms';
+import { playerValue, positionValue } from '../data/perGameMetrics';
+import { splitPlayerName } from '../data/playerName';
 import {
+  buildProfileNights,
   formVerdict,
   gameLog,
   holdingStatus,
   isRecentRange,
   lastSeasonFacts,
-  nightsFromResults,
-  nightsFromTrends,
+  logPriceHeader,
+  priceSourceCaption,
   priceStory,
   RANGE_OPTIONS,
   rangeNights,
+  sideWords,
+  stakeLine,
   summarizeNights,
   type ProfileMetric,
+  type StakeTone,
 } from '../data/profileView';
 import type { TrendPoint, TrendRange } from '../data/trendPresentation';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
-import { Button, Label, Money, SectionHeader, Segmented, Stat, Tag } from '../ui/kit';
+import { Button, headingLevel, Label, Money, SectionHeader, Segmented, Tag } from '../ui/kit';
 import { CloseIcon, StarIcon } from './market/icons';
 import { PlayerAvatar } from './PlayerAvatar';
 import { ProfileChart } from './profile/ProfileChart';
 
 const METRIC_OPTIONS: { key: ProfileMetric; label: string; hint: string }[] = [
-  { key: 'dividends', label: 'Dividends', hint: 'What he paid each game, against his price' },
+  { key: 'dividends', label: 'Dividends', hint: 'His dividend each game, against his price' },
   { key: 'price', label: 'Price', hint: 'His price a game, game by game' },
 ];
 
@@ -46,18 +66,52 @@ const METRIC_OPTIONS: { key: ProfileMetric; label: string; hint: string }[] = [
 const LOG_PREVIEW = 10;
 const LOG_SLACK = 2;
 
+/** Once the name block has scrolled away, the top bar shows who this is. */
+const TITLE_AFTER_SCROLL = 72;
+
+const TONE_COLOR: Record<StakeTone, string> = {
+  gain: colors.green,
+  loss: colors.red,
+  even: colors.muted,
+  none: colors.muted,
+};
+
+/**
+ * One figure in the profile's grid: label, value, caption. The kit's Stat, with
+ * tighter label tracking so "Dividend a game" fits a third of a phone.
+ */
+function Figure({ label, value, caption, style }: {
+  label: string;
+  value: ReactNode;
+  caption?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[styles.figure, style]}>
+      <Label style={styles.figureLabel}>{label}</Label>
+      <View style={styles.figureValue}>{value}</View>
+      {caption ? <Text maxFontSizeMultiplier={1.4} style={styles.figureCaption}>{caption}</Text> : null}
+    </View>
+  );
+}
+
 export interface PerGamePlayerProfileProps {
   player: PerGameMarketPlayer;
   position: PerGamePosition | null;
   results: PerGameSettledResult[];
   dividendRate: number;
   latestSettledDate: string | null;
-  /** Practice mode's league-wide nightly history; otherwise this account's settled nights are used. */
+  /** Practice mode's league-wide nightly history; undefined outside practice. */
   trends?: TrendPoint[];
+  /**
+   * The side to read from when you do not hold him: the market tab he was
+   * opened from. A held player always reads from the side you hold him on.
+   */
+  side?: PerGamePositionSide;
   watching: boolean;
   onToggleWatch: () => void;
   onClose: () => void;
-  /** Desktop width: roomier chart and a single controls row. */
+  /** Desktop panel: roomier chart and wider controls. */
   wide?: boolean;
 }
 
@@ -68,6 +122,7 @@ export function PerGamePlayerProfile({
   dividendRate,
   latestSettledDate,
   trends,
+  side,
   watching,
   onToggleWatch,
   onClose,
@@ -76,26 +131,46 @@ export function PerGamePlayerProfile({
   const [range, setRange] = useState<TrendRange>('L15');
   const [metric, setMetric] = useState<ProfileMetric>('dividends');
   const [showAllGames, setShowAllGames] = useState(false);
-  // A zoomed browser (200% on a phone) leaves under 240px: trim the side
-  // gutters so four range tabs still get 44px each.
+  const [scrolled, setScrolled] = useState(false);
   const { width: windowWidth } = useWindowDimensions();
+  // A zoomed browser (200% on a phone) leaves under 240px: trim the side
+  // gutters so four range tabs still get 44px each, and shrink Watch to its star.
   const inset = !wide && windowWidth < 240 ? styles.insetTight : null;
+  const narrow = !wide && windowWidth < 300;
+
+  const viewSide: PerGamePositionSide = position?.side ?? side ?? 'long';
+  const held = position !== null;
+  const live = trends === undefined;
+  const words = sideWords(viewSide);
 
   const nights = useMemo(
-    () => (trends && trends.length > 0
-      ? nightsFromTrends(trends, dividendRate, latestSettledDate)
-      : nightsFromResults(results, latestSettledDate)),
-    [dividendRate, latestSettledDate, results, trends],
+    () => buildProfileNights({ results, trends, dividendRate, latestSettledDate, side: viewSide }),
+    [dividendRate, latestSettledDate, results, trends, viewSide],
   );
   const shown = useMemo(() => rangeNights(nights, range), [nights, range]);
   const summary = useMemo(() => summarizeNights(shown), [shown]);
   const recent = isRecentRange(range, shown.length, nights.length);
   const status = holdingStatus(position);
-  const lastSeason = lastSeasonFacts(player, position?.side ?? 'long');
-  const mine = useMemo(() => playerValue(results, player.playerId), [player.playerId, results]);
-  const hasOwnGames = mine.games + mine.dnp + mine.pending > 0;
+  // Your money with him: the current position when you hold him (the same
+  // numbers as its Roster row), otherwise every stint you had.
+  const stake = useMemo(
+    () => stakeLine(
+      position ? positionValue(results, position.positionId) : playerValue(results, player.playerId),
+      held,
+    ),
+    [held, player.playerId, position, results],
+  );
+  const lastSeason = lastSeasonFacts(player, viewSide);
   const logCapped = nights.length > LOG_PREVIEW + LOG_SLACK;
   const log = gameLog(nights, showAllGames || !logCapped ? undefined : LOG_PREVIEW);
+  const priceHeader = logPriceHeader(nights, viewSide);
+  const mixedLog = priceHeader === 'Price' || priceHeader === 'Credit';
+  const title = narrow ? splitPlayerName(player.name).surname : player.name;
+
+  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const next = event.nativeEvent.contentOffset.y > TITLE_AFTER_SCROLL;
+    if (next !== scrolled) setScrolled(next);
+  };
 
   return (
     <View style={styles.root}>
@@ -108,38 +183,61 @@ export function PerGamePlayerProfile({
         >
           <CloseIcon size={18} />
         </Pressable>
+        <View style={styles.titleSlot}>
+          {scrolled ? (
+            <Text accessibilityElementsHidden importantForAccessibility="no" maxFontSizeMultiplier={1.3} style={styles.title}>
+              {title}
+            </Text>
+          ) : null}
+        </View>
         <Pressable
           accessibilityLabel={watching ? `Stop watching ${player.name}` : `Watch ${player.name}`}
           accessibilityRole="button"
           onPress={onToggleWatch}
-          style={({ pressed }) => [styles.watch, watching && styles.watchOn, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.watch, narrow && styles.watchIcon, watching && styles.watchOn, pressed && styles.pressed]}
         >
           <StarIcon filled={watching} />
-          <Text maxFontSizeMultiplier={1.3} style={[styles.watchText, watching && styles.watchTextOn]}>
-            {watching ? 'Watching' : 'Watch'}
-          </Text>
+          {narrow ? null : (
+            <Text maxFontSizeMultiplier={1.3} style={[styles.watchText, watching && styles.watchTextOn]}>
+              {watching ? 'Watching' : 'Watch'}
+            </Text>
+          )}
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body} style={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={32} style={styles.scroll}>
         <View style={[styles.identity, inset]}>
           <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={56} />
           <View style={styles.identityCopy}>
-            <Text accessibilityRole="header" maxFontSizeMultiplier={1.4} style={styles.name}>{player.name}</Text>
-            <Text maxFontSizeMultiplier={1.4} style={styles.meta}>
-              <Text style={styles.tier}>{player.tier.toUpperCase()}</Text>
-              {'   '}
-              <Text style={styles.priceNow}>{perGame(player.currentGameCost)}</Text>
+            <Text accessibilityRole="header" {...headingLevel(2)} maxFontSizeMultiplier={1.4} style={styles.name}>
+              {windowWidth >= 320 ? unbrokenName(player.name) : player.name}
             </Text>
+            <View style={styles.metaLine}>
+              {player.tier ? <Text maxFontSizeMultiplier={1.4} style={styles.tier}>{player.tier.toUpperCase()}</Text> : null}
+              <Text maxFontSizeMultiplier={1.4} style={styles.priceNow}>{perGame(player.currentGameCost)}</Text>
+            </View>
           </View>
         </View>
         <View style={[styles.status, inset]}>
-          {status.tag ? <Tag tone="gold">{status.tag}</Tag> : null}
-          <Text maxFontSizeMultiplier={1.4} style={styles.statusText}>{status.text}</Text>
+          <View style={styles.statusLine}>
+            {status.tag ? <Tag>{status.tag}</Tag> : null}
+            <Text maxFontSizeMultiplier={1.4} style={styles.statusText}>{status.text}</Text>
+          </View>
+          {stake ? (
+            <View style={styles.statusLine}>
+              <Text maxFontSizeMultiplier={1.4} style={styles.stakeLead}>{stake.lead}</Text>
+              {stake.total ? (
+                <Text maxFontSizeMultiplier={1.4} style={[styles.stakeTotal, { color: TONE_COLOR[stake.tone] }]}>
+                  {stake.total}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </View>
 
         <SectionHeader
-          meta={nights.length > 0 ? gamesCount(nights.length) : undefined}
+          level={3}
+          right={nights.length > 0 ? <Text style={styles.sectionCount}>{gamesCount(nights.length)}</Text> : undefined}
           style={[styles.sectionHeader, inset]}
           title="Game by game"
         />
@@ -153,29 +251,30 @@ export function PerGamePlayerProfile({
                 style={wide ? styles.rangeWide : undefined}
                 value={range}
               />
-              <Text maxFontSizeMultiplier={1.4} style={styles.verdict}>{formVerdict(summary, recent)}</Text>
+              <Text maxFontSizeMultiplier={1.4} style={styles.verdict}>
+                {formVerdict(summary, { recent, side: viewSide, held, scope: live ? 'yours' : 'season' })}
+              </Text>
               <View style={styles.grid}>
-                <Stat
-                  caption="his dividend"
-                  label="Paid a game"
+                <Figure
+                  label="Dividend a game"
                   style={styles.cell}
-                  value={<Money signed={false} size="title" value={summary.avgPaid ?? 0} />}
+                  value={<Money signed={false} size="title" value={summary.avgDividend ?? 0} />}
                 />
-                <Stat
-                  caption={`now ${money(player.currentGameCost)}`}
-                  label="Price a game"
+                <Figure
+                  caption={priceSourceCaption(summary, viewSide)}
+                  label={words.price}
                   style={styles.cell}
                   value={<Money signed={false} size="title" value={summary.avgPrice ?? 0} />}
                 />
-                <Stat
-                  caption="one roster spot"
+                <Figure
+                  caption={words.netCaption}
                   label="Net a game"
                   style={styles.cell}
                   value={<Money size="title" value={summary.avgNet ?? 0} />}
                 />
-                <Stat
-                  caption={summary.games - summary.beat === 0 ? 'every game' : `${gamesCount(summary.games - summary.beat)} short`}
-                  label="Beat his price"
+                <Figure
+                  caption={words.missedCaption(summary.games - summary.beat)}
+                  label={words.beat}
                   style={styles.cell}
                   value={(
                     <Text maxFontSizeMultiplier={1.4} style={styles.statText}>
@@ -183,14 +282,14 @@ export function PerGamePlayerProfile({
                     </Text>
                   )}
                 />
-                <Stat
-                  caption={summary.best ? `${humanDate(summary.best.date)} · paid ${money(summary.best.dividend)}` : undefined}
+                <Figure
+                  caption={summary.best ? `${humanDate(summary.best.date)}\ndividend ${money(summary.best.dividend)}` : undefined}
                   label="Best game"
                   style={styles.cell}
                   value={<Money value={summary.best?.net ?? 0} />}
                 />
-                <Stat
-                  caption={summary.worst ? `${humanDate(summary.worst.date)} · paid ${money(summary.worst.dividend)}` : undefined}
+                <Figure
+                  caption={summary.worst ? `${humanDate(summary.worst.date)}\ndividend ${money(summary.worst.dividend)}` : undefined}
                   label="Worst game"
                   style={styles.cell}
                   value={<Money value={summary.worst?.net ?? 0} />}
@@ -204,32 +303,34 @@ export function PerGamePlayerProfile({
                 value={metric}
               />
               {metric === 'price' ? (
-                <Text maxFontSizeMultiplier={1.4} style={styles.note}>{priceStory(shown)}</Text>
+                <Text maxFontSizeMultiplier={1.4} style={styles.note}>{priceStory(shown, viewSide)}</Text>
               ) : null}
-              <ProfileChart height={wide ? 200 : 176} metric={metric} nights={shown} />
+              <ProfileChart height={wide ? 200 : 176} metric={metric} nights={shown} side={viewSide} />
             </>
           ) : (
             <Text maxFontSizeMultiplier={1.4} style={styles.verdict}>
-              No games yet this season. His game-by-game numbers start after his first game.
+              {live
+                ? 'No games with you yet. Once he plays for your roster or a short, every game shows here.'
+                : 'No games yet this season. His game-by-game numbers start after his first game.'}
             </Text>
           )}
         </View>
 
-        <SectionHeader style={[styles.sectionHeader, inset]} title="Last season" />
+        <SectionHeader level={3} style={[styles.sectionHeader, inset]} title="Last season" />
         <View style={[styles.section, inset]}>
           {lastSeason.worth === null || lastSeason.edge === null ? (
             <Text maxFontSizeMultiplier={1.4} style={styles.note}>No last season on record for him.</Text>
           ) : (
             <View style={styles.grid}>
-              <Stat
+              <Figure
                 caption="his dividend a game"
                 label="Worth a game"
                 style={styles.cellHalf}
                 value={<Money signed={false} size="title" value={lastSeason.worth} />}
               />
-              <Stat
+              <Figure
                 caption={lastSeason.edgeCaption}
-                label="At today's price"
+                label="Edge at today's price"
                 style={styles.cellHalf}
                 value={<Money size="title" value={lastSeason.edge} />}
               />
@@ -237,59 +338,40 @@ export function PerGamePlayerProfile({
           )}
         </View>
 
-        {hasOwnGames ? (
-          <>
-            <SectionHeader style={[styles.sectionHeader, inset]} title="Your games with him" />
-            <View style={[styles.section, inset]}>
-              {mine.games > 0 && mine.avgNet !== null ? (
-                <View style={styles.grid}>
-                  <Stat
-                    caption={`won ${mine.wins}`}
-                    label="Games"
-                    style={styles.cell}
-                    value={<Text maxFontSizeMultiplier={1.4} style={styles.statText}>{mine.games}</Text>}
-                  />
-                  <Stat label="Net a game" style={styles.cell} value={<Money value={mine.avgNet} />} />
-                  <Stat label="Total" style={styles.cell} value={<Money value={mine.total} />} />
-                </View>
-              ) : (
-                <Text maxFontSizeMultiplier={1.4} style={styles.note}>No settled games with him yet.</Text>
-              )}
-              {mine.dnp > 0 || mine.pending > 0 ? (
-                <Text maxFontSizeMultiplier={1.4} style={styles.note}>
-                  {[
-                    mine.dnp > 0 ? `${mine.dnp} ${mine.dnp === 1 ? 'night' : 'nights'} he did not play (nothing charged)` : '',
-                    mine.pending > 0 ? `${gamesCount(mine.pending)} waiting to settle` : '',
-                  ].filter(Boolean).join(' · ')}
-                </Text>
-              ) : null}
-            </View>
-          </>
-        ) : null}
-
         {nights.length > 0 ? (
           <>
-            <SectionHeader style={[styles.sectionHeader, inset]} title="Game log" />
+            <SectionHeader
+              caption="The same games as the chart, newest first."
+              level={3}
+              style={[styles.sectionHeader, inset]}
+              title="Game log"
+            />
             <View style={[styles.log, inset]}>
               <View style={styles.logRow}>
                 <Label style={styles.logDate}>Game</Label>
-                <Label style={styles.logNumber}>Paid</Label>
-                <Label style={styles.logNumber}>Price</Label>
+                <Label style={styles.logNumber}>Dividend</Label>
+                <Label style={styles.logNumber}>{priceHeader}</Label>
                 <Label style={styles.logNumber}>Net</Label>
               </View>
-              {log.map((night) => (
-                <View
-                  accessibilityLabel={`${humanDate(night.date)}: paid ${money(night.dividend)}, price ${money(night.price)}, net ${signedMoney(night.net)}`}
-                  accessible
-                  key={night.date}
-                  style={[styles.logRow, styles.logRowRule]}
-                >
-                  <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logDate]}>{humanDate(night.date)}</Text>
-                  <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logNumber]}>{money(night.dividend)}</Text>
-                  <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logNumber, styles.logQuiet]}>{money(night.price)}</Text>
-                  <Money size="body" style={styles.logNumber} value={night.net} />
-                </View>
-              ))}
+              {log.map((night) => {
+                const market = night.source === 'market';
+                return (
+                  <View
+                    accessibilityLabel={`${humanDate(night.date)}: dividend ${money(night.dividend)}, ${words.priceShort} ${money(night.price)}${market ? ' at his market price' : ''}, net ${signedMoney(night.net)}`}
+                    accessible
+                    key={night.date}
+                    style={[styles.logRow, styles.logRowRule]}
+                  >
+                    <View style={styles.logDate}>
+                      <Text maxFontSizeMultiplier={1.4} style={styles.logCell}>{humanDate(night.date)}</Text>
+                      {mixedLog && market ? <Text maxFontSizeMultiplier={1.4} style={styles.logSource}>market price</Text> : null}
+                    </View>
+                    <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logNumber]}>{money(night.dividend)}</Text>
+                    <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logNumber, styles.logQuiet]}>{money(night.price)}</Text>
+                    <Money size="body" style={styles.logNumber} value={night.net} />
+                  </View>
+                );
+              })}
               {logCapped ? (
                 <Button
                   label={showAllGames ? `Show latest ${LOG_PREVIEW}` : `Show all ${gamesCount(nights.length)}`}
@@ -314,7 +396,6 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: space.sm,
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
@@ -328,16 +409,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: radius.sm,
   },
+  titleSlot: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+  },
+  title: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.heavy,
+    textAlign: 'center',
+  },
   watch: {
     minHeight: control.height,
     minWidth: control.height,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: space.sm,
     paddingHorizontal: space.md,
     borderWidth: 1,
     borderColor: colors.borderStrong,
     borderRadius: radius.sm,
+  },
+  watchIcon: {
+    width: control.height,
+    paddingHorizontal: 0,
   },
   watchOn: {
     borderColor: colors.goldLine,
@@ -378,9 +476,13 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
     letterSpacing: -0.3,
   },
-  meta: {
+  metaLine: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    columnGap: space.md,
+    rowGap: 2,
     marginTop: 3,
-    color: colors.muted,
   },
   tier: {
     color: colors.faint,
@@ -397,23 +499,47 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   status: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: space.sm,
+    gap: space.xs,
     paddingHorizontal: space.lg,
     paddingTop: space.md,
     paddingBottom: space.sm,
+  },
+  statusLine: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: space.sm,
+    rowGap: space.xs,
   },
   statusText: {
     color: colors.muted,
     fontSize: type.body,
     fontVariant: ['tabular-nums'],
   },
+  stakeLead: {
+    color: colors.muted,
+    fontSize: type.body,
+    fontVariant: ['tabular-nums'],
+  },
+  stakeTotal: {
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.heavy,
+    fontVariant: ['tabular-nums'],
+  },
   sectionHeader: {
     marginTop: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
+  },
+  sectionCount: {
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.heavy,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    fontVariant: ['tabular-nums'],
   },
   section: {
     paddingHorizontal: space.lg,
@@ -431,6 +557,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     rowGap: space.md,
+  },
+  figure: {
+    minWidth: 0,
+  },
+  figureLabel: {
+    letterSpacing: 0.5,
+  },
+  figureValue: {
+    marginTop: 3,
+  },
+  figureCaption: {
+    marginTop: 2,
+    color: colors.faint,
+    fontSize: type.label,
+    lineHeight: 15,
+    fontVariant: ['tabular-nums'],
   },
   // Three across on a phone; narrower screens reflow to two or one rather
   // than break a number across lines.
@@ -488,9 +630,14 @@ const styles = StyleSheet.create({
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
   },
+  logSource: {
+    color: colors.faint,
+    fontSize: type.label,
+  },
   logDate: {
     flex: 1.1,
     minWidth: 0,
+    paddingVertical: space.xs,
   },
   logNumber: {
     flex: 1,

@@ -116,24 +116,30 @@ export type SignalTone = 'gain' | 'loss' | 'even' | 'none';
 export interface ValueSignal {
   /** Per-game edge at today's price from last season, sign already set for the side. */
   edge: number | null;
-  /** What the row says: "+$20K a game last year", "No last season". */
+  /** The fact: "Last year $120K a game ·", or null with no last season. */
+  lead: string | null;
+  /** The comparison: "+$20K vs his price", "-$20K for a short", "No last season". */
   text: string;
   tone: SignalTone;
 }
 
 /**
- * The value line a fan reads at a glance: what one game at today's price
- * would have made last season. A short flips the sign (lastYearEdge does it).
+ * The value line a fan reads at a glance: what he was worth a game last
+ * season, then how that compares with his price today. On the Short tab the
+ * comparison is what a short would have made (lastYearEdge flips the sign).
  */
 export function valueSignal(
   player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
   side: PerGamePositionSide,
 ): ValueSignal {
   const edge = lastYearEdge(player, side);
-  if (edge === null) return { edge, text: 'No last season', tone: 'none' };
+  if (edge === null || player.priorSeasonValuePerGame === null) {
+    return { edge: null, lead: null, text: 'No last season', tone: 'none' };
+  }
+  const lead = `Last year ${money(player.priorSeasonValuePerGame)} a game ·`;
   const tone = netTone(edge);
-  if (tone === 'even') return { edge, text: 'Even with last year', tone };
-  return { edge, text: `${signedMoney(edge)} a game last year`, tone };
+  if (tone === 'even') return { edge, lead, text: 'even with his price', tone };
+  return { edge, lead, text: `${signedMoney(edge)} ${side === 'long' ? 'vs his price' : 'for a short'}`, tone };
 }
 
 /** "8 of 10 on your roster" / "1 of 5 shorts". */
@@ -176,6 +182,23 @@ export function accountValueByPlayer(
   return summaries;
 }
 
+/**
+ * Each position's own settled games, keyed by position id: exactly
+ * positionValue(results, id) for every position, in one pass. A held market
+ * row reads its current position from here, the same source as its Roster row.
+ */
+export function valueByPosition(results: readonly PerGameSettledResult[]): Map<string, ValueSummary> {
+  const grouped = new Map<string, PerGameSettledResult[]>();
+  for (const result of currentResults(results)) {
+    const list = grouped.get(result.positionId) ?? [];
+    list.push(result);
+    grouped.set(result.positionId, list);
+  }
+  const summaries = new Map<string, ValueSummary>();
+  for (const [positionId, list] of grouped) summaries.set(positionId, summarizeValue(list));
+  return summaries;
+}
+
 /** Colour for a per-game net: green above, red below, muted inside the even band. */
 export function netTone(net: number | null): SignalTone {
   if (net === null) return 'none';
@@ -184,17 +207,108 @@ export function netTone(net: number | null): SignalTone {
 }
 
 /**
- * What a held row says after its tag: his net a game so far when games have
- * settled, otherwise the price you locked in.
+ * What a held row says after "On your roster ·" / "Shorted ·": the current
+ * position's net a game and games (positionValue, the Roster row's source),
+ * or the price you locked in before his first game.
  */
 export function heldDetail(summary: ValueSummary | undefined, lockedGameCost: number): {
   text: string;
   tone: SignalTone;
 } {
   if (summary && summary.avgNet !== null && summary.games > 0) {
-    return { text: `${signedMoney(summary.avgNet)} a game so far`, tone: netTone(summary.avgNet) };
+    return {
+      text: `${signedMoney(summary.avgNet)} a game over ${summary.games === 1 ? '1 game' : `${summary.games} games`}`,
+      tone: netTone(summary.avgNet),
+    };
   }
   return { text: `locked at ${money(lockedGameCost)}`, tone: 'none' };
+}
+
+/**
+ * The action button's visible word. A pending action waits; a confirm step
+ * asks ("Drop?"); a lock or a full side says so on the button itself, so a
+ * dimmed button never goes unexplained.
+ */
+export function actionWord({
+  side,
+  held,
+  pending,
+  confirming,
+  rosterLocked,
+  full,
+}: {
+  side: PerGamePositionSide;
+  held: boolean;
+  pending: boolean;
+  confirming: boolean;
+  rosterLocked: boolean;
+  full: boolean;
+}): string {
+  const verb = held ? closeVerb(side) : openVerb(side);
+  if (pending) return 'Wait';
+  if (rosterLocked) return 'Locked';
+  if (held && confirming) return `${verb}?`;
+  if (!held && full) return 'Full';
+  return verb;
+}
+
+/** The confirm step's accessible name; it still starts with the verb. */
+export function confirmName(side: PerGamePositionSide, playerName: string): string {
+  return side === 'long'
+    ? `${closeVerb(side)} ${playerName} from your roster? Tap again to confirm.`
+    : `${closeVerb(side)} your short on ${playerName}? Tap again to confirm.`;
+}
+
+/** What the live region says when a confirm step starts. */
+export function confirmAnnouncement(side: PerGamePositionSide, playerName: string, fee: number): string {
+  const what = side === 'long' ? `drop ${playerName}` : `close your short on ${playerName}`;
+  const cost = fee > 0 ? ` It costs a ${money(fee)} fee.` : '';
+  return `Tap ${closeVerb(side)} again within 4 seconds to ${what}.${cost}`;
+}
+
+/** How long a Drop or Close waits for its second tap. */
+export const CONFIRM_WINDOW_MS = 4000;
+
+export type MarketLayout = 'phone' | 'large' | 'table';
+
+/**
+ * Names stay whole at their hyphen ("Gilgeous-Alexander") while a line can
+ * hold them. Below 320px even the longest surname no longer fits, and a break
+ * at the hyphen beats the browser breaking inside the word.
+ */
+export function keepNamesWhole(width: number): boolean {
+  return width >= 320;
+}
+
+/**
+ * Row layout for a window: a table with aligned columns from tablet width up
+ * (768px), the phone row below that, and the one-column large-text row when
+ * text is scaled up or the window is under 300px (a phone zoomed to 200%).
+ */
+export function marketLayout(width: number, fontScale: number): MarketLayout {
+  if (fontScale > 1.3 || width < 300) return 'large';
+  return width >= 768 ? 'table' : 'phone';
+}
+
+export interface MarketColumnSet {
+  avatar: number;
+  price: number;
+  lastSeason: number;
+  edge: number;
+  /** Your net a game column; 0 hides it (your stake then reads under the name). */
+  yours: number;
+  action: number;
+  gap: number;
+}
+
+/**
+ * Column widths for the table. A tablet or small laptop gets narrower columns
+ * and no "Your net a game" column, so the player column keeps room for a name.
+ */
+export function marketColumns(width: number): MarketColumnSet {
+  return width >= 1100
+    ? { avatar: 36, price: 104, lastSeason: 104, edge: 140, yours: 150, action: 112, gap: 12 }
+    : { avatar: 32, price: 100, lastSeason: 96, edge: 108, yours: 0, action: 96, gap: 12 };
 }
 
 /**

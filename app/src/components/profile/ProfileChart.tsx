@@ -1,14 +1,17 @@
 /**
  * Game-by-game chart for the player profile.
  *
- * Dividends view: one bar per game for what he paid, rising from $0, with his
- * price as a dashed gold line. A bar that clears the line is a game he beat
- * his price; bars are green when he did and red when he did not.
- * Price view: his price a game, game by game.
+ * Dividends view: one bar per game for his dividend, rising from $0, with the
+ * price a game as a dashed gold step line. Bars are green when that game was a
+ * gain for the side you look from (he beat his price on a roster, stayed
+ * under it for a short) and red when it was a loss.
+ * Price view: the price a game, game by game.
  *
  * Reading a game: tap or click a bar and the read-out above the chart names
- * that game's date and money. A mouse also reads the game under the pointer
- * while it moves. With nothing picked the read-out shows his latest game.
+ * that game's date, where its price came from, and the money. A mouse also
+ * reads the game under the pointer while it moves. From the keyboard the
+ * chart is a slider: arrow keys step through the games, Home and End jump to
+ * the first and latest. With nothing picked the read-out shows his latest game.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -21,12 +24,16 @@ import {
 } from 'react-native';
 import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 
+import type { PerGamePositionSide } from '../../api/contracts';
 import { humanDate, money } from '../../copy/terms';
 import {
   chartSummary,
   nightIndexAt,
   nightReadout,
+  nightSourceLabel,
   profileChartModel,
+  sideWords,
+  steppedIndex,
   type ChartInsets,
   type ProfileMetric,
   type ProfileNight,
@@ -35,6 +42,7 @@ import { colors, fonts, radius, space, type, weight } from '../../theme';
 
 const INSETS: ChartInsets = { top: 22, right: 6, bottom: 20, left: 6 };
 
+/** Green for a game that gained for the reader's side, red for a loss. */
 function barColor(night: ProfileNight): string {
   if (night.net > 0) return colors.green;
   if (night.net < 0) return colors.red;
@@ -44,31 +52,44 @@ function barColor(night: ProfileNight): string {
 export function ProfileChart({
   nights,
   metric,
+  side,
   height = 180,
 }: {
   nights: ProfileNight[];
   metric: ProfileMetric;
+  side: PerGamePositionSide;
   height?: number;
 }) {
   const [width, setWidth] = useState(0);
-  // A tap pins a game; a moving mouse previews one. Showing: preview, then pin, then his latest game.
+  // A tap, click or key pins a game; a moving mouse previews one. Showing:
+  // preview, then pin, then his latest game.
   const [pinned, setPinned] = useState<number | null>(null);
   const [preview, setPreview] = useState<number | null>(null);
   const model = useMemo(
     () => profileChartModel(nights, metric, width, height, INSETS),
     [height, metric, nights, width],
   );
+  const words = sideWords(side);
 
   // A new range or metric starts clean, on his latest game. Keyed on what the
   // nights are, not the array's identity, so a re-render keeps the pick.
-  const signature = `${metric}|${nights.length}|${nights[0]?.date ?? ''}|${nights[nights.length - 1]?.date ?? ''}`;
+  const signature = `${metric}|${side}|${nights.length}|${nights[0]?.date ?? ''}|${nights[nights.length - 1]?.date ?? ''}`;
   useEffect(() => {
     setPinned(null);
     setPreview(null);
   }, [signature]);
 
-  const indexAt = useRef<(x: number) => number | null>(() => null);
-  indexAt.current = (x: number) => nightIndexAt(x, model.slot, INSETS.left, nights.length);
+  const latest = useRef({ model, count: nights.length, pinned });
+  latest.current = { model, count: nights.length, pinned };
+  const indexAt = (x: number) => nightIndexAt(x, latest.current.model.slot, INSETS.left, latest.current.count);
+  const step = useCallback((key: string): boolean => {
+    const { count, pinned: current } = latest.current;
+    const next = steppedIndex(key, current ?? count - 1, count);
+    if (next === null) return false;
+    setPreview(null);
+    setPinned(next);
+    return true;
+  }, []);
 
   // Web: listen on the real DOM node. react-native-web's synthetic events do
   // not carry pointer type, and a touch must pin the game (it has no hover).
@@ -80,7 +101,7 @@ export function ProfileChart({
     if (Platform.OS !== 'web' || !node || typeof node.addEventListener !== 'function') return;
     // Vertical swipes still scroll the sheet; sideways drags read games.
     node.style.touchAction = 'pan-y';
-    const at = (event: PointerEvent) => indexAt.current(event.clientX - node.getBoundingClientRect().left);
+    const at = (event: PointerEvent) => indexAt(event.clientX - node.getBoundingClientRect().left);
     // A click or a tap pins the game, and the same game again unpins it. A tap
     // acts on lift, so a swipe that turns into a scroll (pointercancel) never
     // changes the read-out; a sideways drag reads games as it goes.
@@ -103,16 +124,23 @@ export function ProfileChart({
     const leave = (event: PointerEvent) => {
       if (event.pointerType === 'mouse') setPreview(null);
     };
+    const key = (event: KeyboardEvent) => {
+      if (step(event.key)) event.preventDefault();
+    };
     node.addEventListener('pointerdown', down);
     node.addEventListener('pointerup', up);
     node.addEventListener('pointermove', move);
     node.addEventListener('pointerleave', leave);
+    node.addEventListener('keydown', key);
     cleanup.current = () => {
       node.removeEventListener('pointerdown', down);
       node.removeEventListener('pointerup', up);
       node.removeEventListener('pointermove', move);
       node.removeEventListener('pointerleave', leave);
+      node.removeEventListener('keydown', key);
     };
+    // indexAt and step read refs, so the listeners bind once per node.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => () => cleanup.current?.(), []);
 
@@ -121,9 +149,10 @@ export function ProfileChart({
     () => PanResponder.create({
       onStartShouldSetPanResponder: () => Platform.OS !== 'web',
       onMoveShouldSetPanResponder: (_event, gesture) => Platform.OS !== 'web' && Math.abs(gesture.dx) > Math.abs(gesture.dy),
-      onPanResponderGrant: (event) => setPinned(indexAt.current(event.nativeEvent.locationX)),
-      onPanResponderMove: (event) => setPinned(indexAt.current(event.nativeEvent.locationX)),
+      onPanResponderGrant: (event) => setPinned(indexAt(event.nativeEvent.locationX)),
+      onPanResponderMove: (event) => setPinned(indexAt(event.nativeEvent.locationX)),
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -144,6 +173,8 @@ export function ProfileChart({
   const shownIndex = active ?? nights.length - 1;
   const shown = nights[shownIndex];
   const anchor = model.anchors[shownIndex];
+  const reading = nightReadout(shown, metric, side);
+  const source = nightSourceLabel(shown, side);
   const labelAnchor = (x: number) => (x < 60 ? 'start' : x > width - 60 ? 'end' : 'middle');
   const labels = ([['HIGH', model.high], ['LOW', model.low]] as const).filter(
     (entry): entry is readonly ['HIGH' | 'LOW', number] => entry[1] !== null && active === null,
@@ -152,21 +183,30 @@ export function ProfileChart({
 
   return (
     <View>
-      <View accessibilityLiveRegion="polite" style={styles.readout}>
+      <View style={styles.readout}>
         <Text maxFontSizeMultiplier={1.4} style={styles.readoutDate}>
-          {active === null ? `Latest game · ${humanDate(shown.date)}` : humanDate(shown.date)}
+          {`${active === null ? 'Latest game · ' : ''}${humanDate(shown.date)} · ${source}`}
         </Text>
-        <Text maxFontSizeMultiplier={1.4} style={styles.readoutValue}>
-          {nightReadout(shown, metric)}
-        </Text>
+        <Text maxFontSizeMultiplier={1.4} style={styles.readoutValue}>{reading}</Text>
       </View>
       <View
-        accessibilityLabel={chartSummary(nights, metric)}
-        accessibilityRole="image"
         accessible
+        // Native screen readers step games with their adjust gesture; on the
+        // web the slider takes arrow keys, Home and End.
+        accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+        accessibilityLabel={chartSummary(nights, metric, side)}
+        accessibilityRole="adjustable"
+        aria-valuemax={nights.length - 1}
+        aria-valuemin={0}
+        aria-valuenow={shownIndex}
+        aria-valuetext={`${humanDate(shown.date)}, ${source}. ${reading}`}
+        onAccessibilityAction={(event) => {
+          step(event.nativeEvent.actionName === 'increment' ? 'ArrowRight' : 'ArrowLeft');
+        }}
         onLayout={onLayout}
         ref={attach}
         style={[styles.plot, { height }]}
+        tabIndex={0}
         {...responder.panHandlers}
       >
         {width > 0 ? (
@@ -240,22 +280,22 @@ export function ProfileChart({
         <Text style={styles.axisText}>{humanDate(nights[0].date)}</Text>
         {nights.length > 1 ? <Text style={styles.axisText}>{humanDate(nights[nights.length - 1].date)}</Text> : null}
       </View>
-      <View style={styles.legend}>
+      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.legend}>
         {metric === 'dividends' ? (
           <>
             <View style={styles.legendItem}>
               <View style={[styles.swatch, { backgroundColor: colors.green }]} />
-              <Text style={styles.legendText}>Beat his price</Text>
+              <Text style={styles.legendText}>{words.legendGood}</Text>
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.swatch, { backgroundColor: colors.red }]} />
-              <Text style={styles.legendText}>Fell short</Text>
+              <Text style={styles.legendText}>{words.legendBad}</Text>
             </View>
           </>
         ) : null}
         <View style={styles.legendItem}>
           <View style={[styles.dash, metric === 'price' && styles.dashSolid]} />
-          <Text style={styles.legendText}>His price a game</Text>
+          <Text style={styles.legendText}>{words.legendLine}</Text>
         </View>
       </View>
     </View>
@@ -287,6 +327,7 @@ const styles = StyleSheet.create({
   plot: {
     width: '100%',
     cursor: 'pointer',
+    borderRadius: radius.sm,
   },
   empty: {
     alignItems: 'center',

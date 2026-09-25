@@ -2,17 +2,26 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameMarketPlayer, PerGameSettledResult } from '../api/contracts';
+import { positionValue } from './perGameMetrics';
 import {
   accountValueByPlayer,
   actionableFirst,
   actionName,
+  actionWord,
+  confirmAnnouncement,
+  confirmName,
+  CONFIRM_WINDOW_MS,
   filterMarketRows,
   heldDetail,
+  keepNamesWhole,
+  marketColumns,
+  marketLayout,
   netTone,
   rowProfileLabel,
   searchKey,
   slotSummary,
   sortMarketRows,
+  valueByPosition,
   valueSignal,
 } from './marketView';
 
@@ -85,15 +94,29 @@ test('the watching filter keeps only watched players and combines with search', 
   assert.equal(ids(filterMarketRows(rows, { query: '', watchedOnly: false, watched: [] })), 'abcde');
 });
 
-test('the value signal reads in plain English, flips for a short, and admits a missing season', () => {
-  assert.deepEqual(valueSignal(rows[0].player, 'long'), { edge: 15_000, text: '+$15K a game last year', tone: 'gain' });
-  assert.deepEqual(valueSignal(rows[0].player, 'short'), { edge: -15_000, text: '-$15K a game last year', tone: 'loss' });
-  assert.deepEqual(valueSignal(rows[2].player, 'long'), { edge: null, text: 'No last season', tone: 'none' });
+test('the value line states last season, then compares it with his price (grader M5)', () => {
+  assert.deepEqual(valueSignal(rows[0].player, 'long'), {
+    edge: 15_000,
+    lead: 'Last year $120K a game ·',
+    text: '+$15K vs his price',
+    tone: 'gain',
+  });
+  // The Short tab says what a short would have made: the same fact, flipped.
+  assert.deepEqual(valueSignal(rows[0].player, 'short'), {
+    edge: -15_000,
+    lead: 'Last year $120K a game ·',
+    text: '-$15K for a short',
+    tone: 'loss',
+  });
+  assert.deepEqual(valueSignal(rows[2].player, 'long'), { edge: null, lead: null, text: 'No last season', tone: 'none' });
   const even = valueSignal(player({ currentGameCost: 100_000, priorSeasonValuePerGame: 100_300 }), 'long');
   assert.equal(even.tone, 'even');
-  assert.equal(even.text, 'Even with last year');
+  assert.equal(even.text, 'even with his price');
   for (const side of ['long', 'short'] as const) {
-    for (const row of rows) assert.doesNotMatch(valueSignal(row.player, side).text, /\/GM|inverse|%/i);
+    for (const row of rows) {
+      const signal = valueSignal(row.player, side);
+      assert.doesNotMatch(`${signal.lead ?? ''} ${signal.text}`, /\/GM|inverse|%|so far/i);
+    }
   }
 });
 
@@ -139,10 +162,78 @@ test('account value per player counts one side, and a correction once', () => {
   assert.equal(accountValueByPlayer([], 'long').size, 0);
 });
 
-test('a held row shows his net a game so far, or the locked price before any game', () => {
-  const summary = accountValueByPlayer([result({ netPnl: 32_000 }), result({ netPnl: 32_000 })], 'long').get('a');
-  assert.deepEqual(heldDetail(summary, 100_000), { text: '+$32K a game so far', tone: 'gain' });
-  assert.deepEqual(heldDetail(undefined, 100_000), { text: 'locked at $100K', tone: 'none' });
+test('a held row reads the current position only, like its Roster row (grader B1)', () => {
+  // Two weeks on the roster, dropped, added again, one bad night since.
+  const firstStint = Array.from({ length: 11 }, (_, index) => result({
+    positionId: 'mock-position-1',
+    gameId: `old-${index}`,
+    netPnl: 148_364,
+  }));
+  const current = [result({ positionId: 'mock-position-12', gameId: 'new-1', netPnl: -368_339, dividendDollars: -265_000 })];
+  const all = [...firstStint, ...current];
+  // The all-stints value (what round 1 showed) is +$105K a game; the Roster row is -$368K.
+  assert.equal(heldDetail(accountValueByPlayer(all, 'long').get('a'), 103_000).text, '+$105K a game over 12 games');
+  const detail = heldDetail(positionValue(all, 'mock-position-12'), 103_000);
+  assert.deepEqual(detail, { text: '-$368K a game over 1 game', tone: 'loss' });
+  // Right after a re-add, before the new stint plays: the locked price, not the old stint.
+  assert.deepEqual(heldDetail(positionValue(all, 'mock-position-13'), 103_000), { text: 'locked at $103K', tone: 'none' });
+  assert.doesNotMatch(detail.text, /so far/);
+});
+
+test('value by position is positionValue for every position, in one pass', () => {
+  const list = [
+    result({ positionId: 'x', gameId: 'x1', netPnl: 10_000 }),
+    result({ positionId: 'x', gameId: 'x1', resultRevision: 2, kind: 'correction', netPnl: -5_000 }),
+    result({ positionId: 'y', gameId: 'y1', netPnl: 40_000 }),
+    result({ positionId: 'y', gameId: 'y2', status: 'verified_dnp', netPnl: 0, dividendDollars: 0 }),
+  ];
+  const map = valueByPosition(list);
+  for (const id of ['x', 'y']) assert.deepEqual(map.get(id), positionValue(list, id));
+  assert.equal(map.get('x')?.total, -5_000);
+  assert.equal(map.get('y')?.dnp, 1);
+  assert.equal(map.get('z'), undefined);
+});
+
+test('the button says why it is dimmed, asks before a drop, and waits while pending', () => {
+  const base = { side: 'long' as const, held: false, pending: false, confirming: false, rosterLocked: false, full: false };
+  assert.equal(actionWord(base), 'Add');
+  assert.equal(actionWord({ ...base, side: 'short' }), 'Short');
+  assert.equal(actionWord({ ...base, full: true }), 'Full');
+  assert.equal(actionWord({ ...base, rosterLocked: true, full: true }), 'Locked');
+  assert.equal(actionWord({ ...base, pending: true }), 'Wait');
+  assert.equal(actionWord({ ...base, held: true }), 'Drop');
+  assert.equal(actionWord({ ...base, held: true, full: true }), 'Drop', 'a full roster never blocks a drop');
+  assert.equal(actionWord({ ...base, held: true, confirming: true }), 'Drop?');
+  assert.equal(actionWord({ ...base, side: 'short', held: true, confirming: true }), 'Close?');
+  assert.equal(actionWord({ ...base, held: true, confirming: true, rosterLocked: true }), 'Locked');
+  assert.equal(confirmName('long', 'LeBron James'), 'Drop LeBron James from your roster? Tap again to confirm.');
+  assert.match(confirmName('short', 'LeBron James'), /^Close your short on LeBron James\?/);
+  assert.equal(
+    confirmAnnouncement('long', 'LeBron James', 250),
+    'Tap Drop again within 4 seconds to drop LeBron James. It costs a $250 fee.',
+  );
+  assert.equal(confirmAnnouncement('short', 'LeBron James', 0), 'Tap Close again within 4 seconds to close your short on LeBron James.');
+  assert.equal(CONFIRM_WINDOW_MS, 4000);
+});
+
+test('layout: a table from 768px, the phone row below, one column under 300px or with big text', () => {
+  assert.equal(marketLayout(1440, 1), 'table');
+  assert.equal(marketLayout(820, 1), 'table');
+  assert.equal(marketLayout(768, 1), 'table');
+  assert.equal(marketLayout(767, 1), 'phone');
+  assert.equal(marketLayout(360, 1), 'phone');
+  assert.equal(marketLayout(299, 1), 'large');
+  assert.equal(marketLayout(390, 2), 'large');
+  assert.equal(marketLayout(1440, 2), 'large');
+  assert.equal(keepNamesWhole(360), true);
+  assert.equal(keepNamesWhole(319), false);
+  const wide = marketColumns(1200);
+  const tablet = marketColumns(820);
+  assert.ok(wide.yours > 0);
+  assert.equal(tablet.yours, 0);
+  // At 768 the player column keeps room for "Gilgeous-Alexander" (about 150px).
+  const used = 32 + tablet.avatar + tablet.price + tablet.lastSeason + tablet.edge + tablet.action + tablet.gap * 5;
+  assert.ok(768 - used >= 180, `player column ${768 - used}px`);
 });
 
 test('a per-game net is green above the even band, red below it, muted inside it', () => {

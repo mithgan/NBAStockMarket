@@ -5,20 +5,10 @@
  */
 import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import type { MarketColumnSet } from '../../data/marketView';
 import { colors, control, fonts, radius, space, type, weight } from '../../theme';
 import { Label } from '../../ui/kit';
 import { CloseIcon, SearchIcon, StarIcon } from './icons';
-
-/** Fixed widths so the desktop header and every row line up column for column. */
-export const MARKET_COLUMNS = {
-  avatar: 36,
-  price: 104,
-  lastSeason: 104,
-  edge: 150,
-  yours: 150,
-  action: 112,
-  gap: space.md,
-} as const;
 
 export function MarketSearch({
   value,
@@ -80,8 +70,8 @@ export function WatchingToggle({
 }) {
   return (
     <Pressable
-      accessibilityHint={count === 1 ? 'You watch 1 player' : `You watch ${count} players`}
-      accessibilityLabel="Watching only"
+      // react-native-web drops hints, so the count rides in the name.
+      accessibilityLabel={`Watching only, ${count} ${count === 1 ? 'player' : 'players'}`}
       accessibilityRole="switch"
       accessibilityState={{ checked: on }}
       aria-checked={on}
@@ -99,16 +89,21 @@ export function WatchingToggle({
   );
 }
 
-/** Column labels above the desktop table. Widths come from MARKET_COLUMNS. */
-export function MarketColumnHeader({ edgeLabel }: { edgeLabel: string }) {
+/** Column labels above the table; the widths are the rows' own (marketColumns). */
+export function MarketColumnHeader({ columns, edgeLabel }: { columns: MarketColumnSet; edgeLabel: string }) {
   return (
-    <View style={styles.columns}>
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[styles.columns, { gap: columns.gap }]}
+    >
+      <View style={{ width: columns.avatar }} />
       <Label style={styles.columnPlayer}>Player</Label>
-      <Label style={[styles.column, { width: MARKET_COLUMNS.price }]}>Price a game</Label>
-      <Label style={[styles.column, { width: MARKET_COLUMNS.lastSeason }]}>Last season</Label>
-      <Label style={[styles.column, { width: MARKET_COLUMNS.edge }]}>{edgeLabel}</Label>
-      <Label style={[styles.column, { width: MARKET_COLUMNS.yours }]}>Your net a game</Label>
-      <View style={{ width: MARKET_COLUMNS.action }} />
+      <Label style={[styles.column, { width: columns.price }]}>Price a game</Label>
+      <Label style={[styles.column, { width: columns.lastSeason }]}>Last season</Label>
+      <Label style={[styles.column, { width: columns.edge }]}>{edgeLabel}</Label>
+      {columns.yours > 0 ? <Label style={[styles.column, { width: columns.yours }]}>Your net a game</Label> : null}
+      <View style={{ width: columns.action }} />
     </View>
   );
 }
@@ -193,7 +188,6 @@ const styles = StyleSheet.create({
     minHeight: 32,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: MARKET_COLUMNS.gap,
     paddingHorizontal: space.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.borderStrong,
