@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { boardPlaces, leaderStanding, sortBoard, standingLines, standingPlace, type Standing } from './leadersView';
+import { boardLag, boardPlaces, leaderStanding, sortBoard, standingLines, standingPlace, type Standing } from './leadersView';
 
 function board(scores: Array<[string, number, boolean?]>): PerGameLeaderboardRow[] {
   return scores.map(([displayName, cumulativePnl, isCurrentUser], index) => ({
@@ -31,7 +31,7 @@ test('in the middle: the gap to the rank above and to #1', () => {
   assert.equal(standing.of, 5);
   assert.equal(standing.score, 125_000);
   assert.equal(standingPlace(standing), '#3');
-  assert.deepEqual(standingLines(standing), ['$12K behind #2', '$1.1M behind #1']);
+  assert.deepEqual(standingLines(standing), ['$12K behind #2', '$1.07M behind #1']);
 });
 
 test('second place names #1 once', () => {
@@ -41,7 +41,7 @@ test('second place names #1 once', () => {
     ['Cal', -241_000],
   ])));
   assert.equal(standingPlace(standing), '#2');
-  assert.deepEqual(standingLines(standing), ['$1.1M behind #1']);
+  assert.deepEqual(standingLines(standing), ['$1.07M behind #1']);
   assert.equal(standing.first, null);
 });
 
@@ -65,7 +65,7 @@ test('last place still sees the next rank up and the leader', () => {
     ['You', -395_500, true],
   ])));
   assert.equal(standingPlace(standing), '#5');
-  assert.deepEqual(standingLines(standing), ['$250 behind #4', '$791K behind #1']);
+  assert.deepEqual(standingLines(standing), ['$250 behind #4', '$790.9K behind #1']);
 });
 
 test('a tie shares the best rank, whatever order the server listed it in', () => {
@@ -136,4 +136,22 @@ test('the list shows a tie as one shared place, matching "Tied for #2"', () => {
   assert.deepEqual(places.get('entry-You'), { place: 2, tied: true });
   assert.deepEqual(places.get('entry-Ava'), { place: 1, tied: false });
   assert.deepEqual(places.get('entry-Cal'), { place: 4, tied: false });
+});
+
+test('gaps carry one more digit, so two different scores never read the same', () => {
+  // #1 and #2 are $250 apart; rounded to $395K both gaps would look identical.
+  const standing = ranked(leaderStanding(board([
+    ['Ava', 395_438],
+    ['Ben', 395_188],
+    ['You', 0, true],
+  ])));
+  assert.deepEqual(standingLines(standing), ['$395.2K behind #2', '$395.4K behind #1']);
+});
+
+test('the board can lag your account score until the next games settle', () => {
+  const standing = leaderStanding(board([['Ava', 300_000], ['You', 125_000, true]]));
+  assert.equal(boardLag(standing, 125_000), null, 'in step: no caption');
+  assert.equal(boardLag(standing, 124_750), -250, 'a $250 fee since the last games');
+  assert.equal(boardLag({ kind: 'absent', of: 1 }, 5_000), null);
+  assert.equal(boardLag({ kind: 'empty' }, 5_000), null);
 });

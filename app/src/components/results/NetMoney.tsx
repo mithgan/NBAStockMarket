@@ -1,16 +1,32 @@
-import type { StyleProp, TextStyle } from 'react-native';
+import { StyleSheet, Text, type StyleProp, type TextStyle } from 'react-native';
 
-import { colors } from '../../theme';
-import { Money, type MoneySize } from '../../ui/kit';
+import { exactMoney, exactSignedMoney, moneyFine, signedMoneyFine } from '../../copy/terms';
+import { colors, fonts, type, weight } from '../../theme';
+import { Money, moneyColor, type MoneySize } from '../../ui/kit';
+
+const SIZE: Record<MoneySize, number> = {
+  label: type.label,
+  body: type.body,
+  value: type.value,
+  title: type.title,
+  display: type.display,
+  hero: type.hero,
+};
 
 /**
  * A result or a score: signed and green/red, except exactly nothing, which
  * reads "$0" in muted ink rather than "+$0".
+ *
+ * `fine` shows one more digit ("+$446.5K", "-$4.85M", "$3,500") where the
+ * figure sits beside others it must visibly add up with: a row's dividend and
+ * price, or scores and the gaps between them.
  */
 export function NetMoney({
   value,
   size = 'value',
   compact = true,
+  fine = false,
+  signed = true,
   style,
   accessibilityLabel,
 }: {
@@ -18,10 +34,30 @@ export function NetMoney({
   size?: MoneySize;
   /** false for the exact amount ("+$136,000") instead of "+$136K". */
   compact?: boolean;
+  fine?: boolean;
+  /** false for an amount that is neither gain nor loss (a price). */
+  signed?: boolean;
   style?: StyleProp<TextStyle>;
   accessibilityLabel?: string;
 }) {
-  if (Math.round(value) === 0) {
+  const zero = Math.round(value) === 0;
+  if (fine) {
+    return (
+      <Text
+        accessibilityLabel={accessibilityLabel ?? (signed && !zero ? exactSignedMoney(value) : exactMoney(value))}
+        maxFontSizeMultiplier={1.4}
+        style={[
+          styles.fine,
+          { fontSize: SIZE[size], color: !signed || zero ? colors.muted : moneyColor(value) },
+          !signed && styles.plain,
+          style,
+        ]}
+      >
+        {signed ? signedMoneyFine(value) : moneyFine(value)}
+      </Text>
+    );
+  }
+  if (zero) {
     return (
       <Money
         accessibilityLabel={accessibilityLabel}
@@ -44,3 +80,14 @@ export function NetMoney({
     />
   );
 }
+
+const styles = StyleSheet.create({
+  fine: {
+    fontFamily: fonts.display,
+    fontVariant: ['tabular-nums'],
+    fontWeight: weight.heavy,
+  },
+  plain: {
+    color: colors.text,
+  },
+});

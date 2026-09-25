@@ -2,53 +2,48 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { PerGamePositionSide } from '../../api/contracts';
 import { exactMoney, exactSignedMoney, ROSTER_EXPLAINER, SHORT_EXPLAINER } from '../../copy/terms';
+import type { EffectLine } from '../../data/resultsView';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { NetMoney } from './NetMoney';
 
-function Line({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.line}>
-      <Text style={styles.lineLabel}>{label}</Text>
-      <Text style={styles.lineValue}>{value}</Text>
-    </View>
-  );
+/** "+$112,500", "-$137,500", and "$0" for nothing. */
+function effect(amount: number): string {
+  return Math.round(amount) === 0 ? exactMoney(0) : exactSignedMoney(amount);
 }
 
 /**
- * The full settlement of one game, opened from its row: what came in, what
- * went out, and the net, as exact dollars in a right-aligned column that sits
- * under the row's own net. Labels come from `settlementEquation` (Dividend −
- * Price paid for a roster spot; Price credited − Dividend paid for a short).
+ * The full settlement of one game, opened from its row. Each line says what it
+ * was and what it did to YOUR score, signed, so the lines simply add up to the
+ * net: no minus sign in front of a negative number, and "paid" never names a
+ * dividend (it ran backwards for shorts). The wording is built by
+ * `settlementLines` (data/resultsView.ts).
  */
 export function SettlementBreakdown({
-  firstLabel,
-  firstAmount,
-  secondLabel,
-  secondAmount,
-  netPnl,
+  lines,
+  net,
   side,
   wide,
 }: {
-  firstLabel: string;
-  firstAmount: number;
-  secondLabel: string;
-  secondAmount: number;
-  netPnl: number;
+  lines: readonly EffectLine[];
+  net: number;
   side: PerGamePositionSide;
   /** Desktop: a receipt-width column aligned to the right, under the numbers. */
   wide: boolean;
 }) {
+  const spoken = [...lines.map((line) => `${line.label}: ${effect(line.amount)}`), `Net: ${effect(net)}`].join('. ');
   return (
     <View style={[styles.box, wide && styles.boxWide]}>
-      <View
-        accessibilityLabel={`${firstLabel} ${exactMoney(firstAmount)} minus ${secondLabel} ${exactMoney(secondAmount)} equals ${exactSignedMoney(netPnl)}`}
-        accessible
-      >
-        <Line label={firstLabel} value={exactMoney(firstAmount)} />
-        <Line label={`− ${secondLabel}`} value={exactMoney(secondAmount)} />
+      <View accessibilityLabel={`${spoken}.`} accessible>
+        <Text style={styles.heading}>For you</Text>
+        {lines.map((line) => (
+          <View key={line.label} style={styles.line}>
+            <Text style={styles.lineLabel}>{line.label}</Text>
+            <Text style={styles.lineValue}>{effect(line.amount)}</Text>
+          </View>
+        ))}
         <View style={[styles.line, styles.total]}>
-          <Text style={[styles.lineLabel, styles.totalLabel]}>= Net</Text>
-          <NetMoney compact={false} size="body" value={netPnl} />
+          <Text style={[styles.lineLabel, styles.totalLabel]}>Net</Text>
+          <NetMoney compact={false} size="body" style={styles.lineMoney} value={net} />
         </View>
       </View>
       <Text style={styles.explainer}>{side === 'short' ? SHORT_EXPLAINER : ROSTER_EXPLAINER}</Text>
@@ -65,30 +60,48 @@ const styles = StyleSheet.create({
   boxWide: {
     alignSelf: 'flex-end',
     width: '100%',
-    maxWidth: 380,
+    maxWidth: 440,
+  },
+  heading: {
+    marginBottom: 2,
+    color: colors.faint,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.heavy,
+    letterSpacing: 1.1,
+    textAlign: 'right',
+    textTransform: 'uppercase',
   },
   line: {
     minHeight: 22,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
     columnGap: space.md,
+    paddingVertical: 1,
   },
   lineLabel: {
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
     color: colors.muted,
     fontSize: type.body,
     lineHeight: 20,
+    fontVariant: ['tabular-nums'],
   },
   lineValue: {
-    marginLeft: 'auto',
+    flexShrink: 0,
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: type.body,
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
     lineHeight: 20,
+    textAlign: 'right',
+  },
+  lineMoney: {
+    flexShrink: 0,
+    lineHeight: 20,
+    textAlign: 'right',
   },
   total: {
     marginTop: 2,

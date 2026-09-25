@@ -1,17 +1,17 @@
 /**
  * The Results feed as one flat list the screen can virtualise:
- * [night header, its rows…, the next night's header, its rows…], newest night
+ * [day header, its rows…, the next day's header, its rows…], newest day
  * first. It answers "what happened last night, and each night before?".
  *
- * - A night lists each player's game once, at its latest revision: a
- *   correction replaces its base result (perGameMetrics.currentResults).
- * - A night's total is perGameMetrics.nightTotals — the same number every
- *   screen uses — plus any fee the ledger dated to that night, so the newest
- *   night agrees with recentEarnings' "last night" exactly as the score counts it.
- * - Fees with no game night (adding, dropping or shorting a player) are
- *   grouped as roster moves by the day they were charged and placed where they
- *   happened between nights, by event cursor. The group is labelled with that
- *   day when it fits between those nights, otherwise by the nights themselves.
+ * - A day lists each player's game once, at its latest revision: a correction
+ *   replaces its base result (perGameMetrics.currentResults).
+ * - A day's total is perGameMetrics.nightTotals — the same game number every
+ *   screen uses — plus the fees that belong to that day. A fee belongs to its
+ *   game date, or, for an add or drop fee, to the day it was booked: exactly
+ *   the rule perGameMetrics.recentEarnings uses, so the newest night here is
+ *   the "Last night" the chrome and the Roster show.
+ * - A day with fees but no games (moves made for games still to come, or a
+ *   night none of your players played) is still a day in the feed.
  */
 import type {
   PerGameBootstrap,
@@ -19,26 +19,43 @@ import type {
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
-import { humanDay, signedMoney } from '../copy/terms';
+import { exactMoney, signedMoneyFine } from '../copy/terms';
 import type { SettlementEquation } from '../state/perGameState';
 import { currentResults, nightTotals, summarizeValue } from './perGameMetrics';
 
 export type ResultsFeedSource = Pick<PerGameBootstrap, 'settledResults' | 'ledger' | 'positions'>;
 
+export interface ResultsFeedOptions {
+  /** The last settled game day. A later day can only hold moves for games still to come. */
+  lastSettledDate?: string | null;
+}
+
 const FEE_KINDS: ReadonlySet<string> = new Set(['open_fee', 'drop_fee', 'fee', 'penalty']);
+const MOVE_KINDS: ReadonlySet<string> = new Set(['open_fee', 'drop_fee']);
 
 /** Ledger rows that are account activity rather than a game's cost or dividend. */
 export function isFeeEntry(entry: PerGameLedgerEntry): boolean {
   return FEE_KINDS.has(entry.kind);
 }
 
+/**
+ * The day a fee counts on: its game date, else the day it was booked (the
+ * UTC day of its timestamp). The same rule as perGameMetrics.recentEarnings.
+ */
+export function feeDay(entry: PerGameLedgerEntry): string | null {
+  if (entry.gameDate) return entry.gameDate;
+  return entry.createdAt ? entry.createdAt.slice(0, 10) : null;
+}
+
 export interface NightSummary {
-  /** The game night, "2025-11-05". */
+  /** The day, "2025-11-05". */
   date: string;
-  /** What the night did to your score: its settled games plus fees dated to it. */
+  /** What the day did to your score: its settled games plus its fees. */
   total: number;
-  /** Net of the night's settled games alone (nightTotals). */
+  /** Net of the day's settled games alone (nightTotals). */
   gamesNet: number;
+  /** Game rows listed under the day (every status). */
+  results: number;
   /** Settled games with a known result, and how many made money. */
   games: number;
   wins: number;
@@ -51,65 +68,30 @@ export interface NightSummary {
   dnp: number;
   /** Games played but not settled yet. */
   pending: number;
-  /** Fees the ledger dated to this night, summed, and how many. */
+  /** The day's fees, summed, and how many; `moves` of them are add or drop fees. */
   fees: number;
   feeCount: number;
+  moves: number;
   /** Games whose current result is a correction. */
   corrections: number;
-}
-
-export interface MovesSummary {
-  /**
-   * The day the fees were charged ("2025-11-05", the viewer's own calendar
-   * day), or null when that day does not fit between the nights around it —
-   * practice mode stamps fees with the real clock, not the simulated season.
-   */
-  date: string | null;
-  /** The newer night these moves came before, for "before the Wed, Nov 5 games". */
-  before: string | null;
-  /** The older night these moves came after, for "after the Tue, Nov 4 games". */
-  after: string | null;
-  total: number;
-  count: number;
-}
-
-export interface ResultsFeedOptions {
-  /** The next scheduled games; a roster move made since the newest night cannot be dated past it. */
-  nextGameDate?: string | null;
-  /** The calendar day of a ledger timestamp. Defaults to the viewer's local day. */
-  dayOf?: (timestamp: string) => string;
+  /** After the last settled day: only moves for games still to come. */
+  upcoming: boolean;
 }
 
 export type ResultsFeedItem =
   | { type: 'night'; key: string; night: NightSummary }
   | { type: 'result'; key: string; date: string; result: PerGameSettledResult }
   | {
-      type: 'fee';
+      /** The fees under a day that also had games, introduced by a small heading. */
+      type: 'fees';
       key: string;
-      /** The night the fee belongs to, or null for a roster move between nights. */
-      date: string | null;
-      entry: PerGameLedgerEntry;
-      side: PerGamePositionSide | null;
+      date: string;
+      count: number;
+      total: number;
+      /** Every fee is an add or a drop. */
+      moves: boolean;
     }
-  | { type: 'moves'; key: string; moves: MovesSummary };
-
-function isoDay(value: string): string {
-  return value.includes('T') ? value.slice(0, 10) : value;
-}
-
-/**
- * The viewer's calendar day for a ledger timestamp: a fee charged at 9pm in
- * New York on Nov 5 belongs to Nov 5, though it is already Nov 6 in UTC.
- * Game dates are calendar days already and never go through this.
- */
-export function localDay(timestamp: string): string {
-  if (!timestamp.includes('T')) return timestamp;
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return isoDay(timestamp);
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
-}
+  | { type: 'fee'; key: string; date: string; entry: PerGameLedgerEntry; side: PerGamePositionSide | null };
 
 function isCounted(result: PerGameSettledResult): boolean {
   return result.status === 'settled' && result.netPnl !== null && result.dividendDollars !== null;
@@ -132,11 +114,15 @@ function byNewestEntry(left: PerGameLedgerEntry, right: PerGameLedgerEntry): num
   return right.eventCursor - left.eventCursor || right.entryId.localeCompare(left.entryId);
 }
 
+/** Fees with no day at all sort after every real day, under this key. */
+const NO_DAY = '';
+
 function summarizeNight(
   date: string,
   results: readonly PerGameSettledResult[],
   fees: readonly PerGameLedgerEntry[],
   totals: ReadonlyMap<string, { net: number; games: number; wins: number; dnp: number; pending: number }>,
+  lastSettledDate: string | null,
 ): NightSummary {
   const total = totals.get(date);
   const roster = summarizeValue(results.filter((result) => result.side === 'long'));
@@ -147,6 +133,7 @@ function summarizeNight(
     date,
     total: gamesNet + feeTotal,
     gamesNet,
+    results: results.length,
     games: total?.games ?? 0,
     wins: total?.wins ?? 0,
     rosterGames: roster.games,
@@ -157,7 +144,10 @@ function summarizeNight(
     pending: total?.pending ?? 0,
     fees: feeTotal,
     feeCount: fees.length,
+    moves: fees.filter((entry) => MOVE_KINDS.has(entry.kind)).length,
     corrections: results.filter((result) => result.kind === 'correction').length,
+    upcoming: results.length === 0 && date !== NO_DAY
+      && lastSettledDate !== null && date > lastSettledDate,
   };
 }
 
@@ -169,119 +159,67 @@ export function buildResultsFeed(
   source: ResultsFeedSource,
   options: ResultsFeedOptions = {},
 ): ResultsFeedItem[] {
-  const dayOf = options.dayOf ?? localDay;
-  const current = currentResults(source.settledResults);
+  const lastSettledDate = options.lastSettledDate ?? null;
   const totals = new Map(nightTotals(source.settledResults).map((night) => [night.date, night]));
   const sideOf = new Map(source.positions.map((position) => [position.positionId, position.side]));
 
-  const resultsByNight = new Map<string, PerGameSettledResult[]>();
-  for (const result of current) {
-    const list = resultsByNight.get(result.gameDate) ?? [];
+  const resultsByDay = new Map<string, PerGameSettledResult[]>();
+  for (const result of currentResults(source.settledResults)) {
+    const list = resultsByDay.get(result.gameDate) ?? [];
     list.push(result);
-    resultsByNight.set(result.gameDate, list);
+    resultsByDay.set(result.gameDate, list);
   }
-
-  // When each night was first settled (its earliest event), so roster moves
-  // can be placed between the nights they happened between.
-  const settledAt = new Map<string, number>();
-  for (const result of source.settledResults) {
-    const seen = settledAt.get(result.gameDate);
-    if (seen === undefined || result.eventCursor < seen) settledAt.set(result.gameDate, result.eventCursor);
-  }
-
-  const feesByNight = new Map<string, PerGameLedgerEntry[]>();
-  const moves: PerGameLedgerEntry[] = [];
+  const feesByDay = new Map<string, PerGameLedgerEntry[]>();
   for (const entry of source.ledger.items) {
     if (!isFeeEntry(entry)) continue;
-    if (entry.gameDate) {
-      const date = isoDay(entry.gameDate);
-      const list = feesByNight.get(date) ?? [];
-      list.push(entry);
-      feesByNight.set(date, list);
-      const seen = settledAt.get(date);
-      if (seen === undefined || entry.eventCursor < seen) settledAt.set(date, entry.eventCursor);
-    } else {
-      moves.push(entry);
-    }
+    const day = feeDay(entry) ?? NO_DAY;
+    const list = feesByDay.get(day) ?? [];
+    list.push(entry);
+    feesByDay.set(day, list);
   }
-  moves.sort(byNewestEntry);
 
-  const items: ResultsFeedItem[] = [];
-  let nextMove = 0;
-  /**
-   * Emit every roster move newer than `cursor` (all that remain when null).
-   * They sit between the older night `after` and the newer night `before`;
-   * their charge day is shown only when it fits between those two nights.
-   */
-  const emitMoves = (cursor: number | null, before: string | null, after: string | null) => {
-    const latest = before ?? options.nextGameDate ?? null;
-    // Before any night has settled, the moves were made for the next games.
-    const ahead = before ?? (after === null ? options.nextGameDate ?? null : null);
-    let group: PerGameLedgerEntry[] = [];
-    const flush = () => {
-      if (group.length === 0) return;
-      const day = dayOf(group[0].createdAt);
-      const fits = (after === null || day >= after) && (latest === null || day <= latest);
-      items.push({
-        type: 'moves',
-        key: `moves:${group[0].entryId}`,
-        moves: {
-          date: fits ? day : null,
-          before: ahead,
-          after,
-          total: group.reduce((sum, entry) => sum + entry.amountDollars, 0),
-          count: group.length,
-        },
-      });
-      for (const entry of group) {
-        items.push({
-          type: 'fee',
-          key: `fee:${entry.entryId}`,
-          date: null,
-          entry,
-          side: sideOf.get(entry.positionId) ?? null,
-        });
-      }
-      group = [];
-    };
-    while (nextMove < moves.length && (cursor === null || moves[nextMove].eventCursor > cursor)) {
-      const entry = moves[nextMove];
-      if (group.length > 0 && dayOf(group[0].createdAt) !== dayOf(entry.createdAt)) flush();
-      group.push(entry);
-      nextMove += 1;
-    }
-    flush();
-  };
-
-  const dates = [...new Set([...resultsByNight.keys(), ...feesByNight.keys()])]
+  const days = [...new Set([...resultsByDay.keys(), ...feesByDay.keys()])]
     .sort((left, right) => right.localeCompare(left));
-  let newer: string | null = null;
-  for (const date of dates) {
-    emitMoves(settledAt.get(date) ?? Number.NEGATIVE_INFINITY, newer, date);
-    newer = date;
-    const results = [...(resultsByNight.get(date) ?? [])].sort(byRowOrder);
-    const fees = [...(feesByNight.get(date) ?? [])].sort(byNewestEntry);
-    items.push({ type: 'night', key: `night:${date}`, night: summarizeNight(date, results, fees, totals) });
+  const items: ResultsFeedItem[] = [];
+  for (const date of days) {
+    const results = [...(resultsByDay.get(date) ?? [])].sort(byRowOrder);
+    const fees = [...(feesByDay.get(date) ?? [])].sort(byNewestEntry);
+    const night = summarizeNight(date, results, fees, totals, lastSettledDate);
+    items.push({ type: 'night', key: `night:${date}`, night });
     for (const result of results) {
       items.push({ type: 'result', key: `result:${result.positionId}:${result.gameId}`, date, result });
+    }
+    if (fees.length > 0 && results.length > 0) {
+      items.push({
+        type: 'fees',
+        key: `fees:${date}`,
+        date,
+        count: fees.length,
+        total: night.fees,
+        moves: night.moves === fees.length,
+      });
     }
     for (const entry of fees) {
       items.push({ type: 'fee', key: `fee:${entry.entryId}`, date, entry, side: sideOf.get(entry.positionId) ?? null });
     }
   }
-  emitMoves(null, newer, null);
   return items;
 }
 
-/** Nights in the feed, newest first. */
+/** Days in the feed, newest first. */
 export function feedNights(items: readonly ResultsFeedItem[]): NightSummary[] {
   return items.flatMap((item) => (item.type === 'night' ? [item.night] : []));
 }
 
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
 /**
- * One plain line under a night's date: "5 of 8 beat their price · 1 of 2
- * shorts paid off · 2 didn't play". A short pays off when its player stays
- * under his price, so shorts are counted apart instead of "beating" it.
+ * One plain line under a day's date: "5 of 8 beat their price · 1 of 2
+ * shorts paid off · 2 didn't play · fees -$500". A short pays off when its
+ * player stays under his price, so shorts are counted apart instead of
+ * "beating" it. A day with only fees says why there are no games.
  */
 export function nightSummaryLine(night: NightSummary): string {
   const parts: string[] = [];
@@ -292,26 +230,83 @@ export function nightSummaryLine(night: NightSummary): string {
   if (night.pending > 0) parts.push(`${night.pending} waiting on stats`);
   if (night.dnp > 0) parts.push(`${night.dnp} didn't play`);
   if (night.corrections > 0) parts.push(`${night.corrections} corrected`);
-  if (night.feeCount > 0) parts.push(`fees ${signedMoney(night.fees)}`);
+  if (night.results === 0) {
+    parts.push(night.moves === night.feeCount
+      ? plural(night.feeCount, 'roster move', 'roster moves')
+      : plural(night.feeCount, 'fee', 'fees'));
+    if (night.upcoming) parts.push('games still to come');
+    else if (night.date !== NO_DAY) parts.push('none of your players played');
+  } else if (night.feeCount > 0) {
+    // A no-break space keeps "fees" with its amount when the line wraps.
+    parts.push(`fees\u00a0${signedMoneyFine(night.fees)}`);
+  }
   return parts.join(' · ');
 }
 
-/**
- * The line under "Roster moves": "2 fees · Thu, Nov 6", or, when the charge
- * day does not fit the season around it, where the moves sit instead:
- * "12 fees · before the Tue, Oct 21 games".
- */
-export function movesSummaryLine(moves: MovesSummary): string {
-  const count = `${moves.count} ${moves.count === 1 ? 'fee' : 'fees'}`;
-  if (moves.date) return `${count} · ${humanDay(moves.date)}`;
-  if (moves.before) return `${count} · before the ${humanDay(moves.before)} games`;
-  if (moves.after) return `${count} · after the ${humanDay(moves.after)} games`;
-  return count;
-}
-
-/** True when a night's total is still unknown: nothing settled yet, games still waiting. */
+/** True when a day's total is still unknown: nothing settled yet, games still waiting. */
 export function nightTotalPending(night: NightSummary): boolean {
   return night.games === 0 && night.pending > 0 && night.feeCount === 0;
+}
+
+// ---------------------------------------------------------------------------
+// One result row
+
+/**
+ * The two amounts a settled game compares, in the order they subtract to
+ * the net: a roster spot's dividend minus his price; a short's credit (his
+ * price) minus his dividend. Never "paid": that word ran backwards for shorts.
+ */
+export interface ValuePair {
+  first: { label: string; amount: number };
+  second: { label: string; amount: number };
+}
+
+export function valuePair(
+  result: Pick<PerGameSettledResult, 'side' | 'lockedGameCost'>,
+  dividend: number,
+): ValuePair {
+  return result.side === 'short'
+    ? { first: { label: 'Credit', amount: result.lockedGameCost }, second: { label: 'dividend', amount: dividend } }
+    : { first: { label: 'Dividend', amount: dividend }, second: { label: 'price', amount: result.lockedGameCost } };
+}
+
+/** One line of the opened math: what it was, and what it did to your score. */
+export interface EffectLine {
+  label: string;
+  /** The effect on you, signed: + added to your score, - took from it. */
+  amount: number;
+}
+
+/**
+ * The settlement of one game, line by line, each by its effect on you, so no
+ * line ever needs a minus sign in front of a negative number. The lines sum to
+ * the net. A short turns his dividend around, and the label says so:
+ *   roster: Dividend collected +$584,000 · Price charged -$137,500
+ *   short:  Price credited +$112,500 · His dividend was -$320,000, which a short collects +$320,000
+ */
+export function settlementLines(input: {
+  side: PerGamePositionSide;
+  dividend: number;
+  price: number;
+  corrected: boolean;
+}): EffectLine[] {
+  const noun = input.corrected ? 'corrected dividend' : 'dividend';
+  const Noun = input.corrected ? 'Corrected dividend' : 'Dividend';
+  const was = `His ${noun} was ${exactMoney(input.dividend)}`;
+  if (input.side === 'short') {
+    const dividend: EffectLine = input.dividend > 0
+      ? { label: `${was}, which a short pays`, amount: -input.dividend }
+      : input.dividend < 0
+        ? { label: `${was}, which a short collects`, amount: -input.dividend }
+        : { label: Noun, amount: 0 };
+    return [{ label: 'Price credited', amount: input.price }, dividend];
+  }
+  const dividend: EffectLine = input.dividend > 0
+    ? { label: `${Noun} collected`, amount: input.dividend }
+    : input.dividend < 0
+      ? { label: `${was}, which a roster spot pays`, amount: input.dividend }
+      : { label: Noun, amount: 0 };
+  return [dividend, { label: 'Price charged', amount: -input.price }];
 }
 
 /**
@@ -322,12 +317,10 @@ export function nightTotalPending(night: NightSummary): boolean {
 export interface ResultRowModel {
   /** The net for the number column; null means "Net profit and loss unavailable". */
   net: number | null;
-  /** The arithmetic a tap opens. Only a settled game with every amount has one. */
+  /** A settled game's arithmetic: the pair on the row, and the lines a tap opens. */
   math: {
-    firstLabel: string;
-    firstAmount: number;
-    secondLabel: string;
-    secondAmount: number;
+    pair: ValuePair;
+    lines: EffectLine[];
     net: number;
   } | null;
   /**
@@ -345,19 +338,21 @@ export function resultRowModel(
   result: PerGameSettledResult,
   equation: SettlementEquation,
 ): ResultRowModel {
-  const math = (
-    result.status === 'settled'
+  const settled = result.status === 'settled'
+    && result.dividendDollars !== null
     && equation.firstAmount !== null
     && equation.secondAmount !== null
-    && equation.secondLabel !== null
-    && equation.netPnl !== null
-  ) ? {
-      firstLabel: equation.firstLabel,
-      firstAmount: equation.firstAmount,
-      secondLabel: equation.secondLabel,
-      secondAmount: equation.secondAmount,
-      net: equation.netPnl,
-    } : null;
+    && equation.netPnl !== null;
+  const math = settled && result.dividendDollars !== null && equation.netPnl !== null ? {
+    pair: valuePair(result, result.dividendDollars),
+    lines: settlementLines({
+      side: result.side,
+      dividend: result.dividendDollars,
+      price: result.lockedGameCost,
+      corrected: result.kind === 'correction',
+    }),
+    net: equation.netPnl,
+  } : null;
   // Only a fully settled game or a verified did-not-play has a final net —
   // the same games the night total counts. Anything still waiting shows no
   // number rather than a provisional one.

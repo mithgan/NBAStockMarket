@@ -10,18 +10,16 @@ import { settlementEquation } from '../state/perGameState';
 import { recentEarnings } from './perGameMetrics';
 import {
   buildResultsFeed,
+  feeDay,
   feedNights,
-  localDay,
-  movesSummaryLine,
   nightSummaryLine,
   nightTotalPending,
   resultRowModel,
+  settlementLines,
+  valuePair,
   type ResultsFeedItem,
   type ResultsFeedSource,
 } from './resultsView';
-
-/** Tests date ledger stamps in UTC so they pass in every time zone. */
-const utcDay = (timestamp: string) => timestamp.slice(0, 10);
 
 let cursor = 0;
 function result(overrides: Partial<PerGameSettledResult>): PerGameSettledResult {
@@ -57,7 +55,7 @@ function fee(overrides: Partial<PerGameLedgerEntry>): PerGameLedgerEntry {
     kind: 'open_fee',
     amountDollars: -250,
     adjustsEntryId: null,
-    createdAt: '2025-11-01T18:00:00Z',
+    createdAt: '2025-11-01T12:00:00.000Z',
     ...overrides,
   };
 }
@@ -92,6 +90,9 @@ function shape(items: readonly ResultsFeedItem[]): string[] {
   return items.map((item) => item.key);
 }
 
+// ---------------------------------------------------------------------------
+// Grouping
+
 test('nights run newest first, each header followed by its own rows', () => {
   const feed = buildResultsFeed(source([
     result({ positionId: 'pos-1', gameId: 'a1', gameDate: '2025-11-01', netPnl: 10_000 }),
@@ -113,6 +114,7 @@ test('nights run newest first, each header followed by its own rows', () => {
   assert.equal(newest.total, 20_000);
   assert.equal(newest.games, 2);
   assert.equal(newest.wins, 1);
+  assert.equal(newest.results, 2);
   assert.equal(nightSummaryLine(newest), '1 of 2 beat their price');
 });
 
@@ -224,132 +226,94 @@ test('shorts are counted as paying off, not as beating their price', () => {
   assert.equal(nightSummaryLine(night), '1 of 2 beat their price · 1 of 1 short paid off');
 });
 
-test('a fee dated to a game night sits in that night and counts in its total', () => {
+// ---------------------------------------------------------------------------
+// Fees
+
+test('a fee counts on its game date, or else on the day it was booked', () => {
+  assert.equal(feeDay(fee({ kind: 'penalty', gameDate: '2025-11-02' })), '2025-11-02');
+  assert.equal(feeDay(fee({ createdAt: '2025-11-03T12:00:00.000Z' })), '2025-11-03');
+  assert.equal(feeDay(fee({ createdAt: '' })), null);
+});
+
+test('a fee dated to a game night sits in that night, under a heading, and counts in its total', () => {
   const game = result({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-02', netPnl: 60_000 });
   const penalty = fee({ kind: 'penalty', gameDate: '2025-11-02', amountDollars: -5_000 });
   const feed = buildResultsFeed(source([game], [penalty], [position('pos-1', 'long')]));
-  assert.deepEqual(shape(feed), ['night:2025-11-02', 'result:pos-1:g1', `fee:${penalty.entryId}`]);
+  assert.deepEqual(shape(feed), ['night:2025-11-02', 'result:pos-1:g1', 'fees:2025-11-02', `fee:${penalty.entryId}`]);
   const [night] = feedNights(feed);
   assert.equal(night.gamesNet, 60_000);
   assert.equal(night.fees, -5_000);
   assert.equal(night.feeCount, 1);
   assert.equal(night.total, 55_000);
-  assert.equal(nightSummaryLine(night), '1 of 1 beat their price · fees -$5K');
-  const feeItem = feed[2];
+  assert.equal(nightSummaryLine(night), '1 of 1 beat their price · fees\u00a0-$5,000');
+  const heading = feed[2];
+  assert.ok(heading.type === 'fees');
+  assert.equal(heading.moves, false, 'a penalty is a fee, not a roster move');
+  const feeItem = feed[3];
   assert.ok(feeItem.type === 'fee');
   assert.equal(feeItem.date, '2025-11-02');
   assert.equal(feeItem.side, 'long');
 });
 
-test('fees with no game night become roster moves, placed where they happened', () => {
+test('add and drop fees join the night they were booked on, or make a day of their own', () => {
   cursor = 100;
-  const openRoster = fee({ entryId: 'open-roster', positionId: 'pos-1', createdAt: '2025-10-31T20:00:00Z' });
-  const openShort = fee({ entryId: 'open-short', positionId: 'pos-2', createdAt: '2025-10-31T20:05:00Z' });
+  const opening = fee({ entryId: 'open-a', positionId: 'pos-1', createdAt: '2025-11-01T12:00:00.000Z' });
+  const openingShort = fee({ entryId: 'open-b', positionId: 'pos-2', createdAt: '2025-11-01T12:00:00.000Z' });
   const nov1 = result({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-01' });
-  const drop = fee({ entryId: 'drop-roster', kind: 'drop_fee', positionId: 'pos-1', createdAt: '2025-11-02T15:00:00Z' });
-  const nov2 = result({ positionId: 'pos-2', gameId: 'g2', gameDate: '2025-11-02', side: 'short' });
-  const late = fee({ entryId: 'open-late', positionId: 'pos-3', createdAt: '2025-11-03T12:00:00Z' });
-  const feed = buildResultsFeed(source(
-    [nov1, nov2],
-    [openRoster, openShort, drop, late],
-    [position('pos-1', 'long'), position('pos-2', 'short')],
-  ), { dayOf: utcDay, nextGameDate: '2025-11-04' });
-  assert.deepEqual(shape(feed), [
-    'moves:open-late',
-    'fee:open-late',
-    'night:2025-11-02',
-    'result:pos-2:g2',
-    'moves:drop-roster',
-    'fee:drop-roster',
-    'night:2025-11-01',
-    'result:pos-1:g1',
-    'moves:open-short',
-    'fee:open-short',
-    'fee:open-roster',
-  ]);
-  const opening = feed.find((item) => item.key === 'moves:open-short');
-  assert.ok(opening && opening.type === 'moves');
-  assert.deepEqual(opening.moves, { date: '2025-10-31', before: '2025-11-01', after: null, total: -500, count: 2 });
-  assert.equal(movesSummaryLine(opening.moves), '2 fees · Fri, Oct 31');
-  const between = feed.find((item) => item.key === 'moves:drop-roster');
-  assert.ok(between && between.type === 'moves');
-  assert.deepEqual(between.moves, { date: '2025-11-02', before: '2025-11-02', after: '2025-11-01', total: -250, count: 1 });
-  const top = feed.find((item) => item.key === 'moves:open-late');
-  assert.ok(top && top.type === 'moves');
-  assert.equal(movesSummaryLine(top.moves), '1 fee · Mon, Nov 3');
-  const shortFee = feed.find((item) => item.key === 'fee:open-short');
-  assert.ok(shortFee && shortFee.type === 'fee');
-  assert.equal(shortFee.side, 'short');
-  assert.equal(shortFee.date, null);
-  const unknown = feed.find((item) => item.key === 'fee:open-late');
-  assert.ok(unknown && unknown.type === 'fee');
-  assert.equal(unknown.side, null, 'a position the bootstrap no longer lists has no known side');
-  // Undated fees never touch a night's total.
-  assert.deepEqual(feedNights(feed).map((night) => night.total), [50_000, 50_000]);
-});
-
-test('roster moves on different days get their own dated groups', () => {
-  cursor = 200;
-  const first = fee({ entryId: 'day-1', createdAt: '2025-11-04T10:00:00Z' });
-  const second = fee({ entryId: 'day-2', createdAt: '2025-11-05T10:00:00Z', amountDollars: -500 });
-  const feed = buildResultsFeed(source([], [first, second]), { dayOf: utcDay });
-  assert.deepEqual(shape(feed), ['moves:day-2', 'fee:day-2', 'moves:day-1', 'fee:day-1']);
-  assert.equal(feedNights(feed).length, 0);
-  const newest = feed[0];
-  assert.ok(newest.type === 'moves');
-  assert.equal(movesSummaryLine(newest.moves), '1 fee · Wed, Nov 5');
-});
-
-test('a charge day that does not fit the season says where the moves sit instead', () => {
-  // Practice mode stamps fees with the real clock while its nights replay 2025.
-  cursor = 250;
-  const opening = fee({ entryId: 'practice-open', createdAt: '2026-09-24T19:00:00Z' });
-  const oct21 = result({ positionId: 'pos-1', gameId: 'g21', gameDate: '2025-10-21' });
-  const oct22 = result({ positionId: 'pos-1', gameId: 'g22', gameDate: '2025-10-22' });
-  const drop = fee({ entryId: 'practice-drop', kind: 'drop_fee', createdAt: '2026-09-24T19:30:00Z' });
+  // Dropped for the Nov 2 games, which none of your players then played.
+  const drop = fee({ entryId: 'drop-a', kind: 'drop_fee', positionId: 'pos-1', createdAt: '2025-11-02T12:00:00.000Z' });
+  const nov3 = result({ positionId: 'pos-2', gameId: 'g3', gameDate: '2025-11-03', side: 'short' });
+  // Added for the Nov 4 games, which have not been played yet.
+  const late = fee({ entryId: 'open-c', positionId: 'pos-3', createdAt: '2025-11-04T12:00:00.000Z' });
   const feed = buildResultsFeed(
-    source([oct21, oct22], [opening, drop], [position('pos-1', 'long')]),
-    { dayOf: utcDay, nextGameDate: '2025-10-23' },
+    source([nov1, nov3], [opening, openingShort, drop, late], [position('pos-1', 'long'), position('pos-2', 'short')]),
+    { lastSettledDate: '2025-11-03' },
   );
   assert.deepEqual(shape(feed), [
-    'moves:practice-drop',
-    'fee:practice-drop',
-    'night:2025-10-22',
-    'result:pos-1:g22',
-    'night:2025-10-21',
-    'result:pos-1:g21',
-    'moves:practice-open',
-    'fee:practice-open',
+    'night:2025-11-04',
+    'fee:open-c',
+    'night:2025-11-03',
+    'result:pos-2:g3',
+    'night:2025-11-02',
+    'fee:drop-a',
+    'night:2025-11-01',
+    'result:pos-1:g1',
+    'fees:2025-11-01',
+    'fee:open-b',
+    'fee:open-a',
   ]);
-  const [after, , , , , , before] = feed;
-  assert.ok(after.type === 'moves' && before.type === 'moves');
-  assert.equal(after.moves.date, null);
-  assert.equal(movesSummaryLine(after.moves), '1 fee · after the Wed, Oct 22 games');
-  assert.equal(before.moves.date, null);
-  assert.equal(movesSummaryLine(before.moves), '1 fee · before the Tue, Oct 21 games');
-
-  // Opening night of practice: no night has settled, so the moves were for the next games.
-  const opening2 = buildResultsFeed(source([], [opening]), { dayOf: utcDay, nextGameDate: '2025-10-21' })[0];
-  assert.ok(opening2.type === 'moves');
-  assert.equal(movesSummaryLine(opening2.moves), '1 fee · before the Tue, Oct 21 games');
+  const [upcoming, , quiet, opener] = feedNights(feed);
+  assert.equal(upcoming.upcoming, true);
+  assert.equal(upcoming.total, -250);
+  assert.equal(nightSummaryLine(upcoming), '1 roster move · games still to come');
+  assert.equal(quiet.upcoming, false);
+  assert.equal(nightSummaryLine(quiet), '1 roster move · none of your players played');
+  assert.equal(opener.total, 50_000 - 500, 'the night the moves were made for carries their fees');
+  assert.equal(nightSummaryLine(opener), '1 of 1 beat their price · fees\u00a0-$500');
+  const heading = feed.find((item) => item.type === 'fees');
+  assert.ok(heading && heading.type === 'fees');
+  assert.deepEqual({ count: heading.count, total: heading.total, moves: heading.moves }, { count: 2, total: -500, moves: true });
+  const shortFee = feed.find((item) => item.key === 'fee:open-b');
+  assert.ok(shortFee && shortFee.type === 'fee');
+  assert.equal(shortFee.side, 'short');
+  const unknown = feed.find((item) => item.key === 'fee:open-c');
+  assert.ok(unknown && unknown.type === 'fee');
+  assert.equal(unknown.side, null, 'a position the bootstrap no longer lists has no known side');
 });
 
-test('a ledger timestamp is dated on the viewer\'s own calendar day', () => {
-  const previous = process.env.TZ;
-  try {
-    process.env.TZ = 'America/New_York';
-    assert.equal(localDay('2025-11-06T02:00:00Z'), '2025-11-05', '9pm Nov 5 in New York');
-    assert.equal(localDay('2025-11-06T15:00:00Z'), '2025-11-06');
-    process.env.TZ = 'Asia/Tokyo';
-    assert.equal(localDay('2025-11-05T20:00:00Z'), '2025-11-06', '5am Nov 6 in Tokyo');
-  } finally {
-    if (previous === undefined) delete process.env.TZ;
-    else process.env.TZ = previous;
-  }
-  assert.equal(localDay('2025-11-05'), '2025-11-05', 'a calendar day stays as it is');
+test('a fee with no date at all still shows, after every dated day', () => {
+  cursor = 200;
+  const feed = buildResultsFeed(source(
+    [result({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-01' })],
+    [fee({ entryId: 'nodate', createdAt: '' })],
+  ));
+  assert.deepEqual(shape(feed), ['night:2025-11-01', 'result:pos-1:g1', 'night:', 'fee:nodate']);
+  const undated = feedNights(feed)[1];
+  assert.equal(undated.upcoming, false);
+  assert.equal(nightSummaryLine(undated), '1 roster move');
 });
 
-test("the newest night's total matches recentEarnings' last night, corrections and dated fees included", () => {
+test("every night's total matches recentEarnings for that day: corrections, dated fees and booked moves included", () => {
   cursor = 300;
   const base = result({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-05', dividendDollars: 150_000, netPnl: 50_000 });
   const correction = result({
@@ -373,20 +337,24 @@ test("the newest night's total matches recentEarnings' last night, corrections a
   });
   const ledgerRow = (overrides: Partial<PerGameLedgerEntry>) => fee({ kind: 'game_cost', ...overrides });
   const ledger = [
+    fee({ kind: 'open_fee', amountDollars: -250, createdAt: '2025-11-05T12:00:00.000Z' }),
     ledgerRow({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-05', resultRevision: 1, kind: 'game_cost', amountDollars: -100_000 }),
     ledgerRow({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-05', resultRevision: 1, kind: 'game_dividend', amountDollars: 150_000 }),
     ledgerRow({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-05', resultRevision: 2, kind: 'dividend_correction', amountDollars: -30_000 }),
     ledgerRow({ positionId: 'pos-2', gameId: 'g2', gameDate: '2025-11-05', resultRevision: 1, kind: 'game_cost', amountDollars: 80_000 }),
     ledgerRow({ positionId: 'pos-2', gameId: 'g2', gameDate: '2025-11-05', resultRevision: 1, kind: 'game_dividend', amountDollars: -95_000 }),
     fee({ kind: 'penalty', gameDate: '2025-11-05', amountDollars: -1_000 }),
-    fee({ kind: 'open_fee', amountDollars: -250 }),
+    // Booked for the next games: not part of Nov 5.
+    fee({ kind: 'drop_fee', amountDollars: -250, createdAt: '2025-11-06T12:00:00.000Z' }),
   ];
-  const feed = buildResultsFeed(source([base, correction, short], ledger));
-  const [night] = feedNights(feed);
+  const nights = feedNights(buildResultsFeed(source([base, correction, short], ledger), { lastSettledDate: '2025-11-05' }));
+  const nov5 = nights.find((night) => night.date === '2025-11-05');
   const earnings = recentEarnings(ledger, '2025-11-05');
-  assert.ok(earnings);
-  assert.equal(night.total, 4_000);
-  assert.equal(night.total, earnings.night);
+  assert.ok(nov5 && earnings);
+  assert.equal(nov5.total, 3_750);
+  assert.equal(nov5.total, earnings.night);
+  assert.equal(nights[0].date, '2025-11-06');
+  assert.equal(nights[0].upcoming, true);
 });
 
 test('keys are unique and stable across rebuilds', () => {
@@ -396,7 +364,10 @@ test('keys are unique and stable across rebuilds', () => {
     result({ positionId: 'pos-2', gameId: 'g1', gameDate: '2025-11-01' }),
     result({ positionId: 'pos-1', gameId: 'g2', gameDate: '2025-11-02' }),
   ];
-  const ledger = [fee({ entryId: 'f1' }), fee({ entryId: 'f2', gameDate: '2025-11-02', kind: 'penalty' })];
+  const ledger = [
+    fee({ entryId: 'f1', createdAt: '2025-11-02T12:00:00.000Z' }),
+    fee({ entryId: 'f2', gameDate: '2025-11-02', kind: 'penalty' }),
+  ];
   const first = shape(buildResultsFeed(source(rows, ledger)));
   assert.equal(new Set(first).size, first.length);
   assert.deepEqual(shape(buildResultsFeed(source([...rows].reverse(), [...ledger].reverse()))), first);
@@ -417,6 +388,63 @@ test('game cost and dividend ledger rows are not listed as fees', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The words on a row and in its math
+
+test('a row pairs dividend and price for a roster spot, credit and dividend for a short, in subtracting order', () => {
+  const roster = valuePair({ side: 'long', lockedGameCost: 137_500 }, 584_000);
+  assert.deepEqual(roster, { first: { label: 'Dividend', amount: 584_000 }, second: { label: 'price', amount: 137_500 } });
+  const short = valuePair({ side: 'short', lockedGameCost: 112_500 }, 328_000);
+  assert.deepEqual(short, { first: { label: 'Credit', amount: 112_500 }, second: { label: 'dividend', amount: 328_000 } });
+  // First minus second is the net, whatever the signs.
+  for (const [side, price, dividend] of [
+    ['long', 137_500, 584_000], ['long', 100_000, -200_000], ['short', 112_500, 328_000], ['short', 112_500, -320_000],
+  ] as const) {
+    const pair = valuePair({ side, lockedGameCost: price }, dividend);
+    const net = side === 'long' ? dividend - price : price - dividend;
+    assert.equal(pair.first.amount - pair.second.amount, net, `${side} ${dividend}`);
+  }
+});
+
+test('the opened math lists each line by its effect on you, and the lines add up to the net', () => {
+  const cases = [
+    {
+      input: { side: 'long', dividend: 584_000, price: 137_500, corrected: false },
+      lines: [['Dividend collected', 584_000], ['Price charged', -137_500]],
+    },
+    {
+      input: { side: 'long', dividend: -200_000, price: 100_000, corrected: false },
+      lines: [['His dividend was -$200,000, which a roster spot pays', -200_000], ['Price charged', -100_000]],
+    },
+    {
+      input: { side: 'short', dividend: 328_000, price: 112_500, corrected: false },
+      lines: [['Price credited', 112_500], ['His dividend was $328,000, which a short pays', -328_000]],
+    },
+    {
+      input: { side: 'short', dividend: -320_000, price: 112_500, corrected: false },
+      lines: [['Price credited', 112_500], ['His dividend was -$320,000, which a short collects', 320_000]],
+    },
+    {
+      input: { side: 'long', dividend: 0, price: 90_000, corrected: false },
+      lines: [['Dividend', 0], ['Price charged', -90_000]],
+    },
+    {
+      input: { side: 'short', dividend: -40_000, price: 90_000, corrected: true },
+      lines: [['Price credited', 90_000], ['His corrected dividend was -$40,000, which a short collects', 40_000]],
+    },
+  ] as const;
+  for (const { input, lines } of cases) {
+    const got = settlementLines(input);
+    assert.deepEqual(got.map((line) => [line.label, line.amount]), lines);
+    const net = input.side === 'long' ? input.dividend - input.price : input.price - input.dividend;
+    assert.equal(got.reduce((sum, line) => sum + line.amount, 0), net, 'the lines sum to the net');
+    for (const line of got) {
+      assert.doesNotMatch(line.label, /paid/i, `"paid" never names a dividend: ${line.label}`);
+      assert.doesNotMatch(line.label, /^[−-]/, `no minus sign in front of a line: ${line.label}`);
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Row model: what each status shows, decided from the real settlement equation.
 
 function rowFor(
@@ -428,30 +456,37 @@ function rowFor(
   return resultRowModel(row, settlementEquation(row, ledger, results, { ledgerComplete }));
 }
 
-test('a settled roster game opens Dividend − Price paid = Net', () => {
+test('a settled roster game opens dividend collected and price charged', () => {
   const model = rowFor(result({ lockedGameCost: 200_000, dividendDollars: 336_000, netPnl: 136_000 }));
   assert.equal(model.net, 136_000);
-  assert.deepEqual(model.math, {
-    firstLabel: 'Dividend',
-    firstAmount: 336_000,
-    secondLabel: 'Price paid',
-    secondAmount: 200_000,
-    net: 136_000,
+  assert.ok(model.math);
+  assert.deepEqual(model.math.pair, {
+    first: { label: 'Dividend', amount: 336_000 },
+    second: { label: 'price', amount: 200_000 },
   });
+  assert.deepEqual(model.math.lines, [
+    { label: 'Dividend collected', amount: 336_000 },
+    { label: 'Price charged', amount: -200_000 },
+  ]);
+  assert.equal(model.math.net, 136_000);
   assert.equal(model.adjustment, undefined);
   assert.equal(model.mismatch, false);
   assert.equal(model.correctionNumber, 0);
 });
 
-test('a settled short opens Price credited − Dividend paid = Net', () => {
-  const model = rowFor(result({ side: 'short', lockedGameCost: 125_000, dividendDollars: 80_000, netPnl: 45_000 }));
-  assert.deepEqual(model.math, {
-    firstLabel: 'Price credited',
-    firstAmount: 125_000,
-    secondLabel: 'Dividend paid',
-    secondAmount: 80_000,
-    net: 45_000,
+test('a settled short with a negative dividend opens with no double negative', () => {
+  const model = rowFor(result({ side: 'short', lockedGameCost: 112_500, dividendDollars: -320_000, netPnl: 432_500 }));
+  assert.ok(model.math);
+  assert.deepEqual(model.math.pair, {
+    first: { label: 'Credit', amount: 112_500 },
+    second: { label: 'dividend', amount: -320_000 },
   });
+  assert.deepEqual(model.math.lines, [
+    { label: 'Price credited', amount: 112_500 },
+    { label: 'His dividend was -$320,000, which a short collects', amount: 320_000 },
+  ]);
+  assert.equal(model.math.net, 432_500);
+  assert.equal(model.mismatch, false);
 });
 
 test('a correction shows its P&L adjustment from the complete ledger, and numbers later corrections', () => {
@@ -477,7 +512,7 @@ test('a correction shows its P&L adjustment from the complete ledger, and number
   assert.equal(model.correctionNumber, 1);
   assert.equal(model.adjustment, 24_000);
   assert.equal(model.net, 74_000);
-  assert.equal(model.math?.firstLabel, 'Corrected dividend');
+  assert.equal(model.math?.lines[0].label, 'Corrected dividend collected');
   assert.equal(model.mismatch, false);
 
   const again = result({

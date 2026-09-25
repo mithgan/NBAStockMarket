@@ -2,15 +2,19 @@
  * Where you stand on the leaderboard, in plain words: your rank, how far you
  * are from the rank above and from #1, or — when you lead — by how much.
  *
- * Every number comes from the board rows themselves (each row's
- * `cumulativePnl`, the total score since the season started at $0), so the
- * gaps always add up against the list shown underneath.
+ * The rank and gaps come from the board rows themselves (each row's
+ * `cumulativePnl`, the total score since the season started at $0), so they
+ * add up against the list shown underneath. Gaps use `moneyFine`, one more
+ * digit than a score, so a $250 gap never reads "$0" and two gaps to
+ * different scores never read the same. "Your score" is the account's own
+ * figure, the one the Roster shows; the board can lag it until the next
+ * games settle, and `boardLag` says by how much.
  *
  * Ties: two scores that are exactly equal share a place. You are "tied for #2"
  * with the best rank in the tie, whatever order the server listed them in.
  */
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { money } from '../copy/terms';
+import { moneyFine } from '../copy/terms';
 
 export interface BoardGap {
   rank: number;
@@ -137,9 +141,20 @@ export function standingLines(standing: Standing): string[] {
   const lines: string[] = [];
   if (standing.tiedWith.length === 1) lines.push(`Level with ${standing.tiedWith[0]}`);
   if (standing.tiedWith.length > 1) lines.push(`Level with ${standing.tiedWith.length} others`);
-  if (standing.above) lines.push(`${money(standing.above.gap)} behind #${standing.above.rank}`);
-  if (standing.first) lines.push(`${money(standing.first.gap)} behind #${standing.first.rank}`);
-  if (standing.runnerUp) lines.push(`${money(standing.runnerUp.gap)} ahead of #${standing.runnerUp.rank}`);
+  if (standing.above) lines.push(`${moneyFine(standing.above.gap)} behind #${standing.above.rank}`);
+  if (standing.first) lines.push(`${moneyFine(standing.first.gap)} behind #${standing.first.rank}`);
+  if (standing.runnerUp) lines.push(`${moneyFine(standing.runnerUp.gap)} ahead of #${standing.runnerUp.rank}`);
   if (standing.leading && standing.of === 1) lines.push('No one else is on the board yet.');
   return lines;
+}
+
+/**
+ * How far the board's figure for you trails your account score, or null when
+ * they agree. The board is ranked as of the last settled games, so a roster
+ * move's fee since then shows in your score first.
+ */
+export function boardLag(standing: Standing, accountScore: number): number | null {
+  if (standing.kind !== 'ranked') return null;
+  const lag = accountScore - standing.score;
+  return Math.abs(lag) < 1 ? null : lag;
 }
