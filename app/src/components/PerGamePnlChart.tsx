@@ -10,6 +10,8 @@ import {
   hasNights,
   nearestIndex,
   nightlySeries,
+  placeAxisLabels,
+  valueTicks,
   type NightPoint,
 } from '../data/rosterView';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -18,8 +20,8 @@ import { colors, fonts, space, type, weight } from '../theme';
 import { Label, Money } from '../ui/kit';
 import { usePlotPointer, type PlotIntent } from './roster/usePlotPointer';
 
-/** Room at the left of the plot for the "$0" label that names the zero line. */
-const ZERO_GUTTER = 24;
+/** Room at the left of the plot for the value marks: $0, the high and the low. */
+const GUTTER = 52;
 const INSET_RIGHT = 6;
 const INSET_Y = 8;
 const AXIS_LABEL_WIDTH = 64;
@@ -44,29 +46,23 @@ function canPoint(): boolean {
  */
 export function PerGamePnlChart({
   entries,
-  plotHeight: fixedHeight = 80,
-  fill = false,
+  plotHeight = 80,
 }: {
   entries: readonly PerGameLedgerEntry[];
-  /** Plot height when the chart does not fill its column. */
   plotHeight?: number;
-  /** Grow to fill the rest of a column (desktop), never below `plotHeight`. */
-  fill?: boolean;
 }) {
   const points = useMemo(() => buildPnlSeries(entries), [entries]);
   const series = useMemo(() => nightlySeries(points, entries), [entries, points]);
   const domain = useMemo(() => pnlChartDomain(series), [series]);
   const [width, setWidth] = useState(0);
-  const [measuredHeight, setMeasuredHeight] = useState(0);
-  const plotHeight = fill ? Math.max(measuredHeight, fixedHeight) : fixedHeight;
   const [selected, setSelected] = useState<number | null>(null);
   const reducedMotion = useReducedMotion();
   const pointable = useMemo(canPoint, []);
   const clipId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
 
-  const span = Math.max(width - ZERO_GUTTER - INSET_RIGHT, 0);
+  const span = Math.max(width - GUTTER - INSET_RIGHT, 0);
   const xs = useMemo(() => series.map((_, index) => (
-    ZERO_GUTTER + (index / Math.max(series.length - 1, 1)) * span
+    GUTTER + (index / Math.max(series.length - 1, 1)) * span
   )), [series, span]);
   const yOf = useCallback((value: number) => (
     INSET_Y + ((domain.maximum - value) / (domain.maximum - domain.minimum)) * (plotHeight - INSET_Y * 2)
@@ -131,10 +127,7 @@ export function PerGamePnlChart({
     return true;
   }, [last, selected]);
   const { ref, responderProps } = usePlotPointer({ onRead: read, onLeave: () => setSelected(null), onKey });
-  const onLayout = (event: LayoutChangeEvent) => {
-    setWidth(Math.round(event.nativeEvent.layout.width));
-    setMeasuredHeight(Math.round(event.nativeEvent.layout.height));
-  };
+  const onLayout = (event: LayoutChangeEvent) => setWidth(Math.round(event.nativeEvent.layout.width));
 
   if (!hasNights(series)) {
     return (
@@ -164,12 +157,12 @@ export function PerGamePnlChart({
   const shownIndex = readIndex ?? last;
   const end = series[last];
   const endUp = end.cumulativePnl >= 0;
-  const zeroLabelTop = Math.min(Math.max(zeroY - 7, 0), plotHeight - 14);
-  const labelIndexes = axisLabelIndexes(series, width);
-  const revealX = ZERO_GUTTER + revealed * span + 4;
+  const ticks = valueTicks(series.map((night) => night.cumulativePnl), yOf);
+  const axisLabels = placeAxisLabels(xs, axisLabelIndexes(series, width), width, AXIS_LABEL_WIDTH);
+  const revealX = GUTTER + revealed * span + 4;
 
   return (
-    <View style={[styles.container, fill && styles.fill]}>
+    <View style={styles.container}>
       <View style={styles.heading}>
         {point ? <Reading point={point} previous={series[shownIndex - 1]} /> : (
           <>
@@ -195,7 +188,7 @@ export function PerGamePnlChart({
         }}
         onLayout={onLayout}
         ref={ref}
-        style={[styles.plot, fill ? [styles.fill, { minHeight: fixedHeight }] : { height: fixedHeight }]}
+        style={[styles.plot, { height: plotHeight }]}
         tabIndex={0}
         {...responderProps}
       >
@@ -222,15 +215,18 @@ export function PerGamePnlChart({
                 <Path d={linePath} fill="none" stroke={colors.red} strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} />
               </G>
             </G>
-            <Line
-              stroke={colors.borderStrong}
-              strokeDasharray="4 4"
-              strokeWidth={1}
-              x1={ZERO_GUTTER - 2}
-              x2={width}
-              y1={zeroY}
-              y2={zeroY}
-            />
+            {ticks.map((tick) => (
+              <Line
+                key={tick.kind}
+                stroke={tick.kind === 'zero' ? colors.borderStrong : colors.border}
+                strokeDasharray={tick.kind === 'zero' ? '4 4' : '1 4'}
+                strokeWidth={1}
+                x1={GUTTER - 2}
+                x2={width}
+                y1={tick.y}
+                y2={tick.y}
+              />
+            ))}
             {point ? (
               <>
                 <Line
@@ -261,18 +257,23 @@ export function PerGamePnlChart({
             ) : null}
           </Svg>
         ) : null}
-        <Text maxFontSizeMultiplier={1.3} style={[styles.zeroLabel, { top: zeroLabelTop }]}>$0</Text>
+        {/* The value marks name the lines: $0, and the season's high and low. */}
+        {ticks.map((tick) => (
+          <Text
+            key={tick.kind}
+            maxFontSizeMultiplier={1.3}
+            style={[styles.tickLabel, { top: Math.min(Math.max(tick.y - 7, 0), plotHeight - 14) }]}
+          >
+            {tick.kind === 'zero' ? '$0' : signedMoney(tick.value)}
+          </Text>
+        ))}
       </View>
       <View style={styles.axis}>
-        {width > 0 ? labelIndexes.map((index) => {
-          const left = Math.min(Math.max(xs[index] - AXIS_LABEL_WIDTH / 2, 0), Math.max(width - AXIS_LABEL_WIDTH, 0));
-          const align = left <= 0 ? 'left' : left >= width - AXIS_LABEL_WIDTH ? 'right' : 'center';
-          return (
-            <Text key={index} maxFontSizeMultiplier={1.3} style={[styles.axisLabel, { left, textAlign: align }]}>
-              {series[index].label}
-            </Text>
-          );
-        }) : null}
+        {width > 0 ? axisLabels.map(({ index, left, align }) => (
+          <Text key={index} maxFontSizeMultiplier={1.3} style={[styles.axisLabel, { left, textAlign: align }]}>
+            {series[index].label}
+          </Text>
+        )) : null}
       </View>
     </View>
   );
@@ -316,20 +317,20 @@ function Reading({ point, previous }: { point: NightPoint; previous: NightPoint 
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: space.lg,
-    paddingTop: space.sm + 2,
-    paddingBottom: space.sm,
+    paddingTop: space.sm,
+    paddingBottom: 6,
     backgroundColor: colors.background,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
   },
   heading: {
-    minHeight: 20,
+    minHeight: 18,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     columnGap: space.md,
-    marginBottom: space.xs,
+    marginBottom: 2,
   },
   hint: {
     color: colors.faint,
@@ -363,22 +364,20 @@ const styles = StyleSheet.create({
     fontSize: type.label,
     fontWeight: weight.bold,
   },
-  fill: {
-    flexGrow: 1,
-  },
   plot: {
     position: 'relative',
     overflow: 'hidden',
   },
-  /** Out of flow, so a filled plot can shrink again when the window does. */
+  /** Out of flow, so the plot's height is exactly its own. */
   svg: {
     position: 'absolute',
     top: 0,
     left: 0,
   },
-  zeroLabel: {
+  tickLabel: {
     position: 'absolute',
     left: 0,
+    width: GUTTER - 4,
     color: colors.faint,
     fontFamily: fonts.display,
     fontSize: type.label,
@@ -389,7 +388,6 @@ const styles = StyleSheet.create({
   axis: {
     position: 'relative',
     height: 16,
-    marginTop: 2,
   },
   axisLabel: {
     position: 'absolute',
@@ -408,7 +406,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyZeroLabel: {
-    width: ZERO_GUTTER,
+    width: GUTTER,
     color: colors.faint,
     fontFamily: fonts.display,
     fontSize: type.label,

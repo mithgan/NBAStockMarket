@@ -12,12 +12,47 @@ import type {
   PerGameLeaderboardRow,
   PerGameLedgerEntry,
   PerGamePosition,
+  PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
 import { humanDate, signedMoney } from '../copy/terms';
 import type { PnlPoint } from '../state/perGameState';
 import type { TagTone } from '../ui/kit';
-import { positionValue, valueVerdict, type ValueSummary, type ValueVerdict } from './perGameMetrics';
+import {
+  positionValue,
+  valueVerdict,
+  type ScoreBreakdown,
+  type ValueSummary,
+  type ValueVerdict,
+} from './perGameMetrics';
+
+// ---------------------------------------------------------------------------
+// Layout
+
+/**
+ * How roster rows lay out:
+ *  - `table`: a wide list (desktop, tablet) with one header row;
+ *  - `stacked`: a phone, name on top and the four figures on one line under a
+ *    single legend per section;
+ *  - `compact`: under 330 CSS px (a phone at 200% zoom) or with very large
+ *    text, where four figures cannot share a line, so each row lists them.
+ */
+export type RowLayout = 'table' | 'stacked' | 'compact';
+
+/** Below this window width rows reflow (a 390px phone at 200% zoom is 195px). */
+export const COMPACT_MAX_WIDTH = 330;
+/**
+ * At or above this list width rows read as a table: below it the player
+ * column would be too narrow for a name like "Gilgeous-Alexander" on one line.
+ */
+export const TABLE_MIN_LIST_WIDTH = 680;
+/** Text enlarged past this scale reflows rows the same way a narrow window does. */
+export const LARGE_TEXT_SCALE = 1.3;
+
+export function rowLayout(listWidth: number, windowWidth: number, fontScale: number): RowLayout {
+  if (fontScale > LARGE_TEXT_SCALE || windowWidth < COMPACT_MAX_WIDTH) return 'compact';
+  return listWidth >= TABLE_MIN_LIST_WIDTH ? 'table' : 'stacked';
+}
 
 // ---------------------------------------------------------------------------
 // Rows
@@ -108,6 +143,82 @@ export function rankLine(leaderboard: readonly PerGameLeaderboardRow[] | undefin
   const you = leaderboard?.find((row) => row.isCurrentUser);
   if (!you || !leaderboard) return null;
   return you.rank <= leaderboard.length ? `#${you.rank} of ${leaderboard.length}` : `#${you.rank}`;
+}
+
+export interface BreakdownPart {
+  key: 'roster' | 'shorts' | 'closed' | 'fees' | 'other';
+  label: string;
+  value: number;
+}
+
+/**
+ * The score by where it came from, in the order the screen lists it: your
+ * roster, your shorts, closed positions, fees, and "Other" only when the
+ * positions and fees do not explain the whole score.
+ */
+export function breakdownParts(breakdown: ScoreBreakdown): BreakdownPart[] {
+  const parts: BreakdownPart[] = [
+    { key: 'roster', label: 'Roster', value: breakdown.roster },
+    { key: 'shorts', label: 'Shorts', value: breakdown.shorts },
+    { key: 'closed', label: 'Closed', value: breakdown.closed },
+    { key: 'fees', label: 'Fees', value: breakdown.fees },
+  ];
+  if (breakdown.other !== 0) parts.push({ key: 'other', label: 'Other', value: breakdown.other });
+  return parts;
+}
+
+const FEE_KINDS = new Set(['open_fee', 'drop_fee', 'fee', 'penalty']);
+
+/** How many fee entries the ledger holds: "12 roster moves". */
+export function feeMoves(ledger: readonly PerGameLedgerEntry[]): number {
+  return ledger.filter((entry) => FEE_KINDS.has(entry.kind)).length;
+}
+
+export interface ClosedRow {
+  positionId: string;
+  playerId: string;
+  name: string;
+  side: PerGamePositionSide;
+  /** What the position made or lost while it was open. */
+  total: number;
+  games: number;
+  /** "Dropped Nov 6", "Short ended Oct 28", "Short closed Oct 25". */
+  how: string;
+}
+
+/**
+ * Dropped players and ended shorts, most recently closed first. Their money
+ * stays in the score, so the screen keeps listing them: without these rows the
+ * roster stops adding up to the score as soon as anything closes.
+ */
+export function closedRows(
+  positions: readonly PerGamePosition[],
+  ledger: readonly PerGameLedgerEntry[],
+  results: readonly PerGameSettledResult[],
+): ClosedRow[] {
+  const droppedOn = new Map<string, string>();
+  for (const entry of ledger) {
+    if (entry.kind === 'drop_fee' && entry.createdAt) droppedOn.set(entry.positionId, entry.createdAt);
+  }
+  return positions
+    .filter((position) => position.status === 'closed')
+    .sort((left, right) => (right.closedEventSequence ?? 0) - (left.closedEventSequence ?? 0))
+    .map((position) => {
+      const dropped = droppedOn.get(position.positionId);
+      let how: string;
+      if (position.side === 'long') how = dropped ? `Dropped ${humanDate(dropped)}` : 'Dropped';
+      else if (dropped) how = `Short closed ${humanDate(dropped)}`;
+      else how = position.expiresOn ? `Short ended ${humanDate(position.expiresOn)}` : 'Short closed';
+      return {
+        positionId: position.positionId,
+        playerId: position.playerId,
+        name: position.playerName,
+        side: position.side,
+        total: position.cumulativePnl,
+        games: positionValue(results, position.positionId).games,
+        how,
+      };
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -244,4 +355,62 @@ export function chartSummary(series: readonly NightPoint[]): string {
   return `Your score by night ${span}: started at $0, now ${signedMoney(end.cumulativePnl)}. `
     + `Best ${signedMoney(best.cumulativePnl)} after ${best.label}, `
     + `lowest ${signedMoney(worst.cumulativePnl)} after ${worst.label}.`;
+}
+
+export interface AxisLabel {
+  index: number;
+  /** Left edge of the label's box, in plot pixels. */
+  left: number;
+  align: 'left' | 'center' | 'right';
+}
+
+/**
+ * Where the x-axis dates go: centred under their night, pulled inside the
+ * plot at the edges, and never two boxes closer than `gap` (the most recent
+ * date wins, the earlier one is dropped), so no two labels ever touch.
+ */
+export function placeAxisLabels(
+  xs: readonly number[],
+  indexes: readonly number[],
+  width: number,
+  boxWidth: number,
+  gap = 4,
+): AxisLabel[] {
+  const maxLeft = Math.max(width - boxWidth, 0);
+  const placed: AxisLabel[] = [];
+  for (const index of [...indexes].reverse()) {
+    const left = Math.min(Math.max(xs[index] - boxWidth / 2, 0), maxLeft);
+    if (placed.some((label) => Math.abs(label.left - left) < boxWidth + gap)) continue;
+    placed.push({ index, left, align: left <= 0 ? 'left' : left >= maxLeft ? 'right' : 'center' });
+  }
+  return placed.reverse();
+}
+
+export interface ValueTick {
+  value: number;
+  /** Plot y of the value. */
+  y: number;
+  kind: 'high' | 'zero' | 'low';
+}
+
+/**
+ * The y-axis marks: $0 always, the season's high when it is above $0 and its
+ * low when it is below. A mark that would crowd one already placed (less than
+ * `minGap` px apart) is dropped; $0 is placed first, so it always stays.
+ */
+export function valueTicks(
+  values: readonly number[],
+  yOf: (value: number) => number,
+  minGap = 14,
+): ValueTick[] {
+  const high = Math.max(0, ...values);
+  const low = Math.min(0, ...values);
+  const candidates: ValueTick[] = [{ value: 0, y: yOf(0), kind: 'zero' }];
+  if (high > 0) candidates.push({ value: high, y: yOf(high), kind: 'high' });
+  if (low < 0) candidates.push({ value: low, y: yOf(low), kind: 'low' });
+  const kept: ValueTick[] = [];
+  for (const tick of candidates) {
+    if (kept.every((other) => Math.abs(other.y - tick.y) >= minGap)) kept.push(tick);
+  }
+  return kept.sort((left, right) => left.y - right.y);
 }

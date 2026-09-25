@@ -8,18 +8,25 @@ import type {
   PerGameSettledResult,
 } from '../api/contracts';
 import { buildPnlSeries, pnlChartDomain } from '../state/perGameState';
+import { scoreBreakdown } from './perGameMetrics';
 import {
   axisLabelIndexes,
+  breakdownParts,
   chartSummary,
+  closedRows,
   expiryLine,
+  feeMoves,
   figureCaptions,
   gamesLine,
   hasNights,
   nearestIndex,
   nightlySeries,
+  placeAxisLabels,
   rankLine,
   rosterRowView,
+  rowLayout,
   slotLine,
+  valueTicks,
   verdictTag,
 } from './rosterView';
 
@@ -275,4 +282,85 @@ test('the chart summary reads the range, the end, and the best and worst nights'
       + 'Best +$300K after Oct 21, lowest +$200K after Oct 22.',
   );
   assert.doesNotMatch(summary, /\d{4}-\d{2}-\d{2}/);
+});
+
+test('rows reflow under 330 CSS px or with very large text, and read as a table when the list is wide', () => {
+  assert.equal(rowLayout(390, 390, 1), 'stacked');
+  assert.equal(rowLayout(360, 360, 1), 'stacked');
+  // A 390px phone at 200% zoom is 195 CSS px wide: fontScale stays 1 on web.
+  assert.equal(rowLayout(195, 195, 1), 'compact');
+  assert.equal(rowLayout(329, 329, 1), 'compact');
+  assert.equal(rowLayout(390, 390, 2), 'compact');
+  assert.equal(rowLayout(768, 768, 1), 'table');
+  // A narrow tablet list keeps the phone rows rather than squeezing names.
+  assert.equal(rowLayout(640, 640, 1), 'stacked');
+  assert.equal(rowLayout(704, 1024, 1), 'table');
+  assert.equal(rowLayout(840, 1440, 1), 'table');
+  assert.equal(rowLayout(840, 1440, 2), 'compact');
+});
+
+test('the breakdown reads by source, adds up to the score and names Other only when needed', () => {
+  const positions = [
+    position({ positionId: 'l1', side: 'long', cumulativePnl: 1_240_000 }),
+    position({ positionId: 'l2', side: 'long', cumulativePnl: -300_000 }),
+    position({ positionId: 's1', side: 'short', cumulativePnl: 345_000 }),
+    position({ positionId: 'c1', side: 'short', status: 'closed', cumulativePnl: 579_300 }),
+  ];
+  cursor = 0;
+  const ledger = [entry({ kind: 'open_fee' }), entry({ kind: 'drop_fee' }), entry({ kind: 'open_fee' })];
+  const score = 1_240_000 - 300_000 + 345_000 + 579_300 - 750;
+  const parts = breakdownParts(scoreBreakdown(score, positions, ledger));
+  assert.deepEqual(parts.map((part) => [part.label, part.value]), [
+    ['Roster', 940_000], ['Shorts', 345_000], ['Closed', 579_300], ['Fees', -750],
+  ]);
+  assert.equal(parts.reduce((sum, part) => sum + part.value, 0), score);
+  const off = breakdownParts(scoreBreakdown(score + 5_000, positions, ledger));
+  assert.deepEqual(off.at(-1), { key: 'other', label: 'Other', value: 5_000 });
+  assert.equal(feeMoves(ledger), 3);
+  for (const part of parts) assert.doesNotMatch(part.label, /earned|paid/i);
+});
+
+test('closed rows keep dropped players and ended shorts, newest first, with how each closed', () => {
+  cursor = 0;
+  const ledger = [
+    entry({ positionId: 'dropped', kind: 'drop_fee', createdAt: '2025-11-06T12:00:00.000Z' }),
+    entry({ positionId: 'closedShort', kind: 'drop_fee', createdAt: '2025-10-25T12:00:00.000Z' }),
+  ];
+  const rows = closedRows([
+    position({ positionId: 'active', status: 'active' }),
+    position({ positionId: 'expired', playerName: 'Tyrese Maxey', side: 'short', status: 'closed', closedEventSequence: 5, expiresOn: '2025-10-28', cumulativePnl: 345_000 }),
+    position({ positionId: 'dropped', playerName: 'Nikola Jokic', status: 'closed', closedEventSequence: 9, cumulativePnl: 1_632_000 }),
+    position({ positionId: 'closedShort', playerName: 'Scottie Barnes', side: 'short', status: 'closed', closedEventSequence: 3, expiresOn: '2025-10-28', cumulativePnl: -194_000 }),
+  ], ledger, [
+    result({ positionId: 'dropped', gameId: 'a' }),
+    result({ positionId: 'dropped', gameId: 'b' }),
+    result({ positionId: 'expired', gameId: 'c', side: 'short' }),
+  ]);
+  assert.deepEqual(rows.map((row) => [row.name, row.how, row.games, row.total]), [
+    ['Nikola Jokic', 'Dropped Nov 6', 2, 1_632_000],
+    ['Tyrese Maxey', 'Short ended Oct 28', 1, 345_000],
+    ['Scottie Barnes', 'Short closed Oct 25', 0, -194_000],
+  ]);
+});
+
+test('x-axis dates never touch: the most recent date wins a crowded axis', () => {
+  // Wide: three labels fit.
+  assert.deepEqual(placeAxisLabels([0, 50, 150, 300], [1, 2, 3], 320, 64).map((label) => label.index), [1, 2, 3]);
+  // Narrow (a phone at 200% zoom): the first night sits too close to the last.
+  const crowded = placeAxisLabels([48, 105, 157], [1, 2], 163, 64);
+  assert.deepEqual(crowded.map((label) => label.index), [2]);
+  assert.equal(crowded[0].align, 'right');
+  const edges = placeAxisLabels([30, 290], [0, 1], 320, 64);
+  assert.deepEqual(edges.map((label) => label.align), ['left', 'right']);
+  for (let i = 1; i < edges.length; i += 1) assert.ok(edges[i].left - edges[i - 1].left >= 64);
+});
+
+test('the y-axis marks $0 and the season high and low, dropping a mark that would crowd another', () => {
+  const yOf = (value: number) => 100 - value / 10_000;
+  assert.deepEqual(valueTicks([0, 400_000, -300_000], yOf).map((tick) => [tick.kind, tick.value]), [
+    ['high', 400_000], ['zero', 0], ['low', -300_000],
+  ]);
+  // Never below $0: no low mark; a high only 5px above $0 is dropped.
+  assert.deepEqual(valueTicks([0, 50_000], yOf).map((tick) => tick.kind), ['zero']);
+  assert.deepEqual(valueTicks([0, 900_000], yOf).map((tick) => tick.kind), ['high', 'zero']);
 });

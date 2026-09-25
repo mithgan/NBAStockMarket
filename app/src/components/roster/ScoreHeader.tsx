@@ -2,17 +2,13 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { exactSignedMoney, humanDate } from '../../copy/terms';
+import type { BreakdownPart } from '../../data/rosterView';
 import { useCountUp } from '../../hooks/useCountUp';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { Label, Money } from '../../ui/kit';
+import { FineMoney } from './FineMoney';
 
-export interface ScoreBreakdown {
-  dividends: number;
-  gameCosts: number;
-  fees: number;
-}
-
-/** One line of the stack beside the score: a label and a right-aligned value. */
+/** One line of the stack beside the score: a label, then its value. */
 function StackRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <View style={styles.stackRow}>
@@ -22,100 +18,93 @@ function StackRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-const PARTS: Array<[keyof ScoreBreakdown, string]> = [
-  ['dividends', 'Dividends earned'],
-  ['gameCosts', 'Prices paid'],
-  ['fees', 'Fees'],
-];
-
 /**
- * "How am I doing?" in one block: your score as the hero number, what last
- * night and the last seven nights did to it, your rank, and how the score adds
- * up (dividends earned, prices paid, fees). The score counts to its new value
- * when a night settles on screen; `useCountUp` holds it still for reduced
- * motion.
+ * "How am I doing?" in one block: your score as the hero number, the last
+ * seven days and your rank beside it, then the score split by where it came
+ * from (roster, shorts, closed positions, fees), each part the total of a list
+ * further down. Last night lives in the status bar above every screen, so it
+ * is not repeated here.
  *
- * `compact` (phone) keeps the breakdown to one line so roster rows start high
- * on the screen; `panel` (desktop column) lays it out as a small statement and
- * repeats slot use.
+ * The score counts to its new value when a night settles on screen;
+ * `useCountUp` holds it still for reduced motion.
+ *
+ * Layouts: `compact` (phone) sets the parts two to a line so roster rows start
+ * high; `narrow` (under 330 CSS px) lists one part a line; `panel` (the desktop
+ * column) lists them as a statement and adds slot use.
  */
 export function ScoreHeader({
   title,
   score,
-  recent,
+  week,
   started,
   nextGameDate,
   rank,
-  breakdown,
+  parts,
   slots,
   variant,
 }: {
   title: string;
   score: number;
-  /** Last night and the last seven nights, from `recentEarnings`. */
-  recent: { night: number; week: number } | null;
+  /** The last seven days, from `recentEarnings`, fees included. */
+  week: number | null;
   /** True once a game night has touched your score. */
   started: boolean;
   nextGameDate: string | null;
   rank: string | null;
-  breakdown: ScoreBreakdown | null;
+  parts: readonly BreakdownPart[] | null;
   slots: string | null;
-  variant: 'compact' | 'panel';
+  variant: 'compact' | 'narrow' | 'panel';
 }) {
   const shown = useCountUp(score);
+  // Before any game settles there is no week to report and no standing to
+  // claim; the next game date is the one useful fact.
+  const facts = started ? (
+    <View style={[styles.stack, variant === 'panel' && styles.stackFull]}>
+      {week === null ? null : (
+        <StackRow label="Last 7 days">
+          <Money value={week} />
+        </StackRow>
+      )}
+      {rank ? (
+        <StackRow label="Rank">
+          <Text accessibilityLabel={`Rank ${rank.replace('#', 'number ')}`} style={styles.stackText}>{rank}</Text>
+        </StackRow>
+      ) : null}
+    </View>
+  ) : nextGameDate ? (
+    <View style={[styles.stack, variant === 'panel' && styles.stackFull]}>
+      <StackRow label="Next games">
+        <Text style={styles.stackText}>{humanDate(nextGameDate)}</Text>
+      </StackRow>
+    </View>
+  ) : null;
+
   return (
     <View style={styles.header}>
-      <View style={styles.titleRow}>
-        <Label>{title}</Label>
-        {rank ? (
-          <View accessible accessibilityLabel={`Rank ${rank.replace('#', 'number ')}`} style={styles.rank}>
-            <Label>Rank</Label>
-            <Text style={styles.rankValue}>{rank}</Text>
-          </View>
-        ) : null}
-      </View>
+      <Label>{title}</Label>
       <View style={[styles.heroRow, variant === 'panel' && styles.heroColumn]}>
         <Money
           accessibilityLabel={`${title} ${exactSignedMoney(score)}`}
           colored={score !== 0}
-          signed={score !== 0}
           size="hero"
           style={styles.hero}
           value={shown}
         />
-        {started && recent ? (
-          <View style={[styles.stack, variant === 'panel' && styles.stackFull]}>
-            <StackRow label="Last night">
-              <Money value={recent.night} />
-            </StackRow>
-            <StackRow label="7 nights">
-              <Money value={recent.week} />
-            </StackRow>
-          </View>
-        ) : nextGameDate ? (
-          <View style={[styles.stack, variant === 'panel' && styles.stackFull]}>
-            <StackRow label="Next games">
-              <Text style={styles.stackText}>{humanDate(nextGameDate)}</Text>
-            </StackRow>
-          </View>
-        ) : null}
+        {facts}
       </View>
-      {breakdown && variant === 'compact' ? (
-        <View style={styles.inline}>
-          {PARTS.map(([key, label]) => (
-            <View key={key} style={styles.inlinePart}>
-              <Text style={styles.partLabel}>{label}</Text>
-              <Money size="body" value={breakdown[key]} />
-            </View>
-          ))}
-        </View>
-      ) : null}
-      {breakdown && variant === 'panel' ? (
-        <View style={styles.statement}>
-          {PARTS.map(([key, label]) => (
-            <View key={key} style={styles.statementRow}>
-              <Text style={styles.statementLabel}>{label}</Text>
-              <Money size="body" value={breakdown[key]} />
+      {parts ? (
+        <View
+          accessibilityLabel={`${title} by source: ${parts.map((part) => `${part.label} ${exactSignedMoney(part.value)}`).join(', ')}`}
+          accessible
+          style={[styles.parts, variant === 'compact' && styles.partsGrid]}
+        >
+          {parts.map((part) => (
+            <View
+              key={part.key}
+              style={[styles.part, variant === 'compact' && styles.partHalf]}
+            >
+              <Text style={variant === 'panel' ? styles.statementLabel : styles.partLabel}>{part.label}</Text>
+              <FineMoney size="body" value={part.value} />
             </View>
           ))}
         </View>
@@ -128,30 +117,11 @@ export function ScoreHeader({
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: space.lg,
-    paddingTop: space.md,
-    paddingBottom: space.md,
+    paddingTop: 10,
+    paddingBottom: space.sm,
     backgroundColor: colors.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
-  },
-  titleRow: {
-    minHeight: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: space.md,
-  },
-  rank: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: space.sm,
-  },
-  rankValue: {
-    color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: type.value,
-    fontWeight: weight.heavy,
-    fontVariant: ['tabular-nums'],
   },
   heroRow: {
     flexDirection: 'row',
@@ -163,7 +133,7 @@ const styles = StyleSheet.create({
   heroColumn: {
     flexDirection: 'column',
     // A wrapping container stretches items only to its widest item, not to
-    // its own width, so the stack could never reach the right edge.
+    // its own width, so the facts could never reach the right edge.
     flexWrap: 'nowrap',
     alignItems: 'stretch',
     rowGap: space.xs,
@@ -172,19 +142,16 @@ const styles = StyleSheet.create({
     lineHeight: 54,
   },
   stack: {
-    minWidth: 140,
-    flexGrow: 1,
-    maxWidth: 200,
     gap: 2,
   },
   stackFull: {
-    maxWidth: '100%',
+    alignSelf: 'stretch',
   },
   stackRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
-    gap: space.md,
+    columnGap: space.lg,
   },
   stackText: {
     color: colors.text,
@@ -193,39 +160,35 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
     fontVariant: ['tabular-nums'],
   },
-  inline: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    columnGap: space.md,
-    rowGap: 2,
+  parts: {
     marginTop: space.xs,
-    paddingTop: space.sm,
+    paddingTop: 6,
+    rowGap: 3,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
-  inlinePart: {
+  partsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: space.xl,
+  },
+  part: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: 4,
+    justifyContent: 'space-between',
+    columnGap: space.sm,
+  },
+  /** Two parts a line; the gap between the pair is the grid's column gap. */
+  partHalf: {
+    flexBasis: 0,
+    flexGrow: 1,
+    minWidth: 130,
   },
   partLabel: {
     color: colors.faint,
     fontFamily: fonts.display,
     fontSize: type.label,
     fontWeight: weight.bold,
-  },
-  statement: {
-    marginTop: space.sm,
-    paddingTop: space.sm,
-    gap: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  statementRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    gap: space.md,
   },
   statementLabel: {
     color: colors.muted,

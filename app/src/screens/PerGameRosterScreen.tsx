@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -7,15 +7,24 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type LayoutChangeEvent,
 } from 'react-native';
 
 import type { PerGamePosition } from '../api/contracts';
-import { isMockActive, mockPlayerTrends } from '../api/mockPerGameClient';
+import { isMockActive, mockPlayerTrends, mockSeasonStart } from '../api/mockPerGameClient';
 import { PerGamePnlChart } from '../components/PerGamePnlChart';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
-import { StackedFigures, TableFigures, TableHeader } from '../components/roster/RowFigures';
+import { ClosedSection, FeesLine } from '../components/roster/ClosedSection';
+import {
+  FigureLegend,
+  ListFigures,
+  StackedFigures,
+  TableFigures,
+  TableHeader,
+} from '../components/roster/RowFigures';
 import { ScoreHeader } from '../components/roster/ScoreHeader';
+import { SectionHead } from '../components/roster/SectionHead';
 import {
   closeVerb,
   exactMoney,
@@ -24,25 +33,37 @@ import {
   ROSTER_EXPLAINER,
   SHORT_EXPLAINER,
   sideHeading,
+  signedMoneyFine,
+  unbrokenName,
 } from '../copy/terms';
-import { recentEarnings } from '../data/perGameMetrics';
-import { rankLine, rosterRowView, slotLine } from '../data/rosterView';
+import { keepTogether, practiceProgress } from '../data/chromeView';
+import { recentEarnings, scoreBreakdown } from '../data/perGameMetrics';
+import {
+  breakdownParts,
+  closedRows,
+  feeMoves,
+  rankLine,
+  rosterRowView,
+  rowLayout,
+  slotLine,
+  type RowLayout,
+} from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
-import { scoreComponents } from '../state/perGameScoreComponents';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
-import { Button, EmptyState, SectionHeader, Tag } from '../ui/kit';
+import { Button, EmptyState, Tag, visuallyHidden } from '../ui/kit';
 
 /** Desktop: score and chart beside the lists. */
 const WIDE_MIN_WIDTH = 1024;
-/** Lists at least this wide read as a table with a header row. */
-const TABLE_MIN_WIDTH = 700;
-const SUMMARY_WIDTH = 340;
+/** The score column; narrower on small laptops so the table keeps room for names. */
+const summaryWidth = (width: number) => (width >= 1200 ? 360 : 320);
 const ACTION_WIDTH = 72;
+/** How long Drop and Close wait for the confirming second tap (as Restart does). */
+const CONFIRM_MS = 4000;
 
-function PositionRow({ position, table, largeText, onOpenProfile }: {
+function PositionRow({ position, layout, seasonOver, onOpenProfile }: {
   position: PerGamePosition;
-  table: boolean;
-  largeText: boolean;
+  layout: RowLayout;
+  seasonOver: boolean;
   onOpenProfile: (playerId: string) => void;
 }) {
   const { bootstrap, closePosition, pendingActions } = usePerGame();
@@ -54,36 +75,65 @@ function PositionRow({ position, table, largeText, onOpenProfile }: {
   const rosterLockHint = rosterLockDate
     ? `Roster changes are locked for the ${humanDate(rosterLockDate)} games.`
     : 'Roster changes are locked while the current games are in progress.';
-  const disabled = pending || locked || rosterLocked;
+  const disabled = pending || locked || rosterLocked || seasonOver;
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => {
+    if (!confirming) return undefined;
+    const timer = setTimeout(() => setConfirming(false), CONFIRM_MS);
+    return () => clearTimeout(timer);
+  }, [confirming]);
+  useEffect(() => {
+    if (disabled) setConfirming(false);
+  }, [disabled]);
+
   const settled = bootstrap?.settledResults;
   const view = useMemo(() => rosterRowView(position, settled ?? []), [position, settled]);
   const short = position.side === 'short';
   const verb = closeVerb(position.side);
   const target = short ? `short on ${position.playerName}` : position.playerName;
+  const fee = bootstrap?.ruleset.transactionFeeDollars ?? 0;
 
   // Screen readers hear the whole row in one breath, lifetime totals included.
   const profileLabel = [
     position.playerName,
     view.tag.label,
-    `${short ? 'credited' : 'price'} ${exactMoney(position.lockedGameCost)} a game, locked`,
+    short
+      ? `credited ${exactMoney(position.lockedGameCost)} a game, set when you shorted him`
+      : `price ${exactMoney(position.lockedGameCost)} a game, set when you added him`,
     view.games || 'no games yet',
     view.summary.avgDividend === null ? null : `dividend ${exactMoney(view.summary.avgDividend)} a game`,
     view.summary.avgNet === null ? null : `net ${exactSignedMoney(view.summary.avgNet)} a game`,
     `total ${exactSignedMoney(position.cumulativePnl)}`,
     short
-      ? `${exactMoney(position.cumulativeGameCost)} credited and ${exactMoney(position.cumulativeDividend)} paid out`
+      ? `${exactMoney(position.cumulativeGameCost)} credited and ${exactMoney(position.cumulativeDividend)} in his dividends`
       : `${exactMoney(position.cumulativeDividend)} in dividends against ${exactMoney(position.cumulativeGameCost)} in prices`,
     view.expiry,
     'View profile',
   ].filter(Boolean).join(', ');
 
+  // The second tap's consequence, shown in place of the verdict while armed
+  // and spoken through the row's live region.
+  const stays = `${short ? 'its' : 'his'} ${signedMoneyFine(position.cumulativePnl)} stays in your score`;
+  const consequence = fee > 0 ? `${exactMoney(fee)} fee · ${stays}` : stays;
+  const announcement = confirming
+    ? `Tap Confirm to ${verb.toLowerCase()} ${target}. ${fee > 0 ? `A ${exactMoney(fee)} fee applies. ` : ''}`
+      + `${short ? 'Its' : 'His'} ${exactSignedMoney(position.cumulativePnl)} so far stays in your score.`
+    : '';
+
+  const compact = layout === 'compact';
   const identity = (
     <View style={styles.identity}>
-      <Text style={styles.name}>{position.playerName}</Text>
+      <Text style={styles.name}>{unbrokenName(position.playerName)}</Text>
       <View style={styles.meta}>
-        <Tag tone={view.tag.tone}>{view.tag.label}</Tag>
-        {view.games ? <Text style={styles.metaText}>{view.games}</Text> : null}
-        {view.expiry ? <Text style={styles.metaText}>{view.expiry}</Text> : null}
+        {confirming ? (
+          <Text style={styles.confirmLine}>{consequence}</Text>
+        ) : (
+          <>
+            <Tag tone={view.tag.tone}>{view.tag.label}</Tag>
+            {view.games ? <Text style={styles.metaText}>{keepTogether(view.games)}</Text> : null}
+            {view.expiry ? <Text style={styles.metaText}>{keepTogether(view.expiry)}</Text> : null}
+          </>
+        )}
       </View>
     </View>
   );
@@ -99,15 +149,24 @@ function PositionRow({ position, table, largeText, onOpenProfile }: {
       accessibilityHint={rosterLocked ? rosterLockHint : undefined}
       accessibilityLabel={rosterLocked
         ? `${verb} ${target} unavailable while roster changes are locked`
-        : pending ? `${verb === 'Drop' ? 'Dropping' : 'Closing'} ${target}` : `${verb} ${target}`}
+        : seasonOver ? `${verb} ${target} unavailable: the season is over`
+          : pending ? `${verb === 'Drop' ? 'Dropping' : 'Closing'} ${target}`
+            : confirming ? `Confirm: ${verb.toLowerCase()} ${target}` : `${verb} ${target}`}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={() => {
-        if (!disabled) closePosition(position);
+        if (disabled) return;
+        if (!confirming) {
+          setConfirming(true);
+          return;
+        }
+        setConfirming(false);
+        closePosition(position);
       }}
       style={({ pressed }) => [
         styles.action,
+        confirming && styles.actionArmed,
         disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
       ]}
@@ -115,62 +174,70 @@ function PositionRow({ position, table, largeText, onOpenProfile }: {
       {pending && !rosterLocked ? (
         <ActivityIndicator color={colors.muted} size="small" />
       ) : (
-        <Text style={styles.actionText}>{rosterLocked ? 'LOCKED' : verb.toUpperCase()}</Text>
+        <Text style={[styles.actionText, confirming && styles.actionTextArmed]}>
+          {rosterLocked ? 'LOCKED' : confirming ? 'CONFIRM' : verb.toUpperCase()}
+        </Text>
       )}
     </Pressable>
   );
+  // Always mounted, so a confirm request is a change inside an existing live
+  // region (react-native-web has no announceForAccessibility).
+  const liveRegion = (
+    <View accessibilityLiveRegion="polite" style={visuallyHidden}>
+      <Text>{announcement}</Text>
+    </View>
+  );
+  const profileProps = {
+    accessibilityLabel: profileLabel,
+    accessibilityRole: 'button' as const,
+    onPress: () => onOpenProfile(position.playerId),
+  };
 
-  if (table) {
+  if (layout === 'table') {
     return (
       <View style={styles.tableRow}>
-        <Pressable
-          accessibilityLabel={profileLabel}
-          accessibilityRole="button"
-          onPress={() => onOpenProfile(position.playerId)}
-          style={({ pressed }) => [styles.tableProfile, pressed && styles.pressed]}
-        >
+        <Pressable {...profileProps} style={({ pressed }) => [styles.tableProfile, pressed && styles.pressed]}>
           <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
           {identity}
           <TableFigures {...figures} />
         </Pressable>
         {action}
+        {liveRegion}
+      </View>
+    );
+  }
+
+  if (compact) {
+    // Nothing shares a line it cannot fit on: the name takes the full width
+    // (no headshot, no space held for the button), the figures list one a
+    // line, and Drop sits below them.
+    return (
+      <View style={styles.compactRow}>
+        <Pressable {...profileProps} style={({ pressed }) => [styles.compactProfile, pressed && styles.pressed]}>
+          {identity}
+          <View style={styles.compactFigures}>
+            <ListFigures {...figures} />
+          </View>
+        </Pressable>
+        <View style={styles.compactAction}>{action}</View>
+        {liveRegion}
       </View>
     );
   }
 
   return (
     <View style={styles.stackRow}>
-      <Pressable
-        accessibilityLabel={profileLabel}
-        accessibilityRole="button"
-        onPress={() => onOpenProfile(position.playerId)}
-        style={({ pressed }) => [styles.stackProfile, pressed && styles.pressed]}
-      >
+      <Pressable {...profileProps} style={({ pressed }) => [styles.stackProfile, pressed && styles.pressed]}>
         <View style={styles.stackTop}>
           <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
           {identity}
         </View>
         <View style={styles.stackFigures}>
-          <StackedFigures {...figures} twoByTwo={largeText} />
+          <StackedFigures {...figures} />
         </View>
       </Pressable>
       <View style={styles.stackAction}>{action}</View>
-    </View>
-  );
-}
-
-function Section({ title, meta, caption, header, children }: {
-  title: string;
-  meta: string;
-  caption?: string;
-  header?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <View style={styles.section}>
-      <SectionHeader caption={caption} meta={meta} style={styles.sectionHeader} title={title} />
-      {header}
-      {children}
+      {liveRegion}
     </View>
   );
 }
@@ -183,13 +250,22 @@ export function PerGameRosterScreen({
   const { bootstrap } = usePerGame();
   const { width, fontScale } = useWindowDimensions();
   const [profileId, setProfileId] = useState<string | null>(null);
-  const components = useMemo(
-    () => scoreComponents(bootstrap?.ledger.items ?? []),
-    [bootstrap?.ledger.items],
-  );
+  const [listWidth, setListWidth] = useState<number | null>(null);
   const recent = useMemo(
     () => recentEarnings(bootstrap?.ledger.items, bootstrap?.game.lastSettledDate),
     [bootstrap?.game.lastSettledDate, bootstrap?.ledger.items],
+  );
+  const breakdown = useMemo(
+    () => scoreBreakdown(
+      bootstrap?.account.cumulativePnl ?? 0,
+      bootstrap?.positions ?? [],
+      bootstrap?.ledger.items ?? [],
+    ),
+    [bootstrap?.account.cumulativePnl, bootstrap?.ledger.items, bootstrap?.positions],
+  );
+  const closed = useMemo(
+    () => closedRows(bootstrap?.positions ?? [], bootstrap?.ledger.items ?? [], bootstrap?.settledResults ?? []),
+    [bootstrap?.ledger.items, bootstrap?.positions, bootstrap?.settledResults],
   );
   if (!bootstrap) return null;
   const profilePosition = profileId
@@ -219,55 +295,75 @@ export function PerGameRosterScreen({
   const score = bootstrap.account.cumulativePnl;
   const started = bootstrap.ledger.items.some((entry) => entry.gameDate !== null);
   const rosterLocked = bootstrap.ruleset.rosterMutationsLocked;
+  const rosterLockDate = bootstrap.ruleset.rosterLockGameDate;
+  // Practice ends on day 174; a live season ends when no games are left.
+  const seasonOver = isMockActive()
+    ? practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete
+    : bootstrap.game.lastSettledDate !== null && bootstrap.game.nextGameDate === null;
   const wide = width >= WIDE_MIN_WIDTH;
-  // Very large text needs the stacked rows' room; fixed table columns would collide.
-  const largeText = fontScale > 1.3;
-  const table = width >= TABLE_MIN_WIDTH && !largeText;
+  const layout = rowLayout(listWidth ?? (wide ? width - summaryWidth(width) : width), width, fontScale);
+  const totalInset = layout === 'table' ? ACTION_WIDTH + space.sm : 0;
   const hadLongs = bootstrap.positions.some((position) => position.side === 'long' && position.status === 'closed');
   const hadShorts = bootstrap.positions.some((position) => position.side === 'short' && position.status === 'closed');
   const { longSlots, shortSlots } = bootstrap.account;
-  // The lock stops adds as well as drops, so it shows even on an empty roster.
-  const slotMeta = (used: number, limit: number) => (
-    rosterLocked ? `Locked · ${used} of ${limit}` : `${used} of ${limit}`
+  // Why Drop and Close are unavailable, in words on the screen (not only in a
+  // hint react-native-web drops).
+  const actionNote = seasonOver
+    ? 'The season is over. Your roster is final.'
+    : rosterLocked
+      ? `Locked until the ${rosterLockDate ? `${humanDate(rosterLockDate)} ` : 'current '}games settle.`
+      : undefined;
+  const legend = (side: PerGamePosition['side']) => (
+    layout === 'table' ? <TableHeader actionWidth={ACTION_WIDTH} side={side} />
+      : layout === 'stacked' ? <FigureLegend side={side} /> : null
   );
   const rows = (positions: PerGamePosition[]) => positions.map((position) => (
     <PositionRow
       key={position.positionId}
-      largeText={largeText}
+      layout={layout}
       onOpenProfile={setProfileId}
       position={position}
-      table={table}
+      seasonOver={seasonOver}
     />
   ));
+  const onListLayout = (event: LayoutChangeEvent) => {
+    const next = Math.round(event.nativeEvent.layout.width);
+    setListWidth((current) => (current === next ? current : next));
+  };
 
   const summary = (
     <>
       <ScoreHeader
-        breakdown={bootstrap.ledger.items.length > 0 ? components : null}
         nextGameDate={bootstrap.game.nextGameDate}
-        rank={rankLine(bootstrap.leaderboard)}
-        recent={recent}
+        parts={bootstrap.ledger.items.length > 0 ? breakdownParts(breakdown) : null}
+        rank={started ? rankLine(bootstrap.leaderboard) : null}
         score={score}
         slots={wide ? slotLine(bootstrap.account) : null}
         started={started}
         title="Your score"
-        variant={wide ? 'panel' : 'compact'}
+        variant={wide ? 'panel' : layout === 'compact' ? 'narrow' : 'compact'}
+        week={recent ? recent.week : null}
       />
       <PerGamePnlChart
         entries={bootstrap.ledger.items}
-        fill={wide}
-        // Phones keep the plot short so roster rows start high; tablets can afford more.
-        plotHeight={wide ? 168 : table ? 120 : 76}
+        // Phones keep the plot short so roster rows start high; wider lists
+        // afford more, and desktop is capped so nightly swings stay readable.
+        plotHeight={wide ? 208 : layout === 'table' ? 120 : 68}
       />
     </>
   );
   const lists = (
     <>
-      <Section
-        header={table && longs.length > 0 ? <TableHeader actionWidth={ACTION_WIDTH} side="long" /> : null}
-        meta={slotMeta(longSlots.used, longSlots.limit)}
-        title={sideHeading('long')}
-      >
+      <View style={styles.section}>
+        <SectionHead
+          count={`${longSlots.used} of ${longSlots.limit}`}
+          legend={longs.length > 0 ? legend('long') : undefined}
+          note={actionNote}
+          title={sideHeading('long')}
+          total={longs.length > 0 ? breakdown.roster : undefined}
+          totalInset={totalInset}
+          totalLabel="Roster total"
+        />
         {longs.length > 0 ? rows(longs) : (
           <EmptyState
             action={(
@@ -283,19 +379,23 @@ export function PerGameRosterScreen({
             title={hadLongs ? 'Your roster is empty' : 'Add your first player'}
           />
         )}
-      </Section>
-      <Section
-        caption={shorts.length > 0 ? SHORT_EXPLAINER : undefined}
-        header={table && shorts.length > 0 ? <TableHeader actionWidth={ACTION_WIDTH} side="short" /> : null}
-        meta={slotMeta(shortSlots.used, shortSlots.limit)}
-        title={sideHeading('short')}
-      >
+      </View>
+      <View style={styles.section}>
+        <SectionHead
+          caption={shorts.length > 0 ? SHORT_EXPLAINER : undefined}
+          count={`${shortSlots.used} of ${shortSlots.limit}`}
+          legend={shorts.length > 0 ? legend('short') : undefined}
+          title={sideHeading('short')}
+          total={shorts.length > 0 ? breakdown.shorts : undefined}
+          totalInset={totalInset}
+          totalLabel="Shorts total"
+        />
         {shorts.length > 0 ? rows(shorts) : (
           <EmptyState
             action={(
               <Button
-                accessibilityLabel="Open the player market to short a player"
-                label="Open market"
+                accessibilityLabel="Find a short in the player market"
+                label="Find a short"
                 onPress={() => onOpenMarket('short')}
               />
             )}
@@ -304,7 +404,9 @@ export function PerGameRosterScreen({
             title={hadShorts ? 'No open shorts' : 'No shorts yet'}
           />
         )}
-      </Section>
+      </View>
+      <ClosedSection rows={closed} total={breakdown.closed} totalInset={totalInset} />
+      <FeesLine fees={breakdown.fees} moves={feeMoves(bootstrap.ledger.items)} totalInset={totalInset} />
     </>
   );
 
@@ -312,15 +414,15 @@ export function PerGameRosterScreen({
     <View style={styles.screen}>
       {wide ? (
         <View style={styles.columns}>
-          <ScrollView contentContainerStyle={styles.summaryContent} style={styles.summaryColumn}>
+          <ScrollView contentContainerStyle={styles.summaryContent} style={[styles.summaryColumn, { width: summaryWidth(width) }]}>
             {summary}
           </ScrollView>
-          <ScrollView contentContainerStyle={styles.columnContent} style={styles.listColumn}>
+          <ScrollView contentContainerStyle={styles.listContent} onLayout={onListLayout} style={styles.listColumn}>
             {lists}
           </ScrollView>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.columnContent} style={styles.scroll}>
+        <ScrollView contentContainerStyle={styles.listContent} onLayout={onListLayout} style={styles.scroll}>
           {summary}
           {lists}
         </ScrollView>
@@ -355,28 +457,23 @@ const styles = StyleSheet.create({
   summaryColumn: {
     flexGrow: 0,
     flexShrink: 0,
-    width: SUMMARY_WIDTH,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: colors.borderStrong,
   },
   listColumn: {
     flex: 1,
   },
-  columnContent: {
-    paddingBottom: space.xxl,
-  },
   summaryContent: {
-    // The chart grows into whatever height the score block leaves.
-    flexGrow: 1,
+    paddingBottom: space.xl,
+  },
+  listContent: {
+    // Clears a problem notice, which stays over the bottom of the screen
+    // until it is dismissed, so the last row is never stuck under it.
+    paddingBottom: 110,
   },
   section: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
-  },
-  sectionHeader: {
-    minHeight: 40,
-    paddingVertical: space.sm - 2,
-    backgroundColor: colors.surface,
   },
   empty: {
     paddingVertical: space.lg,
@@ -408,6 +505,23 @@ const styles = StyleSheet.create({
     top: space.sm,
     right: space.lg,
   },
+  compactRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingBottom: space.sm,
+  },
+  compactProfile: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+  },
+  compactFigures: {
+    marginTop: space.sm,
+  },
+  compactAction: {
+    alignItems: 'flex-end',
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+  },
   tableRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
@@ -437,6 +551,7 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
   },
   meta: {
+    minHeight: 20,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
@@ -446,6 +561,13 @@ const styles = StyleSheet.create({
   },
   metaText: {
     color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
+    fontVariant: ['tabular-nums'],
+  },
+  confirmLine: {
+    color: colors.goldInk,
     fontFamily: fonts.display,
     fontSize: type.caption,
     fontWeight: weight.bold,
@@ -464,12 +586,19 @@ const styles = StyleSheet.create({
     // is to show how the player is doing.
     backgroundColor: 'transparent',
   },
+  actionArmed: {
+    borderColor: colors.gold,
+    backgroundColor: colors.goldSoft,
+  },
   actionText: {
     color: colors.muted,
     fontFamily: fonts.display,
     fontSize: type.label,
     fontWeight: weight.black,
     letterSpacing: 0.8,
+  },
+  actionTextArmed: {
+    color: colors.goldInk,
   },
   disabled: {
     opacity: 0.45,
