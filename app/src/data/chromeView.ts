@@ -35,7 +35,10 @@ export interface PracticeProgress {
   accessibilityLabel: string;
 }
 
-/** Where a practice season stands, from its opening eve to the last settled night. */
+/**
+ * Where a practice season stands, from its opening eve to the last settled
+ * night. Shared with the Roster screen: keep this signature and behaviour.
+ */
 export function practiceProgress(
   seasonStart: string | null | undefined,
   lastSettledDate: string | null | undefined,
@@ -54,7 +57,8 @@ export function practiceProgress(
 /**
  * Bind a short phrase ("Day 16 of 174", "Thu, Nov 6") with no-break spaces so
  * enlarged text wraps between facts, never inside one. Short phrases only: a
- * long unbreakable run could outgrow a narrow column.
+ * long unbreakable run could outgrow a narrow column. Shared with the Roster
+ * screen: keep this signature and behaviour.
  */
 export function keepTogether(phrase: string): string {
   return phrase.replace(/ /g, '\u00a0');
@@ -73,8 +77,21 @@ export const CHROME_WIDE_MIN_WIDTH = 720;
  * breakpoint, where the tabs move to the top).
  */
 export const CHROME_MERGED_MIN_WIDTH = 900;
-/** Below this width the status toolbar shows icons only (names stay in accessibility labels). */
+/** Below this width the bars trade their 16px gutters and control padding for room. */
+export const CHROME_NARROW_MAX_WIDTH = 360;
+/**
+ * Below this width (a 390px phone at 125% zoom and beyond) the practice bars
+ * go compact: three short lines of facts, and +1 night / +1 week beside a
+ * More control that holds Restart and Exit.
+ */
+export const CHROME_COMPACT_MAX_WIDTH = 320;
+/**
+ * The signed-in toolbar shows icons only in this band: narrow enough that
+ * labels would squeeze the facts, wide enough that the toolbar still shares
+ * the facts' row. Below it the toolbar drops under the facts, with labels.
+ */
 export const CHROME_ICON_ONLY_MAX_WIDTH = 374;
+export const CHROME_ICON_ONLY_MIN_WIDTH = 340;
 /** Text enlarged past this scale stacks the controls under the facts. */
 export const CHROME_LARGE_TEXT_SCALE = 1.3;
 
@@ -83,10 +100,17 @@ export interface ChromeLayout {
   wide: boolean;
   /** Practice controls move up into the status row; the practice bar keeps only its rule. */
   merged: boolean;
-  /** Enlarged text: the facts take the full width and the controls wrap below them. */
+  /**
+   * Enlarged text: lines keep their natural height and wrap. Signed in, the
+   * facts take the whole row and the three controls wrap below them.
+   */
   largeText: boolean;
-  /** A very narrow phone: toolbar controls drop their visible labels. */
+  /** The signed-in toolbar drops its visible labels (names stay in accessibility labels). */
   iconOnly: boolean;
+  /** Tighter gutters and control padding so one row of practice controls still fits. */
+  narrow: boolean;
+  /** A phone at high zoom: short facts, and Restart and Exit behind More. */
+  compact: boolean;
 }
 
 export function chromeLayout(width: number, fontScale: number): ChromeLayout {
@@ -95,8 +119,25 @@ export function chromeLayout(width: number, fontScale: number): ChromeLayout {
     wide: width >= CHROME_WIDE_MIN_WIDTH && !largeText,
     merged: width >= CHROME_MERGED_MIN_WIDTH && !largeText,
     largeText,
-    iconOnly: width < CHROME_ICON_ONLY_MAX_WIDTH && !largeText,
+    iconOnly: width < CHROME_ICON_ONLY_MAX_WIDTH && width >= CHROME_ICON_ONLY_MIN_WIDTH && !largeText,
+    narrow: width < CHROME_NARROW_MAX_WIDTH,
+    compact: width < CHROME_COMPACT_MAX_WIDTH,
   };
+}
+
+/**
+ * When roster changes reopen, beside the ROSTER LOCKED tag. A lock covers
+ * one game date: the server keeps roster changes locked while that date's
+ * games are played and settled, then unlocks; practice clears it when the
+ * night is played. So the honest promise is "after" that date, not "on" it.
+ */
+export function lockReopensText(lockGameDate: string | null): string {
+  return lockGameDate ? `reopens after ${humanDate(lockGameDate)}` : 'while games are on';
+}
+
+/** The same promise without the tag, where a row has no room for one. */
+export function lockLineText(lockGameDate: string | null): string {
+  return lockGameDate ? `Roster reopens after ${humanDate(lockGameDate)}` : 'Roster locked for now';
 }
 
 /** The next slate, in words: "Thu, Nov 6", or null when nothing is scheduled. */
@@ -160,9 +201,12 @@ export function dividendBasisText(basis: DividendBasis): string {
   return basis === 'raw_net_points' ? 'Net points scored' : 'Net points above projection';
 }
 
-/** "Net points scored · $40,000 per net point". */
+/**
+ * "Net points scored · $40,000 per net point", with the rate held together so
+ * a narrow sheet breaks at the dot, never inside "per net point".
+ */
 export function dividendText(basis: DividendBasis, dollarsPerNetPoint: number): string {
-  return `${dividendBasisText(basis)} · ${formatMoney(dollarsPerNetPoint)} per net point`;
+  return `${dividendBasisText(basis)} · ${keepTogether(`${formatMoney(dollarsPerNetPoint)} per net point`)}`;
 }
 
 /** How long a short stays open, in words. */
@@ -172,15 +216,21 @@ export function shortTermText(shortTermDays: number | null): string {
 }
 
 /**
- * The shared rules explanation as short paragraphs — roster, shorts, score —
- * split at the shared short sentence so the words stay exactly the rules copy's.
+ * The shared rules explanation as short paragraphs, in the rules copy's own
+ * order and words. Each marker (a shared sentence such as the roster or short
+ * explainer) becomes its own paragraph, and the text between markers becomes
+ * one too. A marker the copy no longer contains is simply skipped, so a
+ * rewrite of the rules can never drop a sentence from the sheet.
  */
-export function explanationParagraphs(explanation: string, shortExplainer: string): string[] {
-  const at = explanation.indexOf(shortExplainer);
-  if (at < 0) return [explanation];
-  return [
-    explanation.slice(0, at),
-    shortExplainer,
-    explanation.slice(at + shortExplainer.length),
-  ].map((part) => part.trim()).filter(Boolean);
+export function explanationParagraphs(explanation: string, markers: readonly string[]): string[] {
+  const paragraphs: string[] = [];
+  let rest = explanation;
+  for (const marker of markers) {
+    const at = rest.indexOf(marker);
+    if (at < 0) continue;
+    paragraphs.push(rest.slice(0, at), marker);
+    rest = rest.slice(at + marker.length);
+  }
+  paragraphs.push(rest);
+  return paragraphs.map((part) => part.trim()).filter(Boolean);
 }

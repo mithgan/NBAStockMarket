@@ -3,7 +3,7 @@
  * round-capped stroke as the Settings icon so the frame reads as one set.
  * Colours are passed in from `colors.*`; nothing here hard-codes a colour.
  */
-import Svg, { Line, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 
 type IconProps = { color: string; size?: number };
 
@@ -46,12 +46,13 @@ export function PracticeIcon({ color, size = 18 }: IconProps) {
   );
 }
 
-/** A closed padlock: roster changes are locked. */
-export function LockIcon({ color, size = 12 }: IconProps) {
+/** Three dots: more controls behind this one. */
+export function MoreIcon({ color, size = 18 }: IconProps) {
   return (
     <Svg height={size} viewBox="0 0 24 24" width={size}>
-      <Rect fill={color} height={10} rx={2} width={15} x={4.5} y={11} />
-      <Path d="M8 11 V8 A4 4 0 0 1 16 8 V11" fill="none" stroke={color} strokeLinecap="round" strokeWidth={2.4} />
+      <Circle cx={5.5} cy={12} fill={color} r={2} />
+      <Circle cx={12} cy={12} fill={color} r={2} />
+      <Circle cx={18.5} cy={12} fill={color} r={2} />
     </Svg>
   );
 }

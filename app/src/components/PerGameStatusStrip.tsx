@@ -13,12 +13,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { PerGameRuleset } from '../api/contracts';
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
-import { exactMoney, humanDate, PRACTICE_LABEL, SHORT_EXPLAINER } from '../copy/terms';
+import {
+  exactMoney,
+  humanDate,
+  PRACTICE_LABEL,
+  ROSTER_EXPLAINER,
+  SHORT_EXPLAINER,
+} from '../copy/terms';
 import {
   chromeLayout,
   dividendText,
   explanationParagraphs,
   keepTogether,
+  lockLineText,
+  lockReopensText,
   nextGamesText,
   PRACTICE_OVER_TEXT,
   practiceDayText,
@@ -27,21 +35,37 @@ import {
   statusSummary,
 } from '../data/chromeView';
 import { recentEarnings } from '../data/perGameMetrics';
-import { perGameRulesPresentation, positionSlotHint } from '../data/perGameRules';
+import {
+  NEGATIVE_DIVIDEND_EXPLAINER,
+  perGameRulesPresentation,
+  positionSlotHint,
+} from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, control, fonts, labelStyle, radius, space, type, weight } from '../theme';
-import { Money, Tag } from '../ui/kit';
+import { headingLevel, Money, Tag } from '../ui/kit';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { PracticeIcon, RefreshIcon, RulesIcon } from './chrome/ChromeIcons';
 import { PracticeControls } from './SimBar';
+
+/**
+ * How the facts sit beside the controls.
+ *  - wide: one line (clock with the day, last night, next games or the lock).
+ *  - pair: practice on a phone. "Practice · Nov 5 · Last night +$323K" over
+ *    "Day 16 of 174 · Next Thu, Nov 6"; on a locked night the lock and when it
+ *    lifts take the whole second line.
+ *  - stack: one short fact per tight line. Signed in on a phone (three
+ *    controls share the row), practice at high zoom (no room for pairs), and
+ *    practice while Reconcile needs the room.
+ */
+type FactsArrangement = 'wide' | 'pair' | 'stack';
 
 /**
  * The status row above every screen: where the season stands, how last night
  * went, when the next games are, and the few controls that belong to the whole
  * game rather than one screen (rules, refresh, practice).
  *
- * It is part of the frame, not a card, so it stays one row: two short lines of
+ * It is part of the frame, not a card, so it stays one row: short lines of
  * facts beside 44px icon-first controls. In practice mode the practice bar
  * (SimBar) sits directly under it and carries the clock controls; the two share
  * one background and never repeat a date. The rules open as a sheet over the
@@ -80,10 +104,13 @@ export function PerGameStatusStrip() {
     || (reconciliationRequired ? pendingBeyondReconciliation : pendingActions.size > 0)
   );
 
+  // A lock covers one game date and lifts once that date's games are
+  // settled, so the copy promises "after", and says it.
+  const locked = rules.rosterMutationsLocked;
   const lockDate = rules.rosterLockGameDate;
-  const lockSentence = rules.rosterMutationsLocked
+  const lockSentence = locked
     ? (rules.rosterLockGameDate
-      ? `Roster changes are locked for the ${humanDate(rules.rosterLockGameDate)} game.`
+      ? `Roster changes are locked for the ${humanDate(rules.rosterLockGameDate)} games. They reopen once those games are in.`
       : 'Roster changes are locked while the current game is in progress.')
     : null;
   const summary = statusSummary({
@@ -95,55 +122,76 @@ export function PerGameStatusStrip() {
     lockSentence,
   });
 
-  // Only the signed-in row has three controls to squeeze; practice's single
-  // Rules control is 44px wide with its name, so it always keeps it.
+  const arrangement: FactsArrangement = layout.wide
+    ? 'wide'
+    : !practice || layout.compact || reconciliationRequired ? 'stack' : 'pair';
+  // Enlarged text keeps its natural line height and simply wraps.
+  const tight = arrangement === 'stack' && !layout.largeText;
+  // Only the signed-in row has three controls to squeeze; practice's Rules
+  // control is 44px wide with its name, so it always keeps it.
   const placement: ChromeButtonPlacement = layout.wide
     ? 'inline'
     : layout.iconOnly && !practice ? 'icon' : 'stacked';
   const canEnterPractice = !practice && Platform.OS === 'web' && typeof window !== 'undefined';
-  // Signed in, a phone row carries three controls, so each fact takes its own
-  // short line (three tight lines fit the 52px row). Practice has one control
-  // and fits its facts on two, except on the narrowest phones when the lock
-  // tag or Reconcile needs the room.
-  const tight = !layout.wide && !layout.largeText && (
-    !practice || (layout.iconOnly && (rules.rosterMutationsLocked || reconciliationRequired))
-  );
 
   // ---- facts ---------------------------------------------------------------
-  const clock = practice && progress ? (
-    <Text key="clock" maxFontSizeMultiplier={1.5} style={[styles.lead, tight && styles.tight]}>
+  const settledDate = lastSettled ? keepTogether(humanDate(lastSettled)) : null;
+  const dayText = progress ? keepTogether(practiceDayText(progress)) : null;
+  const money = lastNight === null ? null : (
+    <Money size={tight ? 'label' : 'body'} style={tight ? styles.moneyTight : undefined} value={lastNight} />
+  );
+
+  // First line. Practice: the mode and its date, plus the day on a wide screen
+  // or last night on a phone. Signed in: how far the results go.
+  const lead = practice ? (
+    <Text key="lead" maxFontSizeMultiplier={1.5} style={[styles.lead, tight && styles.tight]}>
       <Text style={styles.practiceWord}>{PRACTICE_LABEL}</Text>
-      {lastSettled ? <Text>{`  ·  ${keepTogether(humanDate(lastSettled))}`}</Text> : null}
-      <Text style={styles.leadMuted}>{`  ·  ${keepTogether(practiceDayText(progress))}`}</Text>
-    </Text>
-  ) : (
-    <Text key="clock" maxFontSizeMultiplier={1.5} style={[styles.lead, tight && styles.tight]}>
-      {lastSettled ? `Games through ${keepTogether(humanDate(lastSettled))}` : 'No games settled yet'}
-    </Text>
-  );
-  const night = lastNight === null ? null : (
-    <Text key="night" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
-      <Text style={styles.factLabel}>Last night </Text>
-      <Money size="body" style={tight ? styles.moneyTight : undefined} value={lastNight} />
-    </Text>
-  );
-  const upcoming = rules.rosterMutationsLocked ? (
-    <View
-      key="lock"
-      accessibilityLabel={lockSentence ?? undefined}
-      style={styles.lock}
-    >
-      <Tag style={tight ? styles.tagTight : undefined} tone="gold">ROSTER LOCKED</Tag>
-      {lockDate ? (
-        <Text maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
-          <Text style={styles.factLabel}>for </Text>
-          {keepTogether(humanDate(lockDate))}
+      {settledDate ? `  ·  ${settledDate}` : null}
+      {arrangement === 'wide' && dayText ? <Text style={styles.leadMuted}>{`  ·  ${dayText}`}</Text> : null}
+      {arrangement === 'pair' && money ? (
+        <Text style={styles.leadMuted}>
+          {'  ·  Last night '}
+          {money}
         </Text>
       ) : null}
-    </View>
+    </Text>
+  ) : (
+    <Text key="lead" maxFontSizeMultiplier={1.5} style={[styles.lead, tight && styles.tight]}>
+      {settledDate ? `Games through ${settledDate}` : 'No games settled yet'}
+    </Text>
+  );
+  const night = money === null || arrangement === 'pair' ? null : (
+    <Text key="night" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
+      <Text style={styles.factLabel}>Last night </Text>
+      {money}
+    </Text>
+  );
+  const day = dayText && arrangement !== 'wide' && !(arrangement === 'stack' && layout.compact) ? (
+    <Text key="day" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel, tight && styles.tight]}>
+      {dayText}
+    </Text>
+  ) : null;
+  // Signed in on a phone the lock shares a 52px row with three controls, so
+  // it says the same thing without the tag.
+  const lockAsLine = tight && !practice;
+  const upcoming = locked ? (
+    lockAsLine ? (
+      <Text key="lock" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.lockLine, tight && styles.tight]}>
+        {lockLineText(lockDate)}
+      </Text>
+    ) : (
+      <View key="lock" style={styles.lock}>
+        <Tag style={tight ? styles.tagTight : undefined} tone="gold">ROSTER LOCKED</Tag>
+        <Text maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel, tight && styles.tight]}>
+          {lockReopensText(lockDate)}
+        </Text>
+      </View>
+    )
   ) : progress?.complete ? (
+    // Compact has no day line, so it states the fact; its Restart button sits
+    // right underneath. Wider rows pair "Season complete" with the way on.
     <Text key="over" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel, tight && styles.tight]}>
-      {PRACTICE_OVER_TEXT}
+      {layout.compact ? practiceDayText(progress) : PRACTICE_OVER_TEXT}
     </Text>
   ) : (
     <Text key="next" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
@@ -151,6 +199,40 @@ export function PerGameStatusStrip() {
       {next ? keepTogether(next) : 'not scheduled yet'}
     </Text>
   );
+
+  let facts;
+  if (arrangement === 'wide') {
+    facts = (
+      <View style={[styles.line, styles.lineWide]}>
+        {lead}
+        {night}
+        {upcoming}
+      </View>
+    );
+  } else if (arrangement === 'pair') {
+    facts = (
+      <>
+        {lead}
+        <View style={styles.line}>
+          {locked ? null : day}
+          {upcoming}
+        </View>
+      </>
+    );
+  } else {
+    facts = (
+      <>
+        {lead}
+        {night}
+        {day && !locked ? (
+          <View style={styles.line}>
+            {day}
+            {upcoming}
+          </View>
+        ) : upcoming}
+      </>
+    );
+  }
 
   // ---- controls ------------------------------------------------------------
   // After an uncertain roster action the refresh control becomes the one gold
@@ -193,40 +275,26 @@ export function PerGameStatusStrip() {
         practice && layout.merged && styles.stripMerged,
       ]}
     >
-      <View style={[styles.row, layout.largeText && styles.rowLarge]}>
+      <View
+        style={[
+          styles.row,
+          layout.narrow && styles.rowNarrow,
+          layout.largeText && styles.rowLarge,
+        ]}
+      >
         <View
           accessibilityLabel={summary}
           accessible
           style={[
             styles.facts,
-            practice ? styles.factsPractice : styles.factsLive,
+            practice ? (layout.compact ? styles.factsCompact : styles.factsPractice) : styles.factsLive,
             tight && styles.factsTight,
             // Enlarged text signed in: three controls would squeeze the facts
             // into a sliver, so the facts take the row and the controls wrap.
             layout.largeText && !practice && styles.factsFull,
           ]}
         >
-          {layout.wide ? (
-            <View style={[styles.line, styles.lineWide]}>
-              {clock}
-              {night}
-              {upcoming}
-            </View>
-          ) : tight ? (
-            <>
-              {clock}
-              {night}
-              {upcoming}
-            </>
-          ) : (
-            <>
-              {clock}
-              <View style={styles.line}>
-                {night}
-                {upcoming}
-              </View>
-            </>
-          )}
+          {facts}
         </View>
         <View style={styles.actions}>
           {practice && layout.merged ? <PracticeControls inline /> : null}
@@ -259,9 +327,13 @@ export function PerGameStatusStrip() {
 /** Below this width the rules sheet rises from the bottom; above it, it is a centred panel. */
 const RULES_SHEET_DOCKED_MAX_WIDTH = 640;
 
+/** The shared sentences the rules copy is split at, one paragraph each. */
+const RULES_PARAGRAPH_MARKERS = [ROSTER_EXPLAINER, SHORT_EXPLAINER, NEGATIVE_DIVIDEND_EXPLAINER];
+
 /**
- * The rules, over the screen. Plain English first (the shared rules copy),
- * then the numbers a player checks before a move.
+ * The rules, over the screen. Plain English first (the shared rules copy, in
+ * short paragraphs: dividends and net points, the roster, shorts, the score,
+ * bad games), then the numbers a player checks before a move.
  */
 function RulesSheet({
   visible,
@@ -296,10 +368,15 @@ function RulesSheet({
       transparent
       visible={visible}
     >
-      <Pressable
-        accessibilityLabel="Close the game rules"
-        accessibilityRole="button"
-        onPress={onClose}
+      {/* The scrim closes on a tap but can never take focus. A Pressable, even
+          with tabIndex -1, is still focusable by script, and react-native-web's
+          modal focus trap focuses the first focusable child it finds, so the
+          scrim would be the first stop again. A plain view answering the
+          responder system has no tabindex at all; keyboard and screen-reader
+          users close with Done or Escape. */}
+      <View
+        onResponderRelease={onClose}
+        onStartShouldSetResponder={() => true}
         style={styles.scrim}
       />
       <View
@@ -310,7 +387,7 @@ function RulesSheet({
         ]}
       >
         <View style={styles.sheetHead}>
-          <Text accessibilityRole="header" style={styles.sheetTitle}>Game rules</Text>
+          <Text accessibilityRole="header" {...headingLevel(2)} style={styles.sheetTitle}>Game rules</Text>
           <Pressable
             accessibilityLabel="Close the game rules"
             accessibilityRole="button"
@@ -322,7 +399,7 @@ function RulesSheet({
         </View>
         <ScrollView contentContainerStyle={styles.sheetContent} style={styles.sheetBody}>
           <View style={styles.explanation}>
-            {explanationParagraphs(presentation.explanation, SHORT_EXPLAINER).map((paragraph) => (
+            {explanationParagraphs(presentation.explanation, RULES_PARAGRAPH_MARKERS).map((paragraph) => (
               <Text key={paragraph} style={styles.paragraph}>{paragraph}</Text>
             ))}
           </View>
@@ -364,7 +441,12 @@ const styles = StyleSheet.create({
     // Enlarged text wraps the controls under the facts instead of truncating.
     flexWrap: 'wrap',
     columnGap: space.sm,
+    rowGap: 2,
     paddingHorizontal: space.lg,
+  },
+  rowNarrow: {
+    columnGap: 6,
+    paddingHorizontal: space.md,
   },
   rowLarge: {
     paddingVertical: space.xs,
@@ -379,8 +461,11 @@ const styles = StyleSheet.create({
   factsPractice: {
     flexBasis: 180,
   },
+  factsCompact: {
+    flexBasis: 100,
+  },
   factsLive: {
-    flexBasis: 140,
+    flexBasis: 165,
   },
   factsTight: {
     gap: 0,
@@ -433,12 +518,17 @@ const styles = StyleSheet.create({
   lock: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    flexWrap: 'wrap',
+    columnGap: 6,
+  },
+  lockLine: {
+    color: colors.goldInk,
+    fontWeight: weight.bold,
   },
   tagTight: {
     paddingVertical: 0,
   },
-  // One size per line keeps the three tight lines at exactly their height.
+  // One size per line keeps the tight lines at exactly their height.
   moneyTight: {
     fontSize: type.caption,
   },

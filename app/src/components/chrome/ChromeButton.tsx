@@ -1,5 +1,6 @@
 /**
- * The status row's compact controls: Rules, Refresh (or Reconcile), Practice.
+ * The chrome's compact controls: Rules, Refresh (or Reconcile), Practice, and
+ * the practice bar's More at high zoom.
  *
  * Icon first, name second. On a phone the name sits under the icon so three
  * controls fit beside the facts; on a wide screen it sits beside the icon; on a
@@ -22,6 +23,7 @@ export function ChromeButton({
   busy = false,
   placement,
   tone = 'plain',
+  expanded,
 }: {
   /** Rendered with the colour the button hands it. */
   icon: (color: string) => ReactNode;
@@ -33,14 +35,16 @@ export function ChromeButton({
   placement: ChromeButtonPlacement;
   /** Gold only for the one control that needs the player now (Reconcile). */
   tone?: 'plain' | 'gold';
+  /** For a control that shows and hides more controls (More). */
+  expanded?: boolean;
 }) {
   const gold = tone === 'gold';
-  const color = disabled ? colors.faint : gold ? colors.goldInk : colors.muted;
+  const color = disabled ? colors.faint : gold || expanded ? colors.goldInk : colors.muted;
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
-      accessibilityState={{ disabled, busy }}
+      accessibilityState={{ disabled, busy, expanded }}
       disabled={disabled}
       onPress={() => {
         if (!disabled) onPress();
@@ -50,6 +54,7 @@ export function ChromeButton({
         placement === 'inline' ? styles.inline : styles.stacked,
         gold && styles.gold,
         gold && placement === 'inline' && styles.goldInline,
+        expanded && styles.expanded,
         disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
       ]}
@@ -93,6 +98,11 @@ const styles = StyleSheet.create({
   },
   goldInline: {
     paddingHorizontal: space.md,
+  },
+  // Open: the control reads as pressed in, so it is clear what it opened.
+  expanded: {
+    backgroundColor: colors.surfaceRaised,
+    borderColor: colors.borderStrong,
   },
   label: {
     fontFamily: fonts.display,

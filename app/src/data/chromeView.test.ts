@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 
 import { parsePerGameBootstrap } from '../api/contracts';
-import { SHORT_EXPLAINER } from '../copy/terms';
+import { ROSTER_EXPLAINER, SHORT_EXPLAINER } from '../copy/terms';
 import {
   chromeLayout,
   daysBetween,
@@ -12,6 +12,8 @@ import {
   dividendText,
   explanationParagraphs,
   keepTogether,
+  lockLineText,
+  lockReopensText,
   nextGamesText,
   practiceDayText,
   practiceProgress,
@@ -19,7 +21,7 @@ import {
   shortTermText,
   statusSummary,
 } from './chromeView';
-import { perGameRulesPresentation } from './perGameRules';
+import { NEGATIVE_DIVIDEND_EXPLAINER, NET_POINTS_EXPLAINER, perGameRulesPresentation } from './perGameRules';
 
 const example = JSON.parse(readFileSync(resolve(import.meta.dirname, '../api/fixtures/perGameApiExample.json'), 'utf8'));
 const rules = parsePerGameBootstrap(example.bootstrap).ruleset;
@@ -61,12 +63,37 @@ test('short phrases hold together when large text wraps', () => {
 });
 
 test('layout: phones stack two short lines, wide screens use one line, large text wraps', () => {
-  assert.deepEqual(chromeLayout(390, 1), { wide: false, merged: false, largeText: false, iconOnly: false });
-  assert.deepEqual(chromeLayout(360, 1), { wide: false, merged: false, largeText: false, iconOnly: true });
-  assert.deepEqual(chromeLayout(768, 1), { wide: true, merged: false, largeText: false, iconOnly: false });
-  assert.deepEqual(chromeLayout(1440, 1), { wide: true, merged: true, largeText: false, iconOnly: false });
-  assert.deepEqual(chromeLayout(1440, 2), { wide: false, merged: false, largeText: true, iconOnly: false });
-  assert.deepEqual(chromeLayout(360, 2), { wide: false, merged: false, largeText: true, iconOnly: false });
+  const base = { wide: false, merged: false, largeText: false, iconOnly: false, narrow: false, compact: false };
+  assert.deepEqual(chromeLayout(390, 1), base);
+  assert.deepEqual(chromeLayout(360, 1), { ...base, iconOnly: true });
+  assert.deepEqual(chromeLayout(768, 1), { ...base, wide: true });
+  assert.deepEqual(chromeLayout(1440, 1), { ...base, wide: true, merged: true });
+  assert.deepEqual(chromeLayout(1440, 2), { ...base, largeText: true });
+  assert.deepEqual(chromeLayout(360, 2), { ...base, largeText: true });
+});
+
+test('layout: narrow phones tighten, and a phone at 200% zoom goes compact', () => {
+  // 340-359: tighter gutters, and the signed-in toolbar still icon-only beside the facts.
+  assert.deepEqual(chromeLayout(350, 1), {
+    wide: false, merged: false, largeText: false, iconOnly: true, narrow: true, compact: false,
+  });
+  // 320-339: the signed-in toolbar drops under the facts, so it keeps its labels.
+  assert.equal(chromeLayout(330, 1).iconOnly, false);
+  assert.equal(chromeLayout(330, 1).compact, false);
+  // 390px at 200% zoom is 195 CSS px: compact.
+  assert.deepEqual(chromeLayout(195, 1), {
+    wide: false, merged: false, largeText: false, iconOnly: false, narrow: true, compact: true,
+  });
+  assert.equal(chromeLayout(319, 1).compact, true);
+  assert.equal(chromeLayout(320, 1).compact, false);
+});
+
+test('the roster lock says when changes reopen, never just a date', () => {
+  // A lock covers one game date and lifts once that date's games are settled.
+  assert.equal(lockReopensText('2025-11-06'), 'reopens after Nov 6');
+  assert.equal(lockReopensText(null), 'while games are on');
+  assert.equal(lockLineText('2025-11-16'), 'Roster reopens after Nov 16');
+  assert.equal(lockLineText(null), 'Roster locked for now');
 });
 
 test('next games read as a day, never an ISO date', () => {
@@ -127,22 +154,33 @@ test('rule wording matches the shared rules copy for both dividend bases', () =>
     const facts = perGameRulesPresentation({ ...rules, dividendBasis }).facts;
     assert.equal(dividendBasisText(dividendBasis), facts.find((fact) => fact.label === 'Dividend basis')?.value);
   }
-  assert.equal(dividendText('raw_net_points', 40_000), 'Net points scored · $40,000 per net point');
+  assert.equal(dividendText('raw_net_points', 40_000), 'Net points scored · $40,000\u00a0per\u00a0net\u00a0point');
   assert.equal(shortTermText(7), 'A short closes after 7 days');
   assert.equal(shortTermText(1), 'A short closes after 1 day');
   assert.equal(shortTermText(null), 'A short stays open until you close it');
 });
 
-test('the rules explanation splits into roster, shorts and score without changing a word', () => {
-  const { explanation } = perGameRulesPresentation(rules);
-  const paragraphs = explanationParagraphs(explanation, SHORT_EXPLAINER);
-  assert.equal(paragraphs.length, 3);
-  assert.match(paragraphs[0], /you pay his price and collect his dividend/);
-  assert.equal(paragraphs[1], SHORT_EXPLAINER);
-  assert.match(paragraphs[2], /^Your score is/);
-  assert.equal(paragraphs.join(' '), explanation);
-  // Copy that no longer contains the shared sentence still renders, whole.
-  assert.deepEqual(explanationParagraphs('Plain rules.', SHORT_EXPLAINER), ['Plain rules.']);
+test('the rules explanation reads as short paragraphs without changing a word', () => {
+  const markers = [ROSTER_EXPLAINER, SHORT_EXPLAINER, NEGATIVE_DIVIDEND_EXPLAINER];
+  for (const dividendBasis of ['raw_net_points', 'surprise_vs_projection'] as const) {
+    const { explanation } = perGameRulesPresentation({ ...rules, dividendBasis });
+    const paragraphs = explanationParagraphs(explanation, markers);
+    // Dividends and what net points are; the roster; shorts; the score; bad games.
+    assert.equal(paragraphs.length, 5);
+    assert.match(paragraphs[0], /^A player's dividend comes from/);
+    assert.ok(paragraphs[0].endsWith(NET_POINTS_EXPLAINER));
+    assert.equal(paragraphs[1], ROSTER_EXPLAINER);
+    assert.equal(paragraphs[2], SHORT_EXPLAINER);
+    assert.match(paragraphs[3], /^Your score is the total/);
+    assert.equal(paragraphs[4], NEGATIVE_DIVIDEND_EXPLAINER);
+    assert.equal(paragraphs.join(' '), explanation);
+  }
+  // Copy that no longer contains a shared sentence still renders, whole.
+  assert.deepEqual(explanationParagraphs('Plain rules.', markers), ['Plain rules.']);
+  assert.deepEqual(
+    explanationParagraphs(`Intro. ${SHORT_EXPLAINER}`, markers),
+    ['Intro.', SHORT_EXPLAINER],
+  );
 });
 
 test('chrome copy never uses the words the design bans', () => {
@@ -159,6 +197,9 @@ test('chrome copy never uses the words the design bans', () => {
     dividendText('surprise_vs_projection', 40_000),
     shortTermText(7),
     shortTermText(null),
+    lockReopensText('2025-11-06'),
+    lockLineText('2025-11-06'),
+    lockLineText(null),
   ].join('\n');
   assert.doesNotMatch(copy, /\binverse\b|\/GM\b|raw net points|cumulative|sandbox|\b\d{4}-\d{2}-\d{2}\b/i);
 });
