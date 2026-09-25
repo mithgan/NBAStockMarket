@@ -12,7 +12,18 @@ import type {
   PerGameSettledResult,
   PerGameSlotSummary,
 } from '../api/contracts';
-import { closeVerb, money, openVerb, perGame, signedMoney } from '../copy/terms';
+import {
+  CONFIRM_LABEL,
+  closeVerb,
+  confirmCloseLine,
+  money,
+  moneyFine,
+  openVerb,
+  perGame,
+  rosterReopensLine,
+  signedMoney,
+  signedMoneyFine,
+} from '../copy/terms';
 import {
   currentResults,
   lastYearEdge,
@@ -216,18 +227,23 @@ export function heldDetail(summary: ValueSummary | undefined, lockedGameCost: nu
   tone: SignalTone;
 } {
   if (summary && summary.avgNet !== null && summary.games > 0) {
+    // The Roster's precision, so the same figure reads the same on both screens.
     return {
-      text: `${signedMoney(summary.avgNet)} a game over ${summary.games === 1 ? '1 game' : `${summary.games} games`}`,
+      text: `${signedMoneyFine(summary.avgNet)} a game over ${summary.games === 1 ? '1 game' : `${summary.games} games`}`,
       tone: netTone(summary.avgNet),
     };
   }
-  return { text: `locked at ${money(lockedGameCost)}`, tone: 'none' };
+  return { text: `locked at ${moneyFine(lockedGameCost)}`, tone: 'none' };
 }
 
+/** On a button whose season has ended, as FULL and LOCKED are shown. */
+export const SEASON_OVER_LABEL = 'Season over';
+
 /**
- * The action button's visible word. A pending action waits; a confirm step
- * asks ("Drop?"); a lock or a full side says so on the button itself, so a
- * dimmed button never goes unexplained.
+ * The action button's visible word. A pending action waits; an ended season
+ * or a lock or a full side says so on the button itself, so a dimmed button
+ * never goes unexplained; an armed Drop or Close reads "Confirm", the word
+ * the Roster and Restart use.
  */
 export function actionWord({
   side,
@@ -236,6 +252,7 @@ export function actionWord({
   confirming,
   rosterLocked,
   full,
+  seasonOver = false,
 }: {
   side: PerGamePositionSide;
   held: boolean;
@@ -243,27 +260,89 @@ export function actionWord({
   confirming: boolean;
   rosterLocked: boolean;
   full: boolean;
+  seasonOver?: boolean;
 }): string {
   const verb = held ? closeVerb(side) : openVerb(side);
   if (pending) return 'Wait';
+  if (seasonOver) return SEASON_OVER_LABEL;
   if (rosterLocked) return 'Locked';
-  if (held && confirming) return `${verb}?`;
+  if (held && confirming) return CONFIRM_LABEL;
   if (!held && full) return 'Full';
   return verb;
 }
 
-/** The confirm step's accessible name; it still starts with the verb. */
-export function confirmName(side: PerGamePositionSide, playerName: string): string {
-  return side === 'long'
-    ? `${closeVerb(side)} ${playerName} from your roster? Tap again to confirm.`
-    : `${closeVerb(side)} your short on ${playerName}? Tap again to confirm.`;
+/**
+ * What the live region says when a Drop or Close is armed: the same line the
+ * button shows under it, led by what to tap.
+ * "Tap Confirm to drop Nikola Jokic. $250 fee · his +$764K stays in your score."
+ */
+export function confirmAnnouncement(side: PerGamePositionSide, playerName: string, fee: number, total: number): string {
+  const what = side === 'long' ? `drop ${playerName}` : `close your short on ${playerName}`;
+  // With no fee the shared line starts "his …" or "this short's …"; it is a
+  // sentence of its own here, so it starts with a capital.
+  const line = confirmCloseLine(side, fee, total);
+  return `Tap ${CONFIRM_LABEL} to ${what}. ${line.charAt(0).toUpperCase()}${line.slice(1)}.`;
 }
 
-/** What the live region says when a confirm step starts. */
-export function confirmAnnouncement(side: PerGamePositionSide, playerName: string, fee: number): string {
-  const what = side === 'long' ? `drop ${playerName}` : `close your short on ${playerName}`;
-  const cost = fee > 0 ? ` It costs a ${money(fee)} fee.` : '';
-  return `Tap ${closeVerb(side)} again within 4 seconds to ${what}.${cost}`;
+/**
+ * The season is over when practice has played its last day, or when a live
+ * season has settled games and no next game: the rule the Roster uses, so
+ * the Market never sells a player the Roster calls final.
+ */
+export function isSeasonOver({
+  practiceComplete,
+  lastSettledDate,
+  nextGameDate,
+}: {
+  practiceComplete: boolean;
+  lastSettledDate: string | null;
+  nextGameDate: string | null;
+}): boolean {
+  return practiceComplete || (lastSettledDate !== null && nextGameDate === null);
+}
+
+/** Why an action is unavailable at season end, for its accessible name. */
+export const SEASON_OVER_REASON = 'The season is over.';
+
+export interface HeaderStatus {
+  /** The line under the slot count, or null. */
+  text: string | null;
+  /** 'lock' draws the padlock and the one warning colour. */
+  kind: 'season' | 'lock' | 'full' | null;
+}
+
+/**
+ * The one line under "8 of 10 on your roster": the season is over, or
+ * roster changes are locked (with when they reopen), or the side is full.
+ * Only one shows, so a locked roster never advises a drop it cannot make.
+ */
+export function headerStatus({
+  side,
+  seasonOver,
+  rosterLocked,
+  lockGameDate,
+  full,
+}: {
+  side: PerGamePositionSide;
+  seasonOver: boolean;
+  rosterLocked: boolean;
+  lockGameDate: string | null;
+  full: boolean;
+}): HeaderStatus {
+  if (seasonOver) return { text: 'The season is over', kind: 'season' };
+  if (rosterLocked) return { text: rosterReopensLine(lockGameDate), kind: 'lock' };
+  if (full) return { text: side === 'long' ? 'Full: drop one to add' : 'Full: close one to short', kind: 'full' };
+  return { text: null, kind: null };
+}
+
+/**
+ * Below this width (a phone at 200% zoom) search, sort and Watching fold
+ * behind one toggle, so the first player shows without scrolling past them.
+ */
+export const COLLAPSE_CONTROLS_BELOW = 300;
+
+export function collapseControls(width: number): boolean {
+  return width < COLLAPSE_CONTROLS_BELOW;
 }
 
 /** How long a Drop or Close waits for its second tap. */

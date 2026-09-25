@@ -22,7 +22,7 @@ import type {
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
-import { gamesCount, humanDate, money, perGame, signedMoney } from '../copy/terms';
+import { gamesCount, humanDate, money, moneyFine, signedMoneyFine } from '../copy/terms';
 import { currentResults, lastYearEdge, type ValueSummary } from './perGameMetrics';
 import {
   selectHighLowPoints,
@@ -201,14 +201,14 @@ export function formVerdict(summary: NightsSummary, options: VerdictOptions = {}
     const verb = side === 'long'
       ? good ? 'Beat' : 'Missed'
       : good ? 'Stayed under' : 'Went over';
-    return `${verb} his price by ${money(Math.abs(avgNet))} in ${which}.`;
+    return `${verb} his price by ${moneyFine(Math.abs(avgNet))} in ${which}.`;
   }
   const count = scope === 'yours'
     ? recent ? `your last ${games} games with him` : `your ${games} games with him`
     : recent ? `his last ${games} games` : `his ${games} games this season`;
   const lead = `${side === 'long' ? 'Beat' : 'Stayed under'} his price in ${beat} of ${count}`;
   if (even) return `${lead}, about even on average${forWho}.`;
-  return `${lead}, ${money(Math.abs(avgNet))} a game ${avgNet > 0 ? 'ahead' : 'behind'} on average${forWho}.`;
+  return `${lead}, ${moneyFine(Math.abs(avgNet))} a game ${avgNet > 0 ? 'ahead' : 'behind'} on average${forWho}.`;
 }
 
 /** Labels for the side you look from, so a short never reads as a roster spot. */
@@ -251,7 +251,69 @@ export function priceSourceCaption(summary: Pick<NightsSummary, 'games' | 'yours
   if (summary.games === 0) return '';
   if (summary.yours === summary.games) return yourWord;
   if (summary.yours === 0) return 'his market price';
-  return `${summary.yours} at ${yourWord}`;
+  return 'average of both';
+}
+
+/**
+ * Which of the shown games were yours, when they are a mix: "These 11 games:
+ * 2 with you at $169K, 9 at his market price." Null when every game is yours
+ * or none is, since the price caption already says so.
+ */
+export function mixNote(nights: readonly ProfileNight[], side: PerGamePositionSide): string | null {
+  const yours = nights.filter((night) => night.source === 'yours');
+  if (yours.length === 0 || yours.length === nights.length) return null;
+  const prices = new Set(yours.map((night) => Math.round(night.price)));
+  const at = prices.size === 1
+    ? `at ${moneyFine(yours[0].price)}`
+    : `at your locked ${side === 'long' ? 'prices' : 'credits'}`;
+  const market = nights.length - yours.length;
+  return `These ${gamesCount(nights.length)}: ${yours.length} with you ${at}, ${market} at his market ${side === 'long' ? 'price' : 'credit'}.`;
+}
+
+export interface StatusNight {
+  date: string;
+  /** Did not play (nothing charged), or played but not settled yet. */
+  kind: 'dnp' | 'pending';
+}
+
+/**
+ * Your nights with him that have no money to show: verified did-not-play
+ * nights and games still waiting to settle, on the side you look from. They
+ * stay out of the chart and the averages but keep their line in the log.
+ */
+export function statusNights(results: readonly PerGameSettledResult[], side: PerGamePositionSide): StatusNight[] {
+  const byDate = new Map<string, StatusNight>();
+  for (const result of currentResults(results)) {
+    if (result.side !== side) continue;
+    if (result.status === 'verified_dnp') byDate.set(result.gameDate, { date: result.gameDate, kind: 'dnp' });
+    else if (result.status !== 'settled' || result.dividendDollars === null) {
+      byDate.set(result.gameDate, { date: result.gameDate, kind: 'pending' });
+    }
+  }
+  return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date));
+}
+
+/** "Did not play 1 night (nothing charged) · 2 games waiting to settle", or null. */
+export function unsettledNote(summary: Pick<ValueSummary, 'dnp' | 'pending'>): string | null {
+  const parts: string[] = [];
+  if (summary.dnp > 0) parts.push(`Did not play ${summary.dnp === 1 ? '1 night' : `${summary.dnp} nights`} (nothing charged)`);
+  if (summary.pending > 0) parts.push(`${gamesCount(summary.pending)} waiting to settle`);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+export type LogRow =
+  | { kind: 'game'; night: ProfileNight }
+  | { kind: 'dnp' | 'pending'; date: string };
+
+/** The game log, newest first: settled games with their money, and the nights that have none. */
+export function logRows(nights: readonly ProfileNight[], status: readonly StatusNight[], limit?: number): LogRow[] {
+  const rows: LogRow[] = [
+    ...nights.map((night) => ({ kind: 'game' as const, night })),
+    ...status.map((night) => ({ kind: night.kind, date: night.date })),
+  ];
+  const dateOf = (row: LogRow) => (row.kind === 'game' ? row.night.date : row.date);
+  rows.sort((left, right) => dateOf(right).localeCompare(dateOf(left)));
+  return limit === undefined ? rows : rows.slice(0, limit);
 }
 
 /** The game log's price column header. */
@@ -275,6 +337,16 @@ export const RANGE_OPTIONS: { key: TrendRange; label: string; hint: string }[] =
   { key: 'Season', label: 'Season', hint: 'Every game this season' },
 ];
 
+/**
+ * The range choices for a width. Four tabs in a 195px sheet (a phone at 200%
+ * zoom) leave 44px each, too narrow for "Season", so it reads "All" there.
+ */
+export function rangeOptions(narrow: boolean): { key: TrendRange; label: string; hint: string }[] {
+  return narrow
+    ? RANGE_OPTIONS.map((option) => (option.key === 'Season' ? { ...option, label: 'All' } : option))
+    : RANGE_OPTIONS;
+}
+
 export function rangeNights(nights: readonly ProfileNight[], range: TrendRange): ProfileNight[] {
   return selectTrendRange(nights, range);
 }
@@ -293,9 +365,9 @@ export function priceStory(nights: readonly ProfileNight[], side: PerGamePositio
   const yours = nights.filter((night) => night.source === 'yours').length;
   const note = yours === 0 ? '' : yours === nights.length ? ` (your locked ${word})` : ` (your locked ${word} in ${yours})`;
   if (Math.round(first / 1000) === Math.round(last / 1000)) {
-    return `His ${word} held near ${perGame(last)} over ${gamesCount(nights.length)}${note}.`;
+    return `His ${word} held near ${moneyFine(last)} a game over ${gamesCount(nights.length)}${note}.`;
   }
-  return `His ${word} went from ${money(first)} to ${perGame(last)} over ${gamesCount(nights.length)}${note}.`;
+  return `His ${word} went from ${moneyFine(first)} to ${moneyFine(last)} a game over ${gamesCount(nights.length)}${note}.`;
 }
 
 export interface HoldingStatus {
@@ -309,10 +381,10 @@ export interface HoldingStatus {
 export function holdingStatus(position: Pick<PerGamePosition, 'side' | 'lockedGameCost' | 'expiresOn'> | null): HoldingStatus {
   if (!position) return { tag: null, text: 'Not on your roster or shorted' };
   if (position.side === 'long') {
-    return { tag: 'On your roster', text: `Locked in at ${perGame(position.lockedGameCost)}` };
+    return { tag: 'On your roster', text: `Locked in at ${moneyFine(position.lockedGameCost)} a game` };
   }
   const until = position.expiresOn ? `, ends ${humanDate(position.expiresOn)}` : '';
-  return { tag: 'Shorted', text: `Credited ${perGame(position.lockedGameCost)}${until}` };
+  return { tag: 'Shorted', text: `Credited ${moneyFine(position.lockedGameCost)} a game${until}` };
 }
 
 export type StakeTone = 'gain' | 'loss' | 'even' | 'none';
@@ -330,7 +402,7 @@ export function stakeLine(summary: Pick<ValueSummary, 'games' | 'total'>, held: 
   const tone: StakeTone = Math.abs(summary.total) < EVEN_BAND ? 'even' : summary.total > 0 ? 'gain' : 'loss';
   return {
     lead: held ? `${gamesCount(summary.games)} with you ·` : `Before: ${gamesCount(summary.games)} with you ·`,
-    total: `${signedMoney(summary.total)} total`,
+    total: `${signedMoneyFine(summary.total)} total`,
     tone,
   };
 }
@@ -517,7 +589,7 @@ export function chartSummary(
   const highNight = high ? nights[high.index] : null;
   const lowNight = low ? nights[low.index] : null;
   const range = highNight && lowNight
-    ? ` High ${money(high!.value)} on ${humanDate(highNight.date)}, low ${money(low!.value)} on ${humanDate(lowNight.date)}.`
+    ? ` High ${moneyFine(high!.value)} on ${humanDate(highNight.date)}, low ${moneyFine(low!.value)} on ${humanDate(lowNight.date)}.`
     : '';
   if (metric === 'price') return `His ${words.priceShort} a game over ${gamesCount(nights.length)}.${range}`;
   const summary = summarizeNights(nights);
@@ -530,6 +602,6 @@ export function chartSummary(
 /** The chart's read-out for one night: "Dividend $324K · price $104K · +$220K". */
 export function nightReadout(night: ProfileNight, metric: ProfileMetric, side: PerGamePositionSide = 'long'): string {
   const words = sideWords(side);
-  if (metric === 'price') return `${side === 'long' ? 'Price' : 'Credit'} ${perGame(night.price)}`;
-  return `Dividend ${money(night.dividend)} · ${words.priceShort} ${money(night.price)} · ${signedMoney(night.net)}`;
+  if (metric === 'price') return `${side === 'long' ? 'Price' : 'Credit'} ${moneyFine(night.price)} a game`;
+  return `Dividend ${moneyFine(night.dividend)} · ${words.priceShort} ${moneyFine(night.price)} · ${signedMoneyFine(night.net)}`;
 }

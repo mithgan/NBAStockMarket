@@ -2,17 +2,20 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameMarketPlayer, PerGameSettledResult } from '../api/contracts';
+import { CONFIRM_LABEL, confirmCloseName, rosterReopensLine } from '../copy/terms';
 import { positionValue } from './perGameMetrics';
 import {
   accountValueByPlayer,
   actionableFirst,
   actionName,
   actionWord,
+  collapseControls,
   confirmAnnouncement,
-  confirmName,
   CONFIRM_WINDOW_MS,
   filterMarketRows,
+  headerStatus,
   heldDetail,
+  isSeasonOver,
   keepNamesWhole,
   marketColumns,
   marketLayout,
@@ -172,11 +175,12 @@ test('a held row reads the current position only, like its Roster row (grader B1
   const current = [result({ positionId: 'mock-position-12', gameId: 'new-1', netPnl: -368_339, dividendDollars: -265_000 })];
   const all = [...firstStint, ...current];
   // The all-stints value (what round 1 showed) is +$105K a game; the Roster row is -$368K.
-  assert.equal(heldDetail(accountValueByPlayer(all, 'long').get('a'), 103_000).text, '+$105K a game over 12 games');
+  assert.equal(heldDetail(accountValueByPlayer(all, 'long').get('a'), 103_000).text, '+$105.3K a game over 12 games');
   const detail = heldDetail(positionValue(all, 'mock-position-12'), 103_000);
-  assert.deepEqual(detail, { text: '-$368K a game over 1 game', tone: 'loss' });
+  // The Roster's precision (grader S-2): -$368.3K, not -$368K.
+  assert.deepEqual(detail, { text: '-$368.3K a game over 1 game', tone: 'loss' });
   // Right after a re-add, before the new stint plays: the locked price, not the old stint.
-  assert.deepEqual(heldDetail(positionValue(all, 'mock-position-13'), 103_000), { text: 'locked at $103K', tone: 'none' });
+  assert.deepEqual(heldDetail(positionValue(all, 'mock-position-13'), 104_250), { text: 'locked at $104.3K', tone: 'none' });
   assert.doesNotMatch(detail.text, /so far/);
 });
 
@@ -203,17 +207,56 @@ test('the button says why it is dimmed, asks before a drop, and waits while pend
   assert.equal(actionWord({ ...base, pending: true }), 'Wait');
   assert.equal(actionWord({ ...base, held: true }), 'Drop');
   assert.equal(actionWord({ ...base, held: true, full: true }), 'Drop', 'a full roster never blocks a drop');
-  assert.equal(actionWord({ ...base, held: true, confirming: true }), 'Drop?');
-  assert.equal(actionWord({ ...base, side: 'short', held: true, confirming: true }), 'Close?');
+  // One confirm design with the Roster and Restart (grader N-S1): the shared "Confirm".
+  assert.equal(actionWord({ ...base, held: true, confirming: true }), CONFIRM_LABEL);
+  assert.equal(actionWord({ ...base, side: 'short', held: true, confirming: true }), 'Confirm');
   assert.equal(actionWord({ ...base, held: true, confirming: true, rosterLocked: true }), 'Locked');
-  assert.equal(confirmName('long', 'LeBron James'), 'Drop LeBron James from your roster? Tap again to confirm.');
-  assert.match(confirmName('short', 'LeBron James'), /^Close your short on LeBron James\?/);
+  // At season end nothing sells (grader N-M3), whatever else is true.
+  assert.equal(actionWord({ ...base, seasonOver: true }), 'Season over');
+  assert.equal(actionWord({ ...base, held: true, seasonOver: true, rosterLocked: true }), 'Season over');
+  assert.equal(actionWord({ ...base, full: true, seasonOver: true }), 'Season over');
   assert.equal(
-    confirmAnnouncement('long', 'LeBron James', 250),
-    'Tap Drop again within 4 seconds to drop LeBron James. It costs a $250 fee.',
+    confirmAnnouncement('long', 'LeBron James', 250, 764_000),
+    'Tap Confirm to drop LeBron James. $250 fee · his +$764K stays in your score.',
   );
-  assert.equal(confirmAnnouncement('short', 'LeBron James', 0), 'Tap Close again within 4 seconds to close your short on LeBron James.');
+  assert.equal(
+    confirmAnnouncement('short', 'LeBron James', 0, -12_500),
+    "Tap Confirm to close your short on LeBron James. This short's -$12.5K stays in your score.",
+  );
+  assert.equal(
+    confirmAnnouncement('long', 'LeBron James', 0, 764_000),
+    'Tap Confirm to drop LeBron James. His +$764K stays in your score.',
+  );
+  assert.equal(confirmCloseName('long', 'LeBron James'), 'Confirm dropping LeBron James');
   assert.equal(CONFIRM_WINDOW_MS, 4000);
+});
+
+test('the season is over on practice day 174, or live with no next game; not before the first game', () => {
+  assert.equal(isSeasonOver({ practiceComplete: true, lastSettledDate: '2026-04-12', nextGameDate: '2026-04-13' }), true);
+  assert.equal(isSeasonOver({ practiceComplete: false, lastSettledDate: '2026-04-12', nextGameDate: null }), true);
+  assert.equal(isSeasonOver({ practiceComplete: false, lastSettledDate: '2025-11-05', nextGameDate: '2025-11-06' }), false);
+  assert.equal(isSeasonOver({ practiceComplete: false, lastSettledDate: null, nextGameDate: null }), false);
+});
+
+test('the header adds one status line: season over, then the lock, then full (grader N-S4, N-S5)', () => {
+  const base = { side: 'long' as const, seasonOver: false, rosterLocked: false, lockGameDate: null, full: false };
+  assert.deepEqual(headerStatus(base), { text: null, kind: null });
+  assert.deepEqual(headerStatus({ ...base, full: true }), { text: 'Full: drop one to add', kind: 'full' });
+  assert.deepEqual(headerStatus({ ...base, side: 'short', full: true }), { text: 'Full: close one to short', kind: 'full' });
+  // Locked and full: no advice to drop while drops are locked; the one lock sentence.
+  assert.deepEqual(
+    headerStatus({ ...base, full: true, rosterLocked: true, lockGameDate: '2025-10-31' }),
+    { text: rosterReopensLine('2025-10-31'), kind: 'lock' },
+  );
+  assert.equal(headerStatus({ ...base, rosterLocked: true, lockGameDate: '2025-10-31' }).text, 'Roster reopens after Oct 31');
+  assert.deepEqual(headerStatus({ ...base, seasonOver: true, rosterLocked: true, full: true }), { text: 'The season is over', kind: 'season' });
+});
+
+test('search, sort and Watching fold behind one toggle below 300px', () => {
+  assert.equal(collapseControls(195), true);
+  assert.equal(collapseControls(299), true);
+  assert.equal(collapseControls(300), false);
+  assert.equal(collapseControls(390), false);
 });
 
 test('layout: a table from 768px, the phone row below, one column under 300px or with big text', () => {

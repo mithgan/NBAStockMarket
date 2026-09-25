@@ -9,28 +9,43 @@ import {
 } from 'react-native';
 
 import type { PerGamePositionSide } from '../api/contracts';
-import { isMockActive, mockPlayerTrends } from '../api/mockPerGameClient';
+import { isMockActive, mockPlayerTrends, mockSeasonStart } from '../api/mockPerGameClient';
 import { LockIcon } from '../components/market/icons';
-import { MarketColumnHeader, MarketSearch, WatchingToggle } from '../components/market/MarketControls';
+import { ControlsToggle, MarketColumnHeader, MarketSearch, WatchingToggle } from '../components/market/MarketControls';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
-import { SHORT_EXPLAINER, humanDate, money, perGameShort, signedMoney, unbrokenName } from '../copy/terms';
+import {
+  SHORT_EXPLAINER,
+  confirmCloseLine,
+  confirmCloseName,
+  money,
+  moneyFine,
+  perGameShort,
+  rosterReopensLine,
+  signedMoney,
+  signedMoneyFine,
+  unbrokenName,
+} from '../copy/terms';
+import { practiceProgress } from '../data/chromeView';
 import {
   accountValueByPlayer,
   actionableFirst,
   actionName,
   actionWord,
   CONFIRM_WINDOW_MS,
+  collapseControls,
   confirmAnnouncement,
-  confirmName,
   filterMarketRows,
+  headerStatus,
   heldDetail,
+  isSeasonOver,
   keepNamesWhole,
   MARKET_SORT_OPTIONS,
   marketColumns,
   marketLayout,
   netTone,
   rowProfileLabel,
+  SEASON_OVER_REASON,
   slotSummary,
   sortMarketRows,
   valueByPosition,
@@ -60,9 +75,9 @@ function sideTag(side: PerGamePositionSide): 'On your roster' | 'Shorted' {
   return side === 'long' ? 'On your roster' : 'Shorted';
 }
 
+/** Why a locked button is dimmed, in the app's one lock sentence. */
 function rosterLockMessage(gameDate: string | null): string {
-  if (!gameDate) return 'Roster changes are locked while the current game is in progress.';
-  return `Roster changes are locked for the ${humanDate(gameDate)} game.`;
+  return `Roster changes are locked. ${rosterReopensLine(gameDate)}.`;
 }
 
 const TONE_COLOR: Record<SignalTone, string> = {
@@ -80,6 +95,7 @@ function MarketRow({
   pastValue,
   fee,
   wholeNames,
+  seasonOver,
   onOpenProfile,
   onAnnounce,
 }: {
@@ -93,6 +109,8 @@ function MarketRow({
   fee: number;
   /** Keep hyphenated names whole (there is room for them on this width). */
   wholeNames: boolean;
+  /** No games are left: nothing can be added, dropped or shorted (and charged a fee). */
+  seasonOver: boolean;
   onOpenProfile: (playerId: string) => void;
   onAnnounce: (message: string) => void;
 }) {
@@ -103,7 +121,7 @@ function MarketRow({
   const locked = pendingActions.has('account-mutation');
   const rosterLocked = bootstrap?.ruleset.rosterMutationsLocked ?? true;
   const rosterLockHint = rosterLockMessage(bootstrap?.ruleset.rosterLockGameDate ?? null);
-  const disabled = !row.canSubmit || pending || locked || rosterLocked;
+  const disabled = !row.canSubmit || pending || locked || rosterLocked || seasonOver;
   const currentGameCost = player.currentGameCost;
   const priorSeasonValuePerGame = player.priorSeasonValuePerGame;
   const { given, surname } = splitPlayerName(player.name);
@@ -133,10 +151,12 @@ function MarketRow({
   const large = layout === 'large';
   const actionWidth = table ? columns.action : PHONE_ACTION_WIDTH;
 
+  // While a Drop or Close is armed, the line says what it costs and what stays,
+  // in the words the Roster uses.
   const valueLine = confirming && position ? (
     <View style={styles.detailLine}>
       <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.confirmText]}>
-        {`Tap ${side === 'long' ? 'Drop' : 'Close'}? again to confirm${fee > 0 ? ` · ${money(fee)} fee` : ''}`}
+        {confirmCloseLine(side, fee, position.cumulativePnl)}
       </Text>
     </View>
   ) : position && held ? (
@@ -158,7 +178,7 @@ function MarketRow({
   );
 
   const priceBox = (
-    <View style={[styles.priceBox, !large && styles.priceBoxEnd]}>
+    <View style={styles.priceBox}>
       <Text maxFontSizeMultiplier={1.6} style={styles.price}>{priceAmount}</Text>
       <Text maxFontSizeMultiplier={1.6} style={styles.priceUnit}>{`/${priceUnit}`}</Text>
     </View>
@@ -190,8 +210,10 @@ function MarketRow({
         <Button
           accessibilityHint={rosterLocked ? rosterLockHint : row.unavailableReason ?? undefined}
           accessibilityLabel={confirming && position
-            ? confirmName(side, player.name)
-            : actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}
+            ? confirmCloseName(side, player.name)
+            : seasonOver
+              ? `${actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}. ${SEASON_OVER_REASON}`
+              : actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}
           disabled={disabled}
           label={actionWord({
             side,
@@ -200,13 +222,14 @@ function MarketRow({
             confirming,
             rosterLocked,
             full: row.isFull,
+            seasonOver,
           })}
           onPress={() => {
             if (disabled) return;
             if (position) {
               if (!confirming) {
                 setConfirming(true);
-                onAnnounce(confirmAnnouncement(side, player.name, fee));
+                onAnnounce(confirmAnnouncement(side, player.name, fee, position.cumulativePnl));
                 return;
               }
               setConfirming(false);
@@ -220,8 +243,8 @@ function MarketRow({
               });
             }
           }}
-          style={confirming ? styles.confirmButton : undefined}
-          textStyle={confirming ? styles.confirmButtonText : undefined}
+          style={[!table && styles.phoneButton, confirming && styles.confirmButton]}
+          textStyle={[styles.buttonText, confirming && styles.confirmButtonText]}
           width={large ? undefined : actionWidth}
         />
       )}
@@ -269,7 +292,7 @@ function MarketRow({
               {position && currentValue && currentValue.avgNet !== null && currentValue.games > 0 ? (
                 <>
                   <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, { color: TONE_COLOR[netTone(currentValue.avgNet)] }]}>
-                    {signedMoney(currentValue.avgNet)}
+                    {signedMoneyFine(currentValue.avgNet)}
                   </Text>
                   <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>
                     {currentValue.games === 1 ? '1 game' : `${currentValue.games} games`}
@@ -277,12 +300,12 @@ function MarketRow({
                 </>
               ) : position ? (
                 <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, styles.cellQuiet]}>
-                  {`Locked at ${money(position.lockedGameCost)}`}
+                  {`Locked at ${moneyFine(position.lockedGameCost)}`}
                 </Text>
               ) : pastValue && pastValue.avgNet !== null && pastValue.games > 0 ? (
                 <>
                   <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, { color: TONE_COLOR[netTone(pastValue.avgNet)] }]}>
-                    {signedMoney(pastValue.avgNet)}
+                    {signedMoneyFine(pastValue.avgNet)}
                   </Text>
                   <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>
                     {pastValue.games === 1 ? '1 past game' : `${pastValue.games} past games`}
@@ -320,12 +343,14 @@ function MarketRow({
           ) : (
             // The action floats over the top band's right edge, so the band
             // leaves it room; the value line below runs the full width.
+            // The price shares the top line with the given name and tier, so a
+            // long surname ("Gilgeous-Alexander") keeps the whole second line.
             <View style={[styles.topBand, { paddingRight: actionWidth + space.sm }]}>
-              <Text maxFontSizeMultiplier={1.6} style={styles.kicker}>{kicker}</Text>
-              <View style={styles.nameLine}>
-                <Text maxFontSizeMultiplier={1.6} style={styles.surname}>{whole(surname)}</Text>
+              <View style={styles.kickerPriceLine}>
+                <Text maxFontSizeMultiplier={1.6} style={[styles.kicker, styles.kickerShrink]}>{kicker}</Text>
                 {priceBox}
               </View>
+              <Text maxFontSizeMultiplier={1.6} style={styles.surname}>{whole(surname)}</Text>
             </View>
           )}
           {valueLine}
@@ -350,7 +375,9 @@ export function PerGameMarketScreen({
   const [watchedOnly, setWatchedOnly] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  const [controlsOpen, setControlsOpen] = useState(false);
   const layout = marketLayout(width, fontScale);
+  const folded = collapseControls(width);
   const columns = useMemo(() => marketColumns(width), [width]);
   const wide = layout === 'table';
 
@@ -395,6 +422,21 @@ export function PerGameMarketScreen({
   const rosterLocked = bootstrap.ruleset.rosterMutationsLocked;
   const lockDate = bootstrap.ruleset.rosterLockGameDate;
   const fee = bootstrap.ruleset.transactionFeeDollars;
+  // The Roster's rule: practice ends on its last day, a live season when no
+  // games are left. Then nothing can be added, dropped or shorted.
+  const seasonOver = isSeasonOver({
+    practiceComplete: isMockActive() && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete,
+    lastSettledDate: bootstrap.game.lastSettledDate,
+    nextGameDate: bootstrap.game.nextGameDate,
+  });
+  const status = headerStatus({
+    side,
+    seasonOver,
+    rosterLocked,
+    lockGameDate: lockDate,
+    full: slots.remaining === 0,
+  });
+  const filtersOn = query.trim() !== '' || sort !== 'price' || watchedOnly;
   const profilePlayer = profileId
     ? bootstrap.market.find((row) => row.playerId === profileId) ?? null
     : null;
@@ -415,25 +457,24 @@ export function PerGameMarketScreen({
         { key: 'long', label: 'Roster', hint: positionSlotHint('long', bootstrap.account.longSlots.limit) },
         { key: 'short', label: 'Short', hint: positionSlotHint('short', bootstrap.account.shortSlots.limit) },
       ]}
-      style={wide ? styles.sideToggleWide : styles.sideToggle}
+      // In the folded column a flex basis would become a height, so it only sizes rows.
+      style={wide ? styles.sideToggleWide : folded ? undefined : styles.sideToggle}
       value={side}
     />
   );
+  // The slot count, then at most one line: the season is over, or when the
+  // roster reopens, or that this side is full. A locked roster never shows
+  // "drop one to add", because drops are locked too.
   const slotStatus = (
-    <View style={[styles.slotStatus, wide && styles.slotStatusWide]}>
+    <View style={[styles.slotStatus, wide && styles.slotStatusWide, folded && styles.slotStatusFolded]}>
       <Text maxFontSizeMultiplier={1.4} style={styles.slotText}>{slotSummary(side, slots)}</Text>
-      {slots.remaining === 0 ? (
-        <Text maxFontSizeMultiplier={1.4} style={styles.fullText}>
-          {side === 'long' ? 'Full: drop one to add' : 'Full: close one to short'}
-        </Text>
-      ) : null}
-      {rosterLocked ? (
+      {status.kind === 'lock' ? (
         <View style={styles.lockLine}>
           <LockIcon />
-          <Text maxFontSizeMultiplier={1.4} style={styles.lockText}>
-            {lockDate ? `Locked for the ${humanDate(lockDate)} game` : 'Locked during the game'}
-          </Text>
+          <Text maxFontSizeMultiplier={1.4} style={styles.lockText}>{status.text}</Text>
         </View>
+      ) : status.text ? (
+        <Text maxFontSizeMultiplier={1.4} style={styles.fullText}>{status.text}</Text>
       ) : null}
     </View>
   );
@@ -442,7 +483,7 @@ export function PerGameMarketScreen({
       accessibilityLabel="Sort players"
       onChange={setSort}
       options={MARKET_SORT_OPTIONS}
-      style={wide ? styles.sortToggleWide : styles.sortToggle}
+      style={wide ? styles.sortToggleWide : folded ? undefined : styles.sortToggle}
       value={sort}
     />
   );
@@ -465,6 +506,24 @@ export function PerGameMarketScreen({
           <MarketSearch onChange={setQuery} style={styles.searchWide} value={query} />
           {sortToggle}
           {watchingToggle}
+        </View>
+      ) : folded ? (
+        // A phone at 200% zoom: the side toggle and the slot count stay; search,
+        // sort and Watching fold behind one toggle so a player shows at once.
+        <View style={[styles.controls, styles.controlsFolded]}>
+          {sideToggle}
+          <View style={styles.foldedRow}>
+            {slotStatus}
+            <ControlsToggle active={filtersOn} onToggle={() => setControlsOpen((open) => !open)} open={controlsOpen} />
+          </View>
+          {shortExplainer}
+          {controlsOpen ? (
+            <>
+              <MarketSearch onChange={setQuery} value={query} />
+              {sortToggle}
+              {watchingToggle}
+            </>
+          ) : null}
         </View>
       ) : (
         <View style={styles.controls}>
@@ -523,7 +582,7 @@ export function PerGameMarketScreen({
       <FlatList
         contentContainerStyle={styles.content}
         data={rows}
-        extraData={[layout, columns, positionValues, pastValues, fee, width]}
+        extraData={[layout, columns, positionValues, pastValues, fee, width, seasonOver]}
         initialNumToRender={18}
         keyboardShouldPersistTaps="handled"
         keyExtractor={(row) => row.player.playerId}
@@ -535,6 +594,7 @@ export function PerGameMarketScreen({
             currentValue={item.position ? positionValues.get(item.position.positionId) : undefined}
             fee={fee}
             layout={layout}
+            seasonOver={seasonOver}
             wholeNames={keepNamesWhole(width)}
             onAnnounce={announce}
             onOpenProfile={openProfile}
@@ -587,6 +647,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.sm,
   },
+  controlsFolded: {
+    paddingHorizontal: space.sm,
+    paddingTop: space.sm,
+    paddingBottom: space.sm,
+  },
+  foldedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
   controlsWide: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -609,6 +679,11 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexBasis: 120,
     alignItems: 'flex-end',
+  },
+  slotStatusFolded: {
+    flexBasis: 0,
+    alignItems: 'flex-start',
+    minWidth: 0,
   },
   slotStatusWide: {
     flexGrow: 0,
@@ -716,11 +791,15 @@ const styles = StyleSheet.create({
     minHeight: control.height,
     justifyContent: 'center',
   },
-  nameLine: {
+  kickerPriceLine: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'baseline',
+    justifyContent: 'space-between',
     columnGap: space.sm,
+  },
+  kickerShrink: {
+    flexShrink: 1,
+    minWidth: 0,
   },
   identity: {
     minWidth: 0,
@@ -751,9 +830,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     flexShrink: 0,
-  },
-  priceBoxEnd: {
-    marginLeft: 'auto',
   },
   price: {
     color: colors.text,
@@ -831,6 +907,14 @@ const styles = StyleSheet.create({
     // Lines the button up with the name above it: row inset + avatar + gap.
     paddingLeft: space.md + PHONE_AVATAR + 10,
     paddingBottom: space.md,
+  },
+  phoneButton: {
+    // "CONFIRM" and "SEASON OVER" fit a 76px button on one and two lines.
+    paddingHorizontal: 6,
+  },
+  buttonText: {
+    letterSpacing: 0.5,
+    textAlign: 'center',
   },
   confirmButton: {
     borderColor: colors.goldLine,

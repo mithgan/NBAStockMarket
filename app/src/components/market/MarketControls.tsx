@@ -89,6 +89,35 @@ export function WatchingToggle({
   );
 }
 
+/**
+ * Opens and closes search, sort and Watching where there is no room to show
+ * them all (a phone at 200% zoom). It turns gold while any of them is doing
+ * something, so a folded filter is never forgotten.
+ */
+export function ControlsToggle({
+  open,
+  active,
+  onToggle,
+}: {
+  open: boolean;
+  /** A search, a non-default sort or the Watching filter is on. */
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={active ? 'Search and sort, filters on' : 'Search and sort'}
+      accessibilityRole="button"
+      aria-expanded={open}
+      onPress={onToggle}
+      style={({ pressed }) => [styles.toggle, (open || active) && styles.toggleOn, pressed && styles.pressed]}
+    >
+      <SearchIcon />
+      {active ? <View style={styles.toggleDot} /> : null}
+    </Pressable>
+  );
+}
+
 /** Column labels above the table; the widths are the rows' own (marketColumns). */
 export function MarketColumnHeader({ columns, edgeLabel }: { columns: MarketColumnSet; edgeLabel: string }) {
   return (
@@ -148,6 +177,28 @@ const styles = StyleSheet.create({
     height: control.height,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  toggle: {
+    width: control.height,
+    height: control.height,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    backgroundColor: colors.background,
+  },
+  toggleOn: {
+    borderColor: colors.goldLine,
+  },
+  toggleDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.gold,
   },
   watching: {
     minHeight: control.height,

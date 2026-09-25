@@ -12,6 +12,8 @@ import {
   isRecentRange,
   lastSeasonFacts,
   logPriceHeader,
+  logRows,
+  mixNote,
   nightIndexAt,
   nightReadout,
   nightSourceLabel,
@@ -19,11 +21,14 @@ import {
   priceStory,
   profileChartModel,
   rangeNights,
+  rangeOptions,
   sideNet,
   sideWords,
   stakeLine,
+  statusNights,
   steppedIndex,
   summarizeNights,
+  unsettledNote,
   type ProfileNight,
 } from './profileView';
 import type { TrendPoint } from './trendPresentation';
@@ -200,16 +205,16 @@ test('the summary compares his dividend with his price, per game, and counts you
 test('the verdict is one plain sentence per side, with misses as misses and no percentages', () => {
   assert.equal(
     formVerdict(summarizeNights(nights)),
-    'Beat his price in 4 of his 6 games this season, $43K a game ahead on average.',
+    'Beat his price in 4 of his 6 games this season, $42.5K a game ahead on average.',
   );
   assert.equal(
     formVerdict(summarizeNights(nights.slice(-3)), { recent: true }),
-    'Beat his price in 2 of his last 3 games, $59K a game ahead on average.',
+    'Beat his price in 2 of his last 3 games, $59.3K a game ahead on average.',
   );
   assert.equal(formVerdict(summarizeNights(nights.slice(0, 1))), 'Missed his price by $40K in his only game so far.');
   assert.equal(
     formVerdict(summarizeNights(nights), { scope: 'yours' }),
-    'Beat his price in 4 of your 6 games with him, $43K a game ahead on average.',
+    'Beat his price in 4 of your 6 games with him, $42.5K a game ahead on average.',
   );
   assert.equal(
     formVerdict(summarizeNights([{ ...nights[0], net: 40_000 }]), { side: 'short' }),
@@ -221,7 +226,7 @@ test('the verdict is one plain sentence per side, with misses as misses and no p
   );
   assert.equal(
     formVerdict(summarizeNights(nights), { side: 'short' }),
-    'Stayed under his price in 4 of his 6 games this season, $43K a game ahead on average for a short.',
+    'Stayed under his price in 4 of his 6 games this season, $42.5K a game ahead on average for a short.',
   );
   assert.equal(formVerdict(summarizeNights([])), 'No games yet this season.');
   const even = summarizeNights([
@@ -262,13 +267,62 @@ test('labels follow the side, so a short never reads as a roster spot', () => {
 test('the price is labelled by where it came from', () => {
   assert.equal(priceSourceCaption({ games: 4, yours: 4 }, 'long'), 'your price');
   assert.equal(priceSourceCaption({ games: 4, yours: 0 }, 'long'), 'his market price');
-  assert.equal(priceSourceCaption({ games: 6, yours: 4 }, 'short'), '4 at your credit');
+  assert.equal(priceSourceCaption({ games: 6, yours: 4 }, 'short'), 'average of both');
   assert.equal(logPriceHeader(nights, 'long'), 'Price');
   assert.equal(logPriceHeader(nights.slice(2), 'long'), 'Your price');
   assert.equal(logPriceHeader(nights.slice(2), 'short'), 'Your credit');
   assert.equal(logPriceHeader(nights.slice(0, 2), 'long'), 'Market price');
   assert.equal(nightSourceLabel(nights[0], 'long'), 'market price');
   assert.equal(nightSourceLabel(nights[3], 'short'), 'your credit');
+});
+
+test('a mixed range says which games were yours and at what price (grader N-S3)', () => {
+  assert.equal(mixNote(nights, 'long'), 'These 6 games: 4 with you at your locked prices, 2 at his market price.');
+  const white: ProfileNight[] = [
+    ...Array.from({ length: 9 }, (_, index) => ({ date: `2025-10-${21 + index}`, dividend: 150_000, price: 171_000, net: -21_000, source: 'market' as const })),
+    { date: '2025-11-10', dividend: 340_000, price: 169_000, net: 171_000, source: 'yours' },
+    { date: '2025-11-12', dividend: 339_600, price: 169_000, net: 170_600, source: 'yours' },
+  ];
+  assert.equal(mixNote(white, 'long'), 'These 11 games: 2 with you at $169K, 9 at his market price.');
+  assert.equal(mixNote(white.slice(9), 'long'), null, 'all yours');
+  assert.equal(mixNote(white.slice(0, 9), 'long'), null, 'all market');
+  const twoPrices = white.map((night, index) => (index === 10 ? { ...night, price: 172_500 } : night));
+  assert.equal(mixNote(twoPrices, 'short'), 'These 11 games: 2 with you at your locked credits, 9 at his market credit.');
+});
+
+test('did-not-play and unsettled nights keep a line in the log and a note (rigor S-6)', () => {
+  const list = [
+    result({ gameId: 'a', gameDate: '2025-11-01', dividendDollars: 150_000 }),
+    result({ gameId: 'b', gameDate: '2025-11-02', status: 'verified_dnp', dividendDollars: 0, netPnl: 0 }),
+    result({ gameId: 'c', gameDate: '2025-11-03', status: 'unsettled', dividendDollars: null, netPnl: null }),
+    result({ gameId: 'd', gameDate: '2025-11-04', status: 'unsettled_missing_projection', dividendDollars: null, netPnl: null }),
+    result({ gameId: 'e', gameDate: '2025-11-05', side: 'short', positionId: 'pos-2', status: 'verified_dnp', dividendDollars: 0, netPnl: 0 }),
+  ];
+  assert.deepEqual(statusNights(list, 'long'), [
+    { date: '2025-11-02', kind: 'dnp' },
+    { date: '2025-11-03', kind: 'pending' },
+    { date: '2025-11-04', kind: 'pending' },
+  ]);
+  assert.deepEqual(statusNights(list, 'short'), [{ date: '2025-11-05', kind: 'dnp' }]);
+  const settled = buildProfileNights({ results: list, trends: undefined, dividendRate: RATE, latestSettledDate: null, side: 'long' });
+  const rows = logRows(settled, statusNights(list, 'long'));
+  assert.deepEqual(rows.map((row) => (row.kind === 'game' ? `game ${row.night.date}` : `${row.kind} ${row.date}`)), [
+    'pending 2025-11-04',
+    'pending 2025-11-03',
+    'dnp 2025-11-02',
+    'game 2025-11-01',
+  ]);
+  assert.equal(logRows(settled, statusNights(list, 'long'), 2).length, 2);
+  assert.equal(unsettledNote({ dnp: 1, pending: 2 }), 'Did not play 1 night (nothing charged) · 2 games waiting to settle');
+  assert.equal(unsettledNote({ dnp: 2, pending: 0 }), 'Did not play 2 nights (nothing charged)');
+  assert.equal(unsettledNote({ dnp: 0, pending: 1 }), '1 game waiting to settle');
+  assert.equal(unsettledNote({ dnp: 0, pending: 0 }), null);
+});
+
+test('the Season range reads "All" where four tabs are only 44px wide (rigor S-5)', () => {
+  assert.deepEqual(rangeOptions(false).map((option) => option.label), ['L5', 'L15', 'L30', 'Season']);
+  assert.deepEqual(rangeOptions(true).map((option) => option.label), ['L5', 'L15', 'L30', 'All']);
+  assert.equal(rangeOptions(true)[3].key, 'Season');
 });
 
 test('ranges keep the latest games, and only a shortened range counts as recent', () => {
@@ -293,11 +347,13 @@ test('holding status and stake line say where you stand, from the same numbers a
     tag: 'On your roster',
     text: 'Locked in at $100K a game',
   });
-  assert.deepEqual(holdingStatus({ side: 'short', lockedGameCost: 237_500, expiresOn: '2025-11-12' }), {
+  // The Roster's precision (moneyFine): $112.5K, not $113K (grader N-S2).
+  assert.deepEqual(holdingStatus({ side: 'short', lockedGameCost: 112_500, expiresOn: '2025-11-12' }), {
     tag: 'Shorted',
-    text: 'Credited $238K a game, ends Nov 12',
+    text: 'Credited $112.5K a game, ends Nov 12',
   });
-  assert.deepEqual(stakeLine({ games: 11, total: 1_632_000 }, true), { lead: '11 games with you ·', total: '+$1.6M total', tone: 'gain' });
+  assert.deepEqual(stakeLine({ games: 11, total: 1_632_000 }, true), { lead: '11 games with you ·', total: '+$1.63M total', tone: 'gain' });
+  assert.deepEqual(stakeLine({ games: 3, total: 377_500 }, true)?.total, '+$377.5K total');
   assert.deepEqual(stakeLine({ games: 0, total: 0 }, true), { lead: 'No games yet at this price', total: null, tone: 'none' });
   assert.deepEqual(stakeLine({ games: 3, total: -60_000 }, false), { lead: 'Before: 3 games with you ·', total: '-$60K total', tone: 'loss' });
   assert.equal(stakeLine({ games: 0, total: 0 }, false), null);
@@ -365,6 +421,11 @@ test('a pointer reads the night under it; arrow keys, Home and End step the slid
 test('read-outs and summaries say Dividend, use human dates, and read naturally below zero', () => {
   assert.equal(nightReadout(nights[1], 'dividends'), 'Dividend $180K · price $101K · +$79K');
   assert.equal(nightReadout(nights[3], 'dividends'), 'Dividend -$20K · price $103K · -$123K');
+  // The Results screen's precision: $112.5K, never "$113K" for the same price.
+  assert.equal(
+    nightReadout({ date: '2025-11-05', dividend: -80_000, price: 112_500, net: -192_500, source: 'yours' }, 'dividends'),
+    'Dividend -$80K · price $112.5K · -$192.5K',
+  );
   assert.equal(nightReadout(nights[1], 'price'), 'Price $101K a game');
   assert.equal(nightReadout(nights[1], 'price', 'short'), 'Credit $101K a game');
   assert.match(chartSummary(nights, 'dividends'), /High \$400K on Oct 28, low -\$20K on Oct 26\./);

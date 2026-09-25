@@ -20,6 +20,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type StyleProp,
+  type TextStyle,
   type ViewStyle,
 } from 'react-native';
 
@@ -29,30 +30,43 @@ import type {
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
-import { gamesCount, humanDate, money, perGame, signedMoney, unbrokenName } from '../copy/terms';
+import {
+  exactMoney,
+  exactSignedMoney,
+  gamesCount,
+  humanDate,
+  moneyFine,
+  nightsCount,
+  perGame,
+  signedMoneyFine,
+  unbrokenName,
+} from '../copy/terms';
 import { playerValue, positionValue } from '../data/perGameMetrics';
 import { splitPlayerName } from '../data/playerName';
 import {
   buildProfileNights,
   formVerdict,
-  gameLog,
   holdingStatus,
   isRecentRange,
   lastSeasonFacts,
   logPriceHeader,
+  logRows,
+  mixNote,
   priceSourceCaption,
   priceStory,
-  RANGE_OPTIONS,
   rangeNights,
+  rangeOptions,
   sideWords,
   stakeLine,
+  statusNights,
   summarizeNights,
+  unsettledNote,
   type ProfileMetric,
   type StakeTone,
 } from '../data/profileView';
 import type { TrendPoint, TrendRange } from '../data/trendPresentation';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
-import { Button, headingLevel, Label, Money, SectionHeader, Segmented, Tag } from '../ui/kit';
+import { Button, headingLevel, Label, Money, moneyColor, SectionHeader, Segmented, Tag } from '../ui/kit';
 import { CloseIcon, StarIcon } from './market/icons';
 import { PlayerAvatar } from './PlayerAvatar';
 import { ProfileChart } from './profile/ProfileChart';
@@ -92,6 +106,28 @@ function Figure({ label, value, caption, style }: {
       <View style={styles.figureValue}>{value}</View>
       {caption ? <Text maxFontSizeMultiplier={1.4} style={styles.figureCaption}>{caption}</Text> : null}
     </View>
+  );
+}
+
+/**
+ * Money at the Roster's precision ("$112.5K", "+$1.63M"), so a figure reads
+ * the same on the profile as on the row it came from. Signed amounts are
+ * coloured gain or loss; the screen-reader label is the exact amount.
+ */
+function FineMoney({ value, signed = true, size = type.value, style }: {
+  value: number;
+  signed?: boolean;
+  size?: number;
+  style?: StyleProp<TextStyle>;
+}) {
+  return (
+    <Text
+      accessibilityLabel={signed ? exactSignedMoney(value) : exactMoney(value)}
+      maxFontSizeMultiplier={1.4}
+      style={[styles.fineMoney, { fontSize: size, color: signed ? moneyColor(value) : colors.text }, style]}
+    >
+      {signed ? signedMoneyFine(value) : moneyFine(value)}
+    </Text>
   );
 }
 
@@ -153,16 +189,19 @@ export function PerGamePlayerProfile({
   const status = holdingStatus(position);
   // Your money with him: the current position when you hold him (the same
   // numbers as its Roster row), otherwise every stint you had.
-  const stake = useMemo(
-    () => stakeLine(
-      position ? positionValue(results, position.positionId) : playerValue(results, player.playerId),
-      held,
-    ),
-    [held, player.playerId, position, results],
+  const stakeSummary = useMemo(
+    () => (position ? positionValue(results, position.positionId) : playerValue(results, player.playerId)),
+    [player.playerId, position, results],
   );
+  const stake = stakeLine(stakeSummary, held);
+  // Nights with no money to show: he did not play, or the game has not settled.
+  const quietNote = unsettledNote(stakeSummary);
+  const quiet = useMemo(() => statusNights(results, viewSide), [results, viewSide]);
+  const mix = mixNote(shown, viewSide);
   const lastSeason = lastSeasonFacts(player, viewSide);
-  const logCapped = nights.length > LOG_PREVIEW + LOG_SLACK;
-  const log = gameLog(nights, showAllGames || !logCapped ? undefined : LOG_PREVIEW);
+  const logTotal = nights.length + quiet.length;
+  const logCapped = logTotal > LOG_PREVIEW + LOG_SLACK;
+  const log = logRows(nights, quiet, showAllGames || !logCapped ? undefined : LOG_PREVIEW);
   const priceHeader = logPriceHeader(nights, viewSide);
   const mixedLog = priceHeader === 'Price' || priceHeader === 'Credit';
   const title = narrow ? splitPlayerName(player.name).surname : player.name;
@@ -233,6 +272,7 @@ export function PerGamePlayerProfile({
               ) : null}
             </View>
           ) : null}
+          {quietNote ? <Text maxFontSizeMultiplier={1.4} style={styles.stakeLead}>{quietNote}</Text> : null}
         </View>
 
         <SectionHeader
@@ -247,30 +287,31 @@ export function PerGamePlayerProfile({
               <Segmented
                 accessibilityLabel="Games shown"
                 onChange={setRange}
-                options={RANGE_OPTIONS}
+                options={rangeOptions(!wide && windowWidth < 240)}
                 style={wide ? styles.rangeWide : undefined}
                 value={range}
               />
               <Text maxFontSizeMultiplier={1.4} style={styles.verdict}>
                 {formVerdict(summary, { recent, side: viewSide, held, scope: live ? 'yours' : 'season' })}
               </Text>
+              {mix ? <Text maxFontSizeMultiplier={1.4} style={styles.note}>{mix}</Text> : null}
               <View style={styles.grid}>
                 <Figure
                   label="Dividend a game"
                   style={styles.cell}
-                  value={<Money signed={false} size="title" value={summary.avgDividend ?? 0} />}
+                  value={<FineMoney signed={false} size={type.title} value={summary.avgDividend ?? 0} />}
                 />
                 <Figure
                   caption={priceSourceCaption(summary, viewSide)}
                   label={words.price}
                   style={styles.cell}
-                  value={<Money signed={false} size="title" value={summary.avgPrice ?? 0} />}
+                  value={<FineMoney signed={false} size={type.title} value={summary.avgPrice ?? 0} />}
                 />
                 <Figure
                   caption={words.netCaption}
                   label="Net a game"
                   style={styles.cell}
-                  value={<Money size="title" value={summary.avgNet ?? 0} />}
+                  value={<FineMoney size={type.title} value={summary.avgNet ?? 0} />}
                 />
                 <Figure
                   caption={words.missedCaption(summary.games - summary.beat)}
@@ -283,16 +324,16 @@ export function PerGamePlayerProfile({
                   )}
                 />
                 <Figure
-                  caption={summary.best ? `${humanDate(summary.best.date)}\ndividend ${money(summary.best.dividend)}` : undefined}
+                  caption={summary.best ? `${humanDate(summary.best.date)}\ndividend ${moneyFine(summary.best.dividend)}` : undefined}
                   label="Best game"
                   style={styles.cell}
-                  value={<Money value={summary.best?.net ?? 0} />}
+                  value={<FineMoney value={summary.best?.net ?? 0} />}
                 />
                 <Figure
-                  caption={summary.worst ? `${humanDate(summary.worst.date)}\ndividend ${money(summary.worst.dividend)}` : undefined}
+                  caption={summary.worst ? `${humanDate(summary.worst.date)}\ndividend ${moneyFine(summary.worst.dividend)}` : undefined}
                   label="Worst game"
                   style={styles.cell}
-                  value={<Money value={summary.worst?.net ?? 0} />}
+                  value={<FineMoney value={summary.worst?.net ?? 0} />}
                 />
               </View>
               <Segmented
@@ -353,11 +394,29 @@ export function PerGamePlayerProfile({
                 <Label style={styles.logNumber}>{priceHeader}</Label>
                 <Label style={styles.logNumber}>Net</Label>
               </View>
-              {log.map((night) => {
+              {log.map((row) => {
+                if (row.kind !== 'game') {
+                  // A night with no money: he did not play, or the game has not settled.
+                  const words = row.kind === 'dnp' ? 'Did not play · nothing charged' : 'Waiting to settle';
+                  return (
+                    <View
+                      accessibilityLabel={`${humanDate(row.date)}: ${words}`}
+                      accessible
+                      key={`${row.kind}-${row.date}`}
+                      style={[styles.logRow, styles.logRowRule]}
+                    >
+                      <View style={styles.logDate}>
+                        <Text maxFontSizeMultiplier={1.4} style={styles.logCell}>{humanDate(row.date)}</Text>
+                      </View>
+                      <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logQuiet, styles.logStatus]}>{words}</Text>
+                    </View>
+                  );
+                }
+                const night = row.night;
                 const market = night.source === 'market';
                 return (
                   <View
-                    accessibilityLabel={`${humanDate(night.date)}: dividend ${money(night.dividend)}, ${words.priceShort} ${money(night.price)}${market ? ' at his market price' : ''}, net ${signedMoney(night.net)}`}
+                    accessibilityLabel={`${humanDate(night.date)}: dividend ${exactMoney(night.dividend)}, ${words.priceShort} ${exactMoney(night.price)}${market ? ' at his market price' : ''}, net ${exactSignedMoney(night.net)}`}
                     accessible
                     key={night.date}
                     style={[styles.logRow, styles.logRowRule]}
@@ -366,15 +425,15 @@ export function PerGamePlayerProfile({
                       <Text maxFontSizeMultiplier={1.4} style={styles.logCell}>{humanDate(night.date)}</Text>
                       {mixedLog && market ? <Text maxFontSizeMultiplier={1.4} style={styles.logSource}>market price</Text> : null}
                     </View>
-                    <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logNumber]}>{money(night.dividend)}</Text>
-                    <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logNumber, styles.logQuiet]}>{money(night.price)}</Text>
-                    <Money size="body" style={styles.logNumber} value={night.net} />
+                    <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logNumber]}>{moneyFine(night.dividend)}</Text>
+                    <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logNumber, styles.logQuiet]}>{moneyFine(night.price)}</Text>
+                    <FineMoney size={type.body} style={styles.logNumber} value={night.net} />
                   </View>
                 );
               })}
               {logCapped ? (
                 <Button
-                  label={showAllGames ? `Show latest ${LOG_PREVIEW}` : `Show all ${gamesCount(nights.length)}`}
+                  label={showAllGames ? `Show latest ${LOG_PREVIEW}` : `Show all ${nightsCount(logTotal)}`}
                   onPress={() => setShowAllGames((current) => !current)}
                   style={styles.logMore}
                   variant="quiet"
@@ -646,6 +705,16 @@ const styles = StyleSheet.create({
   },
   logQuiet: {
     color: colors.muted,
+  },
+  logStatus: {
+    flex: 3,
+    textAlign: 'right',
+    fontWeight: weight.medium,
+  },
+  fineMoney: {
+    fontFamily: fonts.display,
+    fontWeight: weight.heavy,
+    fontVariant: ['tabular-nums'],
   },
   logMore: {
     alignSelf: 'flex-start',
