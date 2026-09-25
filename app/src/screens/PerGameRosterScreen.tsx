@@ -405,14 +405,16 @@ export function PerGameRosterScreen({
         />
         {shorts.length > 0 ? rows(shorts) : (
           <EmptyState
-            action={(
+            // Once the season is over the market takes no new shorts, so the
+            // empty section says so instead of sending you somewhere idle.
+            action={seasonOver ? undefined : (
               <Button
                 accessibilityLabel="Find a short in the player market"
                 label="Find a short"
                 onPress={() => onOpenMarket('short')}
               />
             )}
-            copy={SHORT_EXPLAINER}
+            copy={seasonOver ? 'The season is over, so there are no more shorts to open.' : SHORT_EXPLAINER}
             style={styles.empty}
             title={hadShorts ? 'No open shorts' : 'No shorts yet'}
           />
