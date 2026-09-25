@@ -85,14 +85,15 @@ export function SettingsSheet({
       transparent
       visible={visible}
     >
-      {/* The scrim closes on a tap, but it is not a keyboard stop: Done and
-          Escape close the sheet for keyboard users. */}
-      <Pressable
-        accessibilityLabel="Close settings"
-        accessibilityRole="button"
-        onPress={onClose}
+      {/* The scrim closes on a tap but is never a keyboard stop. Even with
+          tabIndex -1 a Pressable stays focusable by script, and
+          react-native-web's modal focus trap focuses the first focusable
+          child, so the scrim is a plain view on the responder system. Done
+          and Escape close the sheet for keyboard and screen-reader users. */}
+      <View
+        onResponderRelease={onClose}
+        onStartShouldSetResponder={() => true}
         style={styles.scrim}
-        tabIndex={-1}
       />
       <View style={styles.sheet}>
         <View style={styles.sheetHead}>
