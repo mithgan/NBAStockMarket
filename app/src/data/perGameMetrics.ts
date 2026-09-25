@@ -195,7 +195,9 @@ function addDays(isoDate: string, days: number): string {
 
 /**
  * Score change on the last settled night and over the seven nights ending on
- * it, from the ledger, so fees count exactly as they do in the score.
+ * it, from the ledger. Entries count on the game date they carry, so a fee
+ * dated to a night counts in that night; a fee with no game date (practice
+ * mode's add and drop fees) is in the score but in neither figure.
  */
 export function recentEarnings(
   ledger: readonly PerGameLedgerEntry[] | undefined,

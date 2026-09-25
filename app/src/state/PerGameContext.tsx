@@ -20,10 +20,11 @@ import type {
   PerGameOpenPositionIntent,
   PerGamePosition,
 } from '../api/contracts';
-import { humanDay, perGame } from '../copy/terms';
+import { perGame } from '../copy/terms';
 import { isAppResume } from './appResume';
 import { ActionLock } from './actionLock';
 import { loadPerGameBootstrapSnapshot } from './perGameBootstrapLoader';
+import { refreshNotice } from './perGameNotices';
 import { runPerGameMutation } from './perGameMutation';
 import {
   MutationReconciliationCoordinator,
@@ -56,7 +57,12 @@ interface PerGameContextValue {
   isTransitioning: false;
   isGameplayReady: boolean;
   pendingActions: ReadonlySet<string>;
-  refreshData: () => Promise<boolean>;
+  /**
+   * Reload the account. `quietUnlessChanged` is for automatic refreshes (the
+   * app coming back to the foreground): they only announce newly settled
+   * games, so switching tabs does not pop a notice every time.
+   */
+  refreshData: (options?: { quietUnlessChanged?: boolean }) => Promise<boolean>;
   openPosition: (intent: PerGameOpenPositionIntent) => Promise<boolean>;
   closePosition: (position: PerGamePosition) => Promise<boolean>;
   dismissNotice: () => void;
@@ -174,23 +180,27 @@ export function PerGameProvider({
     }
   }, []);
 
-  const refreshData = useCallback(async () => {
+  const refreshData = useCallback(async (options?: { quietUnlessChanged?: boolean }) => {
+    // Press handlers may pass their event object straight through; only an
+    // explicit `true` makes a refresh quiet.
+    const quietUnlessChanged = options?.quietUnlessChanged === true;
     const coordinator = reconciliation.current;
     if (!coordinator) return false;
     const attempt = coordinator.beginRefresh();
     if (!attempt) return false;
     updatePendingActions();
     let succeeded = false;
+    const previous = bootstrapRef.current;
     try {
       const refreshed = await loadSnapshot();
       succeeded = refreshed !== null;
-      if (refreshed && mounted.current) {
-        const nextDate = refreshed.game.nextGameDate;
-        say(attempt.reconciliationReason
-          ? 'Your account is back in sync. You can make roster moves again.'
-          : nextDate
-            ? `Prices updated. Next games ${humanDay(nextDate)}.`
-            : 'Prices updated. The next games are not scheduled yet.', 'success');
+      const settledSomething = refreshed !== null
+        && refreshed.game.lastSettledDate !== (previous?.game.lastSettledDate ?? null);
+      if (
+        refreshed && mounted.current
+        && (!quietUnlessChanged || settledSomething || attempt.reconciliationReason)
+      ) {
+        say(refreshNotice(previous, refreshed, Boolean(attempt.reconciliationReason)), 'success');
       }
       return succeeded;
     } finally {
@@ -205,7 +215,7 @@ export function PerGameProvider({
     const subscription = AppState.addEventListener('change', (nextState) => {
       const previousState = appState.current;
       appState.current = nextState;
-      if (isAppResume(previousState, nextState)) void refreshData();
+      if (isAppResume(previousState, nextState)) void refreshData({ quietUnlessChanged: true });
     });
     return () => subscription.remove();
   }, [isLoading, refreshData]);
