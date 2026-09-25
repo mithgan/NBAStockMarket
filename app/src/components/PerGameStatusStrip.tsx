@@ -1,30 +1,51 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { formatCompactMoney, formatCompactSignedMoney, formatSignedMoney } from '../format';
+import type { PerGameRuleset } from '../api/contracts';
+import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
+import { exactMoney, humanDate, PRACTICE_LABEL, SHORT_EXPLAINER } from '../copy/terms';
+import {
+  chromeLayout,
+  dividendText,
+  explanationParagraphs,
+  keepTogether,
+  nextGamesText,
+  PRACTICE_OVER_TEXT,
+  practiceDayText,
+  practiceProgress,
+  shortTermText,
+  statusSummary,
+} from '../data/chromeView';
+import { recentEarnings } from '../data/perGameMetrics';
+import { perGameRulesPresentation, positionSlotHint } from '../data/perGameRules';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
-import { colors, fonts, labelStyle, space, type, weight } from '../theme';
-
-function dateLabel(value: string | null): string {
-  if (!value) return 'Waiting';
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(`${value}T00:00:00Z`));
-}
-
-function addDays(iso: string, days: number): string {
-  return new Date(new Date(`${iso}T00:00:00Z`).getTime() + days * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
-}
+import { colors, control, fonts, labelStyle, radius, space, type, weight } from '../theme';
+import { Money, Tag } from '../ui/kit';
+import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
+import { PracticeIcon, RefreshIcon, RulesIcon } from './chrome/ChromeIcons';
+import { PracticeControls } from './SimBar';
 
 /**
- * The season strip is part of the frame, not a card: one quiet line of clock
- * facts, the standing earnings line (a recurring number deserves a fixed
- * address), and the ruleset facts folded behind a disclosure — always-on
- * instructions are noise after the first read.
+ * The status row above every screen: where the season stands, how last night
+ * went, when the next games are, and the few controls that belong to the whole
+ * game rather than one screen (rules, refresh, practice).
+ *
+ * It is part of the frame, not a card, so it stays one row: two short lines of
+ * facts beside 44px icon-first controls. In practice mode the practice bar
+ * (SimBar) sits directly under it and carries the clock controls; the two share
+ * one background and never repeat a date. The rules open as a sheet over the
+ * screen instead of pushing the content down.
  */
 export function PerGameStatusStrip() {
   const { fontScale, width } = useWindowDimensions();
@@ -39,21 +60,18 @@ export function PerGameStatusStrip() {
   const [rulesOpen, setRulesOpen] = useState(false);
   const lastSettled = bootstrap?.game.lastSettledDate ?? null;
   const ledgerItems = bootstrap?.ledger.items;
-  const earnings = useMemo(() => {
-    if (!ledgerItems || !lastSettled) return null;
-    const weekStart = addDays(lastSettled, -6);
-    let night = 0;
-    let week = 0;
-    for (const entry of ledgerItems) {
-      if (!entry.gameDate) continue;
-      if (entry.gameDate === lastSettled) night += entry.amountDollars;
-      if (entry.gameDate >= weekStart && entry.gameDate <= lastSettled) {
-        week += entry.amountDollars;
-      }
-    }
-    return { night, week };
-  }, [lastSettled, ledgerItems]);
+  const earnings = useMemo(() => recentEarnings(ledgerItems, lastSettled), [lastSettled, ledgerItems]);
   if (!bootstrap) return null;
+
+  const practice = isMockActive();
+  const layout = chromeLayout(width, fontScale);
+  const rules = bootstrap.ruleset;
+  const nextGameDate = bootstrap.game.nextGameDate;
+  const progress = practice ? practiceProgress(mockSeasonStart(), lastSettled) : null;
+  // Before the first night there is no "last night" to report.
+  const lastNight = progress?.day === 0 ? null : earnings?.night ?? null;
+  const next = nextGamesText(nextGameDate);
+
   const pendingBeyondReconciliation = [...pendingActions]
     .some((key) => key !== 'account-mutation');
   const disabled = (
@@ -61,292 +79,478 @@ export function PerGameStatusStrip() {
     || isRefreshing
     || (reconciliationRequired ? pendingBeyondReconciliation : pendingActions.size > 0)
   );
-  const reflow = width < 540 || fontScale > 1.2;
-  const rules = bootstrap.ruleset;
-  const dividendBasis = rules.dividendBasis === 'raw_net_points'
-    ? 'RAW NET POINTS'
-    : 'SURPRISE VS PROJECTION';
+
+  const lockDate = rules.rosterLockGameDate;
+  const lockSentence = rules.rosterMutationsLocked
+    ? (rules.rosterLockGameDate
+      ? `Roster changes are locked for the ${humanDate(rules.rosterLockGameDate)} game.`
+      : 'Roster changes are locked while the current game is in progress.')
+    : null;
+  const summary = statusSummary({
+    mode: practice ? 'practice' : 'live',
+    lastSettledDate: lastSettled,
+    nextGameDate,
+    lastNight,
+    progress: progress ?? undefined,
+    lockSentence,
+  });
+
+  // Only the signed-in row has three controls to squeeze; practice's single
+  // Rules control is 44px wide with its name, so it always keeps it.
+  const placement: ChromeButtonPlacement = layout.wide
+    ? 'inline'
+    : layout.iconOnly && !practice ? 'icon' : 'stacked';
+  const canEnterPractice = !practice && Platform.OS === 'web' && typeof window !== 'undefined';
+  // Signed in, a phone row carries three controls, so each fact takes its own
+  // short line (three tight lines fit the 52px row). Practice has one control
+  // and fits its facts on two, except on the narrowest phones when the lock
+  // tag or Reconcile needs the room.
+  const tight = !layout.wide && !layout.largeText && (
+    !practice || (layout.iconOnly && (rules.rosterMutationsLocked || reconciliationRequired))
+  );
+
+  // ---- facts ---------------------------------------------------------------
+  const clock = practice && progress ? (
+    <Text key="clock" maxFontSizeMultiplier={1.5} style={[styles.lead, tight && styles.tight]}>
+      <Text style={styles.practiceWord}>{PRACTICE_LABEL}</Text>
+      {lastSettled ? <Text>{`  ·  ${keepTogether(humanDate(lastSettled))}`}</Text> : null}
+      <Text style={styles.leadMuted}>{`  ·  ${keepTogether(practiceDayText(progress))}`}</Text>
+    </Text>
+  ) : (
+    <Text key="clock" maxFontSizeMultiplier={1.5} style={[styles.lead, tight && styles.tight]}>
+      {lastSettled ? `Games through ${keepTogether(humanDate(lastSettled))}` : 'No games settled yet'}
+    </Text>
+  );
+  const night = lastNight === null ? null : (
+    <Text key="night" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
+      <Text style={styles.factLabel}>Last night </Text>
+      <Money size="body" style={tight ? styles.moneyTight : undefined} value={lastNight} />
+    </Text>
+  );
+  const upcoming = rules.rosterMutationsLocked ? (
+    <View
+      key="lock"
+      accessibilityLabel={lockSentence ?? undefined}
+      style={styles.lock}
+    >
+      <Tag style={tight ? styles.tagTight : undefined} tone="gold">ROSTER LOCKED</Tag>
+      {lockDate ? (
+        <Text maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
+          <Text style={styles.factLabel}>for </Text>
+          {keepTogether(humanDate(lockDate))}
+        </Text>
+      ) : null}
+    </View>
+  ) : progress?.complete ? (
+    <Text key="over" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel, tight && styles.tight]}>
+      {PRACTICE_OVER_TEXT}
+    </Text>
+  ) : (
+    <Text key="next" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
+      <Text style={styles.factLabel}>{progress?.day === 0 ? 'Season opens ' : 'Next '}</Text>
+      {next ? keepTogether(next) : 'not scheduled yet'}
+    </Text>
+  );
+
+  // ---- controls ------------------------------------------------------------
+  // After an uncertain roster action the refresh control becomes the one gold
+  // thing in the row: reconciling is what unlocks roster moves again.
+  const refreshControl = reconciliationRequired ? (
+    <ChromeButton
+      accessibilityLabel="Reconcile account after uncertain roster action"
+      busy={isRefreshing}
+      disabled={disabled}
+      icon={(color) => <RefreshIcon color={color} />}
+      key="reconcile"
+      label="RECONCILE"
+      onPress={() => {
+        refreshData();
+      }}
+      placement={placement === 'icon' ? 'stacked' : placement}
+      tone="gold"
+    />
+  ) : practice ? null : (
+    <ChromeButton
+      accessibilityLabel="Refresh per-game market data"
+      busy={isRefreshing}
+      disabled={disabled}
+      icon={(color) => <RefreshIcon color={color} />}
+      key="refresh"
+      label={isRefreshing ? 'Updating' : 'Refresh'}
+      onPress={() => {
+        refreshData();
+      }}
+      placement={placement}
+    />
+  );
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.summary, reflow && styles.summaryReflow]}>
-        <View style={[styles.item, reflow && styles.itemReflow]}>
-          <Text style={styles.label}>{reflow ? 'LAST' : 'LAST SETTLED'}</Text>
-          <Text style={styles.value}>{dateLabel(bootstrap.game.lastSettledDate)}</Text>
-        </View>
-        <View style={[styles.item, reflow && styles.itemReflow]}>
-          <Text style={styles.label}>NEXT</Text>
-          <Text style={styles.value}>{dateLabel(bootstrap.game.nextGameDate)}</Text>
-        </View>
-        <View style={[styles.item, reflow && styles.itemReflow]}>
-          <Text style={styles.label}>ROSTER</Text>
-          <Text style={styles.value}>
-            {bootstrap.account.longSlots.used} / {bootstrap.account.longSlots.limit}
-          </Text>
-        </View>
-        {rules.rosterMutationsLocked ? (
-          <View
-            accessible
-            accessibilityLabel={rules.rosterLockGameDate
-              ? `Roster changes are locked for the ${dateLabel(rules.rosterLockGameDate)} game.`
-              : 'Roster changes are locked while the current game is in progress.'}
-            style={styles.lockChip}
-          >
-            <Text style={styles.lockTitle}>ROSTER LOCKED</Text>
-            <Text style={styles.lockDate}>
-              {rules.rosterLockGameDate
-                ? dateLabel(rules.rosterLockGameDate).toUpperCase()
-                : 'IN PLAY'}
-            </Text>
-          </View>
-        ) : null}
-        {/* The two controls travel as one unit so a narrow wrap never strands
-            a lone button on its own line. */}
-        <View style={styles.actions}>
-          <Pressable
-            accessibilityLabel={reconciliationRequired
-              ? 'Reconcile account after uncertain roster action'
-              : 'Refresh per-game market data'}
-            accessibilityRole="button"
-            accessibilityState={{ disabled }}
-            disabled={disabled}
-            onPress={() => {
-              refreshData();
-            }}
-            style={({ pressed }) => [
-              styles.refresh,
-              reconciliationRequired && styles.reconcile,
-              disabled && styles.disabledControl,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={styles.refreshText}>
-              {isRefreshing ? 'WAIT' : reconciliationRequired ? 'RECONCILE' : 'REFRESH'}
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-      <View style={styles.earnings}>
-        {earnings ? (
-          <View
-            accessible
-            accessibilityLabel={`Last night ${formatSignedMoney(earnings.night)}, last seven nights ${formatSignedMoney(earnings.week)}`}
-            style={styles.earningsNumbers}
-          >
-            <Text style={styles.earningsLabel}>LAST NIGHT</Text>
-            <Text style={[styles.earningsValue, earnings.night >= 0 ? styles.up : styles.down]}>
-              {formatCompactSignedMoney(earnings.night)}
-            </Text>
-            <Text style={styles.earningsDot}>·</Text>
-            <Text style={styles.earningsLabel}>7 NIGHTS</Text>
-            <Text style={[styles.earningsValue, earnings.week >= 0 ? styles.up : styles.down]}>
-              {formatCompactSignedMoney(earnings.week)}
-            </Text>
-          </View>
-        ) : null}
-        <Pressable
-          accessibilityLabel={rulesOpen ? 'Hide the game rules' : 'Show the game rules'}
-          accessibilityRole="button"
-          aria-expanded={rulesOpen}
-          onPress={() => setRulesOpen((open) => !open)}
-          style={({ pressed }) => [styles.rulesToggle, pressed && styles.pressed]}
+    <View
+      nativeID="status-strip"
+      style={[
+        styles.strip,
+        !practice && styles.stripLive,
+        practice && layout.merged && styles.stripMerged,
+      ]}
+    >
+      <View style={[styles.row, layout.largeText && styles.rowLarge]}>
+        <View
+          accessibilityLabel={summary}
+          accessible
+          style={[
+            styles.facts,
+            practice ? styles.factsPractice : styles.factsLive,
+            tight && styles.factsTight,
+            // Enlarged text signed in: three controls would squeeze the facts
+            // into a sliver, so the facts take the row and the controls wrap.
+            layout.largeText && !practice && styles.factsFull,
+          ]}
         >
-          <Text style={styles.rulesToggleText}>RULES {rulesOpen ? '▾' : '▸'}</Text>
-        </Pressable>
-      </View>
-      {rulesOpen ? (
-        <View style={styles.rules}>
-          <View style={[styles.ruleItem, reflow && styles.ruleItemReflow]}>
-            <Text style={styles.ruleLabel}>DIVIDEND</Text>
-            <Text style={styles.ruleValue}>
-              {dividendBasis} / {formatCompactMoney(rules.dividendDollarsPerNetPoint)} PER POINT
-            </Text>
-          </View>
-          <View style={[styles.ruleItem, reflow && styles.ruleItemReflow]}>
-            <Text style={styles.ruleLabel}>OPEN FEE</Text>
-            <Text style={styles.ruleValue}>{formatCompactMoney(rules.transactionFeeDollars)}</Text>
-          </View>
-          <View style={[styles.ruleItem, reflow && styles.ruleItemReflow]}>
-            <Text style={styles.ruleLabel}>DROP FEE</Text>
-            <Text style={styles.ruleValue}>{formatCompactMoney(rules.transactionFeeDollars)}</Text>
-          </View>
-          <View style={[styles.ruleItem, reflow && styles.ruleItemReflow]}>
-            <Text style={styles.ruleLabel}>SHORT TERM</Text>
-            <Text style={styles.ruleValue}>
-              {rules.shortTermDays === null ? 'NO EXPIRY' : `${rules.shortTermDays} DAYS`}
-            </Text>
-          </View>
+          {layout.wide ? (
+            <View style={[styles.line, styles.lineWide]}>
+              {clock}
+              {night}
+              {upcoming}
+            </View>
+          ) : tight ? (
+            <>
+              {clock}
+              {night}
+              {upcoming}
+            </>
+          ) : (
+            <>
+              {clock}
+              <View style={styles.line}>
+                {night}
+                {upcoming}
+              </View>
+            </>
+          )}
         </View>
-      ) : null}
+        <View style={styles.actions}>
+          {practice && layout.merged ? <PracticeControls inline /> : null}
+          {canEnterPractice ? (
+            <ChromeButton
+              accessibilityLabel="Play a practice season in this browser. Your account is untouched."
+              icon={(color) => <PracticeIcon color={color} />}
+              label={PRACTICE_LABEL}
+              onPress={() => {
+                window.location.search = '?mock';
+              }}
+              placement={placement}
+            />
+          ) : null}
+          {refreshControl}
+          <ChromeButton
+            accessibilityLabel="Show the game rules"
+            icon={(color) => <RulesIcon color={color} />}
+            label="Rules"
+            onPress={() => setRulesOpen(true)}
+            placement={placement}
+          />
+        </View>
+      </View>
+      <RulesSheet onClose={() => setRulesOpen(false)} rules={rules} visible={rulesOpen} />
     </View>
   );
 }
 
+/** Below this width the rules sheet rises from the bottom; above it, it is a centred panel. */
+const RULES_SHEET_DOCKED_MAX_WIDTH = 640;
+
+/**
+ * The rules, over the screen. Plain English first (the shared rules copy),
+ * then the numbers a player checks before a move.
+ */
+function RulesSheet({
+  visible,
+  onClose,
+  rules,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  rules: PerGameRuleset;
+}) {
+  const reducedMotion = useReducedMotion();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const docked = width < RULES_SHEET_DOCKED_MAX_WIDTH;
+  const presentation = perGameRulesPresentation(rules);
+  const startingScore = presentation.facts.find((fact) => fact.label === 'Starting score')?.value;
+  const fee = exactMoney(rules.transactionFeeDollars);
+  const facts = [
+    { label: 'ROSTER', value: positionSlotHint('long', rules.longSlotLimit) },
+    { label: 'SHORTS', value: positionSlotHint('short', rules.shortSlotLimit) },
+    { label: 'DIVIDEND', value: dividendText(rules.dividendBasis, rules.dividendDollarsPerNetPoint) },
+    { label: 'OPEN FEE', value: `${fee} to add a player or open a short` },
+    { label: 'DROP FEE', value: `${fee} to drop a player or close a short` },
+    { label: 'SHORT TERM', value: shortTermText(rules.shortTermDays) },
+    ...(startingScore ? [{ label: 'SCORE', value: `Starts at ${startingScore}` }] : []),
+  ];
+  return (
+    <Modal
+      accessibilityLabel="Game rules"
+      animationType={reducedMotion ? 'none' : 'fade'}
+      onRequestClose={onClose}
+      transparent
+      visible={visible}
+    >
+      <Pressable
+        accessibilityLabel="Close the game rules"
+        accessibilityRole="button"
+        onPress={onClose}
+        style={styles.scrim}
+      />
+      <View
+        style={[
+          styles.sheet,
+          docked ? styles.sheetDocked : styles.sheetCentered,
+          docked && { paddingBottom: insets.bottom },
+        ]}
+      >
+        <View style={styles.sheetHead}>
+          <Text accessibilityRole="header" style={styles.sheetTitle}>Game rules</Text>
+          <Pressable
+            accessibilityLabel="Close the game rules"
+            accessibilityRole="button"
+            onPress={onClose}
+            style={({ pressed }) => [styles.done, pressed && styles.pressed]}
+          >
+            <Text style={styles.doneText}>Done</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.sheetContent} style={styles.sheetBody}>
+          <View style={styles.explanation}>
+            {explanationParagraphs(presentation.explanation, SHORT_EXPLAINER).map((paragraph) => (
+              <Text key={paragraph} style={styles.paragraph}>{paragraph}</Text>
+            ))}
+          </View>
+          <View style={styles.factList}>
+            {facts.map((fact) => (
+              <View key={fact.label} style={styles.factRow}>
+                <Text style={styles.factName}>{fact.label}</Text>
+                <Text style={styles.factValue}>{fact.value}</Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderStrong,
+  // In practice the practice bar continues the frame directly underneath, and
+  // its progress rule is the frame's bottom edge; signed in, this row is the
+  // whole frame and draws its own.
+  strip: {
     backgroundColor: colors.chromeSoft,
   },
-  summary: {
-    minHeight: 56,
+  // Desktop practice: the clock controls share this row, so it gets the
+  // breathing room the separate practice bar has on a phone.
+  stripMerged: {
+    paddingVertical: space.xs,
+  },
+  stripLive: {
+    paddingVertical: 3,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderStrong,
+  },
+  row: {
+    minHeight: control.height,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.lg,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  summaryReflow: {
+    // Enlarged text wraps the controls under the facts instead of truncating.
     flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: space.md,
+    columnGap: space.sm,
+    paddingHorizontal: space.lg,
   },
-  item: {
-    minWidth: 0,
+  rowLarge: {
+    paddingVertical: space.xs,
+  },
+  facts: {
+    flexGrow: 1,
     flexShrink: 1,
+    minWidth: 0,
+    gap: 1,
   },
-  itemReflow: {
-    minWidth: 72,
+  // The narrowest the facts get before the controls drop below them.
+  factsPractice: {
+    flexBasis: 180,
   },
-  label: {
-    ...labelStyle,
-    marginBottom: 2,
+  factsLive: {
+    flexBasis: 140,
   },
-  value: {
+  factsTight: {
+    gap: 0,
+  },
+  factsFull: {
+    flexBasis: '100%',
+  },
+  line: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    columnGap: space.md,
+  },
+  // One line of mixed sizes (the 13px clock, 12px facts) sits on a baseline.
+  lineWide: {
+    alignItems: 'baseline',
+    columnGap: space.xl,
+  },
+  lead: {
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: type.body,
     fontWeight: weight.bold,
+    lineHeight: 17,
     fontVariant: ['tabular-nums'],
   },
-  lockChip: {
-    alignItems: 'flex-start',
-    paddingHorizontal: space.sm,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: colors.goldLine,
-    backgroundColor: colors.goldSoft,
-  },
-  lockTitle: {
+  practiceWord: {
     color: colors.goldInk,
-    fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.black,
-    letterSpacing: 0.6,
+    fontWeight: weight.heavy,
   },
-  lockDate: {
-    marginTop: 1,
+  leadMuted: {
+    color: colors.muted,
+    fontWeight: weight.medium,
+  },
+  fact: {
     color: colors.text,
     fontFamily: fonts.display,
-    fontSize: type.label,
+    fontSize: type.caption,
     fontWeight: weight.bold,
+    lineHeight: 17,
     fontVariant: ['tabular-nums'],
+  },
+  factLabel: {
+    color: colors.muted,
+    fontWeight: weight.medium,
+  },
+  tight: {
+    lineHeight: 15,
+  },
+  lock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tagTight: {
+    paddingVertical: 0,
+  },
+  // One size per line keeps the three tight lines at exactly their height.
+  moneyTight: {
+    fontSize: type.caption,
   },
   actions: {
     marginLeft: 'auto',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
+    gap: 2,
   },
-  refresh: {
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: space.md,
+  pressed: {
+    opacity: 0.65,
+  },
+  // ---- rules sheet ----------------------------------------------------------
+  scrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  sheet: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 560,
+    maxHeight: '88%',
+    backgroundColor: colors.background,
+    borderColor: colors.border,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.surfaceRaised,
+    overflow: 'hidden',
   },
-  reconcile: {
-    borderColor: colors.gold,
-    backgroundColor: colors.goldSoft,
+  sheetDocked: {
+    marginTop: 'auto',
+    borderBottomWidth: 0,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
   },
-  refreshText: {
-    color: colors.goldInk,
-    fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.heavy,
+  sheetCentered: {
+    marginVertical: 'auto',
+    borderRadius: radius.lg,
   },
-  earnings: {
-    minHeight: 34,
+  sheetHead: {
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.xs,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    justifyContent: 'space-between',
+    paddingLeft: space.lg,
+    paddingRight: space.sm,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
   },
-  earningsNumbers: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: space.sm,
-  },
-  earningsLabel: {
-    ...labelStyle,
-  },
-  earningsValue: {
+  sheetTitle: {
+    color: colors.text,
     fontFamily: fonts.display,
-    fontSize: type.body,
+    fontSize: type.title,
     fontWeight: weight.heavy,
-    fontVariant: ['tabular-nums'],
   },
-  earningsDot: {
-    color: colors.faint,
-    fontSize: type.body,
-  },
-  rulesToggle: {
-    minHeight: 32,
-    marginLeft: 'auto',
+  done: {
+    minHeight: control.height,
+    minWidth: control.height,
+    alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: space.sm,
   },
-  rulesToggleText: {
-    ...labelStyle,
+  doneText: {
     color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.bold,
   },
-  rules: {
+  sheetBody: {
+    flexGrow: 0,
+  },
+  sheetContent: {
+    padding: space.lg,
+    gap: space.lg,
+  },
+  explanation: {
+    gap: space.sm,
+  },
+  paragraph: {
+    color: colors.text,
+    fontFamily: fonts.body,
+    fontSize: type.value,
+    lineHeight: 22,
+  },
+  factList: {
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+  },
+  factRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: colors.background,
+    alignItems: 'baseline',
+    columnGap: space.md,
+    rowGap: 2,
+    paddingVertical: space.sm + 2,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
   },
-  ruleItem: {
-    minWidth: 140,
-    flex: 1,
-    flexBasis: '22%',
-  },
-  ruleItemReflow: {
-    minWidth: 120,
-    flexBasis: '45%',
-  },
-  ruleLabel: {
+  factName: {
     ...labelStyle,
-    marginBottom: 3,
+    width: 96,
   },
-  ruleValue: {
+  factValue: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 180,
     color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.bold,
-    lineHeight: 17,
-  },
-  up: {
-    color: colors.green,
-  },
-  down: {
-    color: colors.red,
-  },
-  disabledControl: {
-    opacity: 0.45,
-  },
-  pressed: {
-    opacity: 0.72,
+    fontFamily: fonts.body,
+    fontSize: type.body,
+    lineHeight: 19,
+    fontVariant: ['tabular-nums'],
   },
 });
