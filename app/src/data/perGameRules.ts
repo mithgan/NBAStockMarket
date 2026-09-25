@@ -2,6 +2,14 @@ import type { PerGamePositionSide, PerGameRuleset } from '../api/contracts';
 import { ROSTER_EXPLAINER, SHORT_EXPLAINER } from '../copy/terms';
 import { formatMoney } from '../format';
 
+/** What net points are, in box-score terms a fan already knows. */
+export const NET_POINTS_EXPLAINER =
+  'Net points are a box-score score: points, rebounds, assists, steals and blocks count for him; turnovers, missed shots and minutes count against him.';
+
+/** Why a dividend can be below zero, and who pays it. */
+export const NEGATIVE_DIVIDEND_EXPLAINER =
+  'A bad game can make his dividend negative: then a roster spot pays it and a short collects it.';
+
 export function perGameRulesPresentation(rules: PerGameRuleset) {
   const raw = rules.dividendBasis === 'raw_net_points';
   return {
@@ -17,7 +25,7 @@ export function perGameRulesPresentation(rules: PerGameRuleset) {
     ],
     explanation: `${raw
       ? "A player's dividend comes from his net points each game."
-      : "A player's dividend comes from how far his net points beat his pregame projection."} ${ROSTER_EXPLAINER} ${SHORT_EXPLAINER} Your score is the total of those games plus fees.`,
+      : "A player's dividend comes from how far his net points beat his pregame projection."} ${NET_POINTS_EXPLAINER} ${ROSTER_EXPLAINER} ${SHORT_EXPLAINER} Your score is the total of those games plus fees. ${NEGATIVE_DIVIDEND_EXPLAINER}`,
   };
 }
 

@@ -114,7 +114,7 @@ test('the live status sentence names the last settled night and the lock', () =>
       lastNight: 0,
       lockSentence: 'Roster changes are locked for the Nov 6 game.',
     }),
-    'Games through Nov 5. Last night +$0. Next games Thu, Nov 6. Roster changes are locked for the Nov 6 game.',
+    'Games through Nov 5. Last night $0. Next games Thu, Nov 6. Roster changes are locked for the Nov 6 game.',
   );
   assert.equal(
     statusSummary({ mode: 'live', lastSettledDate: null, nextGameDate: null, lastNight: null }),

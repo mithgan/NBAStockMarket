@@ -3,6 +3,10 @@ import test from 'node:test';
 
 import {
   closeVerb,
+  exactSignedMoney,
+  moneyFine,
+  signedMoneyFine,
+  unbrokenName,
   gamesCount,
   humanDate,
   humanDateWithYear,
@@ -44,7 +48,8 @@ test('prices are per game in words, never /GM or spelled-out dollars', () => {
   assert.equal(perGameShort(105_000), '$105K/game');
   assert.equal(money(1_300_000), '$1.3M');
   assert.equal(signedMoney(-66_500), '-$67K');
-  assert.equal(signedMoney(0), '+$0');
+  assert.equal(signedMoney(0), '$0');
+  assert.equal(signedMoney(-0.4), '$0');
   assert.doesNotMatch(perGame(237_500), /GM|dollars/);
 });
 
@@ -52,4 +57,23 @@ test('counts pluralise', () => {
   assert.equal(gamesCount(1), '1 game');
   assert.equal(gamesCount(12), '12 games');
   assert.equal(nightsCount(7), '7 nights');
+});
+
+test('fine money keeps figures that sit side by side honest', () => {
+  assert.equal(moneyFine(3_500), '$3,500');
+  assert.equal(moneyFine(137_500), '$137.5K');
+  assert.equal(moneyFine(288_000), '$288K');
+  assert.equal(moneyFine(4_850_000), '$4.85M');
+  assert.equal(moneyFine(5_200_000), '$5.2M');
+  assert.equal(moneyFine(999_960), '$1M');
+  assert.equal(moneyFine(-80_250), '-$80.3K');
+  assert.equal(signedMoneyFine(150_500), '+$150.5K');
+  assert.equal(signedMoneyFine(-3_500), '-$3,500');
+  assert.equal(signedMoneyFine(0), '$0');
+  assert.equal(exactSignedMoney(0), '$0');
+});
+
+test('names keep their hyphen together', () => {
+  assert.equal(unbrokenName('Shai Gilgeous-Alexander'), 'Shai Gilgeous\u2011Alexander');
+  assert.equal(unbrokenName('Nikola Jokic'), 'Nikola Jokic');
 });

@@ -21,6 +21,16 @@ import {
 import { PerGameApiError } from './perGameClient';
 import type { TrendPoint } from '../data/trendPresentation';
 
+/**
+ * Practice runs on last season's calendar, so its ledger is stamped in that
+ * calendar too: a roster move at midday on the day of the next games, a
+ * settlement late that night. Real wall-clock stamps would put a fee in
+ * September 2026 beside October 2025 games.
+ */
+function simulatedTime(day: string, when: 'move' | 'settlement'): string {
+  return `${day}T${when === 'move' ? '12:00:00' : '23:30:00'}.000Z`;
+}
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -94,6 +104,13 @@ export class MockPerGameApiClient {
       rosterLockGameDate: null,
     };
     snapshot.account = { ...snapshot.account, displayName: 'Mock preview' };
+    // A practice season starts everyone at $0, as the Leaders screen says;
+    // the fixture's standings belong to the live sample, not to night zero.
+    snapshot.leaderboard = snapshot.leaderboard.map((row, index) => ({
+      ...row,
+      rank: index + 1,
+      cumulativePnl: row.isCurrentUser ? snapshot.account.cumulativePnl : 0,
+    }));
     return snapshot;
   }
 
@@ -292,7 +309,7 @@ export class MockPerGameApiClient {
         kind: 'game_cost',
         amountDollars: position.side === 'long' ? -cost : cost,
         adjustsEntryId: null,
-        createdAt: new Date().toISOString(),
+        createdAt: simulatedTime(date, 'settlement'),
       });
       this.cursor += 1;
       state.ledger.items.push({
@@ -306,7 +323,7 @@ export class MockPerGameApiClient {
         kind: 'game_dividend',
         amountDollars: position.side === 'long' ? dividend : -dividend,
         adjustsEntryId: null,
-        createdAt: new Date().toISOString(),
+        createdAt: simulatedTime(date, 'settlement'),
       });
       this.cursor += 1;
       state.settledResults.push({
@@ -385,7 +402,10 @@ export class MockPerGameApiClient {
       kind,
       amountDollars: -fee,
       adjustsEntryId: null,
-      createdAt: new Date().toISOString(),
+      createdAt: simulatedTime(
+        this.snapshot.game.nextGameDate ?? this.snapshot.game.lastSettledDate ?? SANDBOX_OPENING_EVE,
+        'move',
+      ),
     });
     this.snapshot.account.cumulativePnl -= fee;
     this.snapshot.game.eventCursor = this.cursor;

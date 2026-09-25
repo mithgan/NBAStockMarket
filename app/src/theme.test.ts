@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { colors, radius, type } from './theme';
+import { VARIANTS } from './theme/variants';
 
 function relativeLuminance(hex: string): number {
   const value = hex.replace('#', '');
@@ -51,6 +52,13 @@ test('every text colour clears WCAG AA against every surface it can sit on', () 
         `${tokenName} on ${surfaceName} is ${ratio.toFixed(2)}:1, below the 4.5:1 minimum`,
       );
     }
+  }
+});
+
+test('text on a gold fill stays readable in every Appearance', () => {
+  for (const variant of Object.values(VARIANTS)) {
+    const ratio = contrast(variant.palette.onGold, variant.palette.gold);
+    assert.ok(ratio >= 4.5, `${variant.name}: onGold on gold is ${ratio.toFixed(2)}:1`);
   }
 });
 

@@ -19,12 +19,35 @@ import {
   Text,
   View,
   type StyleProp,
+  type TextProps,
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
 
 import { exactSignedMoney, exactMoney, money, signedMoney } from '../copy/terms';
 import { colors, control, fonts, headingStyle, labelStyle, radius, space, type, weight } from '../theme';
+
+// ---------------------------------------------------------------------------
+// Accessibility helpers
+
+/**
+ * Heading level for a header. react-native-web turns `aria-level` on a
+ * header into the matching <h1>-<h6>, so a screen's outline reads
+ * screen → section → item instead of a flat list of <h1>s. React Native's
+ * types do not list the prop yet, hence the cast.
+ */
+export function headingLevel(level: 1 | 2 | 3 | 4): TextProps {
+  return { 'aria-level': level } as unknown as TextProps;
+}
+
+/** Present to screen readers, invisible and zero-size on screen. */
+export const visuallyHidden: ViewStyle = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  overflow: 'hidden',
+  opacity: 0,
+};
 
 // ---------------------------------------------------------------------------
 // Money
@@ -177,10 +200,13 @@ export function Button({
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
 }) {
+  const name = accessibilityLabel ?? label;
   return (
     <Pressable
       accessibilityHint={accessibilityHint}
-      accessibilityLabel={accessibilityLabel ?? label}
+      // react-native-web drops accessibilityHint, so a disabled button would
+      // never say why. Carry the reason in the name while it applies.
+      accessibilityLabel={disabled && accessibilityHint ? `${name}. ${accessibilityHint}` : name}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       disabled={disabled}
@@ -271,18 +297,21 @@ export function SectionHeader({
   meta,
   caption,
   right,
+  level = 2,
   style,
 }: {
   title: string;
   meta?: string;
   caption?: string;
   right?: ReactNode;
+  /** Outline level: 1 for a screen title, 2 for a section (default), 3 below. */
+  level?: 1 | 2 | 3 | 4;
   style?: StyleProp<ViewStyle>;
 }) {
   return (
     <View style={[styles.sectionHeader, style]}>
       <View style={styles.sectionCopy}>
-        <Text accessibilityRole="header" style={styles.sectionTitle}>{title}</Text>
+        <Text accessibilityRole="header" {...headingLevel(level)} style={styles.sectionTitle}>{title}</Text>
         {caption ? <Text style={styles.sectionCaption}>{caption}</Text> : null}
       </View>
       {right ?? (meta ? <Text style={styles.sectionMeta}>{meta}</Text> : null)}
@@ -318,16 +347,18 @@ export function EmptyState({
   title,
   copy,
   action,
+  level = 3,
   style,
 }: {
   title: string;
   copy?: string;
   action?: ReactNode;
+  level?: 1 | 2 | 3 | 4;
   style?: StyleProp<ViewStyle>;
 }) {
   return (
     <View style={[styles.empty, style]}>
-      <Text accessibilityRole="header" style={styles.emptyTitle}>{title}</Text>
+      <Text accessibilityRole="header" {...headingLevel(level)} style={styles.emptyTitle}>{title}</Text>
       {copy ? <Text style={styles.emptyCopy}>{copy}</Text> : null}
       {action ? <View style={styles.emptyAction}>{action}</View> : null}
     </View>
@@ -388,7 +419,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   buttonTextPrimary: {
-    color: colors.background,
+    color: colors.onGold,
   },
   buttonTextQuiet: {
     color: colors.muted,

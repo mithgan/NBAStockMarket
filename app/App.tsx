@@ -20,6 +20,7 @@ import { PerGameResultsScreen as PlaysScreen } from './src/screens/PerGameResult
 import { DesignPreviewScreen } from './src/screens/DesignPreviewScreen';
 import { PerGameRosterScreen as PortfolioScreen } from './src/screens/PerGameRosterScreen';
 import { humanDateWithYear } from './src/copy/terms';
+import { visuallyHidden } from './src/ui/kit';
 import {
   PerGameProvider as PortfolioProvider,
   usePerGame as usePortfolio,
@@ -141,9 +142,13 @@ const SUCCESS_NOTICE_MS = 5000;
 
 /**
  * Notices float over the bottom of the screen instead of pushing it down, so
- * adding a player never shoves the list the player is tapping through. A
- * success ("added at $105K a game") clears itself; a problem stays until the
- * player dismisses it, because it asks them to do something.
+ * adding a player never shoves the list the player is tapping through.
+ *
+ * A success ("added at $105K a game", "games through Nov 5 are in") clears
+ * itself and lets taps fall through to the row underneath, so it can never
+ * swallow the next Add. A problem stays until the player dismisses it,
+ * because it asks them to do something. Screen readers hear every notice
+ * through the always-mounted live region in AppBody, not through this view.
  */
 function NoticeToast({
   message,
@@ -159,21 +164,28 @@ function NoticeToast({
     const timer = setTimeout(onDismiss, SUCCESS_NOTICE_MS);
     return () => clearTimeout(timer);
   }, [message, onDismiss, tone]);
+  const problem = tone === 'problem';
   return (
     <View style={styles.noticeLayer}>
       <View
-        accessibilityLiveRegion="polite"
-        style={[styles.notice, tone === 'problem' && styles.noticeProblem]}
+        // A success has nothing to press, and the live region already read
+        // it, so the visual copy stays out of the accessibility tree. A
+        // problem keeps its Dismiss button reachable.
+        accessibilityElementsHidden={!problem}
+        importantForAccessibility={problem ? 'auto' : 'no-hide-descendants'}
+        style={[styles.notice, problem ? styles.noticeProblem : styles.noticePassThrough]}
       >
-        <Text style={styles.noticeText}>{message}</Text>
-        <Pressable
-          accessibilityLabel={`Dismiss: ${message}`}
-          accessibilityRole="button"
-          onPress={onDismiss}
-          style={({ pressed }) => [styles.noticeDismiss, pressed && styles.pressed]}
-        >
-          <Text style={styles.noticeClose}>Dismiss</Text>
-        </Pressable>
+        <Text numberOfLines={problem ? undefined : 2} style={styles.noticeText}>{message}</Text>
+        {problem ? (
+          <Pressable
+            accessibilityLabel={`Dismiss: ${message}`}
+            accessibilityRole="button"
+            onPress={onDismiss}
+            style={({ pressed }) => [styles.noticeDismiss, pressed && styles.pressed]}
+          >
+            <Text style={styles.noticeClose}>Dismiss</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -185,6 +197,7 @@ function NoticeToast({
  * on a phone.
  */
 const WIDE_LAYOUT_MIN_WIDTH = 900;
+const NARROW_LAYOUT_MAX_WIDTH = 300;
 
 function AppBody() {
   const [activeTab, setActiveTab] = useState<Tab>('portfolio');
@@ -193,6 +206,9 @@ function AppBody() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const wide = width >= WIDE_LAYOUT_MIN_WIDTH;
+  // Under ~300 CSS px (a phone at 200% zoom) the four tab labels and the
+  // brand line only fit at the smallest type size, without side padding.
+  const narrow = width < NARROW_LAYOUT_MAX_WIDTH;
   const auth = useOptionalAuth();
   const authError = auth?.error ?? null;
   const authSubmitting = auth?.isSubmitting ?? false;
@@ -298,7 +314,11 @@ function AppBody() {
                 content: below the labels when the bar is on top, above when
                 the bar is at the bottom. */}
             <View style={[styles.tabMarker, position === 'top' && styles.tabMarkerBottomEdge, active && styles.tabMarkerActive]} />
-            <Text maxFontSizeMultiplier={1.5} numberOfLines={1} style={[styles.tabText, active && styles.activeTabText]}>
+            <Text
+              maxFontSizeMultiplier={1.5}
+              numberOfLines={1}
+              style={[styles.tabText, narrow && styles.tabTextNarrow, active && styles.activeTabText]}
+            >
               {tab.label}
             </Text>
           </Pressable>
@@ -318,10 +338,16 @@ function AppBody() {
           <Text maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text>
         </View>
         <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.brand}>databallr</Text>
-        <View style={styles.brandDivider} />
-        <View style={styles.brandCopy}>
-          <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.product}>STOCK MARKET</Text>
-        </View>
+        {/* On a very narrow screen the wordmark keeps the room; the product
+            name is also the page title, so nothing is lost. */}
+        {narrow ? <View style={styles.brandCopy} /> : (
+          <>
+            <View style={styles.brandDivider} />
+            <View style={styles.brandCopy}>
+              <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.product}>STOCK MARKET</Text>
+            </View>
+          </>
+        )}
         <SettingsButton onPress={() => setSettingsOpen(true)} />
       </View>
       {ready && wide ? renderTabBar('top') : null}
@@ -337,11 +363,19 @@ function AppBody() {
           <NoticeToast message={message} onDismiss={dismissNotice} tone={noticeTone} />
         ) : null}
       </View>
+      {/* Mounted for the life of the app so a new notice is a change inside an
+          existing live region; many screen readers skip text that arrives
+          together with a brand-new region. */}
+      <View accessibilityLiveRegion="polite" style={visuallyHidden}>
+        <Text>{authError ?? message ?? ''}</Text>
+      </View>
       {ready ? (wide ? null : renderTabBar('bottom')) : null}
       <SettingsSheet
         listedPlayers={players.length}
         ruleset={bootstrap?.ruleset}
-        onOpenTreatments={typeof window === 'undefined' ? undefined : () => {
+        // The treatments gallery renders design samples from the old share
+        // market; it is a design-review tool, so it stays out of production.
+        onOpenTreatments={!__DEV__ || typeof window === 'undefined' ? undefined : () => {
           window.location.assign(treatmentNavigation(window.location.href).galleryUrl);
         }}
         onClose={() => setSettingsOpen(false)}
@@ -506,7 +540,9 @@ const styles = StyleSheet.create({
     minHeight: 0,
     alignSelf: 'center',
     width: '100%',
-    maxWidth: 1040,
+    // Wide enough for the roster's two columns and the market table to
+    // breathe on a laptop; beyond this lines get too long to scan.
+    maxWidth: 1200,
     backgroundColor: colors.background,
     borderLeftColor: colors.border,
     borderRightColor: colors.border,
@@ -591,6 +627,11 @@ const styles = StyleSheet.create({
   noticeProblem: {
     backgroundColor: colors.goldSoft,
     borderColor: colors.gold,
+  },
+  noticePassThrough: {
+    pointerEvents: 'none',
+    paddingRight: space.md,
+    minHeight: 44,
   },
   // The toast is where "LeBron James added at $105K a game" lands — body size,
   // not fine print: it is the confirmation the player tapped for.
@@ -712,6 +753,9 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     fontWeight: '700',
     color: colors.faint,
+  },
+  tabTextNarrow: {
+    fontSize: type.label,
   },
   activeTabText: {
     color: colors.goldInk,

@@ -42,6 +42,8 @@ export const BASE_PALETTE = {
   goldInk: '#ffcd57',
   goldSoft: '#2f2610',
   goldLine: '#6b571f',
+  /** Text and icons that sit on a gold fill (primary buttons). */
+  onGold: '#0e1218',
   cyan: '#3abff8',
   cyanSoft: '#12303f',
   green: '#3ddc97',
@@ -68,6 +70,7 @@ export const colors = {
   goldInk: webVar('goldInk', BASE_PALETTE.goldInk),
   goldSoft: webVar('goldSoft', BASE_PALETTE.goldSoft),
   goldLine: webVar('goldLine', BASE_PALETTE.goldLine),
+  onGold: webVar('onGold', BASE_PALETTE.onGold),
   cyan: webVar('cyan', BASE_PALETTE.cyan),
   cyanSoft: webVar('cyanSoft', BASE_PALETTE.cyanSoft),
   green: webVar('green', BASE_PALETTE.green),

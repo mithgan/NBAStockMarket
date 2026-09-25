@@ -13,6 +13,7 @@
 import type {
   PerGameLedgerEntry,
   PerGameMarketPlayer,
+  PerGamePosition,
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
@@ -194,10 +195,18 @@ function addDays(isoDate: string, days: number): string {
 }
 
 /**
- * Score change on the last settled night and over the seven nights ending on
- * it, from the ledger. Entries count on the game date they carry, so a fee
- * dated to a night counts in that night; a fee with no game date (practice
- * mode's add and drop fees) is in the score but in neither figure.
+ * The calendar day a ledger entry belongs to: its game date, or for an entry
+ * without one (an add or drop fee) the UTC day it was booked.
+ */
+function entryDay(entry: PerGameLedgerEntry): string | null {
+  if (entry.gameDate) return entry.gameDate;
+  return entry.createdAt ? entry.createdAt.slice(0, 10) : null;
+}
+
+/**
+ * Score change on the last settled day and over the seven calendar days
+ * ending on it, from the ledger, fees included: a game entry counts on its
+ * game date, an add or drop fee on the day it was booked.
  */
 export function recentEarnings(
   ledger: readonly PerGameLedgerEntry[] | undefined,
@@ -208,9 +217,62 @@ export function recentEarnings(
   let night = 0;
   let week = 0;
   for (const entry of ledger) {
-    if (!entry.gameDate) continue;
-    if (entry.gameDate === lastSettledDate) night += entry.amountDollars;
-    if (entry.gameDate >= weekStart && entry.gameDate <= lastSettledDate) week += entry.amountDollars;
+    const day = entryDay(entry);
+    if (!day) continue;
+    if (day === lastSettledDate) night += entry.amountDollars;
+    if (day >= weekStart && day <= lastSettledDate) week += entry.amountDollars;
   }
   return { night, week };
+}
+
+const FEE_KINDS = new Set(['open_fee', 'drop_fee', 'fee', 'penalty']);
+
+export interface ScoreBreakdown {
+  /** Lifetime result of the players on your roster now. */
+  roster: number;
+  /** Lifetime result of your open shorts. */
+  shorts: number;
+  /** What dropped players and ended shorts made or lost while you held them. */
+  closed: number;
+  /** How many positions are closed. */
+  closedCount: number;
+  /** Add and drop fees. */
+  fees: number;
+  /**
+   * Anything the positions and fees do not explain (a partial ledger, a
+   * correction not yet reflected in a position). Zero in normal play.
+   */
+  other: number;
+}
+
+/**
+ * The score, split by where it came from. Each part equals the rows beneath
+ * it on the Roster screen, so the parts always add up to the score and stay
+ * true when shorts and negative nights are involved (unlike "dividends
+ * earned / prices paid", which nets short money into both).
+ */
+export function scoreBreakdown(
+  score: number,
+  positions: readonly PerGamePosition[],
+  ledger: readonly PerGameLedgerEntry[],
+): ScoreBreakdown {
+  let roster = 0;
+  let shorts = 0;
+  let closed = 0;
+  let closedCount = 0;
+  for (const position of positions) {
+    if (position.status === 'active') {
+      if (position.side === 'long') roster += position.cumulativePnl;
+      else shorts += position.cumulativePnl;
+    } else {
+      closed += position.cumulativePnl;
+      closedCount += 1;
+    }
+  }
+  let fees = 0;
+  for (const entry of ledger) {
+    if (FEE_KINDS.has(entry.kind)) fees += entry.amountDollars;
+  }
+  const other = score - roster - shorts - closed - fees;
+  return { roster, shorts, closed, closedCount, fees, other: Math.abs(other) < 1 ? 0 : other };
 }

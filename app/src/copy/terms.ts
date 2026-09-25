@@ -91,8 +91,9 @@ export function money(amount: number): string {
   return formatCompactMoney(amount);
 }
 
-/** Compact signed money: "+$238K", "-$1.2M". */
+/** Compact signed money: "+$238K", "-$1.2M". Zero is plain "$0", never "+$0". */
 export function signedMoney(amount: number): string {
+  if (Math.round(amount) === 0) return '$0';
   return formatCompactSignedMoney(amount);
 }
 
@@ -101,9 +102,44 @@ export function exactMoney(amount: number): string {
   return formatMoney(amount);
 }
 
-/** Exact signed money: "+$237,500". */
+/** Exact signed money: "+$237,500". Zero is plain "$0". */
 export function exactSignedMoney(amount: number): string {
+  if (Math.round(amount) === 0) return '$0';
   return formatSignedMoney(amount);
+}
+
+function trimDecimals(value: string): string {
+  return value.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+}
+
+/**
+ * Money with enough digits that figures shown side by side still add up:
+ * "$3,500", "$137.5K", "$4.85M". Use it where two amounts are compared or
+ * summed on screen (a score breakdown, dividend against price); use the
+ * compact `money` for a lone headline figure.
+ */
+export function moneyFine(amount: number): string {
+  const rounded = Math.round(amount);
+  const sign = rounded < 0 ? '-' : '';
+  const abs = Math.abs(rounded);
+  if (abs < 10_000) return `${sign}$${abs.toLocaleString('en-US')}`;
+  if (abs < 999_950) return `${sign}$${trimDecimals((abs / 1_000).toFixed(1))}K`;
+  return `${sign}$${trimDecimals((abs / 1_000_000).toFixed(2))}M`;
+}
+
+/** Signed `moneyFine`: "+$137.5K", "-$4.85M", and "$0" for zero. */
+export function signedMoneyFine(amount: number): string {
+  const text = moneyFine(amount);
+  if (text === '$0') return text;
+  return text.startsWith('-') ? text : `+${text}`;
+}
+
+/**
+ * A player name that never breaks at its hyphen ("Gilgeous-Alexander" stays
+ * whole when a row wraps). Swaps the hyphen for a non-breaking hyphen.
+ */
+export function unbrokenName(name: string): string {
+  return name.replace(/-/g, '\u2011');
 }
 
 /** "$105K a game" — the price of a player, in words. */

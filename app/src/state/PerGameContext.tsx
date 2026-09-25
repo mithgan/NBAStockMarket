@@ -24,7 +24,7 @@ import { perGame } from '../copy/terms';
 import { isAppResume } from './appResume';
 import { ActionLock } from './actionLock';
 import { loadPerGameBootstrapSnapshot } from './perGameBootstrapLoader';
-import { refreshNotice } from './perGameNotices';
+import { refreshHasNews, refreshNotice } from './perGameNotices';
 import { runPerGameMutation } from './perGameMutation';
 import {
   MutationReconciliationCoordinator,
@@ -194,11 +194,9 @@ export function PerGameProvider({
     try {
       const refreshed = await loadSnapshot();
       succeeded = refreshed !== null;
-      const settledSomething = refreshed !== null
-        && refreshed.game.lastSettledDate !== (previous?.game.lastSettledDate ?? null);
       if (
         refreshed && mounted.current
-        && (!quietUnlessChanged || settledSomething || attempt.reconciliationReason)
+        && (!quietUnlessChanged || refreshHasNews(previous, refreshed) || attempt.reconciliationReason)
       ) {
         say(refreshNotice(previous, refreshed, Boolean(attempt.reconciliationReason)), 'success');
       }

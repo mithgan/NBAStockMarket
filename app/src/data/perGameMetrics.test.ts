@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { PerGameLedgerEntry, PerGameSettledResult } from '../api/contracts';
+import type { PerGameLedgerEntry, PerGamePosition, PerGameSettledResult } from '../api/contracts';
 import {
   currentResults,
   lastYearEdge,
@@ -9,6 +9,7 @@ import {
   playerValue,
   positionValue,
   recentEarnings,
+  scoreBreakdown,
   valueVerdict,
 } from './perGameMetrics';
 
@@ -112,21 +113,69 @@ test('night totals are newest first and use corrected values', () => {
   assert.equal(nights[1].wins, 1);
 });
 
-test('recent earnings match the ledger, fees included', () => {
-  const entry = (gameDate: string | null, amountDollars: number): PerGameLedgerEntry => ({
+test('recent earnings match the ledger, fees included by the day they were booked', () => {
+  const entry = (gameDate: string | null, amountDollars: number, createdAt = '2025-11-08T00:00:00Z'): PerGameLedgerEntry => ({
     eventCursor: 1,
-    entryId: `${gameDate}-${amountDollars}`,
+    entryId: `${gameDate}-${amountDollars}-${createdAt}`,
     positionId: 'a',
     playerId: 'p1',
     gameId: null,
     gameDate,
     resultRevision: null,
-    kind: 'game_dividend',
+    kind: gameDate ? 'game_dividend' : 'open_fee',
     amountDollars,
     adjustsEntryId: null,
-    createdAt: '2025-11-08T00:00:00Z',
+    createdAt,
   });
-  const ledger = [entry('2025-11-08', 5_000), entry('2025-11-08', -1_000), entry('2025-11-02', 2_000), entry('2025-11-01', 9_000), entry(null, -7_000)];
-  assert.deepEqual(recentEarnings(ledger, '2025-11-08'), { night: 4_000, week: 6_000 });
+  const ledger = [
+    entry('2025-11-08', 5_000),
+    entry('2025-11-08', -1_000),
+    entry('2025-11-02', 2_000),
+    entry('2025-11-01', 9_000),
+    entry(null, -250, '2025-11-08T12:00:00.000Z'),
+    entry(null, -250, '2025-11-05T12:00:00.000Z'),
+    entry(null, -250, '2025-10-20T12:00:00.000Z'),
+  ];
+  assert.deepEqual(recentEarnings(ledger, '2025-11-08'), { night: 3_750, week: 5_500 });
   assert.equal(recentEarnings(ledger, null), null);
+});
+
+test('the score breakdown adds up by source, shorts and closed positions included', () => {
+  const position = (overrides: Partial<PerGamePosition>): PerGamePosition => ({
+    positionId: 'x',
+    playerId: 'p',
+    playerName: 'P',
+    side: 'long',
+    status: 'active',
+    lockedGameCost: 100_000,
+    openedEventSequence: 1,
+    closedEventSequence: null,
+    expiresOn: null,
+    cumulativeGameCost: 0,
+    cumulativeDividend: 0,
+    cumulativePnl: 0,
+    ...overrides,
+  });
+  const positions = [
+    position({ positionId: 'a', cumulativePnl: 300_000 }),
+    position({ positionId: 'b', cumulativePnl: -50_000 }),
+    position({ positionId: 'c', side: 'short', cumulativePnl: 120_000 }),
+    position({ positionId: 'd', status: 'closed', cumulativePnl: -80_000 }),
+    position({ positionId: 'e', side: 'short', status: 'closed', cumulativePnl: 40_000 }),
+  ];
+  const fee = (amountDollars: number): PerGameLedgerEntry => ({
+    eventCursor: 1, entryId: `f${amountDollars}`, positionId: 'a', playerId: 'p', gameId: null,
+    gameDate: null, resultRevision: null, kind: 'open_fee', amountDollars, adjustsEntryId: null,
+    createdAt: '2025-11-01T12:00:00Z',
+  });
+  const breakdown = scoreBreakdown(329_500, positions, [fee(-250), fee(-250)]);
+  assert.deepEqual(breakdown, {
+    roster: 250_000,
+    shorts: 120_000,
+    closed: -40_000,
+    closedCount: 2,
+    fees: -500,
+    other: 0,
+  });
+  assert.equal(scoreBreakdown(330_000, positions, [fee(-250), fee(-250)]).other, 500);
 });

@@ -240,6 +240,7 @@ export const VARIANTS: Record<VariantId, DesignVariant> = {
       goldInk: '#6a4e0d',
       goldSoft: '#f0e2bd',
       goldLine: '#b8912f',
+      onGold: '#231f1a',
       cyan: '#14567d',
       cyanSoft: '#dae8f2',
       green: '#6a4e0d',
