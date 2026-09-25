@@ -20,6 +20,7 @@ import {
 } from './contracts';
 import { PerGameApiError } from './perGameClient';
 import type { TrendPoint } from '../data/trendPresentation';
+import { rosterReopensLine } from '../copy/terms';
 
 /**
  * Practice runs on last season's calendar, so its ledger is stamped in that
@@ -129,7 +130,11 @@ export class MockPerGameApiClient {
   }: PerGameOpenPositionRequest): Promise<PerGamePositionMutationResult> {
     const state = this.snapshot;
     if (state.ruleset.rosterMutationsLocked) {
-      throw new PerGameApiError('Roster changes are locked for the current game.', 'roster_locked', 423);
+      throw new PerGameApiError(
+        `Your roster is locked. ${rosterReopensLine(state.ruleset.rosterLockGameDate)}.`,
+        'roster_locked',
+        423,
+      );
     }
     if (expectedAccountVersion !== state.account.version) {
       throw new PerGameApiError('Your account changed. Refresh and retry.', 'account_version_conflict', 409);
@@ -207,7 +212,11 @@ export class MockPerGameApiClient {
   ): Promise<PerGameClosePositionMutationResult> {
     const state = this.snapshot;
     if (state.ruleset.rosterMutationsLocked) {
-      throw new PerGameApiError('Roster changes are locked for the current game.', 'roster_locked', 423);
+      throw new PerGameApiError(
+        `Your roster is locked. ${rosterReopensLine(state.ruleset.rosterLockGameDate)}.`,
+        'roster_locked',
+        423,
+      );
     }
     if (expectedAccountVersion !== state.account.version) {
       throw new PerGameApiError('Your account changed. Refresh and retry.', 'account_version_conflict', 409);
