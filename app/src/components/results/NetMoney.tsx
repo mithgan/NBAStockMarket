@@ -1,6 +1,7 @@
 import { StyleSheet, Text, type StyleProp, type TextStyle } from 'react-native';
 
-import { exactMoney, exactSignedMoney, moneyFine, signedMoneyFine } from '../../copy/terms';
+import { exactMoney, exactSignedMoney } from '../../copy/terms';
+import { amountFine, signedAmountFine } from '../../data/resultsView';
 import { colors, fonts, type, weight } from '../../theme';
 import { Money, moneyColor, type MoneySize } from '../../ui/kit';
 
@@ -17,9 +18,9 @@ const SIZE: Record<MoneySize, number> = {
  * A result or a score: signed and green/red, except exactly nothing, which
  * reads "$0" in muted ink rather than "+$0".
  *
- * `fine` shows one more digit ("+$446.5K", "-$4.85M", "$3,500") where the
+ * `fine` shows one more digit ("+$446.5K", "-$1,215.5K", "$3,500") where the
  * figure sits beside others it must visibly add up with: a row's dividend and
- * price, or scores and the gaps between them.
+ * price, or a night's rows and its total (`amountFine`).
  */
 export function NetMoney({
   value,
@@ -53,7 +54,7 @@ export function NetMoney({
           style,
         ]}
       >
-        {signed ? signedMoneyFine(value) : moneyFine(value)}
+        {signed ? signedAmountFine(value) : amountFine(value)}
       </Text>
     );
   }

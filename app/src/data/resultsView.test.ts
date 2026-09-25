@@ -9,6 +9,7 @@ import type {
 import { settlementEquation } from '../state/perGameState';
 import { recentEarnings } from './perGameMetrics';
 import {
+  amountFine,
   buildResultsFeed,
   feeDay,
   feedNights,
@@ -16,6 +17,8 @@ import {
   nightTotalPending,
   resultRowModel,
   settlementLines,
+  shownExactly,
+  signedAmountFine,
   valuePair,
   type ResultsFeedItem,
   type ResultsFeedSource,
@@ -588,4 +591,82 @@ test('amounts that do not add up are flagged, and the math still opens', () => {
   assert.ok(model.math);
   const dnp = rowFor(result({ status: 'verified_dnp', dividendDollars: 12_000, netPnl: 0 }));
   assert.equal(dnp.mismatch, true);
+});
+
+// ---------------------------------------------------------------------------
+// Precision: a night's shown total is the sum of its rows as shown.
+
+/** Read a shown amount back: "+$1,215.5K" -> 1215500. */
+function shownValue(text: string): number {
+  const match = text.match(/^([+-]?)\$([\d,.]+)([KM]?)$/);
+  assert.ok(match, `not an amount: ${text}`);
+  const value = parseFloat(match[2].replace(/,/g, '')) * (match[3] === 'K' ? 1_000 : match[3] === 'M' ? 1_000_000 : 1);
+  return match[1] === '-' ? -value : value;
+}
+
+test('amounts keep one decimal of a thousand, even past a million', () => {
+  assert.equal(amountFine(446_500), '$446.5K');
+  assert.equal(amountFine(3_500), '$3,500');
+  assert.equal(amountFine(1_279_000), '$1,279K', 'not "$1.28M", which rounds to $10K');
+  assert.equal(amountFine(-1_215_500), '-$1,215.5K');
+  assert.equal(signedAmountFine(1_062_500), '+$1,062.5K');
+  assert.equal(signedAmountFine(-250), '-$250');
+  assert.equal(signedAmountFine(0), '$0');
+});
+
+/** What a night's row and header amounts read as, at the night's precision. */
+function shown(amount: number, exact: boolean): number {
+  return exact ? Math.round(amount) : shownValue(signedAmountFine(amount));
+}
+
+test("a round night's shown total equals the sum of its rows at a tenth of a thousand, even past a million", () => {
+  cursor = 600;
+  const nets = [668_000, 316_500, 79_000, -118_500, -136_500, 470_500];
+  const results = nets.map((netPnl, index) => result({
+    positionId: `pos-${index}`,
+    gameId: `g-${index}`,
+    gameDate: '2025-10-28',
+    lockedGameCost: 100_000,
+    dividendDollars: 100_000 + netPnl,
+    netPnl,
+  }));
+  const feed = buildResultsFeed(source(results, [fee({ kind: 'open_fee', amountDollars: -3_000, createdAt: '2025-10-28T12:00:00.000Z' })]));
+  const [night] = feedNights(feed);
+  assert.equal(night.exact, false, 'whole hundreds everywhere: the short form adds up');
+  assert.equal(night.total, 1_276_000);
+  assert.equal(signedAmountFine(night.total), '+$1,276K');
+  const rows = [...nets, -3_000].map((amount) => shown(amount, night.exact));
+  assert.equal(shown(night.total, night.exact), rows.reduce((sum, amount) => sum + amount, 0));
+  assert.ok(feed.filter((item) => item.type !== 'night').every((item) => 'exact' in item && item.exact === false));
+});
+
+test('a night that would not add up at a tenth of a thousand is shown to the dollar', () => {
+  cursor = 700;
+  // A single $250 fee under round games leaves a total in tens of dollars.
+  const games = [446_500, -66_500].map((netPnl, index) => result({
+    positionId: `pos-${index}`, gameId: `f-${index}`, gameDate: '2025-11-05', netPnl, dividendDollars: 100_000 + netPnl,
+  }));
+  const withFee = feedNights(buildResultsFeed(source(games, [fee({ kind: 'drop_fee', createdAt: '2025-11-05T12:00:00.000Z' })])))[0];
+  assert.equal(withFee.total, 379_750);
+  assert.equal(withFee.exact, true);
+  assert.equal(shown(withFee.total, true), [446_500, -66_500, -250].reduce((sum, amount) => sum + amount, 0));
+
+  // A price locked after the market drifted is in odd dollars.
+  const drifted = result({ positionId: 'pos-d', gameId: 'd1', gameDate: '2025-11-06', lockedGameCost: 137_851, dividendDollars: 584_000, netPnl: 446_149 });
+  const round = result({ positionId: 'pos-r', gameId: 'r1', gameDate: '2025-11-06', lockedGameCost: 100_000, dividendDollars: 324_000, netPnl: 224_000 });
+  const feed = buildResultsFeed(source([drifted, round]));
+  const [night] = feedNights(feed);
+  assert.equal(night.exact, true);
+  assert.equal(shown(night.total, true), 446_149 + 224_000);
+  const rows = feed.filter((item) => item.type === 'result');
+  assert.ok(rows.every((item) => item.type === 'result' && item.exact), 'every row on that night follows it');
+});
+
+test('shownExactly: dollars under $10K, whole hundreds above', () => {
+  assert.equal(shownExactly(3_500), true);
+  assert.equal(shownExactly(-9_999), true);
+  assert.equal(shownExactly(446_500), true);
+  assert.equal(shownExactly(1_279_000), true);
+  assert.equal(shownExactly(322_250), false);
+  assert.equal(shownExactly(137_851), false);
 });

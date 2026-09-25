@@ -149,9 +149,44 @@ test('gaps carry one more digit, so two different scores never read the same', (
 });
 
 test('the board can lag your account score until the next games settle', () => {
-  const standing = leaderStanding(board([['Ava', 300_000], ['You', 125_000, true]]));
-  assert.equal(boardLag(standing, 125_000), null, 'in step: no caption');
-  assert.equal(boardLag(standing, 124_750), -250, 'a $250 fee since the last games');
-  assert.equal(boardLag({ kind: 'absent', of: 1 }, 5_000), null);
-  assert.equal(boardLag({ kind: 'empty' }, 5_000), null);
+  const rows = board([['Ava', 300_000], ['You', 125_000, true]]);
+  assert.equal(boardLag(leaderStanding(rows, 125_000)), null, 'in step: no caption');
+  assert.equal(boardLag(leaderStanding(rows)), null, 'no account score: the board is the score');
+  const lagging = ranked(leaderStanding(rows, 124_750));
+  assert.equal(boardLag(lagging), -250, 'a $250 fee since the last games');
+  assert.equal(lagging.boardScore, 125_000);
+  assert.equal(lagging.score, 124_750);
+  assert.equal(boardLag({ kind: 'absent', of: 1 }), null);
+  assert.equal(boardLag({ kind: 'empty' }), null);
+});
+
+test('you are placed by the score shown, not by a board row that lags it', () => {
+  // Day 0: everyone at $0 on the board, and one add fee has taken you to -$250.
+  const day0 = ranked(leaderStanding(board([
+    ['You', 0, true], ['Ava', 0], ['Ben', 0], ['Cal', 0], ['Dee', 0],
+  ]), -250));
+  assert.equal(standingPlace(day0), '#5', 'last, not "Tied for #1"');
+  assert.equal(day0.of, 5);
+  assert.deepEqual(day0.tiedWith, []);
+  assert.deepEqual(standingLines(day0), ['$250 behind #1']);
+  assert.equal(boardLag(day0), -250);
+
+  // After drops the gap is measured from the -$188.5K shown, not the board's -$187.5K.
+  const afterDrops = ranked(leaderStanding(board([
+    ['Ava', 100_000], ['Ben', -27_900], ['You', -187_500, true],
+  ]), -188_500));
+  assert.deepEqual(standingLines(afterDrops), ['$160.6K behind #2', '$288.5K behind #1']);
+});
+
+test('a score that has moved past or level with a board row takes that place', () => {
+  const rows = board([['Ava', 100_000], ['Ben', 60_000], ['You', 50_000, true], ['Cal', 10_000]]);
+  const passed = ranked(leaderStanding(rows, 70_000));
+  assert.equal(standingPlace(passed), '#2');
+  assert.deepEqual(standingLines(passed), ['$30K behind #1']);
+  const level = ranked(leaderStanding(rows, 60_000));
+  assert.equal(standingPlace(level), 'Tied for #2');
+  assert.deepEqual(standingLines(level), ['Level with Ben', '$40K behind #1']);
+  const leading = ranked(leaderStanding(rows, 150_000));
+  assert.equal(standingPlace(leading), '#1');
+  assert.deepEqual(standingLines(leading), ['$50K ahead of #2']);
 });

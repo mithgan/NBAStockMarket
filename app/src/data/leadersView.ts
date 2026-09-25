@@ -2,16 +2,17 @@
  * Where you stand on the leaderboard, in plain words: your rank, how far you
  * are from the rank above and from #1, or — when you lead — by how much.
  *
- * The rank and gaps come from the board rows themselves (each row's
- * `cumulativePnl`, the total score since the season started at $0), so they
- * add up against the list shown underneath. Gaps use `moneyFine`, one more
- * digit than a score, so a $250 gap never reads "$0" and two gaps to
- * different scores never read the same. "Your score" is the account's own
- * figure, the one the Roster shows; the board can lag it until the next
- * games settle, and `boardLag` says by how much.
+ * Everyone else is placed by their board row (`cumulativePnl`, the total
+ * score since the season started at $0). You are placed by the score the
+ * screen shows you: your account's own figure, the Roster's number. The
+ * board ranks you as of the last settled games, so after a roster move its
+ * row for you can lag; the rank, ties and gaps here never do, and
+ * `boardLag` says how far behind the board's own figure is. Gaps use
+ * `moneyFine`, one more digit than a score, so a $250 gap never reads "$0"
+ * and two gaps to different scores never read the same.
  *
- * Ties: two scores that are exactly equal share a place. You are "tied for #2"
- * with the best rank in the tie, whatever order the server listed them in.
+ * Places are competition ranks: equal scores share the best place, and the
+ * next score down takes the place after everyone above it ("1, 2, 2, 4").
  */
 import type { PerGameLeaderboardRow } from '../api/contracts';
 import { moneyFine } from '../copy/terms';
@@ -32,8 +33,10 @@ export type Standing =
       rank: number;
       /** Board size. */
       of: number;
-      /** Your score on the board. */
+      /** Your score: the account's figure when given, else the board's. Rank, ties and gaps use it. */
       score: number;
+      /** The board's own figure for you, which can lag your score until the next games settle. */
+      boardScore: number;
       /** Everyone else on exactly your score. */
       tiedWith: string[];
       /** No score above yours (alone or tied at the top). */
@@ -81,43 +84,54 @@ export function boardPlaces(rows: readonly PerGameLeaderboardRow[]): Map<string,
   }]));
 }
 
-export function leaderStanding(rows: readonly PerGameLeaderboardRow[]): Standing {
+/**
+ * Your standing among the other rows. Pass your account score to be placed by
+ * it (the figure the screen shows); without it the board's own row for you is
+ * used.
+ */
+export function leaderStanding(
+  rows: readonly PerGameLeaderboardRow[],
+  accountScore?: number,
+): Standing {
   const board = sortBoard(rows);
   if (board.length === 0) return { kind: 'empty' };
   const me = board.find((row) => row.isCurrentUser);
   if (!me) return { kind: 'absent', of: board.length };
 
-  const score = me.cumulativePnl;
+  const score = accountScore ?? me.cumulativePnl;
   const others = board.filter((row) => row !== me);
   const tiedWith = others.filter((row) => row.cumulativePnl === score).map((row) => row.displayName);
   const higher = others.filter((row) => row.cumulativePnl > score);
   const lower = others.filter((row) => row.cumulativePnl < score);
+  // Competition places over everyone's score, yours as shown.
+  const scores = [...others.map((row) => row.cumulativePnl), score];
+  const placeOfScore = (value: number) => 1 + scores.filter((other) => other > value).length;
 
   let above: BoardGap | null = null;
   let first: BoardGap | null = null;
   let runnerUp: BoardGap | null = null;
   if (higher.length > 0) {
-    // The closest score above. A tie up there shares its best rank, so the
-    // gap is named by the place you would take, not by listing order.
+    // The closest score above; a tie up there is named by the place it holds.
     const nextScore = Math.min(...higher.map((row) => row.cumulativePnl));
     const nearest = higher.filter((row) => row.cumulativePnl === nextScore);
-    above = gapTo(nearest[nearest.length - 1] ?? higher[0], score, placeOf(board, nextScore));
+    above = gapTo(nearest[nearest.length - 1] ?? higher[0], score, placeOfScore(nextScore));
     const topScore = Math.max(...higher.map((row) => row.cumulativePnl));
     if (topScore !== nextScore) {
       const top = higher.find((row) => row.cumulativePnl === topScore) ?? higher[0];
-      first = gapTo(top, score, placeOf(board, topScore));
+      first = gapTo(top, score, placeOfScore(topScore));
     }
   } else if (lower.length > 0) {
     const bestBelow = Math.max(...lower.map((row) => row.cumulativePnl));
     const next = lower.find((row) => row.cumulativePnl === bestBelow) ?? lower[0];
-    runnerUp = gapTo(next, score, placeOf(board, bestBelow));
+    runnerUp = gapTo(next, score, placeOfScore(bestBelow));
   }
 
   return {
     kind: 'ranked',
-    rank: placeOf(board, score),
+    rank: placeOfScore(score),
     of: board.length,
     score,
+    boardScore: me.cumulativePnl,
     tiedWith,
     leading: higher.length === 0,
     above,
@@ -149,12 +163,12 @@ export function standingLines(standing: Standing): string[] {
 }
 
 /**
- * How far the board's figure for you trails your account score, or null when
- * they agree. The board is ranked as of the last settled games, so a roster
- * move's fee since then shows in your score first.
+ * How far the board's own figure for you trails the score you are placed by,
+ * or null when they agree. The board is ranked as of the last settled games,
+ * so a roster move's fee since then shows in your score first.
  */
-export function boardLag(standing: Standing, accountScore: number): number | null {
+export function boardLag(standing: Standing): number | null {
   if (standing.kind !== 'ranked') return null;
-  const lag = accountScore - standing.score;
+  const lag = standing.score - standing.boardScore;
   return Math.abs(lag) < 1 ? null : lag;
 }

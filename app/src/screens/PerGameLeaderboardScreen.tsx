@@ -31,10 +31,11 @@ function scoreWords(value: number): string {
 
 /**
  * Your rank, your score and how far you are from the next place up and from
- * #1. The score is your account's, shown exactly as the Roster shows it; the
- * rank and gaps are the board's, and a caption says when the board has not
- * caught up. Gaps carry one more digit than the scores (leadersView), so a
- * $250 gap never reads as $0.
+ * #1. The score is your account's, shown exactly as the Roster shows it, and
+ * the rank, ties and gaps are all worked out from that same score against the
+ * other rows; a caption says when the board's own row for you has not caught
+ * up. Gaps carry one more digit than the scores (leadersView), so a $250 gap
+ * never reads as $0.
  */
 function StandingBlock({
   accountScore,
@@ -63,15 +64,15 @@ function StandingBlock({
   }
   const place = standingPlace(standing);
   const tied = standing.tiedWith.length > 0;
-  const lag = boardLag(standing, accountScore);
+  const lag = boardLag(standing);
   const lagWords = lag === null
     ? ''
-    : ` The board still has you at ${scoreWords(standing.score)} until the next games settle.`;
+    : ` The board still has you at ${scoreWords(standing.boardScore)} until the next games settle.`;
   return (
     <View style={styles.standing}>
       {heading}
       <View
-        accessibilityLabel={`${place} of ${standing.of}. Your score ${scoreWords(accountScore)}.${lagWords} ${lines.join('. ')}.`}
+        accessibilityLabel={`${place} of ${standing.of}. Your score ${scoreWords(standing.score)}.${lagWords} ${lines.join('. ')}.`}
         accessible
       >
         <View style={[styles.standingTop, compact && styles.standingTopCompact]}>
@@ -81,13 +82,13 @@ function StandingBlock({
             <Text style={styles.of}>of {standing.of}</Text>
           </View>
           <View style={[styles.scoreBlock, compact && styles.scoreBlockCompact]}>
-            <NetMoney size="title" value={accountScore} />
+            <NetMoney size="title" value={standing.score} />
             <Text style={styles.scoreLabel}>your score</Text>
           </View>
         </View>
         {lag === null ? null : (
           <Text style={styles.lag}>
-            The board still has you at {signedMoney(standing.score)} until the next games settle.
+            The board still has you at {signedMoney(standing.boardScore)} until the next games settle.
           </Text>
         )}
         {lines.length > 0 ? (
@@ -138,7 +139,8 @@ export function PerGameLeaderboardScreen() {
   const wide = width >= DESKTOP_MIN_WIDTH;
   // Ranked on each row's cumulativePnl: the total score since the season began at $0.
   const rows = sortBoard(bootstrap.leaderboard);
-  const standing = leaderStanding(rows);
+  // You are placed by your account score, the figure shown; the others by their rows.
+  const standing = leaderStanding(rows, bootstrap.account.cumulativePnl);
   const places = boardPlaces(rows);
 
   return (

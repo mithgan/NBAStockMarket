@@ -18,7 +18,6 @@ import {
   exactMoney,
   exactSignedMoney,
   humanDay,
-  moneyFine,
   signedMoney,
   unbrokenName,
 } from '../copy/terms';
@@ -27,6 +26,7 @@ import { Disclosure, DisclosureSpace, DISCLOSURE_WIDTH } from '../components/res
 import { NetMoney } from '../components/results/NetMoney';
 import { SettlementBreakdown } from '../components/results/SettlementBreakdown';
 import {
+  amountFine,
   buildResultsFeed,
   feedNights,
   nightSummaryLine,
@@ -93,16 +93,31 @@ function edges(layout: Layout) {
 // ---------------------------------------------------------------------------
 // Copy for one result. Every status keeps a visible, honest line.
 
-function resultPhrase(result: PerGameSettledResult, model: ResultRowModel): string {
+/**
+ * An amount at its night's precision: a tenth of a thousand ("$446.5K"), or
+ * to the dollar on a night whose amounts would not add up that way.
+ */
+function amountText(value: number, exact: boolean): string {
+  return exact ? exactMoney(value) : amountFine(value);
+}
+
+function resultPhrase(result: PerGameSettledResult, model: ResultRowModel, exact: boolean): string {
   if (result.status === 'verified_dnp') return "Didn't play — no charge";
   if (result.status === 'unsettled_missing_projection') return 'Unsettled · his pregame projection is missing';
   if (result.status !== 'settled') return 'Unsettled · waiting on stats';
   if (!model.math) return 'Result incomplete · waiting on stats';
-  // The pair in the order it subtracts to the net, with one more digit than
-  // a headline so the three numbers visibly add up ($584K - $137.5K = $446.5K).
+  // The pair in the order it subtracts to the net, at the same precision as
+  // the net, so the three numbers visibly add up ($584K - $137.5K = $446.5K).
   // A no-break space keeps each word with its amount when the line wraps.
   const { first, second } = model.math.pair;
-  return `${first.label}\u00a0${moneyFine(first.amount)} · ${second.label}\u00a0${moneyFine(second.amount)}`;
+  return `${first.label}\u00a0${amountText(first.amount, exact)} · ${second.label}\u00a0${amountText(second.amount, exact)}`;
+}
+
+/** A row's or a night's own figure, green or red, at its night's precision. */
+function NightMoney({ exact, size, value }: { exact: boolean; size?: 'body' | 'value' | 'title'; value: number }) {
+  return exact
+    ? <NetMoney compact={false} size={size} value={value} />
+    : <NetMoney fine size={size} value={value} />;
 }
 
 /** "CORRECTION" for the first correction, "CORRECTION 2" for the next. */
@@ -138,7 +153,7 @@ function resultLabel(name: string, result: PerGameSettledResult, model: ResultRo
     const { first, second } = model.math.pair;
     label += `${first.label} ${exactMoney(first.amount)}, ${second.label} ${exactMoney(second.amount)}.`;
   } else {
-    label += `${resultPhrase(result, model).replace(' · ', ', ').replace(' — ', ', ')}.`;
+    label += `${resultPhrase(result, model, false).replace(' · ', ', ').replace(' — ', ', ')}.`;
   }
   if (model.adjustment !== undefined) {
     label += ` ${model.adjustment === null ? 'Adjustment amount unavailable.' : `P&L adjustment ${netWords(model.adjustment)}.`}`;
@@ -152,6 +167,7 @@ function resultLabel(name: string, result: PerGameSettledResult, model: ResultRo
 
 function ResultRow({
   equation,
+  exact,
   expanded,
   layout,
   onToggle,
@@ -159,6 +175,8 @@ function ResultRow({
   result,
 }: {
   equation: SettlementEquation;
+  /** Its night's precision: to the dollar, or a tenth of a thousand. */
+  exact: boolean;
   expanded: boolean;
   layout: Layout;
   onToggle: () => void;
@@ -176,7 +194,7 @@ function ResultRow({
   const net = model.net === null ? (
     <Text accessibilityLabel="Net profit and loss unavailable" style={styles.netUnavailable}>—</Text>
   ) : (
-    <NetMoney fine value={model.net} />
+    <NightMoney exact={exact} value={model.net} />
   );
 
   const body = (
@@ -193,11 +211,11 @@ function ResultRow({
             <>
               <Text style={styles.cell}>
                 <Text style={styles.cellLabel}>{math.pair.first.label.toLowerCase()} </Text>
-                {moneyFine(math.pair.first.amount)}
+                {amountText(math.pair.first.amount, exact)}
               </Text>
               <Text style={styles.cell}>
                 <Text style={styles.cellLabel}>{math.pair.second.label.toLowerCase()} </Text>
-                {moneyFine(math.pair.second.amount)}
+                {amountText(math.pair.second.amount, exact)}
               </Text>
             </>
           ) : null}
@@ -206,7 +224,7 @@ function ResultRow({
             {compact && math ? <Disclosure height={20} open={expanded} /> : null}
           </View>
         </View>
-        {priceColumns ? null : <Text style={styles.detail}>{resultPhrase(result, model)}</Text>}
+        {priceColumns ? null : <Text style={styles.detail}>{resultPhrase(result, model, exact)}</Text>}
         {model.adjustment !== undefined ? (
           <Text style={styles.adjustment}>{adjustmentText(model.adjustment)}</Text>
         ) : null}
@@ -284,11 +302,13 @@ function feeExplanation(entry: PerGameLedgerEntry, side: PerGamePositionSide | n
 
 function FeeActivityRow({
   entry,
+  exact,
   layout,
   playerName,
   side,
 }: {
   entry: PerGameLedgerEntry;
+  exact: boolean;
   layout: Layout;
   playerName: string;
   side: PerGamePositionSide | null;
@@ -308,7 +328,7 @@ function FeeActivityRow({
             <Tag>{feeTitle(entry)}</Tag>
           </View>
           <View style={[styles.netCell, columns && styles.netCellColumns, compact && styles.netCellCompact]}>
-            <NetMoney fine value={entry.amountDollars} />
+            <NightMoney exact={exact} value={entry.amountDollars} />
           </View>
         </View>
         <Text style={styles.detail}>{feeExplanation(entry, side)}</Text>
@@ -347,7 +367,8 @@ function NightHeader({ night, layout }: { night: NightSummary; layout: Layout })
         {pending ? (
           <Text style={styles.netUnavailable}>—</Text>
         ) : (
-          <NetMoney size="title" value={night.total} />
+          // At the rows' own precision, so the total is their sum as shown.
+          <NightMoney exact={night.exact} size="title" value={night.total} />
         )}
       </View>
     </View>
@@ -357,11 +378,13 @@ function NightHeader({ night, layout }: { night: NightSummary; layout: Layout })
 /** Introduces the fees under a day that also had games. */
 function FeesHeader({
   count,
+  exact,
   layout,
   moves,
   total,
 }: {
   count: number;
+  exact: boolean;
   layout: Layout;
   moves: boolean;
   total: number;
@@ -377,7 +400,7 @@ function FeesHeader({
       style={[styles.feesHeader, { paddingLeft: edge.text, paddingRight: edge.right }]}
     >
       <Text style={styles.feesTitle}>{name} · {count}</Text>
-      <NetMoney fine size="body" value={total} />
+      <NightMoney exact={exact} size="body" value={total} />
     </View>
   );
 }
@@ -417,12 +440,13 @@ export function PerGameResultsScreen() {
   const renderItem: ListRenderItem<ResultsFeedItem> = ({ item }) => {
     if (item.type === 'night') return <NightHeader layout={layout} night={item.night} />;
     if (item.type === 'fees') {
-      return <FeesHeader count={item.count} layout={layout} moves={item.moves} total={item.total} />;
+      return <FeesHeader count={item.count} exact={item.exact} layout={layout} moves={item.moves} total={item.total} />;
     }
     if (item.type === 'fee') {
       return (
         <FeeActivityRow
           entry={item.entry}
+          exact={item.exact}
           layout={layout}
           playerName={perGamePlayerName(bootstrap, item.entry.playerId, item.entry.positionId)}
           side={item.side}
@@ -437,6 +461,7 @@ export function PerGameResultsScreen() {
           bootstrap.settledResults,
           { ledgerComplete },
         )}
+        exact={item.exact}
         expanded={expanded.has(item.key)}
         layout={layout}
         onToggle={() => toggle(item.key)}

@@ -7,9 +7,9 @@
  *   replaces its base result (perGameMetrics.currentResults).
  * - A day's total is perGameMetrics.nightTotals — the same game number every
  *   screen uses — plus the fees that belong to that day. A fee belongs to its
- *   game date, or, for an add or drop fee, to the day it was booked: exactly
- *   the rule perGameMetrics.recentEarnings uses, so the newest night here is
- *   the "Last night" the chrome and the Roster show.
+ *   game date, or, for an add or drop fee, to the day it was booked
+ *   (perGameMetrics.entryDay, the rule recentEarnings uses), so the newest
+ *   night here is the "Last night" the chrome and the Roster show.
  * - A day with fees but no games (moves made for games still to come, or a
  *   night none of your players played) is still a day in the feed.
  */
@@ -19,11 +19,42 @@ import type {
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
-import { exactMoney, signedMoneyFine } from '../copy/terms';
+import { exactMoney, moneyFine } from '../copy/terms';
 import type { SettlementEquation } from '../state/perGameState';
-import { currentResults, nightTotals, summarizeValue } from './perGameMetrics';
+import { currentResults, entryDay, nightTotals, summarizeValue } from './perGameMetrics';
 
 export type ResultsFeedSource = Pick<PerGameBootstrap, 'settledResults' | 'ledger' | 'positions'>;
+
+/**
+ * Money at the precision a night's rows add up at. Below a million it is
+ * `moneyFine` ("$446.5K", "$3,500"); from a million up it stays in thousands
+ * with one decimal ("$1,279K") where `moneyFine` would round to the nearest
+ * $10K ("$1.28M") and a night's header would stop equalling its rows.
+ */
+export function amountFine(value: number): string {
+  const rounded = Math.round(value);
+  const abs = Math.abs(rounded);
+  if (abs < 999_950) return moneyFine(rounded);
+  const [whole, decimal] = (Math.round(abs / 100) / 10).toFixed(1).split('.');
+  return `${rounded < 0 ? '-' : ''}$${Number(whole).toLocaleString('en-US')}${decimal === '0' ? '' : `.${decimal}`}K`;
+}
+
+/** Signed `amountFine`: "+$446.5K", "-$1,215.5K", and "$0" for nothing. */
+export function signedAmountFine(value: number): string {
+  if (Math.round(value) === 0) return '$0';
+  const text = amountFine(value);
+  return text.startsWith('-') ? text : `+${text}`;
+}
+
+/**
+ * True when `amountFine` shows this amount exactly: to the dollar under $10K,
+ * or in whole hundreds above. A night whose amounts all pass adds up at that
+ * precision; any other night is shown to the dollar (`NightSummary.exact`).
+ */
+export function shownExactly(value: number): boolean {
+  const rounded = Math.round(value);
+  return Math.abs(rounded) < 10_000 || rounded % 100 === 0;
+}
 
 export interface ResultsFeedOptions {
   /** The last settled game day. A later day can only hold moves for games still to come. */
@@ -39,12 +70,12 @@ export function isFeeEntry(entry: PerGameLedgerEntry): boolean {
 }
 
 /**
- * The day a fee counts on: its game date, else the day it was booked (the
- * UTC day of its timestamp). The same rule as perGameMetrics.recentEarnings.
+ * The day a fee counts on: its game date, else the day it was booked. This
+ * is perGameMetrics.entryDay itself, the rule recentEarnings uses, so a
+ * night here and "Last night" everywhere else can never disagree.
  */
 export function feeDay(entry: PerGameLedgerEntry): string | null {
-  if (entry.gameDate) return entry.gameDate;
-  return entry.createdAt ? entry.createdAt.slice(0, 10) : null;
+  return entryDay(entry);
 }
 
 export interface NightSummary {
@@ -76,22 +107,38 @@ export interface NightSummary {
   corrections: number;
   /** After the last settled day: only moves for games still to come. */
   upcoming: boolean;
+  /**
+   * Show this day's amounts to the dollar. Set when one of them (a row's
+   * net, dividend, price or fee, or the total) is not in whole hundreds, so
+   * at `amountFine`'s tenth of a thousand the rows would stop adding up to
+   * the total. Round nights keep the shorter form.
+   */
+  exact: boolean;
 }
 
+/** Every row carries its day's `exact`, so a day's amounts share one precision. */
 export type ResultsFeedItem =
   | { type: 'night'; key: string; night: NightSummary }
-  | { type: 'result'; key: string; date: string; result: PerGameSettledResult }
+  | { type: 'result'; key: string; date: string; exact: boolean; result: PerGameSettledResult }
   | {
       /** The fees under a day that also had games, introduced by a small heading. */
       type: 'fees';
       key: string;
       date: string;
+      exact: boolean;
       count: number;
       total: number;
       /** Every fee is an add or a drop. */
       moves: boolean;
     }
-  | { type: 'fee'; key: string; date: string; entry: PerGameLedgerEntry; side: PerGamePositionSide | null };
+  | {
+      type: 'fee';
+      key: string;
+      date: string;
+      exact: boolean;
+      entry: PerGameLedgerEntry;
+      side: PerGamePositionSide | null;
+    };
 
 function isCounted(result: PerGameSettledResult): boolean {
   return result.status === 'settled' && result.netPnl !== null && result.dividendDollars !== null;
@@ -129,6 +176,13 @@ function summarizeNight(
   const shorts = summarizeValue(results.filter((result) => result.side === 'short'));
   const feeTotal = fees.reduce((sum, entry) => sum + entry.amountDollars, 0);
   const gamesNet = total?.net ?? 0;
+  const shown = [
+    gamesNet + feeTotal,
+    ...fees.map((entry) => entry.amountDollars),
+    ...results.flatMap((result) => (isCounted(result)
+      ? [result.netPnl ?? 0, result.dividendDollars ?? 0, result.lockedGameCost]
+      : result.status === 'verified_dnp' ? [result.netPnl ?? 0] : [])),
+  ];
   return {
     date,
     total: gamesNet + feeTotal,
@@ -148,6 +202,7 @@ function summarizeNight(
     corrections: results.filter((result) => result.kind === 'correction').length,
     upcoming: results.length === 0 && date !== NO_DAY
       && lastSettledDate !== null && date > lastSettledDate,
+    exact: !shown.every(shownExactly),
   };
 }
 
@@ -185,22 +240,24 @@ export function buildResultsFeed(
     const results = [...(resultsByDay.get(date) ?? [])].sort(byRowOrder);
     const fees = [...(feesByDay.get(date) ?? [])].sort(byNewestEntry);
     const night = summarizeNight(date, results, fees, totals, lastSettledDate);
+    const { exact } = night;
     items.push({ type: 'night', key: `night:${date}`, night });
     for (const result of results) {
-      items.push({ type: 'result', key: `result:${result.positionId}:${result.gameId}`, date, result });
+      items.push({ type: 'result', key: `result:${result.positionId}:${result.gameId}`, date, exact, result });
     }
     if (fees.length > 0 && results.length > 0) {
       items.push({
         type: 'fees',
         key: `fees:${date}`,
         date,
+        exact,
         count: fees.length,
         total: night.fees,
         moves: night.moves === fees.length,
       });
     }
     for (const entry of fees) {
-      items.push({ type: 'fee', key: `fee:${entry.entryId}`, date, entry, side: sideOf.get(entry.positionId) ?? null });
+      items.push({ type: 'fee', key: `fee:${entry.entryId}`, date, exact, entry, side: sideOf.get(entry.positionId) ?? null });
     }
   }
   return items;
@@ -238,7 +295,7 @@ export function nightSummaryLine(night: NightSummary): string {
     else if (night.date !== NO_DAY) parts.push('none of your players played');
   } else if (night.feeCount > 0) {
     // A no-break space keeps "fees" with its amount when the line wraps.
-    parts.push(`fees\u00a0${signedMoneyFine(night.fees)}`);
+    parts.push(`fees\u00a0${signedAmountFine(night.fees)}`);
   }
   return parts.join(' · ');
 }
