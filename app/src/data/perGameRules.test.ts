@@ -16,19 +16,19 @@ test('rules explain the actual basis, fees, expiry and zero starting score', () 
   assert.equal(facts['Open fee'], '$750');
   assert.equal(facts['Drop fee'], '$750');
   assert.equal(facts['Roster slots'], '4');
-  assert.equal(facts['Inverse slots'], '2');
-  assert.equal(facts['Inverse term'], 'No expiry');
-  assert.match(view.explanation, /raw net points/);
+  assert.equal(facts['Short slots'], '2');
+  assert.equal(facts['Shorts last'], 'Until you close them');
+  assert.match(view.explanation, /his net points each game/);
   assert.doesNotMatch(view.explanation, /projected|bankroll/);
 });
 
 test('comparison rules name projection surprise only when that basis is active', () => {
   const view = perGameRulesPresentation({ ...rules, dividendBasis: 'surprise_vs_projection', shortTermDays: 3 });
   assert.match(view.explanation, /projection/);
-  assert.equal(view.facts.find((fact) => fact.label === 'Inverse term')?.value, '3 days');
+  assert.equal(view.facts.find((fact) => fact.label === 'Shorts last')?.value, '3 days');
 });
 
 test('market accessibility hints use current server slot limits', () => {
   assert.equal(positionSlotHint('long', 4), 'Add players to your 4-player roster');
-  assert.equal(positionSlotHint('short', 2), 'Open inverse positions in up to 2 slots');
+  assert.equal(positionSlotHint('short', 2), 'Short up to 2 players');
 });

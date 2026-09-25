@@ -111,12 +111,24 @@ export const fonts = {
 
 export const type = {
   label: 11,
+  caption: 12,
   body: 13,
   value: 15,
   title: 17,
   display: 34,
   hero: 46,
 };
+
+/**
+ * Touch targets. 44 is the floor on every platform and every size: a control
+ * is never made to look smaller by shrinking its hit area, and `hitSlop` is
+ * not used to paper over a small one.
+ */
+export const control = {
+  height: 44,
+  /** Square icon buttons: settings, refresh, rules. */
+  icon: 44,
+} as const;
 
 export const weight = {
   regular: '400',

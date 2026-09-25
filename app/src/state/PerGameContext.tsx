@@ -20,6 +20,7 @@ import type {
   PerGameOpenPositionIntent,
   PerGamePosition,
 } from '../api/contracts';
+import { humanDay, perGame } from '../copy/terms';
 import { isAppResume } from './appResume';
 import { ActionLock } from './actionLock';
 import { loadPerGameBootstrapSnapshot } from './perGameBootstrapLoader';
@@ -173,10 +174,10 @@ export function PerGameProvider({
       if (refreshed && mounted.current) {
         const nextDate = refreshed.game.nextGameDate;
         setMessage(attempt.reconciliationReason
-          ? 'Account reconciled. Roster actions are available again.'
+          ? 'Your account is back in sync. You can make roster moves again.'
           : nextDate
-            ? `Per-game market updated. Next game date: ${nextDate}.`
-            : 'Per-game market updated. Waiting for the next schedule date.');
+            ? `Prices updated. Next games ${humanDay(nextDate)}.`
+            : 'Prices updated. The next games are not scheduled yet.');
       }
       return succeeded;
     } finally {
@@ -267,8 +268,8 @@ export function PerGameProvider({
         expectedQuoteVersion,
       }),
       (result) => result.side === 'long'
-        ? `${playerName} added at a locked ${result.lockedGameCost.toLocaleString('en-US')} dollars per game.`
-        : `${playerName} inverse position opened at a locked ${result.lockedGameCost.toLocaleString('en-US')} dollars per game.`,
+        ? `${playerName} added at ${perGame(result.lockedGameCost)}, locked in.`
+        : `Shorted ${playerName} at ${perGame(result.lockedGameCost)}, locked in.`,
     );
   }, [apiClient, runPositionAction]);
 
@@ -279,8 +280,8 @@ export function PerGameProvider({
       `position:${position.side}:${position.playerId}`,
       () => apiClient.closePosition(position.positionId, accountVersion),
       position.side === 'long'
-        ? `${position.playerName} dropped. Future games will not affect your P&L.`
-        : `${position.playerName} inverse position closed.`,
+        ? `${position.playerName} dropped. His next games won't count toward your score.`
+        : `Short on ${position.playerName} closed.`,
     );
   }, [apiClient, runPositionAction]);
 
