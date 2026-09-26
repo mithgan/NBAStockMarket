@@ -77,6 +77,8 @@ const STACK_MAX_WIDTH = 330;
 const DOCK_MONTH_MIN_WIDTH = 260;
 /** Scrolled this many screens down, "Back to newest" appears. */
 const FAR_SCREENS = 1.5;
+/** While a month jump lands: rows rendered in one pass, and screens kept around it. */
+const JUMP_BATCH = 1000;
 const AVATAR = 32;
 /** Collapsed height of a row's two lines, so the chevron sits level with them. */
 const STACKED_LINES = 40;
@@ -499,6 +501,18 @@ function FeesFold({
 // Long seasons: a month jump and a way back to the newest night
 
 const TITLE_ID = 'results-title';
+/** The desktop side column's "Back to newest" (its wrapper). */
+const BACK_ID = 'results-back-to-newest';
+
+/** The first Tab stop after an element in the page (web). */
+function firstStopAfter(node: HTMLElement): Element | null {
+  const stops = document.querySelectorAll('[tabindex="0"], button:not([disabled]), a[href], input, [role="button"]:not([tabindex="-1"])');
+  for (const stop of Array.from(stops)) {
+    // eslint-disable-next-line no-bitwise
+    if (node.compareDocumentPosition(stop) & Node.DOCUMENT_POSITION_FOLLOWING) return stop;
+  }
+  return null;
+}
 
 /** Set while Results is on screen: scroll back to the newest night. */
 let showNewest: (() => void) | null = null;
@@ -524,15 +538,25 @@ export function scrollResultsToNewest(): boolean {
  * scroll by that, and look again until it holds (the list may still be
  * walking down to a far month). It stops at the end of the feed, and when
  * `current()` says a newer jump or "Back to newest" has taken over.
+ *
+ * While the day is not on the page yet, `missing()` asks the list to try
+ * again (it lands near the day by estimate, not by walking through every
+ * month: walk 5 T4-14). `done()` runs once the day holds, or when it gives
+ * up, so the feed is never left hidden.
  */
 function settleOnDay(
   list: { getScrollableNode?: () => unknown } | null,
   id: string,
   current: () => boolean,
+  { missing, done }: { missing?: () => void; done?: () => void } = {},
   tries = 30,
   steady = 0,
 ): void {
-  if (typeof document === 'undefined' || tries <= 0 || !current()) return;
+  if (typeof document === 'undefined' || !current()) return;
+  if (tries <= 0) {
+    done?.();
+    return;
+  }
   const scroller = list?.getScrollableNode?.() as HTMLElement | null | undefined;
   const node = document.getElementById(id);
   let held = steady;
@@ -545,19 +569,30 @@ function settleOnDay(
       scroller.scrollTop += off;
       held = 0;
     }
-    if (held >= 2) return;
+    if (held >= 2) {
+      done?.();
+      return;
+    }
+  } else if (!node) {
+    missing?.();
   }
-  setTimeout(() => settleOnDay(list, id, current, tries - 1, held), 80);
+  // Quick while it is still moving, so the landing takes a few frames.
+  setTimeout(() => settleOnDay(list, id, current, { missing, done }, tries - 1, held), held > 0 ? 50 : 40);
 }
 
-function focusWhenReady(id: string, tries = 40): void {
-  if (typeof document === 'undefined') return;
+/**
+ * Move focus to an element by id once it has rendered (web only), unless
+ * `current()` says another navigation has taken over since (a Back to newest
+ * pressed mid-jump must not have focus pulled down to the old month).
+ */
+function focusWhenReady(id: string, current: () => boolean = () => true, tries = 40): void {
+  if (typeof document === 'undefined' || !current()) return;
   const node = document.getElementById(id) as (HTMLElement | null);
   if (node) {
     node.focus({ preventScroll: true });
     return;
   }
-  if (tries > 0) setTimeout(() => focusWhenReady(id, tries - 1), 80);
+  if (tries > 0) setTimeout(() => focusWhenReady(id, current, tries - 1), 80);
 }
 
 function toggled(previous: ReadonlySet<string>, key: string): ReadonlySet<string> {
@@ -628,8 +663,18 @@ export function PerGameResultsScreen() {
 
   // Each month jump's number; a later jump (or Back to newest) ends an earlier one's settling.
   const jumpSeq = useRef(0);
+  // The jump in progress (its number, row and night heading), or the last
+  // one's night once it has landed; null after Back to newest.
+  const jumpTarget = useRef<{ seq: number; index: number; id: string } | null>(null);
+  // While a month jump settles the feed is hidden, then shown at the month
+  // (a short fade; none under reduced motion): the months in between never
+  // stream past (walk 5 T4-14).
+  const [landing, setLanding] = useState(false);
   const backToNewest = useCallback(() => {
+    // Any new navigation wins over a jump still settling (walk 5 T4-14).
     jumpSeq.current += 1;
+    jumpTarget.current = null;
+    setLanding(false);
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
     setFar(false);
     focusWhenReady(TITLE_ID);
@@ -644,20 +689,65 @@ export function PerGameResultsScreen() {
   const jumpTo = useCallback((anchor: MonthAnchor) => {
     jumpRetries.current = 0;
     const seq = ++jumpSeq.current;
+    const id = nightAnchorId(anchor.date);
+    const current = () => jumpSeq.current === seq;
+    jumpTarget.current = { seq, index: anchor.index, id };
+    setLanding(true);
     listRef.current?.scrollToIndex({ index: anchor.index, animated: false, viewPosition: 0 });
     // The month's first day at the top of the feed, not a row or two below it.
-    settleOnDay(listRef.current, nightAnchorId(anchor.date), () => jumpSeq.current === seq);
-    focusWhenReady(nightAnchorId(anchor.date));
+    settleOnDay(listRef.current, id, current, {
+      missing: () => {
+        if (!current() || jumpRetries.current >= 40) return;
+        jumpRetries.current += 1;
+        listRef.current?.scrollToIndex({ index: anchor.index, animated: false, viewPosition: 0 });
+      },
+      done: () => {
+        if (current()) setLanding(false);
+      },
+    });
+    focusWhenReady(id, current);
   }, []);
-  // A far month is not measured yet: walk down to the furthest row measured
-  // so far (the rows past it then render), and try again until its day is.
-  const onScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number }) => {
+  // A far month is not measured yet: land near it at once by estimate (rows
+  // measured so far give the average height), so the rows around it render
+  // and the settling above lines its first day up. Walking down a measured
+  // stretch at a time streamed every month past for about 2 s (walk 5 T4-14).
+  // Only the jump in progress may move the list: a Back to newest or another
+  // month pressed meanwhile is never undone by a late retry.
+  const onScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number; averageItemLength: number }) => {
     const list = listRef.current;
-    if (!list || jumpRetries.current >= 40) return;
-    jumpRetries.current += 1;
-    list.scrollToIndex({ index: Math.max(0, info.highestMeasuredFrameIndex), animated: false, viewPosition: 0 });
-    setTimeout(() => list.scrollToIndex({ index: info.index, animated: false, viewPosition: 0 }), 60);
+    const target = jumpTarget.current;
+    if (!list || !target || target.seq !== jumpSeq.current || target.index !== info.index) return;
+    const each = info.averageItemLength > 0 ? info.averageItemLength : 60;
+    list.scrollToOffset({ offset: Math.max(0, each * info.index), animated: false });
   }, []);
+  // Desktop keyboard (walk 5 T3-09): "Back to newest" is drawn under the
+  // month buttons and follows them in Tab order, but a jump puts focus on the
+  // month's first night, far down the feed, with every newer row between it
+  // and the button. So after a jump the two are linked: Shift+Tab from that
+  // night (or its first row) reaches Back to newest, and Tab from Back to
+  // newest returns to the night, skipping the newer rows jumped past.
+  const wideScreen = width >= DESKTOP_MIN_WIDTH;
+  useEffect(() => {
+    if (!wideScreen || !far || typeof document === 'undefined') return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return;
+      const target = jumpTarget.current;
+      const landed = target ? document.getElementById(target.id) : null;
+      const back = document.getElementById(BACK_ID)?.querySelector<HTMLElement>('[tabindex="0"], button, [role="button"]');
+      if (!landed || !back) return;
+      const active = document.activeElement;
+      if (event.shiftKey) {
+        if (active !== landed && active !== firstStopAfter(landed)) return;
+        event.preventDefault();
+        back.focus();
+      } else if (active === back) {
+        event.preventDefault();
+        landed.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [far, wideScreen]);
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = event.nativeEvent.contentOffset.y > Math.max(600, listHeight.current * FAR_SCREENS);
     setFar((was) => (was === next ? was : next));
@@ -772,7 +862,7 @@ export function PerGameResultsScreen() {
       {anchors.length > 1 ? (
         <MonthJump anchors={anchors} current={wide ? currentMonth : null} onJump={jumpTo} />
       ) : null}
-      {wide && far ? <View style={styles.sideBack}>{back}</View> : null}
+      {wide && far ? <View nativeID={BACK_ID} style={styles.sideBack}>{back}</View> : null}
     </View>
   );
   // One rule with the Roster and Market: practice ends on its last day, a live
@@ -811,7 +901,10 @@ export function PerGameResultsScreen() {
       keyExtractor={(item) => item.key}
       ListEmptyComponent={empty}
       ListHeaderComponent={wide ? null : header}
-      maxToRenderPerBatch={16}
+      // A month jump renders every row up to the month in one pass while the
+      // feed is hidden: rows are measured only once rendered, so the list
+      // could otherwise reach a far month only a batch at a time.
+      maxToRenderPerBatch={landing ? JUMP_BATCH : 16}
       onLayout={(event) => {
         listHeight.current = event.nativeEvent.layout.height;
       }}
@@ -820,9 +913,9 @@ export function PerGameResultsScreen() {
       onViewableItemsChanged={onViewableItemsChanged}
       renderItem={renderItem}
       scrollEventThrottle={100}
-      style={styles.list}
+      style={[styles.list, landing ? styles.listLanding : styles.listLanded]}
       viewabilityConfig={viewabilityConfig}
-      windowSize={9}
+      windowSize={landing ? JUMP_BATCH : 9}
     />
   );
 
@@ -859,6 +952,16 @@ export function PerGameResultsScreen() {
 const styles = StyleSheet.create({
   list: {
     flex: 1,
+  },
+  // A month jump settling: hidden, so the months in between never stream past.
+  listLanding: {
+    opacity: 0,
+  },
+  // Shown at the month with a short fade (the global reduced-motion rule
+  // makes it instant). The fade is on the way in only: hiding is at once.
+  listLanded: {
+    opacity: 1,
+    ...({ transitionProperty: 'opacity', transitionDuration: '140ms' } as object),
   },
   content: {
     flexGrow: 1,

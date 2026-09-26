@@ -9,15 +9,20 @@ import {
   boardLag,
   boardList,
   leaderStanding,
+  pastSeasonLines,
+  readPastSeasons,
   sortBoard,
   standingLines,
   type BoardEntry,
+  type PastSeasonLine,
   type Standing,
 } from '../data/leadersView';
 import { isSeasonOver } from '../data/marketView';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, fonts, headingStyle, labelStyle, space, type, weight } from '../theme';
 import { EmptyState, headingLevel, Tag, visuallyHidden } from '../ui/kit';
+// Read through `readPastSeasons`, which checks what `pastSeasonResults()` gives.
+import * as practiceSession from '../web/practiceSession';
 
 /**
  * At this width Leaders fills the frame like every other tab: your standing
@@ -25,6 +30,13 @@ import { EmptyState, headingLevel, Tag, visuallyHidden } from '../ui/kit';
  */
 const DESKTOP_MIN_WIDTH = 1024;
 const SIDE_WIDTH = 280;
+/**
+ * A short window at least this wide (a phone in landscape, 844x390) sets
+ * your standing beside the board too, so the rivals show without scrolling
+ * (walk 5 T1-22): stacked, the title and standing filled the screen.
+ */
+const SHORT_SPLIT_MIN_WIDTH = 600;
+const SHORT_MAX_HEIGHT = 520;
 /** Below this width (a phone at 200% zoom) a row stacks: rank and name, then score. */
 const STACK_MAX_WIDTH = 330;
 const RANK_WIDTH = 52;
@@ -152,6 +164,34 @@ function StandingBlock({
 }
 
 /**
+ * "Your seasons this visit" (practice; walk 5 T2 NYI-1): each finished
+ * season's final score and place, newest first. Hidden until one has
+ * finished; cleared, like the rest of practice, by a reload.
+ */
+function PastSeasons({ lines }: { lines: readonly PastSeasonLine[] }) {
+  if (lines.length === 0) return null;
+  return (
+    <View style={styles.past}>
+      <Text accessibilityRole="header" {...headingLevel(2)} style={styles.standingLabel}>Your seasons this visit</Text>
+      <View accessibilityLabel="Your seasons this visit" role="list" style={styles.pastList}>
+        {lines.map((line) => (
+          <View key={line.key} role="listitem">
+            <Spoken>{line.spoken}</Spoken>
+            <Seen style={styles.pastRow}>
+              <Text style={styles.pastLabel}>{line.label}</Text>
+              <View style={styles.pastFigures}>
+                <NetMoney size="body" value={line.score} />
+                {line.place ? <Text style={styles.pastPlace}>{line.place}</Text> : null}
+              </View>
+            </Seen>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/**
  * One row of the board, read as one list item: "Rank 2, Deep Threes,
  * +$245K". On a level board (before the first games) no one has a rank yet.
  * Every score keeps the app's one format; when two different scores read
@@ -192,11 +232,12 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
 
 export function PerGameLeaderboardScreen() {
   const { bootstrap } = usePerGame();
-  const { fontScale, width } = useWindowDimensions();
+  const { fontScale, height, width } = useWindowDimensions();
   if (!bootstrap) return null;
   // Rows stack for large text and on very narrow screens; a phone reads one row per line.
   const compact = fontScale > 1.2 || width < STACK_MAX_WIDTH;
-  const wide = width >= DESKTOP_MIN_WIDTH;
+  // Desktop, and a phone in landscape: your standing in a side column beside the board.
+  const wide = width >= DESKTOP_MIN_WIDTH || (width >= SHORT_SPLIT_MIN_WIDTH && height < SHORT_MAX_HEIGHT);
   // Ranked on each row's cumulativePnl: the total score since the season began at $0.
   const rows = sortBoard(bootstrap.leaderboard);
   // You are placed by your account score, the figure shown; the others by their rows.
@@ -226,6 +267,8 @@ export function PerGameLeaderboardScreen() {
       {practiceRivals ? <Text style={styles.subtitle}>Practice rivals are computer players.</Text> : null}
     </View>
   );
+  // Practice only: the seasons finished earlier this visit.
+  const seasons = isMockActive() ? pastSeasonLines(readPastSeasons(practiceSession)) : [];
   const standingBlock = (
     <StandingBlock
       accountScore={bootstrap.account.cumulativePnl}
@@ -268,6 +311,7 @@ export function PerGameLeaderboardScreen() {
           <View style={styles.side}>
             {header}
             {standingBlock}
+            <PastSeasons lines={seasons} />
           </View>
           <View style={styles.main}>{board}</View>
         </View>
@@ -276,6 +320,7 @@ export function PerGameLeaderboardScreen() {
           {header}
           {standingBlock}
           {board}
+          <PastSeasons lines={seasons} />
         </>
       )}
     </ScrollView>
@@ -340,6 +385,45 @@ const styles = StyleSheet.create({
   },
   standingLabel: {
     ...labelStyle,
+  },
+  // Your seasons this visit: flat rows under a label, like the standing.
+  past: {
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+  },
+  pastList: {
+    marginTop: space.sm,
+  },
+  pastRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    columnGap: space.md,
+    paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  pastLabel: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.bold,
+  },
+  pastFigures: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    columnGap: space.sm,
+  },
+  pastPlace: {
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
+    fontVariant: ['tabular-nums'],
   },
   standingTop: {
     marginTop: space.xs,

@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { humanDate, signedMoney } from '../../copy/terms';
 import { formatAt, heroFontSize, WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
@@ -18,6 +18,52 @@ function StackRow({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
+ * Phones stack the week and rank under the score at every score length; from
+ * this width they sit beside it. Chosen by width alone, so the block keeps one
+ * arrangement from night to night whatever the score's digits (walk 5 T1-12).
+ */
+export const SCORE_BESIDE_MIN_WIDTH = 600;
+/** The measured fit never takes the hero below this (a 200% zoom phone with text spacing). */
+const HERO_FIT_MIN = 18;
+
+/**
+ * Web: keep the hero on one line at the largest size that fits its line,
+ * measured, not estimated, so a user's text spacing (letter-spacing 0.12em,
+ * WCAG 1.4.12) or a late font never breaks it inside the figure ("-$184.8" /
+ * "K", walk 5 T3-07). A ResizeObserver re-fits it when its width changes.
+ * Shrinks as soon as it overflows; grows back only with a clear margin, so it
+ * never flickers between two sizes.
+ */
+function useHeroFit(start: number, text: string) {
+  const box = useRef<View>(null);
+  const [fit, setFit] = useState<number | null>(null);
+  // Before paint, so the first frame already shows the fitted size.
+  useLayoutEffect(() => {
+    if (Platform.OS !== 'web' || typeof ResizeObserver === 'undefined') return undefined;
+    const holder = box.current as unknown as HTMLElement | null;
+    const node = holder?.firstElementChild as HTMLElement | null | undefined;
+    if (!holder || !node) return undefined;
+    const measure = () => {
+      const room = holder.clientWidth;
+      const need = node.scrollWidth;
+      const current = parseFloat(getComputedStyle(node).fontSize);
+      if (!(room > 0) || !(need > 0) || !(current > 0)) return;
+      let next = current;
+      if (need > room) next = Math.floor((current * room * 0.98) / need);
+      else if (need < room * 0.9 && current < type.hero) next = Math.floor((current * room * 0.98) / need);
+      next = Math.max(HERO_FIT_MIN, Math.min(type.hero, next));
+      if (Math.abs(next - current) >= 1) setFit(next);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(holder);
+    observer.observe(node);
+    measure();
+    return () => observer.disconnect();
+  }, [start, text]);
+  return { box, size: fit ?? start };
+}
+
+/**
  * "How am I doing?" in one block: your score as the hero number, the last
  * seven days and your rank beside it, then the score split by where it came
  * from (roster, shorts, closed positions, fees), each part the total of a list
@@ -30,10 +76,12 @@ function StackRow({ label, children }: { label: string; children: ReactNode }) {
  * "fees so far", not as an alarming loss. The hero row carries one spoken
  * summary: score, week and rank in a sentence.
  *
- * Layouts: `compact` (phone) sets the parts two to a line so roster rows start
- * high; `narrow` (under 330 CSS px) lists one part a line, with the week and
- * rank under the score; `panel` (the desktop column) lists them as a
- * statement and adds slot use.
+ * Layouts: `compact` (phone, tablet) sets the parts two to a line so roster
+ * rows start high, with the week and rank under the score on phones and
+ * beside it from 600px; `narrow` (under 330 CSS px) lists one part a line,
+ * with the week and rank under the score; `panel` (the desktop column) lists
+ * them as a statement and adds slot use. Under the score, the week and rank
+ * values share the block's right edge.
  */
 export function ScoreHeader({
   title,
@@ -62,8 +110,9 @@ export function ScoreHeader({
   slots: string | null;
   variant: 'compact' | 'narrow' | 'panel';
   /**
-   * Value against results from `pickValue`, in words: what your picks are
-   * worth by last season beside what they have made so far. Null hides it.
+   * Value against results from `pickValue`, in words: what the games your
+   * picks played would have made on last season's numbers, beside what they
+   * made (the score before fees). Null hides it.
    */
   valueLine?: string | null;
 }) {
@@ -72,11 +121,13 @@ export function ScoreHeader({
   const feesOnly = !started && score !== 0;
   // The hero fits its line: at 200% zoom a phone is about 195px wide, and an
   // eight-character score at full size ran off the edge (walk 3 T3-28).
-  const heroSize = variant === 'panel' ? type.hero : heroFontSize(signedMoney(score), width - 2 * space.lg, type.hero);
+  const estimate = variant === 'panel' ? type.hero : heroFontSize(signedMoney(score), width - 2 * space.lg, type.hero);
+  const beside = variant === 'compact' && width >= SCORE_BESIDE_MIN_WIDTH;
+  const { box: heroBox, size: heroSize } = useHeroFit(estimate, signedMoney(score));
   // Before any game settles there is no week to report and no standing to
   // claim; the next game date is the one useful fact.
   const facts = started ? (
-    <View style={[styles.stack, variant === 'panel' && styles.stackFull]}>
+    <View style={[styles.stack, beside ? styles.stackBeside : styles.stackFull]}>
       {week === null ? null : (
         <StackRow label={WEEK_LABEL}>
           {/* Fine, like Last night in the bars and the results night headers,
@@ -91,7 +142,7 @@ export function ScoreHeader({
       ) : null}
     </View>
   ) : nextGameDate ? (
-    <View style={[styles.stack, variant === 'panel' && styles.stackFull]}>
+    <View style={[styles.stack, beside ? styles.stackBeside : styles.stackFull]}>
       <StackRow label="Next games">
         <Text style={styles.stackText}>{humanDate(nextGameDate)}</Text>
       </StackRow>
@@ -113,8 +164,8 @@ export function ScoreHeader({
       {/* One sentence for screen readers (walk 4 T3-12); the drawn figures
           below say the same and are hidden from them. */}
       <Text style={visuallyHidden}>{summary}</Text>
-      <View aria-hidden style={[styles.heroRow, variant !== 'compact' && styles.heroColumn]}>
-        <View>
+      <View aria-hidden style={[styles.heroRow, !beside && styles.heroColumn]}>
+        <View ref={heroBox} style={beside ? styles.heroBeside : null}>
           <Money
             colored={started && score !== 0}
             size="hero"
@@ -174,12 +225,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
   },
+  // Side by side (600px and wider): one line, never wrapping; the score
+  // takes the room the week and rank leave and fits it.
   heroRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     columnGap: space.lg,
+  },
+  heroBeside: {
+    flex: 1,
+    minWidth: 0,
   },
   heroColumn: {
     flexDirection: 'column',
@@ -191,12 +247,20 @@ const styles = StyleSheet.create({
   },
   hero: {
     lineHeight: 54,
+    // Its own width, not the line's, so the fit can measure the figure.
+    alignSelf: 'flex-start',
+    // One line always: a figure never breaks inside ("-$184.8" / "K").
+    ...({ whiteSpace: 'nowrap' } as object),
   },
   stack: {
     gap: 2,
   },
+  // Under the score: the block's full width, so both values share its right edge.
   stackFull: {
     alignSelf: 'stretch',
+  },
+  stackBeside: {
+    flexShrink: 0,
   },
   stackRow: {
     flexDirection: 'row',

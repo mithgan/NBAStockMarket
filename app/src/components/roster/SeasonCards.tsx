@@ -79,6 +79,38 @@ export function WelcomeCard({
 }
 
 /**
+ * How to read your first night (walk 5 T1-N4), in the welcome's place once
+ * your first games have settled: the one tag a new fan meets everywhere, and
+ * where each game's math is. One line and a way to Results; × hides it, and
+ * it goes by itself after the next night.
+ */
+export function FirstNightTip({ onOpenResults, onHide }: { onOpenResults: () => void; onHide: () => void }) {
+  const tiny = useWindowDimensions().width < 200;
+  return (
+    <View style={[styles.band, styles.tipBand, tiny && styles.bandTiny]}>
+      <View style={[styles.headRow, tiny && styles.headRowTiny]}>
+        <Text style={[styles.headText, styles.tipText]}>
+          <Text style={styles.tipTag}>PAYING OFF</Text>
+          {" means his dividends beat your price so far. Results shows each game's math."}
+        </Text>
+        <Pressable
+          accessibilityLabel="Hide this tip"
+          accessibilityRole="button"
+          hitSlop={4}
+          onPress={onHide}
+          style={({ pressed }) => [styles.hide, tiny && styles.hideTiny, pressed && styles.pressed]}
+        >
+          <Text style={styles.hideGlyph}>×</Text>
+        </Pressable>
+      </View>
+      <View style={[styles.tipActions, tiny && styles.actionsTiny]}>
+        <Button accessibilityLabel="Results: each game's math" label="Results" onPress={onOpenResults} />
+      </View>
+    </View>
+  );
+}
+
+/**
  * The season's closing moment on the Roster: the final score and place, where
  * it came from (Roster, Shorts, Closed, Fees: the score block's split, which
  * the card carries once the season is over, so the score and rank are not
@@ -92,10 +124,13 @@ export function SeasonCompleteCard({
   precision = 'fine',
   variant = 'compact',
   valueLine = null,
+  movesText,
   onPlayAgain,
   onOpenPlayer,
 }: {
   summary: SeasonSummary;
+  /** What the moves were, from `movesLine`: "4 (3 adds, 1 short) · $1K in fees". */
+  movesText?: string;
   /** What the moves cost in all (the Fees part of the score). */
   fees: number;
   /** The final score by source, from `breakdownParts`; null with nothing on record. */
@@ -122,8 +157,9 @@ export function SeasonCompleteCard({
   ].filter((line): line is { label: string; name: string; total: string } => line !== null);
   // Read the way Season so far read it all season: moves, then fees (unless
   // the split above already names the fees).
-  const moves = `${summary.moves}${split ? '' : ` · fees ${signedMoneyFine(fees)}`}`
-    + (summary.shortsMade > 0 ? ` · ${summary.shortsMade} ${summary.shortsMade === 1 ? 'short' : 'shorts'}` : '');
+  // What the moves were and what they cost (walk 5 T1-13), not a bare count.
+  const moves = movesText ?? (`${summary.moves}${split ? '' : ` · fees ${signedMoneyFine(fees)}`}`
+    + (summary.shortsMade > 0 ? ` · ${summary.shortsMade} ${summary.shortsMade === 1 ? 'short' : 'shorts'}` : ''));
   const spokenMoves = `Moves ${moves.replace(/ · /g, ', ')}`;
   const spoken = [
     `Final score ${signedMoney(summary.finalScore)}`,
@@ -210,12 +246,17 @@ export function SeasonCompleteCard({
  * The desktop score column's closing block while a season runs: best and
  * worst player so far and what the moves have cost.
  */
-export function SeasonSoFar({ summary, fees }: { summary: SeasonSummary; fees: number }) {
+export function SeasonSoFar({ summary, fees, movesText }: {
+  summary: SeasonSummary;
+  fees: number;
+  /** What the moves were, from `movesLine`, read the same as on the season's card. */
+  movesText?: string;
+}) {
   const lines = [
     summary.best ? { label: 'Best so far', text: `${summary.best.name} ${signedMoneyFine(summary.best.total)}` } : null,
     summary.worst ? { label: 'Worst so far', text: `${summary.worst.name} ${signedMoneyFine(summary.worst.total)}` } : null,
     summary.moves > 0
-      ? { label: 'Moves', text: `${summary.moves} · fees ${signedMoneyFine(fees)}` }
+      ? { label: 'Moves', text: movesText ?? `${summary.moves} · fees ${signedMoneyFine(fees)}` }
       : null,
   ].filter((line): line is { label: string; text: string } => line !== null);
   if (lines.length === 0) return null;
@@ -302,6 +343,27 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: type.body,
     lineHeight: 21,
+  },
+  // The first-night tip: a slimmer band than the welcome.
+  tipBand: {
+    paddingTop: space.sm,
+    paddingBottom: space.sm,
+  },
+  tipText: {
+    color: colors.text,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    lineHeight: 18,
+  },
+  tipTag: {
+    fontFamily: fonts.display,
+    fontWeight: weight.heavy,
+  },
+  tipActions: {
+    marginTop: space.xs,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.sm,
   },
   actions: {
     marginTop: space.md,

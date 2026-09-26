@@ -26,7 +26,7 @@ import {
   TableHeader,
 } from '../components/roster/RowFigures';
 import { ScoreHeader } from '../components/roster/ScoreHeader';
-import { SeasonCompleteCard, SeasonSoFar, WelcomeCard } from '../components/roster/SeasonCards';
+import { FirstNightTip, SeasonCompleteCard, SeasonSoFar, WelcomeCard } from '../components/roster/SeasonCards';
 import { SectionHead } from '../components/roster/SectionHead';
 import {
   closeActionName,
@@ -53,6 +53,7 @@ import {
   breakdownPrecision,
   closedRows,
   feeMoves,
+  movesLine,
   pickValue,
   rankLine,
   rosterRowView,
@@ -63,7 +64,7 @@ import {
   type RowLayout,
 } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
-import { openRules, takeRosterPick } from '../state/uiActions';
+import { openRules, openTab, takeRosterPick } from '../state/uiActions';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
 import { Button, ConfirmStrip, EmptyState, headingLevel, Tag, tapsSettling, useAriaDisabled, visuallyHidden } from '../ui/kit';
 import { restartPractice } from '../web/practiceSession';
@@ -84,6 +85,14 @@ const NARROW_LIST_MAX_WIDTH = 380;
  * reload, and so does this.
  */
 let welcomeHidden = false;
+
+/**
+ * The first-night tip (walk 5 T1-N4): the settled night it first showed on,
+ * and whether it is done for this visit (hidden with ×, or a later night
+ * has settled). Like the welcome it lives in memory until a reload, so a
+ * new season does not bring it back.
+ */
+const firstNightTip: { shownOn: string | null; done: boolean } = { shownOn: null, done: false };
 
 type FocusTarget = {
   focus?: (options?: { preventScroll?: boolean }) => void;
@@ -483,17 +492,36 @@ export function PerGameRosterScreen({
     lastSettledDate: bootstrap.game.lastSettledDate,
     nextGameDate: bootstrap.game.nextGameDate,
   }) : false;
-  // Value against results: last season's worth of your picks beside what they
-  // have made so far (walk 3 T1-N1), or this season once it is over.
+  // Value against results: what the games your picks played would have made
+  // on last season's numbers, beside what they made (walk 3 T1-N1), over
+  // every game, dropped players included, so it reads as the score before
+  // fees (walk 5 T1-07).
   const picks = useMemo(
     () => pickValue(
       bootstrap?.positions ?? [],
       (playerId) => market.get(playerId)?.priorSeasonValuePerGame ?? null,
       bootstrap?.settledResults ?? [],
-      { over: seasonOver },
+      { over: seasonOver, fees: breakdown.fees },
     ),
-    [bootstrap?.positions, bootstrap?.settledResults, market, seasonOver],
+    [bootstrap?.positions, bootstrap?.settledResults, breakdown.fees, market, seasonOver],
   );
+
+  // How to read the first night, in the welcome's place once your first
+  // games have settled, until the next night settles or it is hidden.
+  const lastSettledDate = bootstrap?.game.lastSettledDate ?? null;
+  const hasGames = bootstrap?.ledger.items.some((entry) => entry.gameDate !== null) ?? false;
+  const [tipClosed, setTipClosed] = useState(firstNightTip.done);
+  const tipEligible = isMockActive() && !seasonOver && hasGames && !tipClosed;
+  const tipOpen = tipEligible && (firstNightTip.shownOn === null || firstNightTip.shownOn === lastSettledDate);
+  useEffect(() => {
+    if (!tipEligible) return;
+    if (firstNightTip.shownOn === null) {
+      firstNightTip.shownOn = lastSettledDate;
+    } else if (firstNightTip.shownOn !== lastSettledDate) {
+      firstNightTip.done = true;
+      setTipClosed(true);
+    }
+  }, [lastSettledDate, tipEligible]);
 
   const onConfirmOpen = useCallback((position: PerGamePosition) => {
     setConfirmingId(position.positionId);
@@ -625,7 +653,12 @@ export function PerGameRosterScreen({
   // parts, as shown, add up to the hero figure.
   const precision = parts ? breakdownPrecision(parts.map((part) => part.value), score) : 'fine';
   const unplayed = closed.filter((row) => row.unplayed).length;
-  const sticky = layout === 'stacked';
+  // "4 (3 adds, 1 short) · $1K in fees" (walk 5 T1-13).
+  const movesText = movesLine(bootstrap.ledger.items, bootstrap.positions, breakdown.fees);
+  // The title and the one-line legend pin while the rows scroll, in the
+  // phone list and in the table (landscape phones, tablets, desktop), so the
+  // figures never lose their labels (walk 5 T1-20).
+  const sticky = layout === 'stacked' || layout === 'table';
   // One list is pinned at a time; the taller one's height clears both.
   const focusClear = keepFocusClear(Math.max(pinnedLong, pinnedShort));
   const legend = (side: PerGamePosition['side']) => (
@@ -747,6 +780,17 @@ export function PerGameRosterScreen({
         openRules();
       }}
     />
+  ) : tipOpen ? (
+    <FirstNightTip
+      onHide={() => {
+        firstNightTip.done = true;
+        setTipClosed(true);
+        focusElement(rosterHeading.current, { preventScroll: true });
+      }}
+      onOpenResults={() => {
+        openTab('plays');
+      }}
+    />
   ) : seasonOver ? (
     <SeasonCompleteCard
       fees={breakdown.fees}
@@ -759,6 +803,7 @@ export function PerGameRosterScreen({
       onPlayAgain={practice
         ? () => restartPractice(seasonResultLine(bootstrap.account.cumulativePnl, rankLine(bootstrap.leaderboard)))
         : undefined}
+      movesText={movesText}
       parts={parts}
       precision={precision}
       summary={season}
@@ -800,7 +845,7 @@ export function PerGameRosterScreen({
           seasonOver={seasonOver}
         />
       )}
-      {wide && started && !seasonOver ? <SeasonSoFar fees={breakdown.fees} summary={season} /> : null}
+      {wide && started && !seasonOver ? <SeasonSoFar fees={breakdown.fees} movesText={movesText} summary={season} /> : null}
     </>
   );
   const lists = (

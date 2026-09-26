@@ -256,3 +256,37 @@ test('your row is told apart by the score shown, and a level board has no notes'
   const level = boardList(board([['Ava', 0], ['You', 0, true]]), -250);
   assert.deepEqual(level.map((entry) => entry.closeCalls), [[], []]);
 });
+
+test('your seasons this visit: final score and place, newest first, numbered in the order played (walk 5 T2 NYI-1)', async () => {
+  const { pastSeasonLines } = await import('./leadersView');
+  assert.deepEqual(pastSeasonLines([]), []);
+  // The session lists seasons oldest first; a practice calendar ends every season on the same day.
+  const lines = pastSeasonLines([
+    { score: 7_940_000, rank: '#1 of 5', finishedOn: '2026-04-12' },
+    { score: -86_300, rank: '#3 of 5', finishedOn: '2026-04-12' },
+    { score: 0, rank: null, finishedOn: '2026-04-12' },
+  ]);
+  assert.deepEqual(lines.map((line) => line.label), ['Season 3', 'Season 2', 'Season 1']);
+  assert.deepEqual(lines.map((line) => line.place), [null, '#3 of 5', '#1 of 5']);
+  assert.deepEqual(lines.map((line) => line.spoken), [
+    'Season 3: $0',
+    'Season 2: -$86.3K, number 3 of 5',
+    'Season 1: +$7.94M, number 1 of 5',
+  ]);
+  // Wall-clock finish times sort newest first too.
+  const clock = pastSeasonLines([
+    { score: 1_000, rank: '#2 of 5', finishedOn: '2026-09-26T10:00:00Z' },
+    { score: 2_000, rank: '#1 of 5', finishedOn: '2026-09-26T11:00:00Z' },
+  ]);
+  assert.deepEqual(clock.map((line) => line.label), ['Season 2', 'Season 1']);
+});
+
+test('your seasons this visit read safely from a session module with or without pastSeasonResults', async () => {
+  const { readPastSeasons } = await import('./leadersView');
+  assert.deepEqual(readPastSeasons({}), []);
+  assert.deepEqual(readPastSeasons(null), []);
+  assert.deepEqual(readPastSeasons({ pastSeasonResults: () => { throw new Error('storage blocked'); } }), []);
+  assert.deepEqual(readPastSeasons({ pastSeasonResults: () => 'nope' }), []);
+  const good = { score: 12_500, rank: '#2 of 5', finishedOn: '2026-04-12' };
+  assert.deepEqual(readPastSeasons({ pastSeasonResults: () => [good, { score: 'x' }, null] }), [good]);
+});

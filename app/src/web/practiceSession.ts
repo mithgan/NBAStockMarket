@@ -115,9 +115,9 @@ export function noteFinishedSeason(season: PastSeason | null): void {
   finishedSeason = season;
 }
 
-/** This visit's finished seasons, newest first (practice only). */
+/** This visit's finished seasons in the order they were played (practice only). */
 export function pastSeasonResults(): PastSeason[] {
-  return [...pastSeasons].reverse();
+  return [...pastSeasons];
 }
 
 function carryPastSeasons(): void {

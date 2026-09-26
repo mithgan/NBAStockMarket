@@ -28,6 +28,7 @@ import {
 import type { PnlPoint } from '../state/perGameState';
 import type { TagTone } from '../ui/kit';
 import {
+  currentResults,
   entryDay,
   positionValue,
   valueVerdict,
@@ -189,76 +190,97 @@ export function rankLine(leaderboard: readonly PerGameLeaderboardRow[] | undefin
 export const EARLY_GAMES_EACH = 20;
 
 export interface PickValue {
-  /** Sum over the compared picks of last season's dividend minus the locked price, a game (flipped for a short). */
+  /**
+   * What the compared games would have made on last season's numbers: for
+   * each game, his dividend a game last season minus the price you locked
+   * (flipped for a short), added up.
+   */
   byLastSeason: number;
-  /** Sum over the same picks of their profit a game so far (each row's "Profit a game"). */
+  /** What the same games made (each game's net, added up). */
   soFar: number;
-  /** Picks compared: held now, with a last season and at least one game for you. */
+  /** Games compared: settled games of a player with a last season. */
+  games: number;
+  /** Every settled game your roster and shorts played, dropped and ended ones included. */
+  allGames: number;
+  /** Positions (a stint on the roster or a short) with a compared game. */
   players: number;
-  /** Their games so far, on average. */
+  /** Compared games a position, on average. */
   gamesEach: number;
   /**
-   * "Value of your 3 picks combined: +$92K a game. So far they've made -$24.5K
-   * a game combined. A few weeks is mostly luck."
+   * "On last season's numbers, the 12 games your picks played would have
+   * made +$120K. They made -$85K before fees. A few weeks is mostly luck."
    */
   text: string;
 }
 
 /**
  * Value against results, so a cold first month reads as luck and not as a
- * broken signal (walk 3 T1-N1): what your picks are worth by last season's
- * dividends against the prices you locked, beside what they have made a game
- * while you held them. Both sums cover the same players: those on your roster
- * or shorts now, with a last season, who have played for you. Null when there
- * is nothing to compare (no games yet, or no last season for anyone).
+ * broken signal (walk 3 T1-N1), comparing like with like (walk 5 T1-07): the
+ * games your picks have played, what they would have made on last season's
+ * numbers (his dividend a game last season against the price you locked),
+ * beside what those same games made. Every settled game your roster and
+ * shorts played counts, dropped players and ended shorts included, so the
+ * made half is the Roster, Shorts and Closed parts added up: the score before
+ * fees. Dropping a loser no longer flatters it (his games stay in both
+ * halves). A player with no last season (a rookie) has no expected figure: his
+ * games are left out of both halves and the words say "11 of the 12 games",
+ * so the base never silently changes. Null when there is nothing to compare
+ * (no games yet, or no last season for anyone who played).
  *
- * The words say what is added up (walk 4 T1-06): how many picks, "combined"
- * when there are several, and "2 of your 3 picks" when some are left out (not
- * played yet, or no last season), so the figure never silently changes base.
- * `over`: the season has ended, so "this season" rather than "so far".
+ * `over`: the season has ended; "They made" reads right either way, so it
+ * changes nothing now (kept so callers need not change).
+ * `fees`: the Fees part; "before fees" is said only when fees moved the score
+ * and every game is compared, so the made figure plus the fees is the score.
  */
 export function pickValue(
   positions: readonly PerGamePosition[],
   lastSeasonDividend: (playerId: string) => number | null,
   results: readonly PerGameSettledResult[],
-  { over = false }: { over?: boolean } = {},
+  { fees = 0 }: { over?: boolean; fees?: number } = {},
 ): PickValue | null {
+  const sides = new Map(positions.map((position) => [position.positionId, position.side]));
   let byLastSeason = 0;
   let soFar = 0;
-  let players = 0;
   let games = 0;
-  let held = 0;
-  for (const position of positions) {
-    if (position.status !== 'active') continue;
-    held += 1;
-    const prior = lastSeasonDividend(position.playerId);
+  let allGames = 0;
+  const compared = new Set<string>();
+  const playedFor = new Set<string>();
+  for (const result of currentResults(results)) {
+    const side = sides.get(result.positionId);
+    if (!side) continue;
+    if (result.status !== 'settled' || result.netPnl === null || result.dividendDollars === null) continue;
+    allGames += 1;
+    playedFor.add(result.positionId);
+    const prior = lastSeasonDividend(result.playerId);
     if (prior === null) continue;
-    const value = positionValue(results, position.positionId);
-    if (value.avgNet === null || value.games === 0) continue;
-    const edge = prior - position.lockedGameCost;
-    byLastSeason += position.side === 'long' ? edge : -edge;
-    soFar += value.avgNet;
-    players += 1;
-    games += value.games;
+    const edge = prior - result.lockedGameCost;
+    byLastSeason += side === 'long' ? edge : -edge;
+    soFar += result.netPnl;
+    games += 1;
+    compared.add(result.positionId);
   }
-  if (players === 0) return null;
+  if (games === 0) return null;
+  const players = compared.size;
   const gamesEach = games / players;
   const lesson = gamesEach < EARLY_GAMES_EACH ? 'A few weeks is mostly luck.' : 'Last season is a guide, not a promise.';
-  const one = players === 1;
-  const combined = one ? '' : ' combined';
-  const picks = players === held
-    ? one ? 'your pick' : `your ${players} picks`
-    : `${players} of your ${held} picks`;
-  const made = over ? `This season ${one ? 'he' : 'they'} made` : `So far ${one ? "he's" : "they've"} made`;
+  const everyGame = games === allGames;
+  const played = `your ${playedFor.size === 1 ? 'pick' : 'picks'} played`;
+  const base = everyGame
+    ? games === 1 ? `the 1 game ${played}` : `the ${games} games ${played}`
+    : `${games} of the ${allGames} games ${played}`;
+  const they = everyGame ? (games === 1 ? 'It' : 'They') : `Those ${games}`;
+  const beforeFees = everyGame && Math.round(fees) !== 0 ? ' before fees' : '';
   return {
     byLastSeason,
     soFar,
+    games,
+    allGames,
     players,
     gamesEach,
-    // "Value" is the market's word for last season's dividend against the
-    // price (defined in the rules), so the line speaks it, not a new term.
-    text: `Value of ${picks}${combined}: ${signedMoneyCompact(byLastSeason)} a game. `
-      + `${made} ${signedMoneyCompact(soFar)} a game${combined}. ${lesson}`,
+    // Both halves are totals over the same games, in the score's own format,
+    // so "They made" plus the Fees part reads as the score.
+    text: `On last season's numbers, ${base} would have made ${signedMoney(byLastSeason)}. `
+      + `${they} made ${signedMoney(soFar)}${beforeFees}. ${lesson}`,
   };
 }
 
@@ -289,6 +311,65 @@ const FEE_KINDS = new Set(['open_fee', 'drop_fee', 'fee', 'penalty']);
 /** How many fee entries the ledger holds: "12 roster moves". */
 export function feeMoves(ledger: readonly PerGameLedgerEntry[]): number {
   return ledger.filter((entry) => FEE_KINDS.has(entry.kind)).length;
+}
+
+/**
+ * What the season's moves were, in words (walk 5 T1-13): "4 (3 adds, 1 short)
+ * · $1K in fees", "6 (3 adds, 1 short, 1 drop, 1 close) · $1.5K in fees". Each
+ * fee entry is one move: an add or a short opened, a player dropped or a
+ * short closed early (by the position's side); anything else is "other".
+ * `fees` is the Fees part (negative), shown as what the moves cost.
+ */
+export function movesLine(
+  ledger: readonly PerGameLedgerEntry[],
+  positions: readonly Pick<PerGamePosition, 'positionId' | 'side'>[],
+  fees: number,
+): string {
+  const sides = new Map(positions.map((position) => [position.positionId, position.side]));
+  const counts = { add: 0, short: 0, drop: 0, close: 0, other: 0 };
+  for (const entry of ledger) {
+    if (!FEE_KINDS.has(entry.kind)) continue;
+    const side = entry.positionId ? sides.get(entry.positionId) : undefined;
+    if (entry.kind === 'open_fee' && side) counts[side === 'long' ? 'add' : 'short'] += 1;
+    else if (entry.kind === 'drop_fee' && side) counts[side === 'long' ? 'drop' : 'close'] += 1;
+    else counts.other += 1;
+  }
+  const total = counts.add + counts.short + counts.drop + counts.close + counts.other;
+  const words: [number, string, string][] = [
+    [counts.add, 'add', 'adds'],
+    [counts.short, 'short', 'shorts'],
+    [counts.drop, 'drop', 'drops'],
+    [counts.close, 'close', 'closes'],
+    [counts.other, 'other', 'other'],
+  ];
+  const kinds = words.filter(([count]) => count > 0).map(([count, one, many]) => `${count} ${count === 1 ? one : many}`);
+  const cost = Math.round(fees) === 0 ? '' : ` · ${moneyFine(Math.abs(fees))} in fees`;
+  return `${total}${kinds.length > 0 ? ` (${kinds.join(', ')})` : ''}${cost}`;
+}
+
+/** A finger that stays this close to where it landed is a tap. */
+export const CHART_TAP_SLOP = 10;
+/** Sideways this far, and clearly more sideways than up or down, a touch scrubs the chart. */
+export const CHART_SLIDE_MIN = 6;
+
+/**
+ * What a touch on the score chart is doing so far (walk 5 T1-21): `slide`
+ * once it has gone clearly sideways (scrub the nights), `scroll` once it has
+ * gone up or down (the page's; it never selects a night), `wait` while it
+ * has barely moved. A tap selects only when the finger lifts (`chartTouchIsTap`).
+ */
+export function chartTouchMove(dx: number, dy: number, sliding: boolean): 'slide' | 'scroll' | 'wait' {
+  if (sliding) return 'slide';
+  const across = Math.abs(dx);
+  const down = Math.abs(dy);
+  if (across >= CHART_SLIDE_MIN && across > down * 1.5) return 'slide';
+  if (down >= CHART_SLIDE_MIN && down >= across) return 'scroll';
+  return 'wait';
+}
+
+/** A touch that lifts close to where it landed, never having slid or scrolled, is a tap. */
+export function chartTouchIsTap(dx: number, dy: number): boolean {
+  return Math.abs(dx) <= CHART_TAP_SLOP && Math.abs(dy) <= CHART_TAP_SLOP;
 }
 
 export interface ClosedRow {

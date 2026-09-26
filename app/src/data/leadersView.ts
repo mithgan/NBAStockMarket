@@ -239,3 +239,76 @@ export function boardLag(standing: Standing): number | null {
   const lag = standing.score - standing.boardScore;
   return Math.abs(lag) < 1 ? null : lag;
 }
+
+// ---------------------------------------------------------------------------
+// Your seasons this visit (practice)
+
+/**
+ * A finished practice season, as `pastSeasonResults()` in web/practiceSession
+ * gives it: the final score, the place ("#1 of 5", or null off the board) and
+ * when it finished. The list is carried through Play another season and
+ * Restart, and cleared by a manual reload.
+ */
+export interface PastSeason {
+  score: number;
+  rank: string | null;
+  finishedOn: string;
+}
+
+export interface PastSeasonLine {
+  key: string;
+  /** "Season 2": numbered in the order played this visit. */
+  label: string;
+  score: number;
+  /** "#1 of 5", or null when the season ended off the board. */
+  place: string | null;
+  /** "Season 2: +$4.22M, number 1 of 5". */
+  spoken: string;
+}
+
+function isPastSeason(value: unknown): value is PastSeason {
+  const season = value as Partial<PastSeason> | null;
+  return Boolean(season) && typeof season?.score === 'number' && Number.isFinite(season.score)
+    && (season.rank === null || typeof season.rank === 'string')
+    && typeof season.finishedOn === 'string';
+}
+
+/**
+ * The practice session's finished seasons, read from the session module when
+ * it offers `pastSeasonResults()`; an empty list when it does not (a build
+ * without it) or when it gives anything unexpected. Takes the module as an
+ * argument so the screen stays import-safe.
+ */
+export function readPastSeasons(session: unknown): PastSeason[] {
+  const read = (session as { pastSeasonResults?: unknown } | null)?.pastSeasonResults;
+  if (typeof read !== 'function') return [];
+  try {
+    const list: unknown = read();
+    return Array.isArray(list) ? list.filter(isPastSeason) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * "Your seasons this visit" (walk 5 T2 NYI-1): each finished season's final
+ * score and place, newest first, numbered in the order they were played (the
+ * list comes oldest first). Seasons finished on the same day keep that
+ * order, so a practice calendar's shared last day still sorts right.
+ */
+export function pastSeasonLines(seasons: readonly PastSeason[]): PastSeasonLine[] {
+  return seasons
+    .map((season, index) => ({ season, number: index + 1 }))
+    .sort((left, right) => right.season.finishedOn.localeCompare(left.season.finishedOn) || right.number - left.number)
+    .map(({ season, number }) => {
+      const score = Math.round(season.score) === 0 ? '$0' : signedMoney(season.score);
+      const place = season.rank && season.rank.trim() ? season.rank.trim() : null;
+      return {
+        key: `season-${number}`,
+        label: `Season ${number}`,
+        score: season.score,
+        place,
+        spoken: `Season ${number}: ${score}${place ? `, ${place.replace('#', 'number ')}` : ''}`,
+      };
+    });
+}

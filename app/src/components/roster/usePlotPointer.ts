@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Platform, type GestureResponderEvent, type ViewProps } from 'react-native';
 
+import { chartTouchIsTap, chartTouchMove } from '../../data/rosterView';
+
 /** How a reading was asked for: a mouse pointing, a finger tapping, or a finger sliding. */
 export type PlotIntent = 'point' | 'tap' | 'slide';
 
@@ -13,9 +15,6 @@ export interface PlotPointerHandlers {
   onKey: (key: string) => boolean;
 }
 
-/** A slide must travel this far sideways before it counts, so a tap stays a tap. */
-const SLIDE_THRESHOLD = 6;
-
 /**
  * Pointer, touch and keyboard input for a chart plot.
  *
@@ -23,9 +22,10 @@ const SLIDE_THRESHOLD = 6;
  * give a trustworthy x inside an SVG (it is relative to whichever path was
  * hit), so x is measured from `clientX` against the plot's own rectangle.
  *  - Mouse: moving reads a night; leaving goes back to the latest.
- *  - Touch and pen: a tap reads a night and the reading stays after the finger
- *    lifts; sliding sideways scrubs. `touch-action: pan-y` keeps vertical
- *    swipes scrolling the page.
+ *  - Touch and pen: a tap reads a night when the finger lifts, and the
+ *    reading stays; a mostly sideways drag scrubs. A touch that goes up or
+ *    down is the page's scroll and never selects a night (walk 5 T1-21):
+ *    `touch-action: pan-y` hands it to the browser, which then cancels it.
  *  - Keyboard: the plot is a tab stop and the caller maps the keys.
  * Native uses the responder system, where `locationX` is relative to the plot
  * because the SVG inside ignores touches, and hands the gesture back to the
@@ -49,32 +49,39 @@ export function usePlotPointer(handlers: PlotPointerHandlers): {
 
     node.style.touchAction = 'pan-y';
     node.style.cursor = 'crosshair';
-    let startX: number | null = null;
-    let sliding = false;
+    // Where the finger landed, and what the touch has turned out to be.
+    let start: { x: number; y: number } | null = null;
+    let mode: 'wait' | 'slide' | 'scroll' = 'wait';
     const xOf = (event: PointerEvent) => event.clientX - node.getBoundingClientRect().left;
+    const yOf = (event: PointerEvent) => event.clientY - node.getBoundingClientRect().top;
 
     const down = (event: PointerEvent) => {
       if (event.pointerType === 'mouse') return;
-      startX = xOf(event);
-      sliding = false;
-      latest.current.onRead(startX, 'tap');
+      start = { x: xOf(event), y: yOf(event) };
+      mode = 'wait';
     };
     const move = (event: PointerEvent) => {
       if (event.pointerType === 'mouse') {
         latest.current.onRead(xOf(event), 'point');
         return;
       }
-      if (startX === null) return;
+      if (start === null || mode === 'scroll') return;
       const x = xOf(event);
-      if (!sliding && Math.abs(x - startX) < SLIDE_THRESHOLD) return;
-      sliding = true;
-      latest.current.onRead(x, 'slide');
+      mode = chartTouchMove(x - start.x, yOf(event) - start.y, mode === 'slide');
+      if (mode === 'slide') latest.current.onRead(x, 'slide');
     };
-    const up = () => {
-      startX = null;
+    const up = (event: PointerEvent) => {
+      if (start !== null && event.pointerType !== 'mouse' && mode === 'wait'
+        && chartTouchIsTap(xOf(event) - start.x, yOf(event) - start.y)) {
+        latest.current.onRead(start.x, 'tap');
+      }
+      start = null;
+    };
+    // The browser took the touch for a scroll: nothing is selected.
+    const cancel = () => {
+      start = null;
     };
     const leave = (event: PointerEvent) => {
-      startX = null;
       if (event.pointerType === 'mouse') latest.current.onLeave();
     };
     const key = (event: KeyboardEvent) => {
@@ -84,14 +91,14 @@ export function usePlotPointer(handlers: PlotPointerHandlers): {
     node.addEventListener('pointerdown', down);
     node.addEventListener('pointermove', move);
     node.addEventListener('pointerup', up);
-    node.addEventListener('pointercancel', up);
+    node.addEventListener('pointercancel', cancel);
     node.addEventListener('pointerleave', leave);
     node.addEventListener('keydown', key);
     cleanup.current = () => {
       node.removeEventListener('pointerdown', down);
       node.removeEventListener('pointermove', move);
       node.removeEventListener('pointerup', up);
-      node.removeEventListener('pointercancel', up);
+      node.removeEventListener('pointercancel', cancel);
       node.removeEventListener('pointerleave', leave);
       node.removeEventListener('keydown', key);
     };

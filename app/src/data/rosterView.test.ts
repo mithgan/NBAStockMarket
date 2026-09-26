@@ -473,60 +473,81 @@ test('the hero score shrinks to fit a 200% zoom phone and stays full size elsewh
   assert.equal(heroFontSize('-$12.34M', 60, 46), 26);
 });
 
-test('value against results: last season beside what your picks have made, over the same players (walk 3 T1-N1)', async () => {
+test('value against results compares like with like: last season beside what the same games made, dropped and ended ones included (walk 5 T1-07)', async () => {
   const { pickValue } = await import('./rosterView');
+  // Doncic held, Barnes dropped after one game, Duren held, Cunningham shorted
+  // for his term (ended by itself).
   const positions = [
-    // A roster spot at $100K whose last season paid $130K: +$30K a game by last season.
-    position({ positionId: 'a', playerId: 'a', lockedGameCost: 100_000 }),
-    // A short credited $200K on a player whose last season paid $180K: +$20K a game (flipped).
-    position({ positionId: 'b', playerId: 'b', side: 'short', lockedGameCost: 200_000 }),
-    // A rookie who has played, and a player who has not: left out of both sums.
-    position({ positionId: 'c', playerId: 'c', lockedGameCost: 90_000 }),
-    position({ positionId: 'd', playerId: 'd', lockedGameCost: 120_000 }),
-    // Closed: no longer one of your picks.
-    position({ positionId: 'e', playerId: 'e', lockedGameCost: 50_000, status: 'closed' }),
+    position({ positionId: 'don', playerId: 'don', lockedGameCost: 400_000, cumulativePnl: 0 }),
+    position({ positionId: 'bar', playerId: 'bar', lockedGameCost: 250_000, status: 'closed', closedEventSequence: 9 }),
+    position({ positionId: 'dur', playerId: 'dur', lockedGameCost: 180_000 }),
+    position({ positionId: 'cun', playerId: 'cun', side: 'short', lockedGameCost: 300_000, status: 'closed', expiresOn: '2025-10-24' }),
   ];
-  const prior: Record<string, number | null> = { a: 130_000, b: 180_000, c: null, d: 150_000, e: 90_000 };
-  const results = [
-    result({ positionId: 'a', playerId: 'a', gameId: 'a1', eventCursor: 1, dividendDollars: 80_000, netPnl: -20_000 }),
-    result({ positionId: 'a', playerId: 'a', gameId: 'a2', eventCursor: 2, gameDate: '2025-10-23', dividendDollars: 100_000, netPnl: 0 }),
-    result({ positionId: 'b', playerId: 'b', gameId: 'b1', eventCursor: 3, side: 'short', lockedGameCost: 200_000, dividendDollars: 195_000, netPnl: 5_000 }),
-    result({ positionId: 'c', playerId: 'c', gameId: 'c1', eventCursor: 4, lockedGameCost: 90_000, dividendDollars: 190_000, netPnl: 100_000 }),
-    result({ positionId: 'e', playerId: 'e', gameId: 'e1', eventCursor: 5, lockedGameCost: 50_000, dividendDollars: 150_000, netPnl: 100_000 }),
+  // Last season, a game: Doncic +$20K over his price, Barnes +$30K, Duren +$10K, Cunningham $40K under
+  // the credit (a short's edge: +$40K).
+  const prior: Record<string, number> = { don: 420_000, bar: 280_000, dur: 190_000, cun: 260_000 };
+  const games = [
+    result({ positionId: 'don', playerId: 'don', gameId: 'd1', eventCursor: 1, lockedGameCost: 400_000, dividendDollars: 430_000, netPnl: 30_000 }),
+    result({ positionId: 'don', playerId: 'don', gameId: 'd2', eventCursor: 2, gameDate: '2025-10-23', lockedGameCost: 400_000, dividendDollars: 390_000, netPnl: -10_000 }),
+    // Dropped after this game: it still counts in both halves.
+    result({ positionId: 'bar', playerId: 'bar', gameId: 'b1', eventCursor: 3, lockedGameCost: 250_000, dividendDollars: 0, netPnl: -250_000 }),
+    result({ positionId: 'dur', playerId: 'dur', gameId: 'u1', eventCursor: 4, lockedGameCost: 180_000, dividendDollars: 230_000, netPnl: 50_000 }),
+    // The short's two games before it ended.
+    result({ positionId: 'cun', playerId: 'cun', gameId: 'c1', eventCursor: 5, side: 'short', lockedGameCost: 300_000, dividendDollars: 320_000, netPnl: -20_000 }),
+    result({ positionId: 'cun', playerId: 'cun', gameId: 'c2', eventCursor: 6, side: 'short', gameDate: '2025-10-23', lockedGameCost: 300_000, dividendDollars: 290_000, netPnl: 10_000 }),
   ];
-  const value = pickValue(positions, (id) => prior[id] ?? null, results);
+  const value = pickValue(positions, (id) => prior[id] ?? null, games, { fees: -1_250 });
   assert.ok(value);
-  assert.equal(value.byLastSeason, 50_000);
-  // Each row's "Profit a game", summed: a averages -$10K over two games, b made $5K.
-  assert.equal(value.soFar, -5_000);
-  assert.equal(value.players, 2);
-  assert.equal(value.gamesEach, 1.5);
-  // Two of the four held picks are compared (c has no last season, d no game yet), and the words say so.
-  assert.equal(value.text, "Value of 2 of your 4 picks combined: +$50K a game. So far they've made -$5K a game combined. A few weeks is mostly luck.");
+  // 2 x 20K + 30K + 10K + 2 x 40K.
+  assert.equal(value.byLastSeason, 160_000);
+  // Every game's net: the Roster, Shorts and Closed parts added up, the score before fees.
+  assert.equal(value.soFar, 30_000 - 10_000 - 250_000 + 50_000 - 20_000 + 10_000);
+  assert.equal(value.games, 6);
+  assert.equal(value.allGames, 6);
+  assert.equal(value.players, 4);
+  assert.equal(
+    value.text,
+    "On last season's numbers, the 6 games your picks played would have made +$160K. They made -$190K before fees. A few weeks is mostly luck.",
+  );
+  // The made half reconciles with the score: the positions' results plus fees.
+  const breakdown = scoreBreakdown(
+    -190_000 - 1_250,
+    positions.map((row) => ({ ...row, cumulativePnl: games.filter((game) => game.positionId === row.positionId).reduce((sum, game) => sum + (game.netPnl ?? 0), 0) })),
+    [entry({ kind: 'open_fee', amountDollars: -1_250 })],
+  );
+  assert.equal(breakdown.roster + breakdown.shorts + breakdown.closed, value.soFar);
+  assert.equal(breakdown.other, 0);
+  // Dropping the loser does not flatter the line: his game stays in both halves.
+  const afterDrop = pickValue(positions, (id) => prior[id] ?? null, games, { fees: -1_500 });
+  assert.equal(afterDrop?.soFar, value.soFar);
 });
 
-test('the value line says what it adds up: how many picks, combined, and this season once it is over (walk 4 T1-06)', async () => {
+test('value against results names its base when a rookie has no last season, and speaks of one game as one (walk 5 T1-07)', async () => {
   const { pickValue } = await import('./rosterView');
-  // Duren, Barnes and Anunoby: +$31.5K, +$35K and +$25.5K a game by last season.
   const positions = [
-    position({ positionId: 'd', playerId: 'd', lockedGameCost: 176_000 }),
-    position({ positionId: 'b', playerId: 'b', lockedGameCost: 259_000 }),
-    position({ positionId: 'a', playerId: 'a', lockedGameCost: 165_500 }),
+    position({ positionId: 'a', playerId: 'a', lockedGameCost: 100_000 }),
+    position({ positionId: 'k', playerId: 'k', lockedGameCost: 90_000 }),
   ];
-  const prior: Record<string, number> = { d: 207_500, b: 294_000, a: 191_000 };
-  const played = [
-    result({ positionId: 'd', playerId: 'd', gameId: 'd1', eventCursor: 1, lockedGameCost: 176_000, dividendDollars: 166_000, netPnl: -10_000 }),
-    result({ positionId: 'b', playerId: 'b', gameId: 'b1', eventCursor: 2, lockedGameCost: 259_000, dividendDollars: 249_500, netPnl: -9_500 }),
-    result({ positionId: 'a', playerId: 'a', gameId: 'a1', eventCursor: 3, lockedGameCost: 165_500, dividendDollars: 160_500, netPnl: -5_000 }),
+  const prior: Record<string, number | null> = { a: 130_000, k: null };
+  const games = [
+    result({ positionId: 'a', playerId: 'a', gameId: 'a1', eventCursor: 1, dividendDollars: 80_000, netPnl: -20_000 }),
+    result({ positionId: 'a', playerId: 'a', gameId: 'a2', eventCursor: 2, gameDate: '2025-10-23', dividendDollars: 100_000, netPnl: 0 }),
+    result({ positionId: 'k', playerId: 'k', gameId: 'k1', eventCursor: 3, lockedGameCost: 90_000, dividendDollars: 190_000, netPnl: 100_000 }),
   ];
-  const all = pickValue(positions, (id) => prior[id] ?? null, played);
-  assert.equal(all?.text, "Value of your 3 picks combined: +$92K a game. So far they've made -$24.5K a game combined. A few weeks is mostly luck.");
-  // After the first night only Barnes had played: the base is named, not silently one pick.
-  const first = pickValue(positions, (id) => prior[id] ?? null, played.slice(1, 2));
-  assert.equal(first?.text, "Value of 1 of your 3 picks: +$35K a game. So far he's made -$9.5K a game. A few weeks is mostly luck.");
+  // The rookie's game is left out of both halves, and the words say so (no "before fees": not every game).
   assert.equal(
-    pickValue(positions, (id) => prior[id] ?? null, played, { over: true })?.text,
-    "Value of your 3 picks combined: +$92K a game. This season they made -$24.5K a game combined. A few weeks is mostly luck.",
+    pickValue(positions, (id) => prior[id] ?? null, games, { fees: -500 })?.text,
+    "On last season's numbers, 2 of the 3 games your picks played would have made +$60K. Those 2 made -$20K. A few weeks is mostly luck.",
+  );
+  // One game: "the 1 game", "It made".
+  assert.equal(
+    pickValue(positions.slice(0, 1), (id) => prior[id] ?? null, games.slice(0, 1), { fees: -250 })?.text,
+    "On last season's numbers, the 1 game your pick played would have made +$30K. It made -$20K before fees. A few weeks is mostly luck.",
+  );
+  // No fees on record (a live account before its first move fee): nothing to be "before".
+  assert.equal(
+    pickValue(positions.slice(0, 1), (id) => prior[id] ?? null, games.slice(0, 2))?.text,
+    "On last season's numbers, the 2 games your pick played would have made +$60K. They made -$20K. A few weeks is mostly luck.",
   );
 });
 
@@ -539,6 +560,13 @@ test('value against results is hidden with nothing to compare: before games, or 
   assert.equal(pickValue([], () => 120_000, played), null);
   // A night he did not play is no game to compare.
   assert.equal(pickValue(held, () => 120_000, [result({ positionId: 'a', playerId: 'a', status: 'verified_dnp', netPnl: null, dividendDollars: null })]), null);
+  // A corrected game counts once, at its latest revision.
+  const corrected = pickValue(held, () => 120_000, [
+    result({ positionId: 'a', playerId: 'a', netPnl: 10_000, dividendDollars: 110_000 }),
+    result({ positionId: 'a', playerId: 'a', eventCursor: 2, resultRevision: 2, kind: 'correction', netPnl: 15_000, dividendDollars: 115_000 }),
+  ]);
+  assert.equal(corrected?.games, 1);
+  assert.equal(corrected?.soFar, 15_000);
 });
 
 test('value against results uses the price you locked, and calls the gap luck only while the games are few', async () => {
@@ -553,8 +581,46 @@ test('value against results uses the price you locked, and calls the gap luck on
     netPnl: 10_000,
   }));
   // Last season paid $90K against the $100K locked (today's market price plays no part).
-  const early = pickValue(held, () => 90_000, games(EARLY_GAMES_EACH - 1));
-  assert.equal(early?.text, "Value of your pick: -$10K a game. So far he's made +$10K a game. A few weeks is mostly luck.");
-  const later = pickValue(held, () => 90_000, games(EARLY_GAMES_EACH));
-  assert.equal(later?.text, "Value of your pick: -$10K a game. So far he's made +$10K a game. Last season is a guide, not a promise.");
+  const early = pickValue(held, () => 90_000, games(EARLY_GAMES_EACH - 1), { fees: -250 });
+  assert.equal(early?.text, "On last season's numbers, the 19 games your pick played would have made -$190K. They made +$190K before fees. A few weeks is mostly luck.");
+  const later = pickValue(held, () => 90_000, games(EARLY_GAMES_EACH), { fees: -250, over: true });
+  assert.equal(later?.text, "On last season's numbers, the 20 games your pick played would have made -$200K. They made +$200K before fees. Last season is a guide, not a promise.");
+});
+
+test('the season card says what the moves were and what they cost (walk 5 T1-13)', async () => {
+  const { movesLine } = await import('./rosterView');
+  const positions = [
+    position({ positionId: 'a', side: 'long' }),
+    position({ positionId: 'b', side: 'long', status: 'closed' }),
+    position({ positionId: 'c', side: 'long' }),
+    position({ positionId: 's', side: 'short' }),
+    position({ positionId: 't', side: 'short', status: 'closed' }),
+  ];
+  const fee = (kind: PerGameLedgerEntry['kind'], positionId: string) => entry({ kind, positionId, amountDollars: -250 });
+  // Three adds and a short: "4 (3 adds, 1 short) · $1K in fees".
+  const opens = [fee('open_fee', 'a'), fee('open_fee', 'b'), fee('open_fee', 'c'), fee('open_fee', 's')];
+  assert.equal(movesLine(opens, positions, -1_000), '4 (3 adds, 1 short) · $1K in fees');
+  // A drop and a short closed early are moves too, named by side; game results are not moves.
+  const more = [...opens, fee('open_fee', 't'), fee('drop_fee', 'b'), fee('drop_fee', 't'), entry({ kind: 'game_dividend', positionId: 'a', amountDollars: 50_000 })];
+  assert.equal(movesLine(more, positions, -1_750), '7 (3 adds, 2 shorts, 1 drop, 1 close) · $1.75K in fees');
+  assert.equal(movesLine([fee('open_fee', 'a')], positions, -250), '1 (1 add) · $250 in fees');
+  assert.equal(movesLine([], positions, 0), '0');
+});
+
+test('a touch on the score chart selects a night only on a tap or a mostly sideways drag (walk 5 T1-21)', async () => {
+  const { chartTouchIsTap, chartTouchMove, CHART_SLIDE_MIN } = await import('./rosterView');
+  // A thumb scrolling the page: mostly up, a little sideways, is never a slide.
+  assert.equal(chartTouchMove(3, -40, false), 'scroll');
+  assert.equal(chartTouchMove(12, -30, false), 'scroll');
+  assert.equal(chartTouchMove(0, CHART_SLIDE_MIN, false), 'scroll');
+  // Clearly sideways scrubs; a diagonal is not "mostly sideways".
+  assert.equal(chartTouchMove(CHART_SLIDE_MIN, 0, false), 'slide');
+  assert.equal(chartTouchMove(-20, 8, false), 'slide');
+  assert.equal(chartTouchMove(12, 10, false), 'wait');
+  // Barely moved: undecided. Once sliding, it stays a slide whichever way the finger drifts.
+  assert.equal(chartTouchMove(2, 3, false), 'wait');
+  assert.equal(chartTouchMove(1, 30, true), 'slide');
+  // A tap lifts close to where it landed.
+  assert.equal(chartTouchIsTap(3, -4), true);
+  assert.equal(chartTouchIsTap(0, 25), false);
 });
