@@ -73,7 +73,12 @@ interface PerGameContextValue {
    */
   refreshData: (options?: { quietUnlessChanged?: boolean }) => Promise<boolean>;
   openPosition: (intent: PerGameOpenPositionIntent) => Promise<boolean>;
-  closePosition: (position: PerGamePosition) => Promise<boolean>;
+  /**
+   * `also`: one more sentence for the move's notice, so a screen reader hears
+   * one message, not two a moment apart ("Room made for Kawhi Leonard.";
+   * walk 6 T3-11).
+   */
+  closePosition: (position: PerGamePosition, options?: { also?: string }) => Promise<boolean>;
   dismissNotice: () => void;
   /** A short informational notice (clears itself), e.g. why a LOCKED button did nothing. */
   notify: (text: string) => void;
@@ -359,8 +364,9 @@ export function PerGameProvider({
     });
   }, [apiClient, queueMove, runPositionAction]);
 
-  const closePosition = useCallback((position: PerGamePosition) => {
+  const closePosition = useCallback((position: PerGamePosition, options?: { also?: string }) => {
     const key = `position:${position.side}:${position.playerId}`;
+    const also = options?.also ? ` ${options.also}` : '';
     return queueMove(key, () => {
       const accountVersion = bootstrapRef.current?.account.version;
       if (accountVersion === undefined) return Promise.resolve(false);
@@ -368,8 +374,8 @@ export function PerGameProvider({
         key,
         () => apiClient.closePosition(position.positionId, accountVersion),
         position.side === 'long'
-          ? `${position.playerName} dropped. His next games won't count toward your score.${feeNote()}`
-          : `Short on ${position.playerName} closed.${feeNote()}`,
+          ? `${position.playerName} dropped. His next games won't count toward your score.${feeNote()}${also}`
+          : `Short on ${position.playerName} closed.${feeNote()}${also}`,
         position.side === 'long' ? `${position.playerName} was not dropped.` : `Your short on ${position.playerName} was not closed.`,
       );
     });
