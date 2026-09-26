@@ -66,6 +66,11 @@ interface PerGameContextValue {
    * third or fourth notice line (walk 7 T3-18, T2-21, T4-13).
    */
   noticeSpoken: string | null;
+  /**
+   * The last notices, newest first, each as screen readers heard it, so a
+   * player who missed one can read it again (walk 8 T3-I2, T4-N2).
+   */
+  recentNotices: readonly PerGameNoticeRecord[];
   serverError: string | null;
   transitionError: null;
   transitionRequired: false;
@@ -96,6 +101,18 @@ interface PerGameContextValue {
 }
 
 const PerGameContext = createContext<PerGameContextValue | null>(null);
+
+/** One notice as it was said, and when. */
+export interface PerGameNoticeRecord {
+  text: string;
+  tone: NoticeTone;
+  at: number;
+  /** Tells two notices apart (a key for lists). */
+  id: number;
+}
+
+/** How many past notices the app keeps for re-reading. */
+const RECENT_NOTICES_MAX = 10;
 
 /** Moves that land this close together share one notice. */
 const MOVE_BURST_MS = 1500;
@@ -143,6 +160,8 @@ export function PerGameProvider({
     const fee = bootstrapRef.current?.ruleset.transactionFeeDollars ?? 0;
     return fee > 0 ? ` ${exactMoney(fee)}\u00a0fee.` : '';
   };
+  const [recentNotices, setRecentNotices] = useState<readonly PerGameNoticeRecord[]>([]);
+  const noticeIds = useRef(0);
   /** `spoken`: what screen readers hear instead, when it differs. */
   const say = useCallback((text: string, tone: NoticeTone = 'problem', spoken?: string) => {
     const lock = tone === 'success' ? text.match(LOCK_SENTENCE) : null;
@@ -150,6 +169,14 @@ export function PerGameProvider({
     setMessage(lock && lock.index !== undefined && lock.index > 0 ? text.slice(0, lock.index) + text.slice(lock.index + lock[0].length) : text);
     setNoticeSpoken(spoken ?? (lock ? text : null));
     setNoticeSeq((seq) => seq + 1);
+    // The whole sentence as it was heard; a repeat of the last one (a second
+    // LOCKED press) only moves its time.
+    const heard = spoken ?? text;
+    noticeIds.current += 1;
+    const id = noticeIds.current;
+    setRecentNotices((list) => (list[0]?.text === heard
+      ? [{ ...list[0], at: Date.now() }, ...list.slice(1)]
+      : [{ text: heard, tone, at: Date.now(), id }, ...list].slice(0, RECENT_NOTICES_MAX)));
   }, []);
   const shownMessage = useRef<string | null>(null);
   shownMessage.current = message;
@@ -508,6 +535,7 @@ export function PerGameProvider({
     noticeTone,
     noticeSeq,
     noticeSpoken,
+    recentNotices,
     serverError,
     transitionError: null,
     transitionRequired: false,
@@ -538,6 +566,7 @@ export function PerGameProvider({
     noticeSeq,
     noticeSpoken,
     noticeTone,
+    recentNotices,
     openPosition,
     pendingActions,
     refreshData,

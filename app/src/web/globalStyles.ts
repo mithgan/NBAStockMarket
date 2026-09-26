@@ -130,13 +130,14 @@ html, body {
    the screen, and the raking light crossing it is what makes the two read as
    one milled surface instead of as stripes. Both are held near the threshold of
    visibility on purpose: this sits under live numbers, and a texture a reader
-   can actually resolve is a texture competing with them. */
+   can actually resolve is a texture competing with them. At 2.1% the grain read
+   as a pinstripe "screen glitch" in empty space (walk 8 T1-13). */
 #variant-texture-brushed {
   background-image:
     repeating-linear-gradient(
       90deg,
-      rgba(255, 255, 255, 0.021) 0px,
-      rgba(255, 255, 255, 0.021) 1px,
+      rgba(255, 255, 255, 0.012) 0px,
+      rgba(255, 255, 255, 0.012) 1px,
       transparent 1px,
       transparent 3px
     ),
