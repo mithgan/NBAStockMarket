@@ -57,7 +57,7 @@ import { useSheetHistory, useSheetShown } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
 import { measuredFloatTop, measuredSheetTop } from './chrome/sheetTop';
-import { PRACTICE_HINT_ID, PracticeControls, QueuedCancelButton, usePracticeHint, usePracticeRulesContext, useRecentAdvances, useSpacingFold } from './SimBar';
+import { PRACTICE_HINT_ID, PracticeControls, QueuedCancelButton, usePracticeHint, usePracticeRulesContext, useReaderSpacing, useRecentAdvances, useSpacingFold } from './SimBar';
 import { unlessSettling } from '../web/tapSettle';
 
 /**
@@ -120,6 +120,7 @@ export function PerGameStatusStrip() {
   // A reader's text spacing can fold a tall window's frame too (walk 8
   // T3-08); the brand bar then stays, and Settings with it.
   const spacingFolded = useSpacingFold();
+  const readerSpacing = useReaderSpacing();
   if (!bootstrap) return null;
 
   const practice = isMockActive();
@@ -197,7 +198,9 @@ export function PerGameStatusStrip() {
   // "Day 0/174" (walk 8 T3-05); the bar beside it shows how far.
   const dateFirst = folded && !foldedFacts;
   const dayText = progress
-    ? (dateFirst ? practiceDateDay(progress, lastSettled) : keepTogether(shortDay ? practiceDayShort(progress) : practiceDayText(progress)))
+    // With a reader's text spacing the narrowest folded row puts the day
+    // under the date, so Settings keeps its place beside them (walk 9 T3-05).
+    ? (dateFirst ? practiceDateDay(progress, lastSettled, readerSpacing && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH) : keepTogether(shortDay ? practiceDayShort(progress) : practiceDayText(progress)))
     : null;
   // At season end a full bar only repeats "Season complete", and in the
   // narrowest folded row (a phone at 200% zoom) it pushed Settings onto a
@@ -483,6 +486,9 @@ export function PerGameStatusStrip() {
             (tight || locked) && styles.factsTight,
             folded && !foldedFacts && styles.factsFolded,
             tiny && styles.factsTiny,
+            // A reader's text spacing: the facts wrap in the room beside
+            // Settings instead of pushing it onto a line of its own.
+            foldTwoLines && readerSpacing && styles.factsShrink,
             // Enlarged text signed in: three controls would squeeze the facts
             // into a sliver, so the facts take the row and the controls wrap.
             layout.largeText && !practice && styles.factsFull,
@@ -802,6 +808,12 @@ const styles = StyleSheet.create({
   factsFolded: {
     flexBasis: 'auto',
     flexShrink: 0,
+  },
+  factsShrink: {
+    flexBasis: 0,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   // Tiny: the day in two lines over its bar, beside More.
   rowTiny: {

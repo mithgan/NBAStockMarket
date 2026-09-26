@@ -431,11 +431,12 @@ function PositionRow({
     // anywhere on the row; keyboards and screen readers use the name.
     // The name keeps the verdict and the total, so a Tab alone still says how
     // he is doing; the cells carry every figure under its header.
+    // The row header says what its cell shows; the total is its own column,
+    // read there (walk 9 T3-02, as the Market's row header).
     const tableName = [
       position.playerName,
       view.tag.label,
       view.games || null,
-      `total ${signedMoney(position.cumulativePnl)}`,
       view.expiry ? view.expiry.replace(/ · /g, ', ') : null,
       belowZero ? belowZero.replace(/\.$/, '') : null,
       'View profile',

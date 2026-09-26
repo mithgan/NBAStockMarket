@@ -268,6 +268,19 @@ export function useSpacingFold(): boolean {
   return useSyncExternalStore(subscribeSpacingFold, () => spacingFold !== null, () => false);
 }
 
+/** Whether a reader's own text spacing is on (the same watch). */
+let readerSpacing = false;
+
+function setReaderSpacing(next: boolean): void {
+  if (next === readerSpacing) return;
+  readerSpacing = next;
+  spacingListeners.forEach((listener) => listener());
+}
+
+export function useReaderSpacing(): boolean {
+  return useSyncExternalStore(subscribeSpacingFold, () => readerSpacing, () => false);
+}
+
 /** Watches for a reader's text spacing and the frame's height (mounted once, by SimBar). */
 function useSpacingFoldWatch(): void {
   useEffect(() => {
@@ -277,6 +290,7 @@ function useSpacingFoldWatch(): void {
       if (!screen) return;
       const size = `${window.innerWidth}x${window.innerHeight}`;
       const spaced = parseFloat(getComputedStyle(screen).wordSpacing) > 0;
+      setReaderSpacing(spaced);
       if (!spaced) {
         setSpacingFold(null);
         return;
