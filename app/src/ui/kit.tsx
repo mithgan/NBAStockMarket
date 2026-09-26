@@ -697,7 +697,7 @@ const styles = StyleSheet.create({
   },
   buttonSecondary: {
     backgroundColor: colors.surfaceRaised,
-    borderColor: colors.borderStrong,
+    borderColor: colors.controlBorder,
   },
   buttonQuiet: {
     backgroundColor: 'transparent',
@@ -791,7 +791,7 @@ const styles = StyleSheet.create({
   segmented: {
     flexDirection: 'row',
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: colors.controlBorder,
     borderRadius: radius.sm,
     overflow: 'hidden',
     backgroundColor: colors.background,

@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingHorizontal: space.md,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: colors.controlBorder,
     borderRadius: radius.sm,
   },
   watchIcon: {

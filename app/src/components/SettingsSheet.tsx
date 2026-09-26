@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
     borderRadius: radius.md,
-    borderColor: colors.border,
+    borderColor: colors.controlBorder,
     borderWidth: 1,
     backgroundColor: colors.surfaceRaised,
   },

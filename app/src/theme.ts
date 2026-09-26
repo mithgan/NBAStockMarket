@@ -35,6 +35,11 @@ export const BASE_PALETTE = {
   chromeSoft: '#0e1218',
   border: '#212936',
   borderStrong: '#323c4e',
+  /**
+   * The edge of a control (buttons, toggles, inputs): 3:1 against the page
+   * and card colours (WCAG 1.4.11), so a field never reads as floating text.
+   */
+  controlBorder: '#5e6a84',
   text: '#f7f8fa',
   muted: '#aab2c0',
   faint: '#8d97a8',
@@ -63,6 +68,7 @@ export const colors = {
   chromeSoft: webVar('chromeSoft', BASE_PALETTE.chromeSoft),
   border: webVar('border', BASE_PALETTE.border),
   borderStrong: webVar('borderStrong', BASE_PALETTE.borderStrong),
+  controlBorder: webVar('controlBorder', BASE_PALETTE.controlBorder),
   text: webVar('text', BASE_PALETTE.text),
   muted: webVar('muted', BASE_PALETTE.muted),
   faint: webVar('faint', BASE_PALETTE.faint),

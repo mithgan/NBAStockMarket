@@ -898,7 +898,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: colors.controlBorder,
     // Outlined, not filled: dropping is a secondary move on a row whose job
     // is to show how the player is doing.
     backgroundColor: 'transparent',
