@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { exactSignedMoney, gamesCount, unbrokenName } from '../../copy/terms';
+import { exactMoney, exactSignedMoney, gamesCount, unbrokenName } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
 import type { ClosedRow, PartPrecision } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
@@ -84,17 +84,21 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
  * including the players dropped before they played (whose only effect on the
  * score was their fees).
  */
-export function FeesLine({ fees, moves, unplayed = 0, totalInset = 0, precision = 'fine' }: {
+export function FeesLine({ fees, moves, feeEach = 0, unplayed = 0, totalInset = 0, precision = 'fine' }: {
   fees: number;
   moves: number;
+  /** The fee for one move, said once: "$250 each". */
+  feeEach?: number;
   /** Closed positions that never played a game for you. */
   unplayed?: number;
   totalInset?: number;
   precision?: PartPrecision;
 }) {
   if (moves === 0) return null;
-  const detail = `${moves} roster ${moves === 1 ? 'move' : 'moves'}`
-    + (unplayed > 0 ? ` · ${unplayed} dropped before playing` : '');
+  // Moves, not "roster moves": shorts opened and closed cost the same fee.
+  const detail = `${moves} ${moves === 1 ? 'move' : 'moves'}`
+    + (feeEach > 0 ? ` · ${exactMoney(feeEach)} each` : '')
+    + (unplayed > 0 ? ` · ${unplayed} closed before playing` : '');
   return (
     <View
       accessible

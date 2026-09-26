@@ -40,9 +40,12 @@ const GROW_MS = 520;
 export function PerGamePnlChart({
   entries,
   plotHeight = 80,
+  seasonOver = false,
 }: {
   entries: readonly PerGameLedgerEntry[];
   plotHeight?: number;
+  /** A finished season with no nights says so instead of promising a first one. */
+  seasonOver?: boolean;
 }) {
   const points = useMemo(() => buildPnlSeries(entries), [entries]);
   const series = useMemo(() => nightlySeries(points, entries), [entries, points]);
@@ -136,7 +139,9 @@ export function PerGamePnlChart({
             <View style={styles.emptyRule} />
           </View>
           <Text style={styles.emptyText}>
-            Your chart starts at $0 and fills in after your first game night.
+            {seasonOver
+              ? 'None of your players played this season, so there is nothing to chart.'
+              : 'Your chart starts at $0 and fills in after your first game night.'}
           </Text>
         </View>
       </View>

@@ -588,7 +588,7 @@ export function PerGameRosterScreen({
       }}
     />
   ) : seasonOver ? (
-    <SeasonCompleteCard onPlayAgain={practice ? restartPractice : undefined} summary={season} />
+    <SeasonCompleteCard fees={breakdown.fees} onPlayAgain={practice ? restartPractice : undefined} summary={season} />
   ) : null;
 
   // The welcome and the season's result lead the screen: on a phone above the
@@ -598,7 +598,7 @@ export function PerGameRosterScreen({
     <>
       {opening}
       <ScoreHeader
-        nextGameDate={bootstrap.game.nextGameDate}
+        nextGameDate={seasonOver ? null : bootstrap.game.nextGameDate}
         parts={parts}
         precision={precision}
         rank={started ? rankLine(bootstrap.leaderboard) : null}
@@ -616,6 +616,7 @@ export function PerGameRosterScreen({
           // Phones keep the plot short so roster rows start high; wider lists
           // afford more, and desktop is capped so nightly swings stay readable.
           plotHeight={wide ? 208 : layout === 'table' ? 120 : 68}
+          seasonOver={seasonOver}
         />
       )}
       {wide && started && !seasonOver ? <SeasonSoFar fees={breakdown.fees} summary={season} /> : null}
@@ -657,7 +658,7 @@ export function PerGameRosterScreen({
               ? 'The season is over. There are no more players to add.'
               : lockLine ? `${lockLine} You can look around the market until then.` : ROSTER_EXPLAINER}
             style={styles.empty}
-            title={hadLongs ? 'Your roster is empty' : 'Add your first player'}
+            title={hadLongs ? 'Your roster is empty' : seasonOver ? 'No players this season' : 'Add your first player'}
           />
         )}
       </View>
@@ -691,7 +692,7 @@ export function PerGameRosterScreen({
               ? 'The season is over, so there are no more shorts to open.'
               : lockLine ? `${lockLine} ${SHORT_EXPLAINER}` : SHORT_EXPLAINER}
             style={styles.empty}
-            title={hadShorts ? 'No open shorts' : 'No shorts yet'}
+            title={hadShorts ? 'No open shorts' : seasonOver ? 'No shorts this season' : 'No shorts yet'}
           />
         )}
       </View>
@@ -703,6 +704,7 @@ export function PerGameRosterScreen({
         totalInset={totalInset}
       />
       <FeesLine
+        feeEach={fee}
         fees={breakdown.fees}
         moves={feeMoves(bootstrap.ledger.items)}
         precision={precision}

@@ -69,9 +69,12 @@ export function WelcomeCard({
  */
 export function SeasonCompleteCard({
   summary,
+  fees,
   onPlayAgain,
 }: {
   summary: SeasonSummary;
+  /** What the moves cost in all (the Fees part of the score). */
+  fees: number;
   /** Practice only: start a fresh season. */
   onPlayAgain?: () => void;
 }) {
@@ -80,9 +83,10 @@ export function SeasonCompleteCard({
     summary.best ? { label: 'Best', text: `${summary.best.name} ${signedMoneyFine(summary.best.total)}` } : null,
     summary.worst ? { label: 'Worst', text: `${summary.worst.name} ${signedMoneyFine(summary.worst.total)}` } : null,
     {
+      // Read the way Season so far read it all season: moves, then fees.
       label: 'Moves',
-      text: `${summary.moves}`
-        + (summary.shortsMade > 0 ? ` · ${summary.shortsMade} ${summary.shortsMade === 1 ? 'short' : 'shorts'} opened` : ''),
+      text: `${summary.moves} · fees ${signedMoneyFine(fees)}`
+        + (summary.shortsMade > 0 ? ` · ${summary.shortsMade} ${summary.shortsMade === 1 ? 'short' : 'shorts'}` : ''),
     },
   ].filter((line): line is { label: string; text: string } => line !== null);
   const spoken = [
