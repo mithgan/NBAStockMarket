@@ -71,8 +71,8 @@ export interface SortState {
 
 /**
  * The one rule for every sort control (toolbar radios and table headers):
- * choosing a sort shows it in its natural order (Price lowest first, Value
- * and Dividend highest first, Name A to Z) and choosing the one in use
+ * choosing a sort shows it in its natural order (Price, Value and Dividend
+ * highest first, Name A to Z) and choosing the one in use
  * changes nothing; only the order button flips it.
  */
 export function nextSortState(current: SortState, action: { choose: MarketSort } | 'flip'): SortState {
@@ -170,7 +170,8 @@ function sortForward<T extends MarketSortRow>(
   const byName = (left: T, right: T) => compareNames(left.player.name, right.player.name);
   const sorted = [...rows];
   if (sort === 'name') return sorted.sort((left, right) => byName(left, right) || byPrice(left, right));
-  if (sort === 'price') return sorted.sort((left, right) => byPrice(left, right) || byName(left, right));
+  // Price starts with the stars, highest first, like Value (walk 9 T1-16).
+  if (sort === 'price') return sorted.sort((left, right) => byPrice(right, left) || byName(left, right));
   // Value sorts by the figure each row prints (a held row's is at your price).
   const figure = sort === 'dividend'
     ? (row: T) => row.player.priorSeasonValuePerGame
@@ -510,11 +511,14 @@ export function heldDetail(summary: ValueSummary | undefined, lockedGameCost: nu
 }
 
 /**
- * A held phone row's second value line: his Value at the price you locked,
- * then today's price ("Value +$71K at your price · now $418.5K"), so the
- * figure matches the Roster's and today's price stays in view (walk 5 T4-02,
- * T1-02, T2-06). The price box carries "/game"; the line leaves "a game" out,
- * like an unheld row's "$71K over his price", so it fits one line at 320px.
+ * A held phone row's second value line: last season's dividend against the
+ * price you locked, then today's price ("Last season +$71K at your price ·
+ * now $418.5K"), so the figure matches the Roster's and today's price stays
+ * in view (walk 5 T4-02, T1-02, T2-06). It says where the figure comes from
+ * and the row draws it in neutral ink, so it never reads as what he made you
+ * this season, which is the row's coloured result (walk 9 T1-06: a green
+ * "Value +$35K" under a red -$153K a game). The price box carries "/game";
+ * the line leaves "a game" out, like an unheld row's "$71K over his price".
  */
 export function heldValueLine(
   player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
@@ -525,8 +529,14 @@ export function heldValueLine(
   const now = `now ${money(player.currentGameCost)}`;
   if (edge === null) return { edge, value: 'No last season', now, tone: 'none' };
   const tone = netTone(edge);
-  return { edge, value: tone === 'even' ? 'Value even at your price' : `Value ${signedMoneyCompact(edge)} at your price`, now, tone };
+  return { edge, value: tone === 'even' ? 'Last season even at your price' : `Last season ${signedMoneyCompact(edge)} at your price`, now, tone };
 }
+
+/**
+ * From this width a held phone row's value line also says today's price
+ * ("· now $418.2K"); narrower, it would wrap onto a third line on every row.
+ */
+export const HELD_NOW_MIN_WIDTH = 360;
 
 /**
  * An unheld phone row's two value lines, broken after "a game ·" on every
@@ -837,11 +847,24 @@ export function heldValuePhrase(
   const now = `now ${perGame(player.currentGameCost)}`;
   const edge = rowValueEdge(player, side, { lockedGameCost });
   if (edge === null || player.priorSeasonValuePerGame === null) return `no last season, ${now}`;
-  const value = netTone(edge) === 'even' ? 'value even at your price' : `value ${signedMoneyCompact(edge)} a game at your price`;
-  return `${value}, last season ${money(player.priorSeasonValuePerGame)} a game, ${now}`;
+  // Said as the row shows it: last season against your price (walk 9 T1-06).
+  const value = netTone(edge) === 'even' ? 'last season even at your price' : `last season ${signedMoneyCompact(edge)} a game at your price`;
+  return `${value}, dividend ${money(player.priorSeasonValuePerGame)} a game, ${now}`;
 }
 
 export type MarketLayout = 'phone' | 'large' | 'table';
+
+/**
+ * Below this width a phone row leaves out the player's photo: its 44px give
+ * the name and price line room, so "Gilgeous-Alexander STAR ›" and
+ * "KARL-ANTHONY  $379.5K/game" keep one line each and every row has one
+ * height (walk 9 T4-07: 110 and 103px among 92px rows at 320).
+ */
+export const PHONE_PHOTO_MIN_WIDTH = 360;
+
+export function phoneRowPhoto(width: number): boolean {
+  return width >= PHONE_PHOTO_MIN_WIDTH;
+}
 
 /**
  * Names stay whole at their hyphen ("Gilgeous-Alexander") while a line can
@@ -929,6 +952,28 @@ export function rowProfileLabel({
   const priceWords = locked === null ? perGame(price) : `yours ${perGame(locked)}`;
   const facts = [name, spokenTier(tier), priceWords, detail].filter(Boolean).join(', ');
   return reason ? `${facts}. ${reason} View profile` : `${facts}, View profile`;
+}
+
+/**
+ * The name of a table row's player button, the row's header (walk 9 T3-02):
+ * who he is and the way into his profile ("Luka Doncic, star, view
+ * profile"), with his tag while held ("on your roster") or why this side
+ * cannot take him. The figures are left to their own cells, which a screen
+ * reader moving down a column now hears under his name.
+ */
+export function rowHeaderLabel({
+  name,
+  tier,
+  tag = null,
+  reason = null,
+}: {
+  name: string;
+  tier: string | null | undefined;
+  tag?: string | null;
+  reason?: string | null;
+}): string {
+  const facts = [name, spokenTier(tier), tag ? `${tag[0].toLowerCase()}${tag.slice(1)}` : ''].filter(Boolean).join(', ');
+  return reason ? `${facts}. ${reason} View profile` : `${facts}, view profile`;
 }
 
 /** What a screen reader hears when typing pauses: "7 players match "le"". */
@@ -1028,10 +1073,11 @@ export function searchMatchLine(query: string, names: readonly string[]): string
 
 /**
  * Whether a sort runs low to high (aria-sort "ascending", the ↑ arrow).
- * Price and Name start low to high; Value starts with the highest value.
+ * Name starts A to Z; Price, Value and Dividend start with the highest, as a
+ * fan reads a stat table (walk 9 T1-16: Price opened on the cheapest).
  */
 export function sortAscending(sort: MarketSort, reversed = false): boolean {
-  return sort === 'value' || sort === 'dividend' ? reversed : !reversed;
+  return sort === 'name' ? !reversed : reversed;
 }
 
 /** The sort's direction in plain words: "lowest first", "highest first", "A to Z". */
@@ -1047,7 +1093,7 @@ export function sortDirection(sort: MarketSort, reversed = false): string {
  */
 export function flippedSortNote(sort: MarketSort): { text: string; restore: string } {
   if (sort === 'value') return { text: 'Showing the worst value first.', restore: 'Best value first' };
-  if (sort === 'price') return { text: 'Showing the highest price first.', restore: 'Lowest price first' };
+  if (sort === 'price') return { text: 'Showing the lowest price first.', restore: 'Highest price first' };
   if (sort === 'dividend') return { text: 'Showing the lowest dividend first.', restore: 'Highest dividend first' };
   return { text: 'Showing names Z to A.', restore: 'A to Z' };
 }
@@ -1153,16 +1199,36 @@ export function rosterPickReason(playerName: string, side: 'long' | 'short' = 'l
  * each stay whole, so a narrow phone breaks only between them, never
  * "0 of 10 on / your roster" (walk 4 T1-11).
  */
-export function slotLine(side: PerGamePositionSide, slots: Pick<PerGameSlotSummary, 'used' | 'limit'>, saving = 0): string {
+export function slotLine(side: PerGamePositionSide, slots: Pick<PerGameSlotSummary, 'used' | 'limit'>, saving = 0, waiting = false): string {
   // Adds still saving count too, so the number matches the ticked rows (walk
   // 8 T2-08: "7 of 10" beside ten ticks): "10 of 10 \u00B7 3 saving". It is no
   // longer than the plain line, so the toolbar never grows while you tap.
+  // Pressed while practice games play, they wait for them: "3 waiting" (walk
+  // 9 T4-04), with the games named on the line under it (waitingForLine).
   if (saving > 0) {
     const used = Math.min(slots.used + saving, slots.limit);
-    return `${used}\u00A0of\u00A0${slots.limit} \u00B7\u00A0${saving}\u00A0saving`;
+    return `${used}\u00A0of\u00A0${slots.limit} \u00B7\u00A0${saving}\u00A0${waiting ? 'waiting' : 'saving'}`;
   }
   const count = `${slots.used}\u00A0of\u00A0${slots.limit}`;
   return `${count} ${slotSummary(side, slots).slice(`${slots.used} of ${slots.limit} `.length).replace(/ /g, '\u00A0')}`;
+}
+
+/**
+ * Under "3 of 10 · 2 waiting", in the fee line's place: which games the
+ * moves wait for ("for the Oct 21–27 games", "for the rest of the season's
+ * games"); `playing` is usePracticePlaying().
+ */
+export function waitingForLine(playing: string): string {
+  return `for the ${playing.replace(/ /g, '\u00A0')} games`;
+}
+
+/**
+ * The name of an Add or Short pressed while practice games play, while it
+ * waits for them (walk 9 T4-04: it used to say "Added" before the games
+ * decided whether it could be).
+ */
+export function waitingActionName(side: PerGamePositionSide, playerName: string, playing: string): string {
+  return `Waiting for the ${playing} games to ${side === 'long' ? 'add' : 'short'} ${playerName}`;
 }
 
 /**
@@ -1310,6 +1376,30 @@ export function heldOrderLine(previousNight: string, night: string): string {
 }
 
 /** "Re-sort"'s accessible name: what it sorts for ("Re-sort for the Oct 21 games"). */
+/**
+ * The phone list's one quiet line under the sort, and the laptop table's
+ * (walk 9 T4-10, T1-16, T2-12): the order in words, an unusual order said
+ * plainly (the order button flips it back), or that the order is from before
+ * the latest games, with Re-sort. `reserve` is its longest wording, kept as
+ * an invisible copy so the line never changes height when a night lands.
+ */
+export function orderLine({
+  sort,
+  reversed,
+  heldNote,
+}: {
+  sort: MarketSort;
+  reversed: boolean;
+  /** heldOrderLine(...) while the order is from before the latest games, else null. */
+  heldNote: string | null;
+}): { text: string; tone: 'quiet' | 'flipped' | 'stale'; resort: boolean; reserve: string } {
+  const reserve = 'Same order as before the Oct 21–27 games.';
+  if (heldNote) return { text: heldNote, tone: 'stale', resort: true, reserve };
+  const said = sortedLine(sort, reversed);
+  if (reversed) return { text: flippedSortNote(sort).text, tone: 'flipped', resort: false, reserve };
+  return { text: said, tone: 'quiet', resort: false, reserve };
+}
+
 export function resortName(night: string): string {
   return `Re-sort for the ${humanDate(night)} games`;
 }

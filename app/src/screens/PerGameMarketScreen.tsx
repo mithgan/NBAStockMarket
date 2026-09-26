@@ -16,6 +16,7 @@ import { isMockActive, mockPlayerTrends, mockSeasonStart } from '../api/mockPerG
 import { FullNote } from '../components/market/FullNote';
 import { LockIcon, StarIcon } from '../components/market/icons';
 import { ListEnd, SkipLink } from '../components/market/SkipLink';
+import { OrderLine } from '../components/market/OrderLine';
 import { listenForActivations, pressedInScreen } from '../components/market/lastActivation';
 import { spaceToggles } from '../components/market/switchKeys';
 import { useAriaDisabled } from '../components/market/useAriaDisabled';
@@ -57,6 +58,7 @@ import {
   heldPriceCaption,
   heldValueLine,
   heldValuePhrase,
+  HELD_NOW_MIN_WIDTH,
   isSeasonOver,
   JUST_OPENED_MS,
   keptAnnouncement,
@@ -70,13 +72,16 @@ import {
   marketSortOptions,
   netTone,
   nextSortState,
+  orderLine,
   otherSideSaving,
+  phoneRowPhoto,
   slotLineBeside,
   slotRoomFirst,
   foldedSlotBeside,
   fullTierFits,
   rowActions,
   rowKicker,
+  rowHeaderLabel,
   rowProfileLabel,
   rowTier,
   rowValueEdge,
@@ -111,6 +116,8 @@ import {
   watchingLine,
   VALUE_ONE_LINE_MIN_WIDTH,
   valueByPosition,
+  waitingActionName,
+  waitingForLine,
   valueSignal,
   type MarketColumnSet,
   type MarketLayout,
@@ -122,6 +129,7 @@ import type { ValueSummary } from '../data/perGameMetrics';
 import { positionSlotHint } from '../data/perGameRules';
 import { splitPlayerName } from '../data/playerName';
 import { usePerGame } from '../state/PerGameContext';
+import { practicePlaying, usePracticePlaying } from '../state/practicePlaying';
 import { buildPerGameMarketRows, type PerGameMarketRow } from '../state/perGameState';
 import { requestRosterPick } from '../state/uiActions';
 import { useWatchlist } from '../state/watchlist';
@@ -148,6 +156,12 @@ const PHONE_AVATAR = 34;
 const WHOLE_LIST_MAX = 60;
 /** From this width the toolbar's lock line keeps to one line. */
 const LOCK_LINE_ROOMY_WIDTH = 1280;
+/**
+ * Below this height (a laptop: 1366x768, 1152x720) the tall table's
+ * sentence slot gives way to the one-line order strip once the first games
+ * are in, so a row more shows (walk 9 T2-12).
+ */
+const LAPTOP_HEIGHT_BELOW = 820;
 /** Phone row padding: 44px band + one value line keeps six rows above the fold. */
 const ROW_PAD = 6;
 /** A second press on Drop/Close this soon after it opened its question is the same tap bouncing (the Roster's 400 ms). */
@@ -349,9 +363,12 @@ function MarketRow({
   const tierAfter = phone
     ? (phoneTier.place === 'after' ? phoneTier.tier : '')
     : width < KICKER_TIER_MIN_WIDTH && player.tier ? tierLabel(player.tier) : '';
+  // The surname keeps its plain hyphen: a line that holds it keeps it whole,
+  // and one that cannot (a text-spacing style at 320px) breaks at the hyphen,
+  // never inside a word ("Gilgeous-Alexand / er", walk 9 T3-11).
   const nameLine = (
     <>
-      {whole(surname)}
+      {surname}
       {/* One span, kept together, so a wrapped line never splits it. */}
       <Text style={tierAfter ? styles.tierInline : styles.chevron}>
         {tierAfter ? `\u2002${tierAfter.replace(' ', '\u00A0')}\u00A0›` : '\u2002›'}
@@ -374,6 +391,10 @@ function MarketRow({
   // laptop): "Added ✓" shows while the move is on its way, and a move that
   // fails reverts it while the notice says why.
   const [optimistic, setOptimistic] = useState<'open' | 'close' | null>(null);
+  // An Add or Short pressed while practice games play waits for them (walk 9
+  // T4-04): the button says "Waiting" in neutral ink, not a tick the games
+  // may take back, until the move goes through ("Added ✓") or reverts.
+  const [waitingFor, setWaitingFor] = useState<string | null>(null);
   // Rows are keyed by side, so the tick stays on the side it was pressed on
   // (walk 8 T4-07); coming back to that side while it saves shows it again.
   const opening = optimistic === 'open' || (optimistic === null && ownSaving && !position);
@@ -424,7 +445,8 @@ function MarketRow({
     refocus.current = false;
     (actionRef.current as unknown as { focus?: () => void } | null)?.focus?.();
   }, [confirming, noting]);
-  const word = actionWord({
+  const waiting = waitingFor !== null && opening;
+  const word = waiting ? 'Waiting' : actionWord({
     side,
     held: shownHeld,
     pending,
@@ -495,10 +517,12 @@ function MarketRow({
       {`${sideTag(side)} · `}
       <Text style={{ color: TONE_COLOR[tone] }}>{text}</Text>
     </Text>,
-    <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[value.tone] }]}>
+    // Last season against your price, in neutral ink: the row's only
+    // coloured figure is what he made you (walk 9 T1-06).
+    <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>
       {joiner ? <Text style={styles.leadText}>{joiner}</Text> : null}
       {value.value}
-      <Text style={styles.leadText}>{` ·\u00A0${value.now}`}</Text>
+      {width >= HELD_NOW_MIN_WIDTH ? <Text style={styles.leadText}>{` ·\u00A0${value.now}`}</Text> : null}
     </Text>,
   );
   const unheldLineFor = (shown: typeof signal) => {
@@ -619,8 +643,12 @@ function MarketRow({
         <Button
           ref={actionRef}
           accessibilityHint={rosterLocked ? rosterLockHint : row.unavailableReason ?? undefined}
+          // A waiting move names its games; the lock it may meet is the notice's to say.
+          {...((waiting ? { accessibilityHint: undefined } : {}) as object)}
           // FULL says why, with its own word in the name for voice control.
-          accessibilityLabel={justOpened
+          accessibilityLabel={waiting && waitingFor
+            ? waitingActionName(side, player.name, waitingFor)
+            : justOpened
             ? justOpenedName(side, player.name)
             : justClosed
               ? justClosedName(side, player.name)
@@ -637,7 +665,7 @@ function MarketRow({
           disabled={resting}
           // "Added ✓" / "Dropped ✓": a move that just worked, in the success
           // colour, never the dashed "unavailable" look (walk 4 T2-03).
-          done={justOpened || justClosed}
+          done={(justOpened || justClosed) && !waiting}
           focusableWhenDisabled
           // LOCKED answers a tap with why and when, as on the Roster.
           onDisabledPress={rosterLocked ? () => notify(lockNotice(rosterLockGameDate)) : undefined}
@@ -673,8 +701,9 @@ function MarketRow({
               }
               lastAction.current = 'open';
               setOptimistic('open');
+              setWaitingFor(practicePlaying());
               startCooling();
-              // The move starts once "Added ✓" is on screen.
+              // The move starts once "Added ✓" (or "Waiting") is on screen.
               afterPaint(() => {
                 void openPosition({
                   playerId: player.playerId,
@@ -683,18 +712,20 @@ function MarketRow({
                   expectedQuoteVersion: player.quoteVersion,
                 }).then((opened) => {
                   setOptimistic(null);
+                  setWaitingFor(null);
                   onReleaseSlot(side, player.playerId);
                   if (opened) startCooling();
                 }, () => {
                   setOptimistic(null);
+                  setWaitingFor(null);
                   onReleaseSlot(side, player.playerId);
                 });
               });
             }
           }}
           // "Dropped ✓" and "Shorted ✓" fit the phone button on one line (walk 5 T4-03).
-          style={[!table && styles.phoneButton, !table && (justOpened || justClosed || fullButton) && styles.phoneButtonDone, confirming && styles.buttonArmed, fullButton && noting && styles.buttonArmed]}
-          textStyle={[styles.buttonText, (justOpened || justClosed) && styles.buttonTextDone, fullButton && styles.buttonTextFull, (confirming || (fullButton && noting)) && styles.buttonTextArmed]}
+          style={[!table && styles.phoneButton, !table && (justOpened || justClosed || fullButton) && styles.phoneButtonDone, confirming && styles.buttonArmed, fullButton && noting && styles.buttonArmed, waiting && styles.buttonWaiting]}
+          textStyle={[styles.buttonText, (justOpened || justClosed) && !waiting && styles.buttonTextDone, fullButton && styles.buttonTextFull, (confirming || (fullButton && noting)) && styles.buttonTextArmed, waiting && styles.buttonTextWaiting]}
           width={large ? undefined : actionWidth}
         />
       )}
@@ -830,9 +861,19 @@ function MarketRow({
           <StarIcon filled={watched} size={18} />
         </Pressable>
         </View>
-        <View style={styles.profileWrap} {...cellRole}>
+        {/* The player is the row's header (walk 9 T3-02): moving down a
+            column, a screen reader names him before each figure, so his
+            button's name leaves the figures to their cells. */}
+        <View style={styles.profileWrap} {...(tableRoles ? ({ role: 'rowheader' } as object) : {})}>
         <Pressable
-          accessibilityLabel={label}
+          accessibilityLabel={tableRoles
+            ? rowHeaderLabel({
+              name: player.name,
+              tier: player.tier,
+              tag: position && !blocked ? tagText : null,
+              reason: blocked ? (busy && busyElsewhere ? busyElsewhere.reason : row.unavailableReason) : null,
+            })
+            : label}
           accessibilityRole="button"
           onPress={openProfile}
           style={({ pressed }) => [styles.profileArea, styles.profileAreaTable, { gap: columns.gap, paddingRight: columns.gap }, pressed && styles.pressed]}
@@ -946,9 +987,13 @@ function MarketRow({
         onPress={openProfile}
         style={({ pressed }) => [styles.profileArea, large && styles.profileAreaLarge, pressed && styles.pressed]}
       >
-        <View style={[styles.avatarBox, large && styles.avatarBoxLarge]}>
-          <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={PHONE_AVATAR} />
-        </View>
+        {/* Below 360px the photo gives its room to the name and price, so
+            every row keeps one height (walk 9 T4-07). */}
+        {large || phoneRowPhoto(width) ? (
+          <View style={[styles.avatarBox, large && styles.avatarBoxLarge]}>
+            <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={PHONE_AVATAR} />
+          </View>
+        ) : null}
         <View style={styles.rowContent}>
           {large ? (
             <>
@@ -1009,6 +1054,9 @@ export function PerGameMarketScreen({
   }), []);
   const { fontScale, height, width } = useWindowDimensions();
   const watchlist = useWatchlist();
+  // The practice games playing now ("Oct 21–27"), or null: moves pressed
+  // meanwhile wait for them, and the slot count says so (walk 9 T4-04).
+  const playingNow = usePracticePlaying();
   // Side, sort, search, Watching and your place in the list come back after a
   // tab switch or a rotation (marketViewMemory). A fresh request for a side
   // (the Roster's "Find a short") wins and starts that side at the top.
@@ -1168,6 +1216,13 @@ export function PerGameMarketScreen({
   // the sort in use chosen again, "Re-sort" on a tall table, or coming back
   // to the Market sorts for the latest night.
   const [sortedNight, setSortedNight] = useState(night);
+  // The first games are in: the laptop table's explainer sentence gives way
+  // (walk 9 T2-12). Read when the Market opens and when the view changes,
+  // never as a night lands, so nothing moves by itself.
+  const gamesIn = !isMockActive() || practiceProgress(mockSeasonStart(), bootstrap?.game.lastSettledDate).day > 0;
+  const gamesInRef = useRef(gamesIn);
+  gamesInRef.current = gamesIn;
+  const [sentenceGone, setSentenceGone] = useState(gamesIn);
   const orderKey = `${sort}|${reversed}|${side}|${query}|${watchedOnly}|${sortedNight}`;
   const orderRef = useRef<{ key: string; ids: readonly string[] } | null>(null);
   const { rows, orderMoved } = useMemo(() => {
@@ -1251,6 +1306,7 @@ export function PerGameMarketScreen({
     if (lastViewKey.current === viewKey) return;
     lastViewKey.current = viewKey;
     setSortedNight(nightRef.current);
+    setSentenceGone(gamesInRef.current);
   }, [viewKey]);
 
   // Your place in the list: the first player you can see, and the offset.
@@ -1259,6 +1315,18 @@ export function PerGameMarketScreen({
   const listEndRef = useRef<View>(null);
   const skipToEnd = useCallback(() => {
     (listEndRef.current as unknown as { focus?: () => void } | null)?.focus?.();
+  }, []);
+  // After the list, a way back up to the practice controls (walk 9 T3-N2:
+  // about forty Shift+Tabs from the 20th player at 200% zoom): +1 night,
+  // wherever the frame shows it, or its More button when folded.
+  const backToControls = useCallback(() => {
+    if (typeof document === 'undefined') return;
+    const buttons = Array.from(document.querySelectorAll('[role="button"], button')) as HTMLElement[];
+    const shown = (node: HTMLElement) => node.getClientRects().length > 0;
+    const named = (pattern: RegExp) => buttons.find((node) => pattern.test(node.getAttribute('aria-label') ?? node.textContent ?? '') && shown(node));
+    const target = named(/^\+1\s*night/i) ?? named(/^More\b/);
+    target?.focus();
+    target?.scrollIntoView?.({ block: 'nearest' });
   }, []);
   const place = useRef({ anchorId: remembered.anchorId, offset: remembered.offset });
   const rowsRef = useRef(rows);
@@ -1518,11 +1586,12 @@ export function PerGameMarketScreen({
   // (walk 8 T2-08); the saving line sits over an invisible copy of the plain
   // one, so the toolbar keeps its height while you tap.
   const savingCount = slotView.side === side ? slotView.saving.length : 0;
+  const waitingNow = playingNow !== null && savingCount > 0;
   const slotTextStyle = [styles.slotText, slotRight && styles.textRight];
   const slotCount = savingCount > 0 ? (
     <View style={styles.slotSaving}>
       <SameHeight ghosts={[<Text key="plain" maxFontSizeMultiplier={1.4} style={slotTextStyle}>{slotLine(side, { used: Math.min(slots.used + savingCount, slots.limit), limit: slots.limit })}</Text>]}>
-        <Text maxFontSizeMultiplier={1.4} style={slotTextStyle}>{slotLine(side, slots, savingCount)}</Text>
+        <Text maxFontSizeMultiplier={1.4} style={slotTextStyle}>{slotLine(side, slots, savingCount, waitingNow)}</Text>
       </SameHeight>
     </View>
   ) : (
@@ -1540,8 +1609,11 @@ export function PerGameMarketScreen({
         <Text maxFontSizeMultiplier={1.4} style={[styles.fullText, slotRight && styles.textRight]}>{unbrokenTail(status.text)}</Text>
       ) : null}
       {/* What a move costs, where the side is chosen (none while moves are locked or over). */}
+      {/* While moves wait for the games playing now, the line names them. */}
       {status.kind === null || status.kind === 'full' ? (
-        feeHint(side, fee) ? <Text maxFontSizeMultiplier={1.4} style={[styles.feeText, slotRight && styles.textRight]}>{feeLine(side, fee)}</Text> : null
+        waitingNow && playingNow
+          ? <Text maxFontSizeMultiplier={1.4} style={[styles.feeText, slotRight && styles.textRight]}>{waitingForLine(playingNow)}</Text>
+          : feeHint(side, fee) ? <Text maxFontSizeMultiplier={1.4} style={[styles.feeText, slotRight && styles.textRight]}>{feeLine(side, fee)}</Text> : null
       ) : null}
     </View>
   );
@@ -1573,6 +1645,19 @@ export function PerGameMarketScreen({
   // line, so switching sides never moves the table.
   const sideExplainer = (
     <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{side === 'short' ? shortWords : ROSTER_EXPLAINER}</Text>
+  );
+  // The order in one quiet line (walk 9 T4-10, T1-16, T2-12): on phones
+  // under the sort, on a laptop-height table in the sentence's place once the
+  // first games are in; a tall table keeps its sentence slot.
+  const compactSlot = wide && roomy && height < LAPTOP_HEIGHT_BELOW && sentenceGone;
+  const order = orderLine({ sort, reversed, heldNote });
+  const orderStrip = (
+    <OrderLine
+      reserve={order.reserve}
+      resort={order.resort ? { name: resortName(night), onPress: resortNow } : null}
+      text={order.text}
+      tone={order.tone}
+    />
   );
 
   // Anything else inside the table (a divider, the footer, an empty list)
@@ -1606,7 +1691,7 @@ export function PerGameMarketScreen({
         <Text accessibilityRole="header" {...headingLevel(1)}>Market</Text>
       </View>
       {rowToolbar ? (
-        <View style={[styles.controlsWide, !roomy && styles.controlsShort]}>
+        <View style={[styles.controlsWide, (!roomy || compactSlot) && styles.controlsShort]}>
           {sideToggle}
           {slotStatus}
           <MarketSearch onChange={setQuery} placeholder={searchPlaceholder} style={[styles.searchWide, wide && !roomy && styles.searchShort]} value={query} />
@@ -1658,13 +1743,16 @@ export function PerGameMarketScreen({
             {watchingToggle}
           </View>
           {sortToggle}
+          {orderStrip}
         </View>
       )}
       {/* On a tall desktop the unusual-order note takes the explainer's own
           slot, which always keeps a button's height, so pressing a column
           header again never pushes the table down under the pointer (walk 5
           T2-02: the header moved 44px and a third click missed). */}
-      {wide && roomy ? (
+      {compactSlot || (rowToolbar && !roomy) ? (
+        <View style={[styles.explainerWide, styles.orderSlot]}>{orderStrip}</View>
+      ) : wide && roomy ? (
         <View style={[styles.explainerWide, styles.explainerSlot]}>
           {heldNote ? (
             <View style={styles.flipNote}>
@@ -1678,7 +1766,7 @@ export function PerGameMarketScreen({
             </View>
           ) : sideExplainer}
         </View>
-      ) : reversed && (!folded || controlsOpen) ? (
+      ) : reversed && folded && controlsOpen ? (
         // On the list's gutter, with a reset that looks like the other small
         // outlined buttons (walk 5 T1-15: the note touched the screen edge).
         <View style={[styles.flipNote, styles.flipNoteGutter, folded && styles.flipNoteFolded]}>
@@ -1781,7 +1869,10 @@ export function PerGameMarketScreen({
       {pinned ? listHeader : null}
       {/* On a tall desktop the column labels and the rows are one table for
           screen readers (walk 8 T3-09); the labels stay put over the rows. */}
-      <View style={styles.list} {...(pinned ? ({ role: 'table', 'aria-label': listHeading(side, spokenCount, totalCount) } as object) : {})}>
+      {/* Above the toolbar in paint order, so a column's explanation, which
+          opens upward over the toolbar, is seen (walk 9 T2-01, T3-01); the
+          rows scroll inside the list, so they never reach the toolbar. */}
+      <View style={[styles.list, pinned && styles.listOverToolbar]} {...(pinned ? ({ role: 'table', 'aria-label': listHeading(side, spokenCount, totalCount) } as object) : {})}>
       {pinned && columnHeader ? <View style={styles.tableHeader}>{columnHeader}</View> : null}
       <FlatList
         contentContainerStyle={styles.content}
@@ -1796,6 +1887,7 @@ export function PerGameMarketScreen({
         ListFooterComponent={(
           <>
             {spanRow(resultCount > 0 ? <ListEnd label="End of the list" ref={listEndRef} /> : null)}
+            {spanRow(resultCount > 0 && isMockActive() ? <SkipLink label="Back to the practice controls" onPress={backToControls} /> : null)}
             {spanRow(watchingFooter ?? searchFooter)}
           </>
         )}
@@ -1891,6 +1983,10 @@ export function PerGameMarketScreen({
 const styles = StyleSheet.create({
   list: {
     flex: 1,
+  },
+  listOverToolbar: {
+    // Above the pinned toolbar's zIndex 1 (styles.header).
+    zIndex: 2,
   },
   content: {
     paddingBottom: 110,
@@ -2110,6 +2206,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: type.caption,
     fontWeight: weight.bold,
+  },
+  orderSlot: {
+    // One line (the order strip keeps its own height) under a toolbar with
+    // the short window's inset: a laptop's table shows a row more (T2-12).
+    minHeight: 0,
+    paddingBottom: 6,
+    marginTop: -space.sm,
   },
   explainerSlot: {
     // A quiet button's height, whichever it holds (sentence or order note).
@@ -2424,6 +2527,16 @@ const styles = StyleSheet.create({
   },
   buttonTextArmed: {
     color: colors.goldInk,
+  },
+  // "Waiting": a move held for the games playing now. Solid and neutral:
+  // not the green of a move that worked, not the dashed "not now".
+  buttonWaiting: {
+    borderStyle: 'solid',
+    borderColor: colors.controlBorder,
+  },
+  buttonTextWaiting: {
+    color: colors.text,
+    letterSpacing: 0,
   },
   stripTable: {
     // Under a wide row the strip keeps the row's inset and lines its buttons

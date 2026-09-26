@@ -102,8 +102,8 @@ const rows = [
 ];
 const ids = (list: { player: PerGameMarketPlayer }[]) => list.map((row) => row.player.playerId).join('');
 
-test('price sorts cheapest first', () => {
-  assert.equal(ids(sortMarketRows(rows, 'price', 'long')), 'cabed');
+test('price sorts highest first, like value (walk 9 T1-16)', () => {
+  assert.equal(ids(sortMarketRows(rows, 'price', 'long')), 'debac');
 });
 
 test('value sorts best last-season edge first and puts no last season last', () => {
@@ -477,10 +477,10 @@ test('choosing a sort never flips it; only the order button does (T1-08, T2-05, 
   assert.deepEqual(nextSortState({ sort: 'value', reversed: true }, { choose: 'value' }), { sort: 'value', reversed: true });
   assert.deepEqual(nextSortState({ sort: 'value', reversed: true }, { choose: 'name' }), { sort: 'name', reversed: false });
   assert.deepEqual(nextSortState({ sort: 'value', reversed: false }, 'flip'), { sort: 'value', reversed: true });
-  // Natural orders: Value and Dividend highest first, Price lowest first, Name A to Z.
+  // Natural orders: Price, Value and Dividend highest first, Name A to Z (walk 9 T1-16).
   assert.equal(orderButtonName('value', false), 'Order: highest first');
   assert.equal(orderButtonName('dividend', false), 'Order: highest first');
-  assert.equal(orderButtonName('price', false), 'Order: lowest first');
+  assert.equal(orderButtonName('price', false), 'Order: highest first');
   assert.equal(orderButtonName('name', false), 'Order: A to Z');
   assert.equal(orderButtonTitle('value', false), 'Order: highest first. Flip to lowest first.');
   // Labels carry no arrow; Dividend joins where the table shows its column, or while in use.
@@ -541,24 +541,24 @@ test('spoken rows say the tier as words, and held rows keep their value phrase (
   assert.match(rowProfileLabel({ name: 'Kon Knueppel', tier: 'role', price: 111_500, detail: 'No last season' }), /^Kon Knueppel, role player, /);
   const gillespie = { currentGameCost: 126_500, priorSeasonValuePerGame: 120_000 };
   // Held at the price you locked (walk 5 T4-02): today's price is said after it.
-  assert.equal(heldValuePhrase(gillespie, 'long', 126_500), 'value -$6.5K a game at your price, last season $120K a game, now $126.5K a game');
-  assert.equal(heldValuePhrase(gillespie, 'short', 126_500), 'value +$6.5K a game at your price, last season $120K a game, now $126.5K a game');
+  assert.equal(heldValuePhrase(gillespie, 'long', 126_500), 'last season -$6.5K a game at your price, dividend $120K a game, now $126.5K a game');
+  assert.equal(heldValuePhrase(gillespie, 'short', 126_500), 'last season +$6.5K a game at your price, dividend $120K a game, now $126.5K a game');
   assert.equal(heldValuePhrase({ currentGameCost: 90_000, priorSeasonValuePerGame: null }, 'long', 89_000), 'no last season, now $90K a game');
 });
 
 test('a reversed sort runs the other way, words included; no last season still goes last (T2-N03)', () => {
-  assert.equal(ids(sortMarketRows(rows, 'price', 'long', true)), 'debac');
+  assert.equal(ids(sortMarketRows(rows, 'price', 'long', true)), 'cabed');
   assert.equal(ids(sortMarketRows(rows, 'value', 'long', true)), 'dbeac');
   assert.equal(ids(sortMarketRows(rows, 'name', 'long', true)), 'ecabd');
   // Plain direction words (T3-18): "highest first", not "dearest first".
-  assert.equal(sortedLine('price', true), 'Sorted by price, highest first.');
-  assert.equal(sortedLine('price'), 'Sorted by price, lowest first.');
+  assert.equal(sortedLine('price', true), 'Sorted by price, lowest first.');
+  assert.equal(sortedLine('price'), 'Sorted by price, highest first.');
   assert.equal(sortedLine('value'), 'Sorted by value, highest first.');
   assert.equal(sortedLine('value', true), 'Sorted by value, lowest first.');
   assert.equal(sortedLine('name', true), 'Sorted by name, Z to A.');
   assert.equal(sortDirection('value'), 'highest first');
-  // The arrow (and the header's spoken order) follows this: Price and Name start ascending, Value descending.
-  assert.equal(sortAscending('price'), true);
+  // The arrow (and the header's spoken order) follows this: Name starts ascending, Price and Value descending.
+  assert.equal(sortAscending('price'), false);
   assert.equal(sortAscending('value'), false);
   assert.equal(sortAscending('value', true), true);
   assert.equal(sortAscending('name', true), false);
@@ -642,11 +642,11 @@ test('a held row measures Value at the price you locked, and sorts by the figure
   const doncic = { currentGameCost: 418_500, priorSeasonValuePerGame: 488_500 };
   assert.equal(rowValueEdge(doncic, 'long', { lockedGameCost: 417_500 }), 71_000);
   assert.equal(rowValueEdge(doncic, 'long', null), 70_000, 'unheld: today\'s price');
-  assert.deepEqual(heldValueLine(doncic, 'long', 417_500), { edge: 71_000, value: 'Value +$71K at your price', now: 'now $418.5K', tone: 'gain' });
+  assert.deepEqual(heldValueLine(doncic, 'long', 417_500), { edge: 71_000, value: 'Last season +$71K at your price', now: 'now $418.5K', tone: 'gain' });
   // A held short: locked credit minus his dividend.
-  assert.equal(heldValueLine({ currentGameCost: 150_000, priorSeasonValuePerGame: 120_000 }, 'short', 140_000).value, 'Value +$20K at your price');
+  assert.equal(heldValueLine({ currentGameCost: 150_000, priorSeasonValuePerGame: 120_000 }, 'short', 140_000).value, 'Last season +$20K at your price');
   assert.equal(heldValueLine({ currentGameCost: 90_000, priorSeasonValuePerGame: null }, 'long', 89_500).value, 'No last season');
-  assert.equal(heldValueLine({ currentGameCost: 100_200, priorSeasonValuePerGame: 100_000 }, 'long', 100_000).value, 'Value even at your price');
+  assert.equal(heldValueLine({ currentGameCost: 100_200, priorSeasonValuePerGame: 100_000 }, 'long', 100_000).value, 'Last season even at your price');
   // Value sort: a held row sorts by its value at your price (+$71K), above a +$70.5K row at today's.
   const market = [
     { player: player({ playerId: 'x', currentGameCost: 100_000, priorSeasonValuePerGame: 170_500 }), position: null },

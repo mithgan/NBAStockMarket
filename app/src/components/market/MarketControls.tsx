@@ -342,11 +342,67 @@ export function MarketColumnHeader({
   // One explanation at a time, the most recent of hover or keyboard focus;
   // Escape hides it while focus stays (walk 5 T3-12, WCAG 1.4.13).
   const [tip, setTip] = useState<{ key: TipKey; by: TipSource } | null>(null);
+  // Hover waits a moment, so a pointer crossing the labels on its way to a
+  // sort does not flash each explanation (walk 9 T2-01); once one shows, its
+  // neighbours show at once. Leaving waits a beat too, so the pointer can
+  // move onto the explanation to read it (WCAG 1.4.13); focus is at once.
+  const hoverWait = useRef<{ show: ReturnType<typeof setTimeout> | null; hide: ReturnType<typeof setTimeout> | null }>({ show: null, hide: null });
+  const tipRef = useRef(tip);
+  tipRef.current = tip;
+  const clearWait = (which: 'show' | 'hide') => {
+    const timer = hoverWait.current[which];
+    if (timer) clearTimeout(timer);
+    hoverWait.current[which] = null;
+  };
+  const cancelHover = () => {
+    clearWait('show');
+    clearWait('hide');
+  };
   const onTip = (key: TipKey, by: TipSource, on: boolean) => {
-    if (by === 'escape') setTip(null);
-    else if (on) setTip({ key, by });
+    if (by === 'escape') {
+      cancelHover();
+      setTip(null);
+      return;
+    }
+    if (by === 'hover') {
+      const current = tipRef.current;
+      if (on) {
+        clearWait('hide');
+        clearWait('show');
+        if (current?.key === key) return;
+        if (current) {
+          setTip({ key, by });
+          return;
+        }
+        hoverWait.current.show = setTimeout(() => {
+          hoverWait.current.show = null;
+          setTip({ key, by });
+        }, TIP_HOVER_DELAY_MS);
+        return;
+      }
+      clearWait('show');
+      clearWait('hide');
+      hoverWait.current.hide = setTimeout(() => {
+        hoverWait.current.hide = null;
+        setTip((shown) => (shown && shown.key === key && shown.by === 'hover' ? null : shown));
+      }, TIP_LEAVE_GRACE_MS);
+      return;
+    }
+    if (on) setTip({ key, by });
     else setTip((current) => (current && current.key === key && current.by === by ? null : current));
   };
+  useEffect(() => () => cancelHover(), []);
+  // Escape hides a shown explanation wherever focus is, a hovered one too
+  // (WCAG 1.4.13: dismissed without moving the pointer).
+  const tipShown = tip !== null;
+  useEffect(() => {
+    if (!tipShown || typeof document === 'undefined') return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setTip(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [tipShown]);
   return (
     // A row of sort buttons over the list, not a table: the player rows are
     // buttons, not table rows, so a table role promised navigation it could
@@ -410,6 +466,36 @@ export function MarketColumnHeader({
 
 let explainIds = 0;
 
+/** How long the pointer rests on a column label before its explanation shows. */
+const TIP_HOVER_DELAY_MS = 350;
+/** How long an explanation stays after the pointer leaves, so it can move onto it. */
+const TIP_LEAVE_GRACE_MS = 150;
+
+/**
+ * A column's explanation: a solid panel over the toolbar, just above its
+ * label, with a caret pointing down at it (walk 9 T2-01, T3-01: it used to
+ * be painted under the toolbar, so nobody saw it). The table lifts its
+ * header above the toolbar for it (PerGameMarketScreen).
+ */
+function ColumnTip({ id, text, shown, onHover }: { id: string; text: string; shown: boolean; onHover: (on: boolean) => void }) {
+  return (
+    // The pointer can rest on it to read it (it stays while hovered); it
+    // takes no focus and no press.
+    <Pressable
+      accessible={false}
+      focusable={false}
+      onHoverIn={() => onHover(true)}
+      onHoverOut={() => onHover(false)}
+      style={[styles.explain, !shown && styles.explainHidden]}
+      // Never a Tab stop: its words are the label's description already.
+      {...({ tabIndex: -1 } as object)}
+    >
+      <Text nativeID={id} style={styles.explainText}>{text}</Text>
+      <View style={styles.caret} />
+    </Pressable>
+  );
+}
+
 type TipSource = 'hover' | 'focus' | 'escape';
 /** A column that explains itself: the sortable ones, and "Your profit a game". */
 type TipKey = MarketSort | 'yours';
@@ -463,9 +549,7 @@ function PlainHeader({
       >
         <Text maxFontSizeMultiplier={1.4} style={[styles.headerText, styles.headerTextNumber, styles.headerTextShrink]}>{label}</Text>
       </Pressable>
-      <View pointerEvents="none" style={[styles.explain, !tipShown && styles.explainHidden]}>
-        <Text nativeID={explainId} style={styles.explainText}>{explain}</Text>
-      </View>
+      <ColumnTip id={explainId} onHover={(on) => onTip('yours', 'hover', on)} shown={tipShown} text={explain} />
     </View>
   );
 }
@@ -556,11 +640,7 @@ function SortHeader({
           {mark}
         </Text>
       </Pressable>
-      {explain ? (
-        <View pointerEvents="none" style={[styles.explain, !tipShown && styles.explainHidden]}>
-          <Text nativeID={explainId} style={styles.explainText}>{explain}</Text>
-        </View>
-      ) : null}
+      {explain ? <ColumnTip id={explainId} onHover={(on) => onTip?.(columnKey, 'hover', on)} shown={tipShown} text={explain} /> : null}
     </View>
   );
 }
@@ -817,10 +897,10 @@ const styles = StyleSheet.create({
   },
   explain: {
     // Above the label, over the toolbar's sentence, so it never covers the
-    // first row's figures (walk 5 T3-12).
+    // first row's figures (walk 5 T3-12); the caret below points at the label.
     position: 'absolute',
     bottom: '100%',
-    marginBottom: 2,
+    marginBottom: 7,
     right: 0,
     zIndex: 5,
     width: 220,
@@ -833,6 +913,20 @@ const styles = StyleSheet.create({
   },
   explainHidden: {
     display: 'none',
+  },
+  caret: {
+    // A square turned on its point, half out of the panel's bottom edge: its
+    // two lower edges carry the panel's border (visible in forced colours too).
+    position: 'absolute',
+    bottom: -6,
+    right: 14,
+    width: 11,
+    height: 11,
+    transform: [{ rotate: '45deg' }],
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceRaised,
   },
   explainText: {
     color: colors.text,
