@@ -210,7 +210,8 @@ test('a held row reads the current position only, like its Roster row (grader B1
   // The Roster's precision (grader S-2): -$368.3K, not -$368K.
   assert.deepEqual(detail, { text: '-$368.3K a game over 1 game', tone: 'loss' });
   // Right after a re-add, before the new stint plays: the locked price, not the old stint.
-  assert.deepEqual(heldDetail(positionValue(all, 'mock-position-13'), 104_250), { text: 'locked at $104.3K', tone: 'none' });
+  // Right after a re-add the price box shows "yours $104.3K"; the line says no games yet.
+  assert.deepEqual(heldDetail(positionValue(all, 'mock-position-13'), 104_250), { text: 'no games yet', tone: 'none' });
   assert.doesNotMatch(detail.text, /so far/);
 });
 

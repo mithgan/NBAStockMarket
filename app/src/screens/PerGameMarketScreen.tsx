@@ -320,10 +320,16 @@ function MarketRow({
   const large = layout === 'large';
   const actionWidth = table ? columns.action : PHONE_ACTION_WIDTH;
 
+  // A held row: your result so far, then his Value on this side, in the
+  // line the row keeps for it (it used to sit empty; walk 4 T4-03).
+  const heldValue = signal.edge === null ? 'no last season' : `Value ${signedMoneyCompact(signal.edge)} a game`;
   const heldLine = (text: string, tone: SignalTone) => (
     <View style={styles.detailLine}>
       <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.heldText]}>{`${sideTag(side)} ·`}</Text>
-      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[tone] }]}>{text}</Text>
+      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[tone] }]}>{`${text} ·`}</Text>
+      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[signal.edge === null ? 'none' : signal.tone] }]}>
+        {heldValue}
+      </Text>
     </View>
   );
   const unheldLine = (
@@ -348,7 +354,18 @@ function MarketRow({
     <SameHeight ghosts={[heldLine(heldDetail(undefined, currentGameCost).text, 'none')]}>{unheldLine}</SameHeight>
   );
 
-  const priceBox = (
+  // A held row leads with the price you locked: the big figure used to be
+  // today's market price, which moved when you added him (walk 4 T1-19).
+  // Today's price is in his profile; a second line here would make the row
+  // taller than its unheld self and move the rows below.
+  const lockedPrice = position ? perGameShort(position.lockedGameCost).split('/')[0] : null;
+  const priceBox = position && lockedPrice ? (
+    <View style={styles.priceBox}>
+      <Text maxFontSizeMultiplier={1.6} style={styles.priceUnit}>{'yours '}</Text>
+      <Text maxFontSizeMultiplier={1.6} style={styles.price}>{lockedPrice}</Text>
+      <Text maxFontSizeMultiplier={1.6} style={styles.priceUnit}>{`/${priceUnit}`}</Text>
+    </View>
+  ) : (
     <View style={styles.priceBox}>
       <Text maxFontSizeMultiplier={1.6} style={styles.price}>{priceAmount}</Text>
       <Text maxFontSizeMultiplier={1.6} style={styles.priceUnit}>{`/${priceUnit}`}</Text>
@@ -558,7 +575,9 @@ function MarketRow({
               {position ? <Tag style={styles.kickerTag}>{tagText}</Tag> : null}
             </View>
             <Text maxFontSizeMultiplier={1.4} style={styles.surname}>{nameLine}</Text>
-            {columns.yours === 0 && position && held ? (
+            {/* The result once he has played; the locked price is "Yours" under
+                the price, said once per row (walk 4 T2-11). */}
+            {columns.yours === 0 && position && held && currentValue && currentValue.games > 0 ? (
               <Text maxFontSizeMultiplier={1.4} style={[styles.detailText, { color: TONE_COLOR[held.tone] }]}>{held.text}</Text>
             ) : null}
           </View>
@@ -594,7 +613,8 @@ function MarketRow({
               {position && currentValue && currentValue.avgNet !== null && currentValue.games > 0 ? (
                 <>
                   <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, { color: TONE_COLOR[netTone(currentValue.avgNet)] }]}>
-                    {signedMoneyFine(currentValue.avgNet)}
+                    {/* The Roster's per-game precision (walk 4 T4-13). */}
+                    {signedMoneyCompact(currentValue.avgNet)}
                   </Text>
                   <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>
                     {currentValue.games === 1 ? '1 game' : `${currentValue.games} games`}

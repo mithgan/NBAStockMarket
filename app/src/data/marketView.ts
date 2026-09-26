@@ -16,12 +16,10 @@ import {
   closeVerb,
   exactMoney,
   money,
-  moneyFine,
   openVerb,
   perGame,
   rosterReopensLine,
   signedMoney,
-  signedMoneyFine,
   moneyCompact,
   signedMoneyCompact,
 } from '../copy/terms';
@@ -411,13 +409,15 @@ export function heldDetail(summary: ValueSummary | undefined, lockedGameCost: nu
   tone: SignalTone;
 } {
   if (summary && summary.avgNet !== null && summary.games > 0) {
-    // The Roster's precision, so the same figure reads the same on both screens.
+    // The Roster's per-game precision ("+$1.5K a game", not "+$1,473"), so
+    // the same figure reads the same on both screens (walk 4 T4-13).
     return {
-      text: `${signedMoneyFine(summary.avgNet)} a game over ${summary.games === 1 ? '1 game' : `${summary.games} games`}`,
+      text: `${signedMoneyCompact(summary.avgNet)} a game over ${summary.games === 1 ? '1 game' : `${summary.games} games`}`,
       tone: netTone(summary.avgNet),
     };
   }
-  return { text: `locked at ${moneyFine(lockedGameCost)}`, tone: 'none' };
+  // His price box already shows your locked price ("yours $104.3K").
+  return { text: 'no games yet', tone: 'none' };
 }
 
 /**
