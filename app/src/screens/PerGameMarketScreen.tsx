@@ -18,6 +18,7 @@ import { LockIcon, StarIcon } from '../components/market/icons';
 import { listenForActivations, pressedInScreen } from '../components/market/lastActivation';
 import { spaceToggles } from '../components/market/switchKeys';
 import { useAriaDisabled } from '../components/market/useAriaDisabled';
+import { pressedByPointer } from '../web/tapSettle';
 import { ControlsToggle, MarketColumnHeader, MarketSearch, SortControl, WatchingToggle } from '../components/market/MarketControls';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
@@ -51,6 +52,7 @@ import {
   fullNote,
   headerStatus,
   heldDetail,
+  heldPriceCaption,
   heldValueLine,
   heldValuePhrase,
   isSeasonOver,
@@ -67,6 +69,8 @@ import {
   netTone,
   nextSortState,
   slotLineBeside,
+  foldedSlotBeside,
+  fullTierFits,
   rowActions,
   rowKicker,
   rowProfileLabel,
@@ -85,7 +89,12 @@ import {
   sortedLine,
   sortMarketRows,
   keepListOrder,
+  RESORT_AFTER_MS,
+  resortedLine,
+  sameOrder,
+  shortTermLine,
   unheldValueLines,
+  watchingLine,
   VALUE_ONE_LINE_MIN_WIDTH,
   valueByPosition,
   valueSignal,
@@ -104,7 +113,7 @@ import { requestRosterPick } from '../state/uiActions';
 import { useWatchlist } from '../state/watchlist';
 import { colors, control, fonts, labelStyle, space, type, weight } from '../theme';
 import { rowMarker } from '../ui/domMarkers';
-import { Button, ConfirmStrip, EmptyState, headingLevel, Segmented, Tag, tapsSettling, useCooldown, visuallyHidden } from '../ui/kit';
+import { Button, ConfirmStrip, EmptyState, headingLevel, repeatSafe, Segmented, settleTaps, Tag, tapsSettling, useCooldown, visuallyHidden } from '../ui/kit';
 
 // Start listening at load, so the press that first opens the Market is seen.
 listenForActivations();
@@ -119,6 +128,12 @@ const STAR_LEAD = space.sm + control.height + space.sm - space.lg - 12;
 const PHONE_AVATAR = 34;
 /** Phone row padding: 44px band + one value line keeps six rows above the fold. */
 const ROW_PAD = 6;
+/** A second press on Drop/Close this soon after it opened its question is the same tap bouncing (the Roster's 400 ms). */
+const QUESTION_DOUBLE_TAP_MS = 400;
+/** Rows ignore taps this long after a night's re-sort moves them, as after a move. */
+const RESORT_QUIET_MS = 300;
+/** A press this recent (or a finger still down) puts off the re-sort a little. */
+const RESORT_PRESS_GAP_MS = 450;
 
 /** The tag a player carries when he is held on a side. */
 function sideTag(side: PerGamePositionSide): 'On your roster' | 'Shorted' {
@@ -138,6 +153,30 @@ function unbrokenTail(text: string): string {
 function afterPaint(run: () => void): void {
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(run, 0));
   else setTimeout(run, 0);
+}
+
+/** The row's hover marker, plus its player (`data-player`), so the list can find its place by player. */
+function playerMarker(playerId: string): object {
+  return rowMarker.dataSet ? { dataSet: { ...rowMarker.dataSet, player: playerId } } : rowMarker;
+}
+
+type AnchorNode = {
+  getBoundingClientRect: () => { top: number; bottom: number };
+  querySelectorAll: (selector: string) => ArrayLike<AnchorNode & { getAttribute: (name: string) => string | null }>;
+  scrollTop: number;
+};
+
+/** The list's first visible player and how far his row's top sits below the list's top (web). */
+function readAnchor(node: AnchorNode | undefined): { id: string; dy: number } | null {
+  if (!node?.querySelectorAll) return null;
+  const top = node.getBoundingClientRect().top;
+  const rows = node.querySelectorAll('[data-player]');
+  for (let index = 0; index < rows.length; index += 1) {
+    const rect = rows[index].getBoundingClientRect();
+    const id = rows[index].getAttribute('data-player');
+    if (id && rect.bottom > top + 1) return { id, dy: rect.top - top };
+  }
+  return null;
 }
 
 /** Why a locked button is dimmed, in the app's one lock sentence. */
@@ -192,6 +231,7 @@ function MarketRow({
   wholeNames,
   seasonOver,
   width,
+  fullTier,
   onOpenProfile,
   onAnnounce,
   watched,
@@ -217,6 +257,8 @@ function MarketRow({
   seasonOver: boolean;
   /** The screen width: below 380px the kicker leaves out the tier. */
   width: number;
+  /** The list says "Role player" at this width (fullTierFits), else "Role" on every row. */
+  fullTier: boolean;
   onOpenProfile: (playerId: string) => void;
   onAnnounce: (message: string) => void;
   /** On your watchlist; the table row carries a star to change it in place. */
@@ -242,16 +284,22 @@ function MarketRow({
   const priorSeasonValuePerGame = player.priorSeasonValuePerGame;
   const { given, surname } = splitPlayerName(player.name);
   const whole = (text: string) => (wholeNames ? unbrokenName(text) : text);
-  const kicker = whole(rowKicker(given, player.tier, width));
-  // A phone row names the tier on every row, held or not: beside the given
-  // name where it fits beside the price, after the surname otherwise, in its
-  // short form ("Role") where the full one does not fit (walk 5 T1-03).
+  // One tier word per list: a narrow table's held rows need "Role" beside
+  // their chip, so every row there says "Role" (walk 6 T1-01, T4-03).
+  const tableTier = columns.yours === 0 ? shortTierLabel(player.tier) : tierLabel(player.tier);
+  const kicker = whole(layout === 'table'
+    ? (tableTier ? `${given}\u00A0· ${tableTier}` : given)
+    : rowKicker(given, player.tier, width));
+  // A phone row names the tier on every row, held or not, in the list's one
+  // word for this width and in one place for this width: beside the given
+  // name from 380px (a long given name is cut short first), after the
+  // surname below that (walk 6 T4-06; walk 5 T1-03).
   const phone = layout === 'phone';
-  const phoneTier = rowTier({ given, surname, tier: player.tier, width });
+  const phoneTier = rowTier({ given, tier: player.tier, width, fullTier });
   // Below 380px (the large-text row) the tier follows the surname, so every
   // width says the same thing. The chevron says the row opens more.
   const tierAfter = phone
-    ? phoneTier.after
+    ? (phoneTier.place === 'after' ? phoneTier.tier : '')
     : width < KICKER_TIER_MIN_WIDTH && player.tier ? tierLabel(player.tier) : '';
   const nameLine = (
     <>
@@ -310,9 +358,18 @@ function MarketRow({
     (actionRef.current as unknown as { focus?: () => void } | null)?.focus?.();
   }, [confirming, noting]);
   // The button rests (dimmed, taps ignored, still in the Tab order) while it
-  // cannot act, and says so to assistive tech.
-  const resting = disabled || justOpened || justClosed || confirming;
+  // cannot act, and says so to assistive tech. With its question open it does
+  // not rest: it looks pressed, as on the Roster, and a second tap folds the
+  // question like Keep (walk 6 T4-05, T1-14: dashed read as "you can't").
+  const resting = disabled || justOpened || justClosed;
   useAriaDisabled(actionRef, resting);
+  const askedAt = useRef(0);
+  useEffect(() => {
+    const node = actionRef.current as unknown as { setAttribute?: (name: string, value: string) => void; removeAttribute?: (name: string) => void } | null;
+    if (!node?.setAttribute || !node.removeAttribute) return;
+    if (position) node.setAttribute('aria-expanded', confirming ? 'true' : 'false');
+    else node.removeAttribute('aria-expanded');
+  });
   const word = actionWord({
     side,
     held: shownHeld,
@@ -407,15 +464,23 @@ function MarketRow({
   // "yours $X") and not held (given name and tier, today's price). Each is
   // drawn over an invisible copy of the other, so adding or dropping him
   // never changes the row's height, whichever one wraps.
-  const kickerLine = (kickerText: string, box: ReactNode) => (
+  // The given name gives way (cut short) before the tier or the price move.
+  const kickerWords = (
+    <View style={styles.kickerParts}>
+      <Text maxFontSizeMultiplier={1.6} numberOfLines={1} style={[styles.kicker, styles.kickerGiven]}>{whole(given)}</Text>
+      {phoneTier.place === 'kicker' && phoneTier.tier ? (
+        <Text maxFontSizeMultiplier={1.6} numberOfLines={1} style={[styles.kicker, styles.kickerTier]}>{`\u00A0· ${phoneTier.tier}`}</Text>
+      ) : null}
+    </View>
+  );
+  const kickerLine = (box: ReactNode) => (
     <View style={styles.kickerPriceLine}>
-      <Text maxFontSizeMultiplier={1.6} style={[styles.kicker, styles.kickerShrink]}>{kickerText}</Text>
+      {kickerWords}
       <View style={styles.priceEnd}>{box}</View>
     </View>
   );
-  const phoneKicker = whole(phoneTier.kicker);
-  const heldTop = kickerLine(phoneKicker, heldPriceBox(position ? perGameShort(position.lockedGameCost).split('/')[0] : priceAmount));
-  const unheldTop = kickerLine(phoneKicker, marketPriceBox);
+  const heldTop = kickerLine(heldPriceBox(position ? perGameShort(position.lockedGameCost).split('/')[0] : priceAmount));
+  const unheldTop = kickerLine(marketPriceBox);
   const topLine = position
     ? <SameHeight ghosts={[unheldTop]}>{heldTop}</SameHeight>
     : <SameHeight ghosts={[heldTop]}>{unheldTop}</SameHeight>;
@@ -468,10 +533,10 @@ function MarketRow({
               : word === 'Full'
                 ? fullActionName(side, player.name)
                 : actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}
-          // While the confirm strip is open the row's own button rests, so a
-          // second tap in the same spot does nothing. FULL and LOCKED rest
-          // too, drawn alike (dashed, full-contrast words): not now, press to
-          // learn why (walk 4 T4-14, T1-24).
+          // While the confirm strip is open the row's own button looks
+          // pressed and a later tap folds it (a bounce does nothing). FULL
+          // and LOCKED rest, drawn alike (dashed, full-contrast words): not
+          // now, press to learn why (walk 4 T4-14, T1-24).
           disabled={resting}
           // "Added ✓" / "Dropped ✓": a move that just worked, in the success
           // colour, never the dashed "unavailable" look (walk 4 T2-03).
@@ -492,8 +557,16 @@ function MarketRow({
           onPress={() => {
             if (disabled) return;
             if (justOpened || justClosed) return;
-            if (confirming) return;
+            if (confirming) {
+              // A double tap's second press must not fold the question the
+              // first one opened; a later tap folds it, as Keep does.
+              if (Date.now() - askedAt.current < QUESTION_DOUBLE_TAP_MS) return;
+              closeStrip();
+              onAnnounce(keptAnnouncement(side, player.name));
+              return;
+            }
             if (position) {
+              askedAt.current = Date.now();
               setConfirming(true);
             } else {
               lastAction.current = 'open';
@@ -514,8 +587,8 @@ function MarketRow({
             }
           }}
           // "Dropped ✓" and "Shorted ✓" fit the phone button on one line (walk 5 T4-03).
-          style={!table ? [styles.phoneButton, (justOpened || justClosed) && styles.phoneButtonDone] : undefined}
-          textStyle={[styles.buttonText, (justOpened || justClosed) && styles.buttonTextDone]}
+          style={[!table && styles.phoneButton, !table && (justOpened || justClosed) && styles.phoneButtonDone, confirming && styles.buttonArmed]}
+          textStyle={[styles.buttonText, (justOpened || justClosed) && styles.buttonTextDone, confirming && styles.buttonTextArmed]}
           width={large ? undefined : actionWidth}
         />
       )}
@@ -588,14 +661,15 @@ function MarketRow({
   const keptLine = dimmed ? (
     <View style={[styles.keptLine, table && styles.stripTable]}>
       {/* Names him, so the line reads whole beside a dimmed row (walk 4 T2-14). */}
-      <Text maxFontSizeMultiplier={1.4} style={styles.keptText}>{`No longer watching ${given}\u00A0·`}</Text>
+      {/* His full name, then the way back; no dangling "·" (walk 6 T2-12). */}
+      <Text maxFontSizeMultiplier={1.4} style={styles.keptText}>{`No longer watching ${whole(player.name)}`}</Text>
       <Button
         accessibilityLabel={`Watch ${player.name} again`}
         label="Watch again"
-        onPress={() => {
+        onPress={repeatSafe(() => {
           rewatched.current = true;
           onToggleWatch(player.playerId);
-        }}
+        })}
         variant="quiet"
       />
     </View>
@@ -605,15 +679,16 @@ function MarketRow({
     const tableEdge = rowValueEdge(player, side, position);
     return (
       <>
-      <View style={[styles.row, styles.rowTable, dimmed && styles.rowDimmed]} {...rowMarker}>
+      <View style={[styles.row, styles.rowTable, dimmed && styles.rowDimmed]} {...playerMarker(player.playerId)}>
         <Pressable
           ref={starRef}
           accessibilityLabel={`Watch ${player.name}`}
           accessibilityRole="switch"
           accessibilityState={{ checked: watched }}
           aria-checked={watched}
-          onPress={() => onToggleWatch(player.playerId)}
-          {...spaceToggles(() => onToggleWatch(player.playerId))}
+          // A double tap stars him once (walk 6 T4-11).
+          onPress={repeatSafe(() => onToggleWatch(player.playerId))}
+          {...spaceToggles(repeatSafe(() => onToggleWatch(player.playerId)))}
           style={({ pressed }) => [styles.starCell, pressed && styles.pressed]}
         >
           <StarIcon filled={watched} size={18} />
@@ -631,9 +706,12 @@ function MarketRow({
                 word to keep the chip on the kicker's line (it is still spoken). */}
             <View style={styles.kickerLine}>
               <Text maxFontSizeMultiplier={1.4} style={styles.kicker}>
-                {position && columns.yours === 0 ? whole(shortTierLabel(player.tier) ? `${given}\u00A0· ${shortTierLabel(player.tier)}` : given) : kicker}
+                {kicker}
               </Text>
-              {position ? <Tag style={styles.kickerTag}>{tagText}</Tag> : null}
+              {/* A narrow table's chip is one short word, so it stays on the
+                  kicker's line beside "Scottie · Starter" and a held row keeps
+                  the list's one height (walk 6 T2-14: 76px beside 60px). */}
+              {position ? <Tag style={styles.kickerTag}>{columns.yours === 0 && side === 'long' ? 'Yours' : tagText}</Tag> : null}
             </View>
             <Text maxFontSizeMultiplier={1.4} style={styles.surname}>{nameLine}</Text>
             {/* The result once he has played; the locked price is "Yours" under
@@ -646,10 +724,8 @@ function MarketRow({
             {/* A held row leads with your price, as on phones (walk 5 T2-16);
                 today's sits under it when your add has nudged it. */}
             <Text maxFontSizeMultiplier={1.4} style={styles.cellValue}>{money(position ? position.lockedGameCost : currentGameCost)}</Text>
-            {position && position.lockedGameCost !== currentGameCost ? (
-              <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>{`yours · now ${money(currentGameCost)}`}</Text>
-            ) : position ? (
-              <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>yours, locked in</Text>
+            {position ? (
+              <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>{heldPriceCaption(position.lockedGameCost, currentGameCost)}</Text>
             ) : null}
           </View>
           {/* No last season: one calm dash in both columns (the row's name says it in words). */}
@@ -697,7 +773,12 @@ function MarketRow({
                     {pastValue.games === 1 ? '1 past game' : `${pastValue.games} past games`}
                   </Text>
                 </>
-              ) : null /* Nothing of yours here: an empty cell, not a wall of dashes (walk 5 T2-03). */}
+              ) : (
+                // Not yours: one quiet dash, as the other columns mark an empty
+                // cell, and said in words (walk 6 T2-03: a blank column read
+                // like one that failed to load).
+                <Text accessibilityLabel="not held" maxFontSizeMultiplier={1.4} style={[styles.cellValue, styles.cellQuiet]}>—</Text>
+              )}
             </View>
           ) : null}
         </Pressable>
@@ -712,7 +793,7 @@ function MarketRow({
 
   return (
     <>
-    <View style={[styles.row, large && styles.rowLarge, dimmed && styles.rowDimmed]} {...rowMarker}>
+    <View style={[styles.row, large && styles.rowLarge, dimmed && styles.rowDimmed]} {...playerMarker(player.playerId)}>
       <Pressable
         ref={profileRef}
         accessibilityLabel={label}
@@ -832,6 +913,26 @@ export function PerGameMarketScreen({
     setControlsOpen(false);
     setTimeout(() => (controlsToggleRef.current as unknown as { focus?: () => void } | null)?.focus?.(), 0);
   }, []);
+  // Opened from the keyboard, the panel puts focus in its search box, so
+  // typing searches at once (walk 6 T3-02); a tap leaves focus where it was.
+  const openedByKey = useRef(false);
+  const toggleControls = useCallback(() => {
+    const opening = !controlsOpenRef.current;
+    openedByKey.current = opening && !pressedByPointer();
+    setControlsOpen(opening);
+  }, []);
+  const controlsOpenRef = useRef(controlsOpen);
+  controlsOpenRef.current = controlsOpen;
+  // Escape anywhere in the open panel, the toggle included, folds it and
+  // returns focus to the toggle; the search box's own Escape clears a search
+  // first (MarketSearch).
+  const foldedKeys = useMemo(() => ({
+    onKeyDown: (event: { key: string; target?: unknown }) => {
+      if (event.key !== 'Escape' || !controlsOpenRef.current) return;
+      if ((event.target as { tagName?: string } | undefined)?.tagName === 'INPUT') return;
+      closeControls();
+    },
+  }), [closeControls]);
   // A short window (a phone turned sideways) gets the phone rows, which label
   // their own figures, so the table only shows where its labels fit.
   const layout = marketLayout(width, fontScale, height);
@@ -856,13 +957,28 @@ export function PerGameMarketScreen({
     () => (bootstrap ? buildPerGameMarketRows(bootstrap, side) : []),
     [bootstrap, side],
   );
+  // The longest given name on either side decides the tier word for a width.
+  const longestGiven = useMemo(
+    () => (bootstrap?.market ?? []).reduce((most, entry) => Math.max(most, splitPlayerName(entry.name).given.length), 0),
+    [bootstrap?.market],
+  );
+  const fullTier = fullTierFits(width, longestGiven);
   // The list keeps its order while the player works through it: an Add
   // nudges that player's price (and so his value), and a re-sort swapped
   // rows under the finger (Barnes and Booker traded places after an Add).
-  // A new sort, side, search, filter or night sorts afresh; so does coming
-  // back to the Market.
-  const orderKey = `${sort}|${reversed}|${side}|${query}|${watchedOnly}|${bootstrap?.game.lastSettledDate ?? ''}`;
+  // A new sort, side, search or filter sorts afresh; so does coming back to
+  // the Market. A night re-sorts a moment later (below).
+  const night = bootstrap?.game.lastSettledDate ?? '';
+  // The night the list's order was sorted for. After +1 night the list keeps
+  // its order until the player scrolls, changes the view, or about a second
+  // passes, so a tap aimed a moment before lands on the player it was aimed
+  // at (walk 6 T4-13: Booker's Add opened Barnes's profile).
+  const [sortedNight, setSortedNight] = useState(night);
+  const [resortNote, setResortNote] = useState<string | null>(null);
+  const orderKey = `${sort}|${reversed}|${side}|${query}|${watchedOnly}|${sortedNight}`;
   const orderRef = useRef<{ key: string; ids: readonly string[] } | null>(null);
+  // The order a fresh sort would give now, to tell whether a re-sort moves anyone.
+  const freshIds = useRef<readonly string[]>([]);
   const rows = useMemo(() => {
     const fresh = actionableFirst(sortMarketRows(
       filterMarketRows(allRows, { query, watchedOnly, watched: kept.length > 0 ? [...watchlist.watched, ...kept] : watchlist.watched }),
@@ -870,6 +986,7 @@ export function PerGameMarketScreen({
       side,
       reversed,
     ));
+    freshIds.current = fresh.map((row) => row.player.playerId);
     const ordered = keepListOrder(fresh, orderRef.current?.key === orderKey ? orderRef.current.ids : null);
     orderRef.current = { key: orderKey, ids: ordered.map((row) => row.player.playerId) };
     return ordered;
@@ -899,6 +1016,86 @@ export function PerGameMarketScreen({
     if (announceTimer.current) clearTimeout(announceTimer.current);
   }, []);
 
+  // Re-sorting after a night: never while a finger or the mouse is down or
+  // has just pressed (the rows would move under that tap), and with the
+  // list's short quiet after it, as after a move.
+  const holding = night !== sortedNight;
+  const holdRefs = useRef({ night, sortedNight, holding, pointerDown: false, pressedAt: 0, holdOffset: 0 });
+  holdRefs.current.night = night;
+  holdRefs.current.sortedNight = sortedNight;
+  holdRefs.current.holding = holding;
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return undefined;
+    const down = () => {
+      holdRefs.current.pointerDown = true;
+      holdRefs.current.pressedAt = Date.now();
+    };
+    const up = () => {
+      holdRefs.current.pointerDown = false;
+    };
+    window.addEventListener('pointerdown', down, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+    return () => {
+      window.removeEventListener('pointerdown', down, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+    };
+  }, []);
+  const resort = useCallback(() => {
+    const { night: current, sortedNight: previous } = holdRefs.current;
+    if (current === previous) return;
+    holdRefs.current.sortedNight = current;
+    const moved = !sameOrder(freshIds.current, orderRef.current?.ids);
+    if (moved) settleTaps(RESORT_QUIET_MS, 0, 'list');
+    setSortedNight(current);
+    // Said where the side explainer sits, and aloud, only when someone moved.
+    if (moved) {
+      const line = resortedLine(previous, current);
+      setResortNote(line);
+      announce(line);
+    } else {
+      setResortNote((shown) => (shown ? resortedLine(previous, current) : shown));
+    }
+  }, [announce]);
+  useEffect(() => {
+    if (!holding) return undefined;
+    holdRefs.current.holdOffset = place.current.offset;
+    const started = Date.now();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const attempt = () => {
+      const { pointerDown, pressedAt } = holdRefs.current;
+      const busy = pointerDown || Date.now() - pressedAt < RESORT_PRESS_GAP_MS;
+      if (busy && Date.now() - started < 4000) {
+        timer = setTimeout(attempt, 150);
+        return;
+      }
+      resort();
+    };
+    timer = setTimeout(attempt, RESORT_AFTER_MS);
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [holding, resort]);
+  // Changing the view sorts afresh for the latest night, with nothing to say.
+  const viewKey = `${sort}|${reversed}|${side}|${query}|${watchedOnly}`;
+  const lastViewKey = useRef(viewKey);
+  useEffect(() => {
+    if (lastViewKey.current === viewKey) return;
+    lastViewKey.current = viewKey;
+    setSortedNight(holdRefs.current.night);
+    setResortNote(null);
+  }, [viewKey]);
+  // On a tall table the note borrows the side sentence's reserved slot for a
+  // while; elsewhere it keeps its line until the view changes, so nothing
+  // moves when it goes.
+  const noteInSlot = layout === 'table' && height >= ROOMY_MIN_HEIGHT;
+  useEffect(() => {
+    if (!resortNote || !noteInSlot) return undefined;
+    const timer = setTimeout(() => setResortNote(null), 8000);
+    return () => clearTimeout(timer);
+  }, [resortNote, noteInSlot]);
+
   // Your place in the list: the first player you can see, and the offset.
   const listRef = useRef<FlatList<PerGameMarketRow>>(null);
   const place = useRef({ anchorId: remembered.anchorId, offset: remembered.offset });
@@ -906,9 +1103,31 @@ export function PerGameMarketScreen({
   rowsRef.current = rows;
   const widthRef = useRef(width);
   const retries = useRef(0);
+  // Your place for a rotation or a resized window: the first player you can
+  // see and where his row sits, read on the web from the rows themselves
+  // (walk 6 T4-07: an offset or a viewability callback read after the
+  // reflow came back at the top of the list). Recorded only while the
+  // window keeps its size, so the resize's own scroll never overwrites it.
+  const scrollNode = () => listRef.current?.getScrollableNode?.() as AnchorNode | undefined;
+  const anchor = useRef<{ id: string; dy: number; width: number; height: number } | null>(null);
+  const recordAnchor = useCallback((force = false) => {
+    if (typeof window === 'undefined' || !window.innerWidth) return;
+    const shown = { width: window.innerWidth, height: window.innerHeight };
+    const saved = anchor.current;
+    // The window changed size and the rows have not been put back yet.
+    if (!force && saved && (saved.width !== shown.width || saved.height !== shown.height)) return;
+    const found = readAnchor(listRef.current?.getScrollableNode?.() as AnchorNode | undefined);
+    if (!found) return;
+    anchor.current = { ...found, ...shown };
+    place.current.anchorId = found.id;
+  }, []);
+  const aligning = useRef(false);
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     place.current.offset = event.nativeEvent.contentOffset.y;
-  }, []);
+    if (!aligning.current) recordAnchor();
+    // Scrolling after a night brings the new order at once.
+    if (holdRefs.current.holding && Math.abs(place.current.offset - holdRefs.current.holdOffset) > 24) resort();
+  }, [recordAnchor, resort]);
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     const first = viewableItems.find((token) => token.isViewable);
     if (first) place.current.anchorId = (first.item as PerGameMarketRow).player.playerId;
@@ -947,15 +1166,62 @@ export function PerGameMarketScreen({
       rememberMarket({ anchorId: place.current.anchorId, offset: place.current.offset, width: widthRef.current });
     };
   }, [remembered, scrollToPlayer]);
-  // A rotation reflows every row: keep the same player at the top.
+  // A rotation or a resized window reflows every row: bring the same player
+  // back to the same spot, re-aligning for a moment while rows settle, unless
+  // the player scrolls meanwhile.
+  const sizeRef = useRef({ width, height });
   useEffect(() => {
-    if (widthRef.current === width) return undefined;
+    const before = sizeRef.current;
+    if (before.width === width && before.height === height) return undefined;
+    sizeRef.current = { width, height };
     widthRef.current = width;
-    const anchor = place.current.anchorId;
-    if (place.current.offset <= 0) return undefined;
-    const timer = setTimeout(() => scrollToPlayer(anchor), 80);
-    return () => clearTimeout(timer);
-  }, [width, scrollToPlayer]);
+    const saved = anchor.current;
+    if (!saved || place.current.offset <= 0) {
+      recordAnchor(true);
+      return undefined;
+    }
+    aligning.current = true;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let userMoved = false;
+    const stop = () => {
+      userMoved = true;
+    };
+    const events = ['wheel', 'touchmove', 'keydown'] as const;
+    if (typeof window !== 'undefined') events.forEach((name) => window.addEventListener(name, stop, { capture: true, passive: true }));
+    const finish = () => {
+      aligning.current = false;
+      if (typeof window !== 'undefined') events.forEach((name) => window.removeEventListener(name, stop, { capture: true }));
+      recordAnchor(true);
+    };
+    const align = () => {
+      if (userMoved) {
+        finish();
+        return;
+      }
+      const node = scrollNode();
+      const rows = node?.querySelectorAll?.('[data-player]');
+      let row: AnchorNode | null = null;
+      for (let index = 0; rows && index < rows.length; index += 1) {
+        if (rows[index].getAttribute('data-player') === saved.id) row = rows[index];
+      }
+      if (node && row) {
+        const delta = row.getBoundingClientRect().top - node.getBoundingClientRect().top - saved.dy;
+        if (Math.abs(delta) > 1) node.scrollTop += delta;
+      } else {
+        // Laid out further down than the list has drawn: jump near, then refine.
+        scrollToPlayer(saved.id);
+      }
+      tries += 1;
+      if (tries < 10) timer = setTimeout(align, tries < 4 ? 40 : 100);
+      else finish();
+    };
+    timer = setTimeout(align, 0);
+    return () => {
+      if (timer) clearTimeout(timer);
+      finish();
+    };
+  }, [width, height, recordAnchor, scrollToPlayer]);
 
   // Screen readers hear what a search, a cleared search or the Watching
   // filter did, once typing pauses; the new line replaces the old one.
@@ -1065,8 +1331,10 @@ export function PerGameMarketScreen({
   const slotBeside = slotLineBeside(width);
   // Beside the toggle its wrapped lines share one right edge.
   const slotRight = slotBeside && !rowToolbar && !folded;
+  // Folded and too narrow to share the search button's row: a line of its own.
+  const slotOwnLine = folded && !foldWide && !foldedSlotBeside(width);
   const slotStatus = (
-    <View style={[styles.slotStatus, !slotBeside && styles.slotStatusUnder, rowToolbar && styles.slotStatusWide, folded && styles.slotStatusFolded]}>
+    <View style={[styles.slotStatus, !slotBeside && styles.slotStatusUnder, rowToolbar && styles.slotStatusWide, folded && !slotOwnLine && styles.slotStatusFolded]}>
       <Text maxFontSizeMultiplier={1.4} style={[styles.slotText, slotRight && styles.textRight]}>{slotLine(side, slots)}</Text>
       {status.kind === 'lock' ? (
         <View style={styles.lockLine}>
@@ -1098,13 +1366,15 @@ export function PerGameMarketScreen({
   const watchingToggle = (
     <WatchingToggle count={watchlist.watched.length} on={watchedOnly} onChange={setWatchedOnly} />
   );
+  // The Short side says how long a short runs before anyone pays for one.
+  const shortWords = `${SHORT_EXPLAINER} ${shortTermLine(bootstrap.ruleset.shortTermDays)}`;
   const shortExplainer = side === 'short' && roomy ? (
-    <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{SHORT_EXPLAINER}</Text>
+    <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{shortWords}</Text>
   ) : null;
   // On a tablet or desktop each side explains itself in the same reserved
   // line, so switching sides never moves the table.
   const sideExplainer = (
-    <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{side === 'short' ? SHORT_EXPLAINER : ROSTER_EXPLAINER}</Text>
+    <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{side === 'short' ? shortWords : ROSTER_EXPLAINER}</Text>
   );
 
   const listHeader = (
@@ -1123,25 +1393,26 @@ export function PerGameMarketScreen({
       ) : folded ? (
         // A phone at 200% zoom: the side toggle and the slot count stay; search,
         // sort and Watching fold behind one toggle so a player shows at once.
-        <View style={[styles.controls, styles.controlsFolded]}>
+        <View style={[styles.controls, styles.controlsFolded]} {...(foldedKeys as object)}>
           {foldWide ? null : sideToggle}
+          {slotOwnLine ? slotStatus : null}
           <View style={styles.foldedRow}>
             {foldWide ? sideToggle : null}
-            {slotStatus}
+            {slotOwnLine ? null : slotStatus}
             {/* Landscape has room to say it in words (walk 4 T1-10). */}
-            <ControlsToggle active={filtersOn} buttonRef={controlsToggleRef} labelled={foldWide} onToggle={() => setControlsOpen((open) => !open)} open={controlsOpen} />
+            <ControlsToggle active={filtersOn} buttonRef={controlsToggleRef} labelled={foldWide} onToggle={toggleControls} open={controlsOpen} />
           </View>
           {shortExplainer}
           {controlsOpen ? (
             foldWide ? (
               <View style={styles.foldedOpenRow}>
-                <MarketSearch onChange={setQuery} onEscapeEmpty={closeControls} placeholder={searchPlaceholder} style={styles.searchFlex} value={query} />
+                <MarketSearch focusOnMount={openedByKey.current} onChange={setQuery} onEscapeEmpty={closeControls} placeholder={searchPlaceholder} style={styles.searchFlex} value={query} />
                 {sortToggle}
                 {watchingToggle}
               </View>
             ) : (
               <>
-                <MarketSearch onChange={setQuery} onEscapeEmpty={closeControls} placeholder={searchPlaceholder} value={query} />
+                <MarketSearch focusOnMount={openedByKey.current} onChange={setQuery} onEscapeEmpty={closeControls} placeholder={searchPlaceholder} value={query} />
                 {sortToggle}
                 {watchingToggle}
               </>
@@ -1169,7 +1440,9 @@ export function PerGameMarketScreen({
           T2-02: the header moved 44px and a third click missed). */}
       {wide && roomy ? (
         <View style={[styles.explainerWide, styles.explainerSlot]}>
-          {reversed ? (
+          {resortNote ? (
+            <Text maxFontSizeMultiplier={1.4} style={[styles.explainer, styles.resortText]}>{resortNote}</Text>
+          ) : reversed ? (
             <View style={styles.flipNote}>
               <Text maxFontSizeMultiplier={1.4} style={styles.flipText}>{flippedSortNote(sort).text}</Text>
               <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="secondary" />
@@ -1183,6 +1456,11 @@ export function PerGameMarketScreen({
           <Text maxFontSizeMultiplier={1.4} style={styles.flipText}>{flippedSortNote(sort).text}</Text>
           <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="secondary" />
         </View>
+      ) : null}
+      {/* Elsewhere the re-sort note takes a line of its own on the gutter; it
+          appears as the rows re-sort and stays until the view changes. */}
+      {resortNote && !(wide && roomy) ? (
+        <Text maxFontSizeMultiplier={1.4} style={[styles.explainer, styles.resortText, styles.resortGutter, folded && styles.flipNoteFolded]}>{resortNote}</Text>
       ) : null}
       {wide ? (
         <MarketColumnHeader
@@ -1248,6 +1526,20 @@ export function PerGameMarketScreen({
     <EmptyState copy="Players appear here once prices are posted." level={2} title="The market is empty" />
   );
 
+  // Under a Watching list, the count and the way back to everyone, on screen
+  // as well as aloud (walk 6 T1-12: 450px of empty space under two rows).
+  const watchingFooter = watchedOnly && !trimmed && spokenCount > 0 ? (
+    <View style={[styles.watchingFooter, { paddingHorizontal: wide ? space.lg : space.md }]}>
+      <Text maxFontSizeMultiplier={1.4} style={styles.watchingFooterText}>{watchingLine(spokenCount)}</Text>
+      <Button
+        accessibilityLabel={`Show all ${totalCount} players`}
+        label={`Show all ${totalCount}`}
+        onPress={() => setWatchedOnly(false)}
+        variant="secondary"
+      />
+    </View>
+  ) : null;
+
   return (
     <>
       {pinned ? listHeader : null}
@@ -1259,6 +1551,7 @@ export function PerGameMarketScreen({
         keyboardShouldPersistTaps="handled"
         keyExtractor={(row) => row.player.playerId}
         ListEmptyComponent={emptyState}
+        ListFooterComponent={watchingFooter}
         ListHeaderComponent={pinned ? null : listHeader}
         onScroll={onScroll}
         onScrollToIndexFailed={({ index, averageItemLength }) => {
@@ -1295,6 +1588,7 @@ export function PerGameMarketScreen({
             seasonOver={seasonOver}
             wholeNames={keepNamesWhole(width)}
             width={width}
+            fullTier={fullTier}
             onAnnounce={announce}
             onToggleWatch={toggleWatchStable}
             watched={watchlist.isWatched(item.player.playerId)}
@@ -1434,6 +1728,10 @@ const styles = StyleSheet.create({
     flexBasis: 'auto',
   },
   slotStatusFolded: {
+    // Takes the room the search button leaves (below 340px the stacked
+    // style's flexGrow 0 left it 0px wide, so its words ran under the
+    // button: walk 6 T3-01, T4-10).
+    flexGrow: 1,
     flexBasis: 0,
     alignItems: 'flex-start',
     minWidth: 0,
@@ -1443,6 +1741,10 @@ const styles = StyleSheet.create({
     flexBasis: 'auto',
     alignItems: 'flex-start',
     minWidth: 140,
+    // A locked night's line ("Moves reopen after Oct 28 · your players still
+    // play") wraps under the count instead of squeezing the search box below
+    // its placeholder (walk 6 T2-19: 138px at 1024x768).
+    maxWidth: 150,
   },
   slotText: {
     color: colors.muted,
@@ -1472,6 +1774,9 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   lockText: {
+    // Wraps within the slot block beside its icon, never past it.
+    flexShrink: 1,
+    minWidth: 0,
     color: colors.goldInk,
     fontSize: type.label,
     fontWeight: weight.bold,
@@ -1490,6 +1795,13 @@ const styles = StyleSheet.create({
   },
   flipNoteFolded: {
     paddingHorizontal: space.sm,
+  },
+  resortText: {
+    color: colors.text,
+  },
+  resortGutter: {
+    paddingHorizontal: space.lg,
+    paddingBottom: space.sm,
   },
   flipText: {
     color: colors.goldInk,
@@ -1626,10 +1938,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   kickerPriceLine: {
+    // One line: the given name is cut short before the price or the tier
+    // moves (walk 6 T4-06).
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     alignItems: 'baseline',
     columnGap: space.sm,
+  },
+  kickerParts: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  kickerGiven: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  kickerTier: {
+    flexShrink: 0,
   },
   priceEnd: {
     // Right-aligned on the kicker's line, or on its own line when it wraps.
@@ -1789,11 +2116,35 @@ const styles = StyleSheet.create({
   buttonTextDone: {
     letterSpacing: 0,
   },
+  // The Roster's "question open" look: this is what you are deciding.
+  buttonArmed: {
+    borderColor: colors.gold,
+    backgroundColor: colors.goldSoft,
+  },
+  buttonTextArmed: {
+    color: colors.goldInk,
+  },
   stripTable: {
     // Under a wide row the strip keeps the row's inset and lines its buttons
     // up with the action column.
     paddingLeft: space.lg,
     paddingRight: space.lg,
+  },
+  watchingFooter: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: space.md,
+    rowGap: space.xs,
+    paddingVertical: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  watchingFooterText: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
   },
   emptyActions: {
     flexDirection: 'row',

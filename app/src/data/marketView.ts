@@ -15,6 +15,8 @@ import type {
 import {
   closeVerb,
   exactMoney,
+  humanDate,
+  humanDaySpan,
   money,
   openVerb,
   perGame,
@@ -93,7 +95,19 @@ export function orderButtonTitle(sort: MarketSort, reversed: boolean): string {
 export const COLUMN_EXPLANATIONS = {
   value: "Last season's dividend minus his price (yours once you hold him), for this side",
   dividend: 'What he paid out a game last season',
+  // "Your profit a game" says what it is, like its neighbours (walk 6 T2-03).
+  yours: 'Your result a game so far, on players you hold',
 } as const;
+
+/**
+ * A held row's caption under its price at table widths: today's price when
+ * your add has moved it ("now $387.5K"; the big figure above is already
+ * yours, walk 6 T2-14: "yours · now $387.5K" wrapped at 768px), or that the
+ * price is locked.
+ */
+export function heldPriceCaption(lockedGameCost: number, currentGameCost: number): string {
+  return lockedGameCost !== currentGameCost ? `now ${money(currentGameCost)}` : 'yours, locked in';
+}
 
 /** Under half a thousand either way reads as even, matching valueVerdict. */
 const EVEN_BAND = 500;
@@ -668,6 +682,20 @@ export function slotLineBeside(width: number): boolean {
 }
 
 /**
+ * In the folded toolbar the slot line shares a row with the 44px "Search and
+ * sort" button while the room left beside it holds its longest unbreakable
+ * piece ("on your roster", "to short or close": about 96px, with room for
+ * text-spacing overrides); narrower (400% zoom, about 100px) it takes a line
+ * of its own. It never runs under the button (walk 6 T3-01, T4-10).
+ */
+export const FOLDED_SLOT_ROOM = 96;
+
+export function foldedSlotBeside(width: number): boolean {
+  // The folded bar's 8px insets, the button and its 8px gap.
+  return width - 2 * 8 - 44 - 8 >= FOLDED_SLOT_ROOM;
+}
+
+/**
  * From this width the kicker names the tier ("KARL-ANTHONY · STAR"). The
  * phone row puts the kicker and the price on one line, and below 380px the
  * longest given names only fit there without the tier.
@@ -720,52 +748,52 @@ export function shortTierLabel(tier: string | null | undefined): string {
 
 /** Where a phone row names the tier. */
 export interface RowTier {
-  /** The top line's words beside the price: "Luka · Star", or the given name alone. */
-  kicker: string;
-  /** The tier after the surname ("Star"), or '' when the top line carries it. */
-  after: string;
+  /** The given name, as the kicker prints it (it may be cut short, never the tier). */
+  given: string;
+  /** The list's tier word at this width: "Role" or "Role player", "Starter", "Star"; '' with no tier. */
+  tier: string;
+  /** Beside the given name ("NIKOLA · STAR") or after the surname ("Jokic STAR ›"): one place per width. */
+  place: 'kicker' | 'after';
 }
 
 // Phone row geometry, from the row's own styles: the row's insets, avatar and
 // gap take 76px, the Add button and its gap 84px, and the widest price box
 // ("$417.5K/game", or "yours $417.5K") with its gap about 97px. Character
-// widths are generous averages for the kicker's 11px capitals and the
-// surname's 15px heavy type.
+// widths are generous averages for the kicker's 11px capitals.
 const PHONE_BAND_INSET = 160;
 const PHONE_PRICE_BOX = 97;
 const KICKER_CHAR = 7.2;
-const SURNAME_CHAR = 8.6;
 
 /**
- * The tier on a phone row, never dropped (walk 5 T1-03): beside the given
- * name when that fits beside the price (in full, then short: "Role"),
- * otherwise after the surname (in full, then short). Below 380px the surname
- * is tried first, as before. Held and unheld price boxes are the same width,
- * so the tier stays in its place when he is added.
+ * Whether a phone list at this width says "Role player" or "Role": decided
+ * once per width from the longest given name in the market, so one list
+ * never shows both (walk 6 T1-01, T4-03; walk 5 T1-03 picked it per row).
+ */
+export function fullTierFits(width: number, longestGiven: number): boolean {
+  const kicker = longestGiven + ' · Role player'.length;
+  return kicker * KICKER_CHAR <= width - PHONE_BAND_INSET - PHONE_PRICE_BOX;
+}
+
+/**
+ * The tier on a phone row, never dropped and never moved row to row: from
+ * 380px beside the given name on every row (a long given name is cut short
+ * before the tier moves, walk 6 T4-06), below that after the surname on
+ * every row; in the one word the list uses at this width.
  */
 export function rowTier({
   given,
-  surname,
   tier,
   width,
+  fullTier,
 }: {
   given: string;
-  surname: string;
   tier: string | null | undefined;
   width: number;
+  /** fullTierFits for this list and width. */
+  fullTier: boolean;
 }): RowTier {
-  const full = tierLabel(tier);
-  if (!full) return { kicker: given, after: '' };
-  const short = shortTierLabel(tier);
-  const band = width - PHONE_BAND_INSET;
-  const kicker = (label: string) => `${given} · ${label.replace(' ', ' ')}`;
-  const fitsKicker = (label: string) => kicker(label).length * KICKER_CHAR <= band - PHONE_PRICE_BOX;
-  const fitsAfter = (label: string) => surname.length * SURNAME_CHAR + (label.length + 3) * KICKER_CHAR <= band;
-  const inKicker = [full, short].find(fitsKicker);
-  const afterName = [full, short].find(fitsAfter);
-  if (width < KICKER_TIER_MIN_WIDTH && afterName) return { kicker: given, after: afterName };
-  if (inKicker) return { kicker: kicker(inKicker), after: '' };
-  return { kicker: given, after: afterName ?? short };
+  const word = fullTier ? tierLabel(tier) : shortTierLabel(tier);
+  return { given, tier: word, place: width >= KICKER_TIER_MIN_WIDTH ? 'kicker' : 'after' };
 }
 
 /**
@@ -885,7 +913,7 @@ export function searchResultLine(query: string, count: number): string {
 /**
  * What a screen reader hears when the list changes, once typing pauses: a
  * search's matches; right after a search is cleared, that the list is back
- * ("Search cleared, 30 players."); the Watching filter's count against
+ * ("Search cleared. Showing all 30 players."); the Watching filter's count against
  * everyone ("Watching: 0 players. Show everyone to see all 30.").
  */
 export function listCountLine({
@@ -906,7 +934,8 @@ export function listCountLine({
   const players = (n: number) => `${n} ${n === 1 ? 'player' : 'players'}`;
   if (query && !searchHasLetters(query)) return `${SEARCH_NEEDS_LETTERS}.`;
   if (query) return searchResultLine(query, count);
-  if (cleared) return watchedOnly ? `Search cleared. Watching: ${players(count)}.` : `Search cleared, ${players(count)}.`;
+  // Says the list is whole again, in the words the list uses (walk 6 T3-N4).
+  if (cleared) return watchedOnly ? `Search cleared. Watching: ${players(count)}.` : `Search cleared. Showing all ${players(count)}.`;
   if (watchedOnly) return `Watching: ${players(count)}. Show everyone to see all ${total}.`;
   return `Showing all ${players(count)}.`;
 }
@@ -1062,4 +1091,46 @@ export function keepListOrder<T extends { player: { playerId: string } }>(
   const added = sorted.filter((row) => !place.has(row.player.playerId));
   known.sort((a, b) => (place.get(a.player.playerId) as number) - (place.get(b.player.playerId) as number));
   return [...known, ...added];
+}
+
+/** How long the list keeps its order after a night before it re-sorts (walk 6 T4-13). */
+export const RESORT_AFTER_MS = 1000;
+
+/** The day after an ISO date ("2025-10-21" -> "2025-10-22"). */
+function dayAfter(isoDate: string): string {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return isoDate;
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * What the list says when it re-sorts after a night or a week: "Re-sorted for
+ * the Oct 21 games.", "Re-sorted for the Oct 21–27 games." `previousNight` is
+ * the night the old order was sorted for ('' before any game).
+ */
+export function resortedLine(previousNight: string, night: string): string {
+  const first = previousNight ? dayAfter(previousNight) : night;
+  const when = first < night ? humanDaySpan(first, night) : humanDate(night);
+  return `Re-sorted for the ${when} games.`;
+}
+
+/** Two orders list the same players in the same places. */
+export function sameOrder(a: readonly string[] | null | undefined, b: readonly string[] | null | undefined): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((id, index) => id === b[index]);
+}
+
+/** The line under a Watching list, said on screen as well as aloud: "Watching: 2 players" (walk 6 T1-12). */
+export function watchingLine(count: number): string {
+  return `Watching: ${count} ${count === 1 ? 'player' : 'players'}`;
+}
+
+/**
+ * How long a short runs, said where the Short side is chosen, before anyone
+ * pays for one (walk 6 T1-11): "Each short runs 7 days, then ends by itself."
+ */
+export function shortTermLine(days: number | null): string {
+  if (days === null) return 'Each short runs until you close it.';
+  return `Each short runs ${days} ${days === 1 ? 'day' : 'days'}, then ends by itself.`;
 }

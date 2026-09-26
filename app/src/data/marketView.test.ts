@@ -10,6 +10,8 @@ import {
   actionName,
   actionWord,
   collapseControls,
+  foldedSlotBeside,
+  fullTierFits,
   echoQuery,
   feeHint,
   fullActionName,
@@ -59,10 +61,15 @@ import {
   heldValueLine,
   nicknameFor,
   PLAYER_NICKNAMES,
+  RESORT_AFTER_MS,
+  resortedLine,
   rowTier,
   rowValueEdge,
+  sameOrder,
+  shortTermLine,
   shortTierLabel,
   unheldValueLines,
+  watchingLine,
 } from './marketView';
 
 function player(overrides: Partial<PerGameMarketPlayer>): PerGameMarketPlayer {
@@ -425,7 +432,7 @@ test('spoken counts say what the filter did, and that a cleared search is back (
   assert.equal(listCountLine(base), 'Showing all 30 players.');
   assert.equal(listCountLine({ ...base, count: 0, watchedOnly: true }), 'Watching: 0 players. Show everyone to see all 30.');
   assert.equal(listCountLine({ ...base, count: 1, watchedOnly: true }), 'Watching: 1 player. Show everyone to see all 30.');
-  assert.equal(listCountLine({ ...base, cleared: true }), 'Search cleared, 30 players.');
+  assert.equal(listCountLine({ ...base, cleared: true }), 'Search cleared. Showing all 30 players.');
   assert.equal(listCountLine({ ...base, query: 'zz', count: 0 }), 'No players match "zz".');
   assert.equal(listCountLine({ ...base, query: 'le', count: 7 }), '7 players match "le".');
 });
@@ -656,25 +663,29 @@ test('every phone row breaks its value in the same place, and one game reads "in
   assert.equal(heldDetail({ ...one, games: 2, avgNet: 1_473 } as Parameters<typeof heldDetail>[0], 417_500).text, '+$1.5K a game over 2 games');
 });
 
-test('a phone row always names the tier, short where the full word does not fit (walk 5 T1-03)', () => {
+test('a phone list names the tier on every row, in one word and one place per width (walk 6 T1-01, T4-03, T4-06; walk 5 T1-03)', () => {
   assert.equal(shortTierLabel('role'), 'Role');
   assert.equal(shortTierLabel('starter'), 'Starter');
   assert.equal(shortTierLabel(null), '');
-  const at = (given: string, surname: string, tier: string, width: number) => rowTier({ given, surname, tier, width });
+  const names = [['Donovan', 'role'], ['Derrick', 'role'], ['Kon', 'role'], ['OG', 'role'], ['Giannis', 'star'], ['Karl-Anthony', 'star'], ['Shai', 'star'], ["De'Aaron", 'starter']];
+  const longest = Math.max(...names.map(([given]) => given.length));
   for (const width of [320, 360, 375, 390, 412, 430, 844]) {
-    for (const [given, surname, tier] of [['Donovan', 'Clingan', 'role'], ['Derrick', 'White', 'role'], ['Giannis', 'Antetokounmpo', 'star'], ['Karl-Anthony', 'Towns', 'star'], ['Shai', 'Gilgeous-Alexander', 'star'], ["De'Aaron", 'Fox', 'starter']]) {
-      const placed = at(given, surname, tier, width);
-      assert.ok(placed.kicker !== given || placed.after !== '', `${given} at ${width} keeps his tier`);
-    }
+    const fullTier = fullTierFits(width, longest);
+    const placed = names.map(([given, tier]) => rowTier({ given, tier, width, fullTier }));
+    // Never dropped, one place and one role word for the whole list.
+    assert.ok(placed.every((row) => row.tier !== ''), `every row at ${width} keeps its tier`);
+    assert.equal(new Set(placed.map((row) => row.place)).size, 1, `one place at ${width}`);
+    assert.equal(new Set(placed.filter((_, index) => names[index][1] === 'role').map((row) => row.tier)).size, 1, `one role word at ${width}`);
   }
-  // Wide phones keep it beside the given name, in full where it fits, short where not.
-  assert.deepEqual(at('Luka', 'Doncic', 'star', 390), { kicker: 'Luka\u00A0· Star', after: '' });
-  assert.deepEqual(at('Derrick', 'White', 'role', 390), { kicker: 'Derrick\u00A0· Role', after: '' });
-  assert.deepEqual(at('Derrick', 'White', 'role', 430), { kicker: 'Derrick\u00A0· Role\u00A0player', after: '' });
-  // Narrow phones put it after the surname; a long surname sends it back beside the given name.
-  assert.deepEqual(at('Scottie', 'Barnes', 'starter', 360), { kicker: 'Scottie', after: 'Starter' });
-  assert.deepEqual(at('Shai', 'Gilgeous-Alexander', 'star', 360), { kicker: 'Shai\u00A0· Star', after: '' });
-  assert.deepEqual(at('Nikola', 'Jokic', null as unknown as string, 390), { kicker: 'Nikola', after: '' });
+  // Portrait phones: "Role" beside the given name (Karl-Anthony is cut short, not moved); landscape has room for "Role player".
+  assert.deepEqual(rowTier({ given: 'Derrick', tier: 'role', width: 390, fullTier: fullTierFits(390, longest) }), { given: 'Derrick', tier: 'Role', place: 'kicker' });
+  assert.deepEqual(rowTier({ given: 'Karl-Anthony', tier: 'star', width: 390, fullTier: false }), { given: 'Karl-Anthony', tier: 'Star', place: 'kicker' });
+  assert.equal(fullTierFits(430, longest), false);
+  assert.equal(fullTierFits(844, longest), true);
+  assert.deepEqual(rowTier({ given: 'Derrick', tier: 'role', width: 844, fullTier: true }), { given: 'Derrick', tier: 'Role\u00A0player', place: 'kicker' });
+  // Narrow phones: after the surname on every row.
+  assert.deepEqual(rowTier({ given: 'Shai', tier: 'star', width: 360, fullTier: false }), { given: 'Shai', tier: 'Star', place: 'after' });
+  assert.deepEqual(rowTier({ given: 'Nikola', tier: null, width: 390, fullTier: false }), { given: 'Nikola', tier: '', place: 'kicker' });
 });
 
 test('spaced single letters are initials, and a few nicknames find their player alone (walk 5 T4-10, T4-N3)', () => {
@@ -711,4 +722,36 @@ test('spaced single letters are initials, and a few nicknames find their player 
   }
   assert.equal(nicknameFor('wem'), null, 'only whole nicknames');
   assert.equal(nicknameFor('luka'), null);
+});
+
+test('after a night the list re-sorts a moment later and says for which games (walk 6 T4-13)', () => {
+  assert.ok(RESORT_AFTER_MS >= 800 && RESORT_AFTER_MS <= 1500, 'about a second');
+  assert.equal(resortedLine('2025-10-20', '2025-10-21'), 'Re-sorted for the Oct 21 games.');
+  assert.equal(resortedLine('', '2025-10-21'), 'Re-sorted for the Oct 21 games.');
+  assert.equal(resortedLine('2025-10-20', '2025-10-27'), 'Re-sorted for the Oct 21–27 games.');
+  assert.equal(resortedLine('2025-10-27', '2025-11-03'), 'Re-sorted for the Oct 28–Nov 3 games.');
+  assert.equal(sameOrder(['a', 'b'], ['a', 'b']), true);
+  assert.equal(sameOrder(['a', 'b'], ['b', 'a']), false);
+  assert.equal(sameOrder(['a'], null), false);
+});
+
+test('the folded slot line never shares room it does not have with the search button (walk 6 T3-01, T4-10)', () => {
+  // 200% zoom (195), 180px split screen and 400% zoom of a laptop (320): beside the button.
+  assert.equal(foldedSlotBeside(195), true);
+  assert.equal(foldedSlotBeside(180), true);
+  assert.equal(foldedSlotBeside(320), true);
+  // 400% zoom of a phone (98px): a line of its own.
+  assert.equal(foldedSlotBeside(98), false);
+  assert.equal(foldedSlotBeside(163), false);
+});
+
+test('a Watching list says how many it shows, on screen too (walk 6 T1-12)', () => {
+  assert.equal(watchingLine(2), 'Watching: 2 players');
+  assert.equal(watchingLine(1), 'Watching: 1 player');
+});
+
+test('the Short side says how long a short runs before one is bought (walk 6 T1-11)', () => {
+  assert.equal(shortTermLine(7), 'Each short runs 7 days, then ends by itself.');
+  assert.equal(shortTermLine(1), 'Each short runs 1 day, then ends by itself.');
+  assert.equal(shortTermLine(null), 'Each short runs until you close it.');
 });

@@ -17,6 +17,7 @@ import {
   type MarketSortOption,
 } from '../../data/marketView';
 import { colors, control, fonts, radius, space, type, weight } from '../../theme';
+import { repeatSafe } from '../../ui/kit';
 import { CloseIcon, SearchIcon, SortOrderIcon, StarIcon } from './icons';
 import { spaceToggles } from './switchKeys';
 
@@ -29,6 +30,9 @@ function useTitle(ref: { current: unknown }, title: string): void {
 }
 
 type KeyEvent = { key: string; preventDefault: () => void };
+
+/** "Search players" needs about this much box: 38px before it, 12px after, ~110px of words at 16px. */
+const SEARCH_PLAYERS_MIN_WIDTH = 160;
 
 /**
  * The one button that flips the order: an arrow icon, 44x44, named for the
@@ -156,6 +160,7 @@ export function MarketSearch({
   style,
   placeholder = 'Search players',
   onEscapeEmpty,
+  focusOnMount = false,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -164,6 +169,8 @@ export function MarketSearch({
   placeholder?: string;
   /** Escape in the empty field: the folded panel closes and focus returns to its toggle. */
   onEscapeEmpty?: () => void;
+  /** Take keyboard focus when it appears (the folded panel opened from the keyboard, walk 6 T3-02). */
+  focusOnMount?: boolean;
 }) {
   // The input itself carries the border so its own box is the full 44px; the
   // magnifier and the clear control sit over its padding. Clearing keeps the
@@ -171,8 +178,16 @@ export function MarketSearch({
   // Escape in the empty field keeps focus there (it used to fall to the page,
   // walk 5 T3-03), or closes the folded panel it sits in.
   const input = useRef<TextInput>(null);
+  // A box narrower than its words shows the short one, never a clipped
+  // "Search play" (walk 6 T2-19: 138px on a locked night at 1024x768).
+  const [narrow, setNarrow] = useState(false);
+  const shown = narrow && placeholder === 'Search players' ? 'Search' : placeholder;
+  const focusFirst = useRef(focusOnMount);
+  useEffect(() => {
+    if (focusFirst.current) input.current?.focus();
+  }, []);
   return (
-    <View style={[styles.search, style]}>
+    <View onLayout={(event) => setNarrow(event.nativeEvent.layout.width < SEARCH_PLAYERS_MIN_WIDTH)} style={[styles.search, style]}>
       <TextInput
         ref={input}
         accessibilityLabel="Search players"
@@ -186,7 +201,7 @@ export function MarketSearch({
           if (value.length > 0) onChange('');
           else onEscapeEmpty?.();
         }}
-        placeholder={placeholder}
+        placeholder={shown}
         placeholderTextColor={colors.faint}
         returnKeyType="search"
         style={[styles.searchInput, value.length > 0 && styles.searchInputClearable]}
@@ -235,8 +250,9 @@ export function WatchingToggle({
       accessibilityRole="switch"
       accessibilityState={{ checked: on }}
       aria-checked={on}
-      onPress={() => onChange(!on)}
-      {...spaceToggles(() => onChange(!on))}
+      // A double tap switches it once, not on and straight back off (walk 6 T4-11).
+      onPress={repeatSafe(() => onChange(!on))}
+      {...spaceToggles(repeatSafe(() => onChange(!on)))}
       style={({ pressed }) => [styles.watching, on && styles.watchingOn, pressed && styles.pressed, style]}
     >
       <StarIcon filled={on} size={16} />
@@ -317,8 +333,8 @@ export function MarketColumnHeader({
 }) {
   // One explanation at a time, the most recent of hover or keyboard focus;
   // Escape hides it while focus stays (walk 5 T3-12, WCAG 1.4.13).
-  const [tip, setTip] = useState<{ key: MarketSort; by: TipSource } | null>(null);
-  const onTip = (key: MarketSort, by: TipSource, on: boolean) => {
+  const [tip, setTip] = useState<{ key: TipKey; by: TipSource } | null>(null);
+  const onTip = (key: TipKey, by: TipSource, on: boolean) => {
     if (by === 'escape') setTip(null);
     else if (on) setTip({ key, by });
     else setTip((current) => (current && current.key === key && current.by === by ? null : current));
@@ -358,9 +374,13 @@ export function MarketColumnHeader({
           width={columns.edge}
         />
         {columns.yours > 0 ? (
-          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.headerCell, styles.headerPlain, { width: columns.yours }]}>
-            <Text maxFontSizeMultiplier={1.4} style={[styles.headerText, styles.headerTextNumber]}>{'Your profit a\u00A0game'}</Text>
-          </View>
+          <PlainHeader
+            explain={COLUMN_EXPLANATIONS.yours}
+            label={'Your profit a\u00A0game'}
+            onTip={onTip}
+            tipShown={tip?.key === 'yours'}
+            width={columns.yours}
+          />
         ) : null}
         <View style={{ width: columns.action }} />
       </View>
@@ -371,6 +391,57 @@ export function MarketColumnHeader({
 let explainIds = 0;
 
 type TipSource = 'hover' | 'focus' | 'escape';
+/** A column that explains itself: the sortable ones, and "Your profit a game". */
+type TipKey = MarketSort | 'yours';
+
+/**
+ * A column label that is not a sort ("Your profit a game"): it explains
+ * itself on hover and keyboard focus like Value and Dividend (walk 6 T2-03:
+ * it read like a column that failed to load), Escape hides the note while
+ * focus stays.
+ */
+function PlainHeader({
+  label,
+  width,
+  explain,
+  tipShown,
+  onTip,
+}: {
+  label: string;
+  width: number;
+  explain: string;
+  tipShown: boolean;
+  onTip: (key: TipKey, by: TipSource, on: boolean) => void;
+}) {
+  const [explainId] = useState(() => `market-column-explain-${(explainIds += 1)}`);
+  return (
+    <View style={[styles.headerCell, { width }]}>
+      <Pressable
+        accessibilityLabel={label.replace(/\u00A0/g, ' ')}
+        onBlur={() => onTip('yours', 'focus', false)}
+        onFocus={(event) => {
+          const target = event.target as unknown as { matches?: (selector: string) => boolean };
+          if (target.matches?.(':focus-visible') ?? true) onTip('yours', 'focus', true);
+        }}
+        onHoverIn={() => onTip('yours', 'hover', true)}
+        onHoverOut={() => onTip('yours', 'hover', false)}
+        style={[styles.headerInner, styles.sorter, styles.headerInnerNumber]}
+        {...({
+          'aria-describedby': explainId,
+          tabIndex: 0,
+          onKeyDown: (event: KeyEvent) => {
+            if (event.key === 'Escape' && tipShown) onTip('yours', 'escape', false);
+          },
+        } as object)}
+      >
+        <Text maxFontSizeMultiplier={1.4} style={[styles.headerText, styles.headerTextNumber, styles.headerTextShrink]}>{label}</Text>
+      </Pressable>
+      <View pointerEvents="none" style={[styles.explain, !tipShown && styles.explainHidden]}>
+        <Text nativeID={explainId} style={styles.explainText}>{explain}</Text>
+      </View>
+    </View>
+  );
+}
 
 function SortHeader({
   columnKey,
@@ -391,7 +462,7 @@ function SortHeader({
   explain?: string;
   /** This column's explanation is the one showing. */
   tipShown?: boolean;
-  onTip?: (key: MarketSort, by: TipSource, on: boolean) => void;
+  onTip?: (key: TipKey, by: TipSource, on: boolean) => void;
   sort: MarketSort;
   reversed: boolean;
   onChoose: (sort: MarketSort) => void;
