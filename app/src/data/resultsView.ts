@@ -315,6 +315,17 @@ export function monthAnchors(items: readonly ResultsFeedItem[]): MonthAnchor[] {
   }));
 }
 
+/**
+ * The month "Jump to" marks as the one you are reading, on every screen size
+ * (walk 7 T1-07: phones marked none). It is the month at the top of the
+ * feed; until the list has said what is on screen (first paint, a new
+ * season's feed) you are at the top, so the newest month. Null without months.
+ */
+export function readingMonth(anchors: readonly MonthAnchor[], onScreen: string | null): string | null {
+  if (onScreen && anchors.some((anchor) => anchor.key === onScreen)) return onScreen;
+  return anchors[0]?.key ?? null;
+}
+
 /** Days in the feed, newest first. */
 export function feedNights(items: readonly ResultsFeedItem[]): NightSummary[] {
   return items.flatMap((item) => (item.type === 'night' ? [item.night] : []));

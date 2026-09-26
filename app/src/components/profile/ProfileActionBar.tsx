@@ -327,19 +327,33 @@ function leaveForRoster(
   setTimeout(go, 400);
 }
 
-/** One line of context on the left (and a quieter move under it), the action on the right. */
+/**
+ * One line of context on the left, the action on the right. With a quieter
+ * move beside it ("Short instead"), the context takes its own line and the two
+ * buttons share the row under it, the main one on the right (walk 7 T1-04:
+ * the switch hung under the note like a caption).
+ */
 function Bar({ note, warn = false, below, children }: {
   note: string;
   warn?: boolean;
   below?: ReactNode;
   children?: ReactNode;
 }) {
+  const text = <Text maxFontSizeMultiplier={1.4} style={[styles.note, warn && styles.noteWarn]}>{note}</Text>;
+  if (below) {
+    return (
+      <View style={[styles.bar, styles.barStacked]}>
+        {text}
+        <View style={styles.buttons}>
+          {below}
+          {children}
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={styles.bar}>
-      <View style={styles.noteColumn}>
-        <Text maxFontSizeMultiplier={1.4} style={[styles.note, warn && styles.noteWarn]}>{note}</Text>
-        {below}
-      </View>
+      <View style={styles.noteColumn}>{text}</View>
       {children}
     </View>
   );
@@ -380,9 +394,25 @@ const styles = StyleSheet.create({
   action: {
     minWidth: 88,
   },
+  // The quieter move looks like a control: a ghost button with a 3:1 edge.
   instead: {
-    // A quiet text button: its words line up with the note above.
-    paddingHorizontal: 0,
+    borderColor: colors.controlBorder,
+  },
+  // One column that spans the bar (a wrapping column would be only as wide
+  // as a short note, leaving the main button mid-row).
+  barStacked: {
+    flexDirection: 'column',
+    flexWrap: 'nowrap',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+  },
+  buttons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    columnGap: space.md,
+    rowGap: space.sm,
   },
   done: {
     minHeight: control.height,

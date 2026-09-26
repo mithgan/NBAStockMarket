@@ -746,6 +746,25 @@ test('a long feed offers one jump per month, newest first, at that month\'s newe
   assert.deepEqual(twoSeasons.map((anchor) => anchor.label), ['Oct 26', 'Oct 25']);
 });
 
+test('Jump to marks the month you are reading on every screen, the newest until the list reports (walk 7 T1-07)', async () => {
+  const { readingMonth } = await import('./resultsView');
+  cursor = 1100;
+  const games = ['2026-04-12', '2026-03-30', '2026-01-15', '2025-10-22'].map((gameDate, index) => result({
+    positionId: `pos-${index}`, gameId: `r${index}`, gameDate,
+  }));
+  const anchors = monthAnchors(buildResultsFeed(source(games)));
+  // At the top of the feed, before the list has reported: the newest month.
+  assert.equal(readingMonth(anchors, null), '2026-04');
+  // After scrolling or a jump: the month at the top of the feed.
+  assert.equal(readingMonth(anchors, '2026-01'), '2026-01');
+  assert.equal(readingMonth(anchors, '2025-10'), '2025-10');
+  // A month from an earlier season's feed (Play another season) is not kept.
+  assert.equal(readingMonth(anchors, '2024-02'), '2026-04');
+  // No months, nothing marked.
+  assert.equal(readingMonth([], null), null);
+  assert.equal(readingMonth([], '2026-01'), null);
+});
+
 test('a day\'s moves live inside their fold as one list, each read with the player named once (walk 3 T3-32)', async () => {
   const { foldedFeed, movesByDay, moveWords } = await import('./resultsView');
   cursor = 900;

@@ -218,6 +218,12 @@ export interface VerdictOptions {
    * 'yours': only games you held him (outside practice, the only history there is).
    */
   scope?: 'season' | 'yours';
+  /**
+   * Say the money. False when his one game shown is yours and the profile's
+   * header already says its result ("Your roster spot: +$194.5K over 1
+   * game"): the verdict tells how it went, once (walk 7 T1-05).
+   */
+  figure?: boolean;
 }
 
 /**
@@ -227,7 +233,7 @@ export interface VerdictOptions {
  * on average for your short."
  */
 export function formVerdict(summary: NightsSummary, options: VerdictOptions = {}): string {
-  const { recent = false, side = 'long', held = false, scope = 'season' } = options;
+  const { recent = false, side = 'long', held = false, scope = 'season', figure = true } = options;
   const { games, beat, avgNet } = summary;
   if (games === 0 || avgNet === null) {
     return scope === 'yours' ? 'No games with you yet.' : 'No games yet this season.';
@@ -243,7 +249,9 @@ export function formVerdict(summary: NightsSummary, options: VerdictOptions = {}
     const verb = side === 'long'
       ? good ? 'Beat' : 'Missed'
       : good ? 'Stayed under' : 'Went over';
-    return `${verb} his price by ${moneyFine(Math.abs(avgNet))} in ${which}.`;
+    return figure
+      ? `${verb} his price by ${moneyFine(Math.abs(avgNet))} in ${which}.`
+      : `${verb} his price in ${which}.`;
   }
   const count = scope === 'yours'
     ? recent ? `your last ${games} games with him` : `your ${games} games with him`
@@ -508,7 +516,9 @@ export function rangeOptions({ total, yours, room }: {
     : { key: 'Season', label: narrow ? 'All' : 'Season', hint: 'Every game he played this season' };
   const fit = room === 'wide' ? 5 : room === 'phone' ? 4 : 3;
   while (withYou.length + recent.length + 1 > fit) recent = recent.slice(0, -1);
-  return [...withYou, ...recent, season];
+  // "With you" always leads, as the widest range and the held default, so
+  // the chosen tab reads first (walk 7 T2-19: "Last 5 | With you").
+  return allYours ? [season, ...recent] : [...withYou, ...recent, season];
 }
 
 /**
@@ -604,9 +614,16 @@ export interface HoldingStatus {
   text: string;
 }
 
-/** Your status with him, in words: on your roster at a locked price, shorted, or not held. */
-export function holdingStatus(position: Pick<PerGamePosition, 'side' | 'lockedGameCost' | 'expiresOn'> | null): HoldingStatus {
-  if (!position) return { tag: null, text: 'Not on your roster or shorted' };
+/**
+ * Your status with him, in words: on your roster at a locked price, shorted,
+ * or not held, said from the side the action bar offers (walk 7 T1-04: "Not
+ * on your roster or shorted" read awkwardly).
+ */
+export function holdingStatus(
+  position: Pick<PerGamePosition, 'side' | 'lockedGameCost' | 'expiresOn'> | null,
+  side: PerGamePositionSide = 'long',
+): HoldingStatus {
+  if (!position) return { tag: null, text: side === 'long' ? 'Not on your roster' : "You haven't shorted him" };
   if (position.side === 'long') {
     return { tag: 'On your roster', text: `Locked in at ${moneyFine(position.lockedGameCost)} a game` };
   }
@@ -733,6 +750,41 @@ export function lastSeasonValue(
     label: 'Value at your price',
     caption: `${side === 'long' ? 'a game' : 'a game for your short'}, against your ${yours}${now === yours ? '' : ` (now ${now})`}`,
   };
+}
+
+/**
+ * Before his first game the profile says plainly what will fill it (walk 7
+ * T1-04: the sheet was half empty with one line). 'season': practice, where
+ * every game he plays shows; 'yours': live, only games you hold him.
+ */
+export function firstGamePreview(
+  side: PerGamePositionSide,
+  scope: 'season' | 'yours',
+): { lead: string; items: string[] } {
+  return {
+    lead: scope === 'yours'
+      ? 'No games with you yet. Once he plays for your roster or a short, this shows:'
+      : 'No games yet this season. After his first game, this shows:',
+    items: [
+      'His dividend each game against his price, on a chart',
+      side === 'long'
+        ? 'How often he beats his price, and his average a game'
+        : 'How often he stays under his price, and his average a game',
+      'A game log, newest first',
+    ],
+  };
+}
+
+/**
+ * What "Value" means, in one line, under last season's figures while he has
+ * no games yet (walk 7 T1-04): the Market's rule, from the side you look from,
+ * against the price you locked when you hold him.
+ */
+export function valueMeaning(side: PerGamePositionSide, held: boolean): string {
+  const price = held ? 'your price' : "today's price";
+  return side === 'long'
+    ? `Value is his dividend last season minus ${price}: what each game would add to your score at that pace.`
+    : `Value for a short is ${price} minus his dividend last season: what each game would add at that pace.`;
 }
 
 /** Newest night first, for the game-by-game log. */

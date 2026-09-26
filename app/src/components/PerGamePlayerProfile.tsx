@@ -45,6 +45,7 @@ import { currentResults, playerValue, positionValue } from '../data/perGameMetri
 import { splitPlayerName } from '../data/playerName';
 import {
   buildProfileNights,
+  firstGamePreview,
   formVerdict,
   holdingStatus,
   defaultRange,
@@ -67,6 +68,7 @@ import {
   statusNights,
   summarizeNights,
   unsettledNote,
+  valueMeaning,
   type ProfileMetric,
   type ProfileRange,
   type StakeTone,
@@ -226,7 +228,7 @@ export function PerGamePlayerProfile({
   const shown = useMemo(() => rangeNights(nights, range), [nights, range]);
   const summary = useMemo(() => summarizeNights(shown), [shown]);
   const recent = isRecentRange(range, shown.length, nights.length);
-  const status = holdingStatus(position);
+  const status = holdingStatus(position, viewSide);
   // Your money with him: the current position when you hold him (the same
   // numbers as its Roster row), otherwise every stint you had.
   const stakeSummary = useMemo(
@@ -246,6 +248,12 @@ export function PerGamePlayerProfile({
     past: pastStintLead(currentResults(results).filter((row) => row.playerId === player.playerId)),
   }), [ledger, player.playerId, position, results]);
   const stake = stakeLine(stakeSummary, held, viewSide, opened);
+  // One game shown, and it was yours with the header saying its result: the
+  // verdict says how it went without the figure, and the averages and the
+  // best/only tiles wait for his second game (walk 7 T1-05: one figure said
+  // six times pushed the chart below the fold).
+  const oneGame = summary.games === 1;
+  const headerSaysIt = held && oneGame && summary.yours === 1 && Boolean(stake?.total);
   // Nights with no money to show: he did not play, or the game has not settled.
   const quietNote = unsettledNote(stakeSummary);
   const quiet = useMemo(() => statusNights(results, viewSide), [results, viewSide]);
@@ -260,6 +268,7 @@ export function PerGamePlayerProfile({
   const priceHeader = logPriceHeader(shown, viewSide);
   const mixedLog = priceHeader === 'Price';
   const title = narrow ? splitPlayerName(player.name).surname : player.name;
+  const preview = firstGamePreview(viewSide, live ? 'yours' : 'season');
 
   // Space toggles a switch (the WAI-ARIA pattern screen readers teach), but
   // react-native-web only presses buttons on Space; without this the sheet
@@ -424,9 +433,12 @@ export function PerGamePlayerProfile({
                   // "for your short" only when every game shown was yours.
                   held: held && summary.yours === summary.games,
                   scope: live || range === 'Yours' ? 'yours' : 'season',
+                  figure: !headerSaysIt,
                 })}
               </Text>
               {mix ? <Text maxFontSizeMultiplier={1.4} style={styles.note}>{mix}</Text> : null}
+              {oneGame ? null : (
+              <>
               {/* The first three figures are averages over the games shown, so
                   his average price never reads as his price now. One-word
                   labels keep the three values on one line at 360px. */}
@@ -487,6 +499,8 @@ export function PerGamePlayerProfile({
                   </>
                 )}
               </View>
+              </>
+              )}
               <Segmented
                 accessibilityLabel="Chart shows"
                 onChange={setMetric}
@@ -502,11 +516,18 @@ export function PerGamePlayerProfile({
               <ProfileChart height={wide ? 200 : 176} metric={metric} nights={shown} side={viewSide} />
             </>
           ) : (
-            <Text maxFontSizeMultiplier={1.4} style={styles.verdict}>
-              {live
-                ? 'No games with you yet. Once he plays for your roster or a short, every game shows here.'
-                : 'No games yet this season. His game-by-game numbers start after his first game.'}
-            </Text>
+            // Say plainly what will fill this once he plays (walk 7 T1-04).
+            <View style={styles.preview}>
+              <Text maxFontSizeMultiplier={1.4} style={styles.verdict}>{preview.lead}</Text>
+              <View role="list" style={styles.previewList}>
+                {preview.items.map((item) => (
+                  <View key={item} role="listitem" style={styles.previewItem}>
+                    <Text aria-hidden maxFontSizeMultiplier={1.4} style={styles.previewDot}>•</Text>
+                    <Text maxFontSizeMultiplier={1.4} style={styles.previewText}>{item}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
           )}
         </View>
 
@@ -532,6 +553,11 @@ export function PerGamePlayerProfile({
               />
             </View>
           )}
+          {/* Before his first game the Market's "Value" is his whole story,
+              so say what it means (walk 7 T1-04). */}
+          {nights.length === 0 && lastSeason.edge !== null ? (
+            <Text maxFontSizeMultiplier={1.4} style={styles.note}>{valueMeaning(viewSide, held && position?.side === viewSide)}</Text>
+          ) : null}
         </View>
 
         {nights.length > 0 ? (
@@ -741,6 +767,27 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: type.value,
     lineHeight: 22,
+  },
+  preview: {
+    gap: space.sm,
+  },
+  previewList: {
+    gap: space.xs,
+  },
+  previewItem: {
+    flexDirection: 'row',
+    gap: space.sm,
+  },
+  previewDot: {
+    color: colors.goldInk,
+    fontSize: type.body,
+    lineHeight: 20,
+  },
+  previewText: {
+    flexShrink: 1,
+    color: colors.muted,
+    fontSize: type.body,
+    lineHeight: 20,
   },
   grid: {
     flexDirection: 'row',

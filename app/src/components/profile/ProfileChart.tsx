@@ -57,6 +57,13 @@ const INSETS: ChartInsets = { top: 22, right: 6, bottom: 20, left: 6 };
 const GUTTER = 52;
 const PRICE_INSETS: ChartInsets = { top: 12, right: 6, bottom: 12, left: GUTTER };
 const PRICE_INSETS_BARE: ChartInsets = { top: 12, right: 6, bottom: 12, left: 6 };
+/**
+ * Dividends view: the same gutter, where the $0 line is named, as on the
+ * Score by night chart, so a game below zero reads as below zero, not as a
+ * small one (walk 7 T1-08). Bars and dates keep their places when you switch
+ * between Dividends and Price.
+ */
+const DIVIDEND_INSETS: ChartInsets = { top: 22, right: 6, bottom: 20, left: GUTTER };
 const SCALE_MIN_WIDTH = 160;
 /** Half a mark's height: its words are about 14px tall. */
 const MARK_HALF = 7;
@@ -88,8 +95,12 @@ export function ProfileChart({
   // preview, then pin, then his latest game.
   const [pinned, setPinned] = useState<number | null>(null);
   const [preview, setPreview] = useState<number | null>(null);
-  const scaled = metric === 'price' && width >= SCALE_MIN_WIDTH;
-  const insets = metric === 'price' ? (scaled ? PRICE_INSETS : PRICE_INSETS_BARE) : INSETS;
+  // Wide enough for the gutter of marks (not at 400% zoom).
+  const gutter = width >= SCALE_MIN_WIDTH;
+  const scaled = metric === 'price' && gutter;
+  const insets = metric === 'price'
+    ? (scaled ? PRICE_INSETS : PRICE_INSETS_BARE)
+    : gutter ? DIVIDEND_INSETS : INSETS;
   const model = useMemo(
     () => profileChartModel(nights, metric, width, height, insets),
     [height, insets, metric, nights, width],
@@ -246,7 +257,7 @@ export function ProfileChart({
         {width > 0 ? (
           <Svg height={height} width={width}>
             {metric === 'dividends' && zeroY !== null ? (
-              <Line stroke={colors.borderStrong} strokeWidth={1} x1={0} x2={width} y1={zeroY} y2={zeroY} />
+              <Line stroke={colors.borderStrong} strokeWidth={1} x1={gutter ? insets.left - 4 : 0} x2={width} y1={zeroY} y2={zeroY} />
             ) : null}
             {marks.map((mark) => (
               <Line
@@ -339,6 +350,15 @@ export function ProfileChart({
               );
             })}
           </Svg>
+        ) : null}
+        {/* Dividends: the $0 line named beside it (walk 7 T1-08). */}
+        {metric === 'dividends' && gutter && zeroY !== null ? (
+          <Text
+            maxFontSizeMultiplier={1.3}
+            style={[styles.mark, styles.zeroMark, { top: Math.min(Math.max(zeroY - MARK_HALF, 0), height - MARK_HALF * 2) }]}
+          >
+            $0
+          </Text>
         ) : null}
         {/* The scale: his high and low price beside their guide lines. */}
         {marks.map((mark) => (
@@ -462,6 +482,10 @@ const styles = StyleSheet.create({
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
     lineHeight: MARK_HALF * 2,
+  },
+  // The $0 mark reads at text grade: it is what tells a game below zero apart.
+  zeroMark: {
+    color: colors.muted,
   },
   legend: {
     flexDirection: 'row',

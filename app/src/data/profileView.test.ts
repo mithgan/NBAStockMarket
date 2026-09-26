@@ -387,6 +387,11 @@ test('ranges are spelled out, only offered when they narrow his games, and fit 4
   // All of his games were yours: one tab, and it says so ("With you").
   assert.deepEqual(labels(rangeOptions({ total: 4, yours: 4, room: 'phone' })), ['With you']);
   assert.equal(rangeOptions({ total: 4, yours: 4, room: 'phone' })[0].key, 'Season');
+  // All of his 12 games were yours: "With you" (his season) leads, then the narrower range (walk 7 T2-19).
+  assert.deepEqual(labels(rangeOptions({ total: 12, yours: 12, room: 'wide' })), ['With you', 'Last 5']);
+  assert.equal(rangeOptions({ total: 12, yours: 12, room: 'wide' })[0].key, 'Season');
+  assert.deepEqual(labels(rangeOptions({ total: 40, yours: 40, room: 'phone' })), ['With you', 'Last 5', 'Last 15', 'Last 30']);
+  assert.deepEqual(labels(rangeOptions({ total: 40, yours: 40, room: 'narrow' })), ['Yours', 'L5', 'L15']);
 });
 
 test('the game log follows the range and says which games it lists (walk-1 T2-36)', () => {
@@ -428,7 +433,9 @@ test('price story reads the move in plain words and says when the price was your
 });
 
 test('holding status and stake line say where you stand, from the same numbers as your row', () => {
-  assert.deepEqual(holdingStatus(null), { tag: null, text: 'Not on your roster or shorted' });
+  // Said from the side the bar offers (walk 7 T1-04), never "Not on your roster or shorted".
+  assert.deepEqual(holdingStatus(null), { tag: null, text: 'Not on your roster' });
+  assert.deepEqual(holdingStatus(null, 'short'), { tag: null, text: "You haven't shorted him" });
   assert.deepEqual(holdingStatus({ side: 'long', lockedGameCost: 100_000, expiresOn: null }), {
     tag: 'On your roster',
     text: 'Locked in at $100K a game',
@@ -900,4 +907,36 @@ test('the legend draws "Missed his price" the way the bars are drawn, at every w
   assert.equal(missStroke(5.9), 1);
   assert.equal(missStroke(6), 1.5);
   assert.equal(drawsHollow({ width: 4, height: 3 }), false);
+});
+
+test('before his first game the profile says what will fill it, and what Value means (walk 7 T1-04)', async () => {
+  const { firstGamePreview, valueMeaning } = await import('./profileView');
+  assert.deepEqual(firstGamePreview('long', 'season'), {
+    lead: 'No games yet this season. After his first game, this shows:',
+    items: [
+      'His dividend each game against his price, on a chart',
+      'How often he beats his price, and his average a game',
+      'A game log, newest first',
+    ],
+  });
+  assert.equal(firstGamePreview('short', 'season').items[1], 'How often he stays under his price, and his average a game');
+  assert.equal(firstGamePreview('long', 'yours').lead, 'No games with you yet. Once he plays for your roster or a short, this shows:');
+  assert.equal(valueMeaning('long', false), "Value is his dividend last season minus today's price: what each game would add to your score at that pace.");
+  assert.equal(valueMeaning('long', true), 'Value is his dividend last season minus your price: what each game would add to your score at that pace.');
+  assert.equal(valueMeaning('short', false), "Value for a short is today's price minus his dividend last season: what each game would add at that pace.");
+});
+
+test('after one game of yours the verdict tells how it went without repeating the header\'s figure (walk 7 T1-05)', () => {
+  const one = summarizeNights([{ date: '2025-10-21', dividend: 612_000, price: 417_500, net: 194_500, source: 'yours' }]);
+  assert.equal(formVerdict(one), 'Beat his price by $194.5K in his only game so far.');
+  assert.equal(formVerdict(one, { figure: false }), 'Beat his price in his only game so far.');
+  assert.equal(formVerdict(one, { figure: false, scope: 'yours' }), 'Beat his price in your only game with him.');
+  const miss = summarizeNights([{ date: '2025-10-21', dividend: 100_000, price: 140_000, net: -40_000, source: 'yours' }]);
+  assert.equal(formVerdict(miss, { side: 'short', held: true, figure: false }), 'Went over his price in his only game so far.');
+  // From the second game on, the figure is the average, not the header's total: it stays.
+  const two = summarizeNights([
+    { date: '2025-10-21', dividend: 612_000, price: 417_500, net: 194_500, source: 'yours' },
+    { date: '2025-10-22', dividend: 300_000, price: 417_500, net: -117_500, source: 'yours' },
+  ]);
+  assert.equal(formVerdict(two, { figure: false }), 'Beat his price in 1 of his 2 games this season, $38.5K a game ahead on average.');
 });

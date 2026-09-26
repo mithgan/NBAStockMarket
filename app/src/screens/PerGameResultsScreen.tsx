@@ -44,6 +44,7 @@ import {
   nightSummaryLine,
   nightSummaryWrapped,
   nightTotalPending,
+  readingMonth,
   resultRowModel,
   revealScroll,
   type MonthAnchor,
@@ -919,7 +920,9 @@ export function PerGameResultsScreen() {
         <Text style={styles.note}>None of your players had a game on {humanDay(lastSettled)}.</Text>
       ) : null}
       {anchors.length > 1 ? (
-        <MonthJump anchors={anchors} current={wide ? currentMonth : null} onJump={jumpTo} />
+        // Marked on phones too, where the row sits at the top of the feed
+        // (walk 7 T1-07): the newest month there, the jumped-to one after a jump.
+        <MonthJump anchors={anchors} current={readingMonth(anchors, currentMonth)} onJump={jumpTo} />
       ) : null}
       {wide && far ? <View nativeID={BACK_ID} style={styles.sideBack}>{back}</View> : null}
     </View>
