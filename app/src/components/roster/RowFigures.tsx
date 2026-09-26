@@ -43,8 +43,11 @@ function Share({ grow, children }: { grow: number; children: ReactNode }) {
  * next one.
  */
 export function StackedFigures({ price, dividend, net, total, narrow = false }: Figures & { narrow?: boolean }) {
+  // Drawn for the eye: the row's own name already says each figure with its
+  // caption, so screen readers no longer hear four bare amounts after it
+  // (fix 10 roster owner's note).
   return (
-    <View style={styles.line}>
+    <View aria-hidden style={styles.line}>
       <Share grow={PHONE_SHARES.price}><FineMoney precision="compact" signed={false} value={price} /></Share>
       <Share grow={PHONE_SHARES.dividend}>
         {dividend === null ? <Missing /> : <FineMoney precision="compact" signed={false} value={dividend} />}
@@ -59,7 +62,9 @@ export function StackedFigures({ price, dividend, net, total, narrow = false }: 
 export function FigureLegend({ side, narrow = false }: { side: PerGamePositionSide; narrow?: boolean }) {
   const captions = figureCaptions(side);
   return (
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.line}>
+    // Drawn for the eye only: each row says its captions (on the web too,
+    // where the native-only props did nothing).
+    <View aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.line}>
       <Share grow={PHONE_SHARES.price}><Text style={styles.caption}>{captions.price}</Text></Share>
       <Share grow={PHONE_SHARES.dividend}><Text style={styles.caption}>{captions.dividend}</Text></Share>
       {narrow ? null : <Share grow={PHONE_SHARES.net}><Text style={styles.caption}>{captions.net}</Text></Share>}
