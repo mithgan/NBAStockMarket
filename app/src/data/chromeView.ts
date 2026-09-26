@@ -137,7 +137,7 @@ export function practiceQuestion(
     return {
       title: 'Play another season?',
       lines: [`Your final result will be cleared: ${stakes}.`, 'A new season starts at Day 0 with an empty roster.'],
-      confirmLabel: 'Play again',
+      confirmLabel: 'Play another season',
       cancelLabel: 'Keep this result',
     };
   }

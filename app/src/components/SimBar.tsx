@@ -535,8 +535,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
           season" (walk 2 T2-17). Its name keeps "restart" for anyone looking. */}
       <Button
         ref={restartRef}
-        accessibilityLabel={progress.complete ? 'Play again: restart practice' : 'Restart practice'}
-        label={progress.complete ? 'Play again' : 'Restart'}
+        accessibilityLabel={progress.complete ? 'Play another season: restart practice' : 'Restart practice'}
+        // One name for the way on at season end, as the card and status row
+        // say it (walk 3 T1-11, T4-04).
+        label={progress.complete ? 'Play another season' : 'Restart'}
         onPress={() => askQuestion(progress.complete ? 'play-again' : 'restart')}
         style={[styles.quiet, narrow && styles.quietNarrow]}
         variant="quiet"
@@ -634,8 +636,13 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     return (
       <View style={[styles.controls, styles.controlsNarrow]}>
         <View style={[styles.group, styles.groupFill]}>
-          {advanceButtons}
-          {menu(secondaryButtons)}
+          {/* Nothing left to play at season end: no dimmed advance buttons. */}
+          {progress.complete ? secondaryButtons : (
+            <>
+              {advanceButtons}
+              {menu(secondaryButtons)}
+            </>
+          )}
         </View>
         {hint}
       </View>
@@ -644,9 +651,11 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
 
   return (
     <View style={[styles.controls, narrow && styles.controlsNarrow, inline && styles.controlsInline]}>
-      <View style={[styles.group, narrow && styles.groupNarrow]}>
-        {advanceButtons}
-      </View>
+      {progress.complete ? null : (
+        <View style={[styles.group, narrow && styles.groupNarrow]}>
+          {advanceButtons}
+        </View>
+      )}
       <View style={[styles.group, styles.secondary, inline && styles.secondaryInline]}>
         {secondaryButtons}
       </View>

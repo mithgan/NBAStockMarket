@@ -221,7 +221,7 @@ test('Restart and Exit say what the season would lose', async () => {
   const again = practiceQuestion('play-again', done);
   assert.equal(again.title, 'Play another season?');
   assert.equal(again.lines[0], 'Your final result will be cleared: a finished season, 8 players, score -$40K.');
-  assert.equal(again.confirmLabel, 'Play again');
+  assert.equal(again.confirmLabel, 'Play another season');
   assert.equal(
     practiceStakes({ progress: practiceProgress(OPENING_EVE, OPENING_EVE), players: 0, shorts: 0, score: 0 }),
     'Day 0 of 174, no players, score $0',

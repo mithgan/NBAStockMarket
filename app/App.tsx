@@ -13,6 +13,7 @@ import { seasonLabelFor } from './src/data/calendar';
 import { PerGameStatusStrip as SeasonControl } from './src/components/PerGameStatusStrip';
 import { SimBar } from './src/components/SimBar';
 import { SettingsButton, SettingsSheet } from './src/components/SettingsSheet';
+import { LeadersTabIcon, MarketTabIcon, ResultsTabIcon, RosterTabIcon } from './src/components/TabIcons';
 import { useReducedMotion } from './src/hooks/useReducedMotion';
 import { PerGameLeaderboardScreen as LeaderboardScreen } from './src/screens/PerGameLeaderboardScreen';
 import { PerGameMarketScreen as MarketScreen } from './src/screens/PerGameMarketScreen';
@@ -375,6 +376,14 @@ function treatmentsRequested(): boolean {
   return new URLSearchParams(window.location.search).has('treatments');
 }
 const NARROW_LAYOUT_MAX_WIDTH = 300;
+
+/** The icon for a tab, for windows too narrow for its label. */
+function TabIcon({ tab, color }: { tab: Tab; color: string }) {
+  if (tab === 'portfolio') return <RosterTabIcon color={color} />;
+  if (tab === 'market') return <MarketTabIcon color={color} />;
+  if (tab === 'plays') return <ResultsTabIcon color={color} />;
+  return <LeadersTabIcon color={color} />;
+}
 /** Below this width the brand bar keeps the wordmark and drops "STOCK MARKET" whole (never "STOCK MAR…"). */
 const BRAND_PRODUCT_MIN_WIDTH = 330;
 
@@ -459,6 +468,8 @@ function AppBody() {
   // brand line only fit at the smallest type size, without side padding.
   const narrow = width < NARROW_LAYOUT_MAX_WIDTH;
   const brandOnly = width < BRAND_PRODUCT_MIN_WIDTH;
+  // Under this width the four tab labels would be cut to "Ro… M… Re… Le…".
+  const iconTabs = width < 200;
   const auth = useOptionalAuth();
   const authError = auth?.error ?? null;
   const authSubmitting = auth?.isSubmitting ?? false;
@@ -598,13 +609,19 @@ function AppBody() {
                   content: below the labels when the bar is on top, above when
                   the bar is at the bottom. */}
               <View style={[styles.tabMarker, position === 'top' && styles.tabMarkerBottomEdge, active && styles.tabMarkerActive]} />
-              <Text
-                maxFontSizeMultiplier={1.5}
-                numberOfLines={1}
-                style={[styles.tabText, narrow && styles.tabTextNarrow, active && styles.activeTabText]}
-              >
-                {tab.label}
-              </Text>
+              {iconTabs ? (
+                // Too narrow for the words (a phone at 400% zoom): an icon each,
+                // the tab still named in full for screen readers.
+                <TabIcon color={active ? colors.goldInk : colors.faint} tab={tab.key} />
+              ) : (
+                <Text
+                  maxFontSizeMultiplier={1.5}
+                  numberOfLines={1}
+                  style={[styles.tabText, narrow && styles.tabTextNarrow, active && styles.activeTabText]}
+                >
+                  {tab.label}
+                </Text>
+              )}
             </Pressable>
           );
         })}

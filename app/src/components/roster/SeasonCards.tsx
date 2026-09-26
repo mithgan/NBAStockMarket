@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { exactMoney, humanDate, signedMoney, signedMoneyFine } from '../../copy/terms';
 import type { SeasonSummary } from '../../data/perGameMetrics';
@@ -31,12 +31,15 @@ export function WelcomeCard({
   const fee = feeDollars > 0 ? ` Each add or drop costs a ${exactMoney(feeDollars)} fee.` : '';
   const games = nextGameDate ? `the ${humanDate(nextGameDate)} games` : 'the first games';
   const title = hasPlayers ? 'Ready for the first games' : 'Your practice season';
+  // At 400% zoom (about 100px wide) the × takes its own line and the buttons
+  // run full width, so the words keep the whole card (walk 3 T3-05).
+  const tiny = useWindowDimensions().width < 200;
   const copy = hasPlayers
     ? `Press +1 night to play ${games}. You can keep adding players until then.`
     : `Pick players you think will earn more than their price a game, then press +1 night to play ${games}.${fee} Practice isn't saved: reloading starts a new season.`;
   return (
-    <View style={styles.band}>
-      <View style={styles.headRow}>
+    <View style={[styles.band, tiny && styles.bandTiny]}>
+      <View style={[styles.headRow, tiny && styles.headRowTiny]}>
         <View style={styles.headText}>
           <Label tone="gold">Practice</Label>
           <Text accessibilityRole="header" {...headingLevel(2)} style={styles.title}>{title}</Text>
@@ -46,13 +49,13 @@ export function WelcomeCard({
           accessibilityRole="button"
           hitSlop={4}
           onPress={onHide}
-          style={({ pressed }) => [styles.hide, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.hide, tiny && styles.hideTiny, pressed && styles.pressed]}
         >
           <Text style={styles.hideGlyph}>×</Text>
         </Pressable>
       </View>
       <Text style={styles.copy}>{copy}</Text>
-      <View style={styles.actions}>
+      <View style={[styles.actions, tiny && styles.actionsTiny]}>
         {hasPlayers ? null : (
           <Button accessibilityLabel="Open market: browse players to add" label="Open market" onPress={onOpenMarket} variant="primary" />
         )}
@@ -172,6 +175,21 @@ const styles = StyleSheet.create({
   headText: {
     flex: 1,
     minWidth: 0,
+  },
+  bandTiny: {
+    paddingHorizontal: space.sm,
+  },
+  hideTiny: {
+    alignSelf: 'flex-end',
+    marginTop: 0,
+  },
+  headRowTiny: {
+    flexDirection: 'column-reverse',
+    alignItems: 'stretch',
+  },
+  actionsTiny: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
   },
   title: {
     ...headingStyle,
