@@ -53,6 +53,7 @@ import { humanDate, seasonResultLine } from '../copy/terms';
 import { rankLine } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
 import { refreshNotice } from '../state/perGameNotices';
+import { setPracticePlaying } from '../state/practicePlaying';
 import { openTab } from '../state/uiActions';
 import { colors, fonts, headingStyle, radius, space, type, weight } from '../theme';
 import { Button, ConfirmDialog, headingLevel, settleTaps, visuallyHidden } from '../ui/kit';
@@ -412,6 +413,8 @@ function publishQueued(next: QueuedPresses): void {
 }
 
 function publishPlaying(next: string | null): void {
+  // Every screen can see what is playing (a move pressed now waits for it).
+  setPracticePlaying(next);
   if (next === playingNow) return;
   playingNow = next;
   queueListeners.forEach((listener) => listener());
@@ -1320,6 +1323,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     runRef.current = null;
     landedRun.current = null;
     setPlaying({ step: 'end', date: end ? humanDate(end) : null });
+    setPracticePlaying("rest of the season's");
     try {
       await afterPaint();
       recordAdvance({ step: 'week', from, emptyRoster: open.length === 0 });
@@ -1335,6 +1339,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     } finally {
       advancingRef.current = false;
       setPlaying(null);
+      setPracticePlaying(null);
     }
   };
   playToEndRef.current = () => {

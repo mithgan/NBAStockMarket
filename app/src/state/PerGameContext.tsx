@@ -21,7 +21,7 @@ import type {
   PerGamePosition,
 } from '../api/contracts';
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
-import { exactMoney, perGame } from '../copy/terms';
+import { exactMoney, moneyFine, perGame } from '../copy/terms';
 import { practiceProgress } from '../data/chromeView';
 import { isAppResume } from './appResume';
 import { ActionLock } from './actionLock';
@@ -365,7 +365,8 @@ export function PerGameProvider({
       ? [...last.names, move.name]
       : [move.name];
     const fee = bootstrapRef.current?.ruleset.transactionFeeDollars ?? 0;
-    const fees = fee > 0 ? ` ${exactMoney(fee * names.length)}\u00a0in fees.` : '';
+    // Totals read in K like every other figure ("$1.25K in fees", walk 9 T4-01).
+    const fees = fee > 0 ? ` ${moneyFine(fee * names.length)}\u00a0in fees.` : '';
     const shown = names.length === 1 ? text
       : names.length <= 3 ? `${nameList(names)} ${move.verb}.${fees}`
         : `${move.name} ${move.verb}: ${names.length} players in a row.${fees}`;
