@@ -928,6 +928,114 @@ export function earnLine(dollarsPerNetPoint: number | null | undefined): string 
   return `Each game a player plays, you pay his price and collect his dividend${rate}.`;
 }
 
+/**
+ * The welcome's first part (walk 10 T1-01): what to do, as three short
+ * numbered steps a new fan can take in at a glance, the call to action
+ * first. "Press +1 night to play Oct 21".
+ */
+export function welcomeSteps(nextGameDate: string | null | undefined): string[] {
+  return [
+    'Add players from the Market',
+    `Press +1 night to play ${nextGameDate ? humanDate(nextGameDate) : 'the first games'}`,
+    "Beat each player's price to score",
+  ];
+}
+
+/**
+ * The welcome's smaller second part (walk 10 T1-01): how a game scores
+ * (`earnLine`), that a bad game can go below zero, the fee, and that
+ * practice starts over on a reload.
+ */
+export function welcomeDetails(earn: string, feeDollars: number): string {
+  const fee = feeDollars > 0 ? ` Each add or drop costs ${exactMoney(feeDollars)}.` : '';
+  return `${earn} ${BELOW_ZERO_WELCOME}${fee} Practice isn't saved: reloading starts over.`;
+}
+
+/**
+ * Which Closed rows offer the move again (walk 10 T4-07): a player's newest
+ * shown row on each side, "Add again" on a dropped player's and "Short
+ * again" on a short's. A stint dropped before he played is folded into the
+ * Fees line, never shown, so it never takes the button from the row above
+ * it. Rows come most recent first.
+ */
+export function againRows(rows: readonly ClosedRow[]): { readdable: Set<string>; reshortable: Set<string> } {
+  const readdable = new Set<string>();
+  const reshortable = new Set<string>();
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const key = `${row.side}:${row.playerId}`;
+    if (row.unplayed || seen.has(key)) continue;
+    seen.add(key);
+    (row.side === 'long' ? readdable : reshortable).add(row.positionId);
+  }
+  return { readdable, reshortable };
+}
+
+/**
+ * A Closed row as a screen reader hears it (walk 10 T3-04), its figure
+ * included as the screen draws it: "Scottie Barnes, dropped Oct 28 after 4
+ * games, last game Oct 27: -$612K". `money` is the drawn figure; `back` says
+ * where he is now, when he is on a list again.
+ */
+export function closedSpoken(row: Pick<ClosedRow, 'name' | 'how' | 'games'>, money: string, back: string | null = null): string {
+  const [first = '', ...rest] = row.how.split(' · ');
+  const how = `${first.charAt(0).toLowerCase()}${first.slice(1)}`;
+  const games = `${row.games} ${row.games === 1 ? 'game' : 'games'}`;
+  // "Dropped after Oct 21" already has its "after".
+  const when = /\b(after|before)\b/.test(first) ? `${how}, ${games}` : `${how} after ${games}`;
+  const more = rest.length > 0 ? `, ${rest.join(', ')}` : '';
+  return `${row.name}, ${when}${more}: ${money}${back ? `. ${back}` : ''}`;
+}
+
+/** The first-night tip's reading: a tag the screen shows and what it means, or the words alone. */
+export interface TipReading {
+  side: PerGamePositionSide;
+  /** "PAYING OFF" or "LOSING MONEY" when an open row shows it; null when the words stand alone. */
+  tag: string | null;
+  words: string;
+}
+
+/**
+ * What the first-night tip explains (walk 10 T1-10): a tag an open row
+ * shows ("PAYING OFF means…"), on the tip's side first; with no open row
+ * showing one (a short that ended inside the first week), the newest Closed
+ * row, by name and figure: "Cade Cunningham's short ended +$86.5K: his
+ * dividends came in under his price." Never a word the screen does not show.
+ */
+export function tipReading(
+  positions: readonly PerGamePosition[],
+  results: readonly PerGameSettledResult[],
+  closed: readonly ClosedRow[] = [],
+): TipReading {
+  const shows = (side: PerGamePositionSide) => positions.some((position) => {
+    if (position.status !== 'active' || position.side !== side) return false;
+    const verdict = valueVerdict(positionValue(results, position.positionId));
+    return verdict === 'profit' || verdict === 'loss';
+  });
+  const first = tipSide(positions);
+  const other: PerGamePositionSide = first === 'long' ? 'short' : 'long';
+  for (const side of [first, other]) {
+    if (!shows(side)) continue;
+    const verdict = tipVerdict(positions, results, side);
+    return { side, tag: tipTag(verdict), words: tipWords(side, verdict) };
+  }
+  const row = closed.find((candidate) => !candidate.unplayed);
+  if (!row) return { side: first, tag: tipTag('profit'), words: tipWords(first, 'profit') };
+  const money = formatAt(row.total, 'fine', true);
+  const up = Math.round(row.total) > 0;
+  const down = Math.round(row.total) < 0;
+  const math = " Results shows each game's math.";
+  if (row.side === 'short') {
+    const what = row.endedByTerm ? 'ended' : 'closed';
+    const why = up ? 'his dividends came in under his price'
+      : down ? 'he played well, so his dividends beat his price' : 'his dividends matched his price';
+    return { side: 'short', tag: null, words: `${row.name}'s short ${what} ${money}: ${why}.${math}` };
+  }
+  const why = up ? 'his dividends beat your price'
+    : down ? 'his dividends came in under your price' : 'his dividends matched your price';
+  return { side: 'long', tag: null, words: `${row.name} ended ${money} when you dropped him: ${why}.${math}` };
+}
+
 /** The first-night tip stays up to a week of game nights (walk 6 T1-17). */
 export const TIP_DAYS = 7;
 
@@ -1185,6 +1293,33 @@ export function axisMoney(value: number): string {
  */
 export function axisMark(value: number): string {
   return Math.abs(Math.round(value)) >= 999_950 ? formatAt(value, 'fine', true) : axisMoney(value);
+}
+
+/**
+ * A value mark's words on the score chart: "$0", "High +$4.56M", "Low
+ * -$334K" (walk 10 T1-04). Named, so a season whose line ends just under
+ * its high never reads as ending at the high: the final score is the
+ * score block's, and a night's reading gives any other.
+ */
+export function valueMark(kind: 'zero' | 'high' | 'low', value: number): string {
+  if (kind === 'zero') return '$0';
+  return `${kind === 'high' ? 'High' : 'Low'} ${axisMark(value)}`;
+}
+
+/** Clear air above the score chart's heading when a tap brings it into view. */
+export const READING_REVEAL_GAP = 4;
+
+/**
+ * Where to scroll so a tapped night's reading can be seen (walk 10 T1-07):
+ * the chart's heading carries it, and on a phone it can sit scrolled under
+ * the top of the page while the plot is in view. `headingTop` is its top
+ * edge from the top of the scrolling area; returns the scroll offset that
+ * puts it just inside (never above 0), or null when it is already in view,
+ * so a reading never moves a page that already shows it.
+ */
+export function readingRevealTop(headingTop: number, scrollTop: number, gap = READING_REVEAL_GAP): number | null {
+  if (headingTop >= 0) return null;
+  return Math.max(0, Math.round(scrollTop + headingTop - gap));
 }
 
 /** Half a value mark's height: its words are about 14px tall. */

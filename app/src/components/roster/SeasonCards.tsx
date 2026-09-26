@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { exactMoney, humanDate } from '../../copy/terms';
+import { humanDate } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
 import type { SeasonSummary } from '../../data/perGameMetrics';
-import { BELOW_ZERO_WELCOME, finalSummary, formatAt, tipTag, tipWords, type BreakdownPart, type PartPrecision, type TipVerdict } from '../../data/rosterView';
+import { finalSummary, formatAt, tipTag, tipWords, welcomeDetails, welcomeSteps, type BreakdownPart, type PartPrecision, type TipVerdict } from '../../data/rosterView';
 import { colors, control, fonts, headingStyle, radius, space, type, weight } from '../../theme';
 import { Button, headingLevel, Label, tapsSettling, visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -39,22 +39,21 @@ export function WelcomeCard({
   onOpenRules?: () => void;
   onHide: () => void;
 }) {
-  const fee = feeDollars > 0 ? ` Each add or drop costs a ${exactMoney(feeDollars)} fee.` : '';
   const games = nextGameDate ? `the ${humanDate(nextGameDate)} games` : 'the first games';
   const title = hasPlayers ? 'Ready for the first games' : 'Your practice season';
   // At 400% zoom (about 100px wide) the × takes its own line and the buttons
   // run full width, so the words keep the whole card (walk 3 T3-05).
-  const tiny = useWindowDimensions().width < 200;
-  const copy = hasPlayers
-    ? `Press +1 night to play ${games}. You can keep adding players until then.`
-    // Right after what a dividend is: that a bad game can take it below zero
-    // (walk 8 T1-01), so a first "-$56K" on the roster is not a surprise.
-    : `${earn} ${BELOW_ZERO_WELCOME} Pick players whose dividend should beat their price, then press +1 night to play ${games}.${fee} Practice isn't saved: reloading starts a new season.`;
+  const windowWidth = useWindowDimensions().width;
+  const tiny = windowWidth < 200;
+  // A 320px phone keeps both buttons on one line (their padding trimmed, the
+  // 44px height kept), so the roster shows under the card (walk 10 T1-01).
+  const tight = !tiny && windowWidth < 360 ? styles.actionTight : undefined;
   return (
     <View style={[styles.band, tiny && styles.bandTiny]}>
       <View style={[styles.headRow, tiny && styles.headRowTiny]}>
         <View style={styles.headText}>
-          <Label tone="gold">Practice</Label>
+          {/* The steps' title says "practice" itself; the next step's does not. */}
+          {hasPlayers ? <Label tone="gold">Practice</Label> : null}
           <Text
             accessibilityRole="header"
             nativeID={PRACTICE_WELCOME_TITLE_ID}
@@ -75,12 +74,29 @@ export function WelcomeCard({
           <Text style={styles.hideGlyph}>×</Text>
         </Pressable>
       </View>
-      <Text style={styles.copy}>{copy}</Text>
+      {hasPlayers ? (
+        <Text style={styles.copy}>{`Press +1 night to play ${games}. You can keep adding players until then.`}</Text>
+      ) : (
+        <>
+          {/* What to do, as three short steps the eye takes in at once; how
+              a game scores, the fee and the reload in a smaller part under
+              them (walk 10 T1-01). */}
+          <View role="list" style={styles.steps}>
+            {welcomeSteps(nextGameDate).map((step, index) => (
+              <View key={step} role="listitem" style={styles.step}>
+                <Text style={styles.stepNumber}>{index + 1}</Text>
+                <Text style={styles.stepText}>{step}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.details}>{welcomeDetails(earn, feeDollars)}</Text>
+        </>
+      )}
       <View style={[styles.actions, tiny && styles.actionsTiny]}>
         {hasPlayers ? null : (
-          <Button accessibilityLabel="Open market: browse players to add" label="Open market" onPress={onOpenMarket} variant="primary" />
+          <Button accessibilityLabel="Open market: browse players to add" label="Open market" onPress={onOpenMarket} style={tight} variant="primary" />
         )}
-        {onOpenRules ? <Button label="How scoring works" onPress={onOpenRules} /> : null}
+        {onOpenRules ? <Button label="How scoring works" onPress={onOpenRules} style={tight} /> : null}
       </View>
     </View>
   );
@@ -95,22 +111,30 @@ export function WelcomeCard({
  * beside them, never on a row of its own above them (walk 7 T3-09). × hides
  * it, and it goes by itself after the first week.
  */
-export function FirstNightTip({ onOpenResults, onHide, side = 'long', verdict = 'profit' }: {
+export function FirstNightTip({ onOpenResults, onHide, side = 'long', verdict = 'profit', reading }: {
   onOpenResults: () => void;
   onHide: () => void;
   /** Who the tip speaks to: a shorts-only player gets the short's reading (`tipSide`, walk 8 T4-10). */
   side?: 'long' | 'short';
   /** The tag it explains: the one the rows show (`tipVerdict`, walk 9 T1-14). */
   verdict?: TipVerdict;
+  /**
+   * What it explains, from `tipReading`: a tag on screen and its meaning, or
+   * with no tag on screen the newest Closed row in words (walk 10 T1-10).
+   * Overrides `side` and `verdict`.
+   */
+  reading?: { tag: string | null; words: string };
 }) {
+  const tag = reading ? reading.tag : tipTag(verdict);
+  const words = reading ? reading.words : tipWords(side, verdict);
   const tiny = useWindowDimensions().width < 200;
   const results = <Button accessibilityLabel="Results: each game's math" label="Results" onPress={onOpenResults} />;
   return (
     <View style={[styles.band, styles.tipBand, tiny && styles.bandTiny]}>
       <View style={[styles.headRow, styles.tipRowInline]}>
         <Text style={[styles.headText, styles.tipText]}>
-          <Text style={styles.tipTag}>{tipTag(verdict)}</Text>
-          {tipWords(side, verdict)}
+          {tag ? <Text style={styles.tipTag}>{tag}</Text> : null}
+          {words}
         </Text>
         {tiny ? null : results}
         <Pressable
@@ -399,6 +423,43 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: type.body,
     lineHeight: 21,
+  },
+  // The welcome's three steps: a figure column, then one short line each.
+  steps: {
+    marginTop: space.xs,
+    rowGap: 2,
+  },
+  step: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    columnGap: space.sm,
+  },
+  stepNumber: {
+    minWidth: 12,
+    color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.black,
+    fontVariant: ['tabular-nums'],
+  },
+  stepText: {
+    flexShrink: 1,
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.heavy,
+    lineHeight: 21,
+  },
+  actionTight: {
+    paddingHorizontal: space.sm,
+  },
+  // The second part: smaller and quieter than the steps.
+  details: {
+    marginTop: space.sm,
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    lineHeight: 17,
   },
   // The first-night tip: a slimmer band than the welcome.
   tipBand: {

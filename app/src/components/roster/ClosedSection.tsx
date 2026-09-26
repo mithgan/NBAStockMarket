@@ -3,9 +3,9 @@ import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-na
 
 import { gamesCount, unbrokenName } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
-import { feesDetail, formatAt, spokenRepeats, type ClosedRow, type PartPrecision } from '../../data/rosterView';
+import { closedSpoken, feesDetail, formatAt, spokenRepeats, type ClosedRow, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
-import { Button } from '../../ui/kit';
+import { Button, visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
 import { TABLE_COLUMNS } from './RowFigures';
 import { SectionHead } from './SectionHead';
@@ -87,10 +87,7 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
         const action = actionFor ? actionFor(row) : null;
         const note = noteFor ? noteFor(row) : null;
         const back = backFor ? backFor(row) : null;
-        const label = `${row.name}, ${row.how.replace(/ · /g, ', ')}, ${gamesCount(row.games)}, ${formatAt(row.total, precision, true)} stays in your score${back ? `. ${back}` : ''}`;
         const figure = (hidden: boolean) => (
-          // In the table the figure is drawn after Add again; the facts'
-          // name already says it, so it is not heard twice.
           <View aria-hidden={hidden || undefined} style={[styles.money, table && { marginRight: totalInset, minWidth: TABLE_COLUMNS.total, alignItems: 'flex-end' }]}>
             <FineMoney precision={precision} value={row.total} />
           </View>
@@ -98,8 +95,13 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
         return (
           <View key={row.positionId} style={styles.item}>
             <View style={styles.row}>
-              {/* The facts read as one stop; a follow-up button stays its own stop. */}
-              <View accessible accessibilityLabel={label} style={[styles.facts, table && styles.factsTable]}>
+              {/* Heard as one sentence with its figure, "Scottie Barnes,
+                  dropped Oct 28 after 4 games: -$612K" (walk 10 T3-04): a
+                  name on a role-less box is not read in reading mode, so the
+                  sentence is hidden text and the drawn row is hidden from
+                  screen readers. A follow-up button stays its own stop. */}
+              <Text style={visuallyHidden}>{closedSpoken(row, formatAt(row.total, precision, true), back)}</Text>
+              <View aria-hidden style={[styles.facts, table && styles.factsTable]}>
                 <View style={styles.copy}>
                   <Text style={styles.name}>{unbrokenName(row.name)}</Text>
                   <DotLine parts={[...row.how.split(' · ').map(bindDates), keepTogether(gamesCount(row.games))]} style={styles.detail} />

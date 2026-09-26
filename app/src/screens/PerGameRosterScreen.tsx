@@ -53,6 +53,7 @@ import { chromeFolded, keepTogether, practiceProgress, resultSpan } from '../dat
 import { isSeasonOver } from '../data/marketView';
 import { earningsBetween, scoreBreakdown, seasonSummary } from '../data/perGameMetrics';
 import {
+  againRows,
   breakdownParts,
   closedRows,
   earnLine,
@@ -68,11 +69,10 @@ import {
   shortEndsNext,
   shownParts,
   slotLine,
+  tipReading,
   tipRetired,
-  tipSide,
   belowZeroNote,
   backLines,
-  tipVerdict,
   type ClosedRow,
   type RowLayout,
 } from '../data/rosterView';
@@ -924,18 +924,9 @@ export function PerGameRosterScreen({
 
   // "Short again" goes on the latest closed row of any short, closed early
   // or run to its term (walk 8 T2-05), "Add again" on the latest row of a
-  // player you dropped (walk 7 T2-20), while he is not on either list again.
-  const reshortable = new Set<string>();
-  const readdable = new Set<string>();
-  {
-    const seen = new Set<string>();
-    for (const row of closed) {
-      if (seen.has(row.playerId)) continue;
-      seen.add(row.playerId);
-      if (row.side === 'short') reshortable.add(row.positionId);
-      if (row.side === 'long') readdable.add(row.positionId);
-    }
-  }
+  // player you dropped (walk 7 T2-20), while he is not on either list again:
+  // his newest shown row, even when his last stint never played (walk 10 T4-07).
+  const { readdable, reshortable } = againRows(closed);
   const heldNow = new Set(active.map((position) => position.playerId));
   const sideFull = (side: PerGamePosition['side']) => (
     side === 'long' ? longSlots.used >= longSlots.limit : shortSlots.used >= shortSlots.limit
@@ -1085,9 +1076,9 @@ export function PerGameRosterScreen({
     />
   ) : tipOpen ? (
     <FirstNightTip
-      side={tipSide(bootstrap.positions)}
-      // It explains the tag the rows show (walk 9 T1-14).
-      verdict={tipVerdict(bootstrap.positions, bootstrap.settledResults ?? [], tipSide(bootstrap.positions))}
+      // It explains the tag the rows show (walk 9 T1-14), or with none on
+      // screen the newest Closed row (walk 10 T1-10).
+      reading={tipReading(bootstrap.positions, bootstrap.settledResults ?? [], closed)}
       // Results at the end of the tip's words at every width, so the tip
       // keeps to a slim band (walk 6 T1-08, walk 7 T1-10).
       onHide={() => {
@@ -1134,7 +1125,10 @@ export function PerGameRosterScreen({
       {opening}
       {seasonOver ? null : (
         <ScoreHeader
-          nextGameDate={bootstrap.game.nextGameDate}
+          // The welcome's steps name the first games' date, so the score
+          // does not say it a third time and the roster shows under them on
+          // a 320px phone (walk 10 T1-01).
+          nextGameDate={showWelcome ? null : bootstrap.game.nextGameDate}
           parts={parts}
           precision={precision}
           rank={started ? rankLine(bootstrap.leaderboard) : null}
@@ -1426,8 +1420,11 @@ const styles = StyleSheet.create({
   compactFigures: {
     marginTop: space.sm,
   },
+  // Drop ends at the right edge, in line with the figures above it (walk 10
+  // T1-06): a row, so the button's own centring (alignSelf) is vertical here.
   compactAction: {
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
   },

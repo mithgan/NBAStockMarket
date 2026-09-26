@@ -3,7 +3,7 @@ import { Platform, StyleSheet, Text, View, type LayoutChangeEvent, type ViewStyl
 
 import { formatAt, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, headingStyle, space, type, weight } from '../../theme';
-import { headingLevel } from '../../ui/kit';
+import { headingLevel, visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
 
 /** The title row's height before it has been measured. */
@@ -87,13 +87,16 @@ export function SectionHead({
             {count ? <Text style={styles.count}>{count}</Text> : null}
           </View>
           {total === undefined ? null : (
-            <View style={{ marginRight: totalInset }}>
-              <FineMoney
-                accessibilityLabel={totalLabel ? `${totalLabel} ${formatAt(total, precision, true)}` : undefined}
-                precision={precision}
-                value={total}
-              />
-            </View>
+            <>
+              {/* The total named for screen readers, "Roster total -$120.5K"
+                  (walk 10 T3-03): a name on a role-less figure is not read
+                  in reading mode, so the words are hidden text and the drawn
+                  figure is hidden from them. */}
+              {totalLabel ? <Text style={visuallyHidden}>{`${totalLabel} ${formatAt(total, precision, true)}`}</Text> : null}
+              <View aria-hidden={totalLabel ? true : undefined} style={{ marginRight: totalInset }}>
+                <FineMoney precision={precision} value={total} />
+              </View>
+            </>
           )}
         </View>
       </View>

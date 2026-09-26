@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Platform, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle, ClipPath, Defs, G, Line, Path, Rect } from 'react-native-svg';
 
 import type { PerGameLedgerEntry } from '../api/contracts';
 import {
   axisLabelIndexes,
-  axisMark,
   chartSummary,
   chartValueText,
   MARK_MIN_GAP,
@@ -14,9 +13,11 @@ import {
   nearestIndex,
   nightlySeries,
   placeAxisLabels,
+  readingRevealTop,
   valueTicks,
   weekStepIndex,
   widestReading,
+  valueMark,
   type NightPoint,
 } from '../data/rosterView';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -141,10 +142,23 @@ export function PerGamePnlChart({
     return () => cancelAnimationFrame(frame);
   }, [reducedMotion, series.length]);
 
+  // A tap, click or slide asks to see its reading: when the heading that
+  // carries it has scrolled under the top of the page, it comes into view
+  // (walk 10 T1-07). Pointing (hover) and the keys never move the page.
+  const headingRef = useRef<View>(null);
+  const revealWanted = useRef(false);
+  useEffect(() => {
+    const wanted = revealWanted.current;
+    revealWanted.current = false;
+    if (pinned === null || !wanted) return;
+    revealReading(headingRef.current, reducedMotion);
+  }, [pinned, reducedMotion]);
+
   const last = series.length - 1;
   const read = useCallback((x: number, intent: PlotIntent) => {
     const index = nearestIndex(xs, x);
     if (index === null) return;
+    if (intent !== 'point') revealWanted.current = true;
     // Pointing reads a night; a click pins it, and a click on the pinned
     // night lets it go, as a second tap does.
     if (intent === 'point') setHovered(index);
@@ -152,6 +166,8 @@ export function PerGamePnlChart({
     else setPinned((current) => (current === index ? null : index));
   }, [xs]);
   const onKey = useCallback((key: string) => {
+    // The keys never move the page, even right after a slide asked to.
+    revealWanted.current = false;
     if (key === 'Escape') {
       if (selected === null) return false;
       setPinned(null);
@@ -223,7 +239,7 @@ export function PerGamePnlChart({
           so reading a night never pushes the chart and the rows under it
           (walk 9 T1-03): unseen copies of the resting words and of the
           longest reading share its one cell with what is shown. */}
-      <View style={styles.heading}>
+      <View ref={headingRef} style={styles.heading}>
         <View style={styles.headingLayer}>
           {point ? <Reading point={point} previous={series[shownIndex - 1]} stacked={tallReading} /> : restWords}
         </View>
@@ -350,7 +366,7 @@ export function PerGamePnlChart({
             onLayout={(event) => onMarkLayout(tick.kind, event.nativeEvent.layout.width)}
             style={[styles.tickLabel, { top: Math.min(Math.max(tick.labelY - 7, 0), plotHeight - 14) }]}
           >
-            {tick.kind === 'zero' ? '$0' : axisMark(tick.value)}
+            {valueMark(tick.kind, tick.value)}
           </Text>
         ))}
       </View>
@@ -376,6 +392,28 @@ export function PerGamePnlChart({
       </View>
     </View>
   );
+}
+
+/**
+ * Scrolls the chart's heading into view when it sits above the top of the
+ * area that scrolls it (web): the least move that shows the reading, smooth
+ * unless the viewer asked for less motion.
+ */
+function revealReading(node: unknown, reducedMotion: boolean) {
+  if (Platform.OS !== 'web') return;
+  const heading = node as HTMLElement | null;
+  if (!heading || typeof heading.getBoundingClientRect !== 'function') return;
+  let area = heading.parentElement;
+  while (area && !(area.scrollHeight > area.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(area).overflowY))) {
+    area = area.parentElement;
+  }
+  if (!area) return;
+  const top = readingRevealTop(heading.getBoundingClientRect().top - area.getBoundingClientRect().top, area.scrollTop);
+  if (top === null) return;
+  // The element's own scrollTo: react-native-web gives a ScrollView's node its
+  // own `scrollTo({ x, y })`, which reads these options as the top.
+  (Element.prototype.scrollTo as (this: Element, options: ScrollToOptions) => void)
+    .call(area, { top, behavior: reducedMotion ? 'auto' : 'smooth' });
 }
 
 /**

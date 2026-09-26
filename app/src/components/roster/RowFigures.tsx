@@ -95,11 +95,16 @@ export function ListFigures({ side, price, dividend, net, total }: Figures) {
 /** Column widths for the wide table; captions fit on one line at 11px. */
 export const TABLE_COLUMNS = { price: 76, dividend: 96, net: 76, total: 80 } as const;
 
-/** Wide lists: the header row over the figure columns (the section's legend). */
+/**
+ * Wide lists: the header row over the figure columns (the section's legend).
+ * Drawn only: the table under it names its own columns to screen readers, so
+ * the words are not heard twice (walk 10 T3-03). The native props do nothing
+ * on the web; `aria-hidden` does.
+ */
 export function TableHeader({ side, actionWidth }: { side: PerGamePositionSide; actionWidth: number }) {
   const captions = figureCaptions(side);
   return (
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.tableHeader}>
+    <View accessibilityElementsHidden aria-hidden importantForAccessibility="no-hide-descendants" style={styles.tableHeader}>
       <Text style={[styles.caption, styles.headerPlayer]}>Player</Text>
       <Text style={[styles.caption, { width: TABLE_COLUMNS.price }]}>{captions.price}</Text>
       <Text style={[styles.caption, { width: TABLE_COLUMNS.dividend }]}>{captions.dividend}</Text>
