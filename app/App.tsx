@@ -185,6 +185,23 @@ function CenteredState({
 const SUCCESS_NOTICE_MS = 5000;
 const SUCCESS_NOTICE_MAX_MS = 10000;
 
+/**
+ * Where the last tap landed, so a notice can keep clear of it: a notice that
+ * slides up over the row you just tapped hides its "Added ✓" (walk 3 T1-01).
+ */
+let lastTap = { y: -1, at: 0 };
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', (event) => {
+    lastTap = { y: event.clientY, at: Date.now() };
+  }, { capture: true, passive: true });
+}
+
+/** A notice right after a tap in the lower part of the screen shows at the top instead. */
+function noticeAtTop(): boolean {
+  if (typeof window === 'undefined') return false;
+  return Date.now() - lastTap.at < 3000 && lastTap.y > window.innerHeight * 0.5;
+}
+
 function successNoticeMs(message: string): number {
   return Math.min(SUCCESS_NOTICE_MAX_MS, SUCCESS_NOTICE_MS + Math.max(0, message.length - 60) * 60);
 }
@@ -214,6 +231,8 @@ function NoticeToast({
     return () => clearTimeout(timer);
   }, [message, onDismiss, tone]);
   const noticeRef = useRef<View | null>(null);
+  // Chosen once per notice: away from where the player just tapped.
+  const atTop = useMemo(() => noticeAtTop(), [message]);
   // A sheet over the app shows its own result (the profile's tick and note);
   // a success notice would only sit dimmed under its scrim.
   const sheetOpen = useSyncExternalStore(subscribeSheets, sheetIsOpen, () => false);
@@ -248,7 +267,7 @@ function NoticeToast({
     // presses whatever sits underneath. Screen readers already heard it
     // through the live region, so the visual copy stays out of their way.
     return (
-      <View style={styles.noticeLayer}>
+      <View style={[styles.noticeLayer, atTop && styles.noticeLayerTop]}>
         <Pressable
           ref={noticeRef}
           accessibilityElementsHidden
@@ -263,7 +282,7 @@ function NoticeToast({
     );
   }
   return (
-    <View style={styles.noticeLayer}>
+    <View style={[styles.noticeLayer, atTop && styles.noticeLayerTop]}>
       <View ref={noticeRef} style={[styles.notice, styles.noticeProblem]}>
         <Text style={styles.noticeText}>{message}</Text>
         <Pressable
@@ -879,6 +898,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: space.md,
     pointerEvents: 'box-none',
+  },
+  noticeLayerTop: {
+    top: space.md,
+    bottom: undefined,
   },
   notice: {
     width: '100%',
