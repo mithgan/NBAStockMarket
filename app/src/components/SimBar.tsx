@@ -36,7 +36,7 @@ import { rankLine } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
 import { openTab } from '../state/uiActions';
 import { colors, fonts, radius, space, type, weight } from '../theme';
-import { Button, ConfirmDialog, visuallyHidden } from '../ui/kit';
+import { Button, ConfirmDialog, settleTaps, visuallyHidden } from '../ui/kit';
 import { useSheetHistory } from '../web/appHistory';
 import { leavePractice, restartPractice } from '../web/practiceSession';
 import { ChromeButton } from './chrome/ChromeButton';
@@ -49,6 +49,18 @@ import { LockIcon, MoreIcon } from './chrome/ChromeIcons';
  * frames, so it does not wait; the timer is only a safety net.
  */
 const PAINT_FALLBACK_MS = 500;
+
+/**
+ * A second tap on the same advance button sooner than this is the same press
+ * bouncing (a double tap), not a second night: it is ignored. A deliberate
+ * second press, a moment later, is queued and plays (walk 5 T3-11, T4-06).
+ * Keyboard presses have no spot and always count.
+ */
+const ADVANCE_DOUBLE_TAP_MS = 250;
+const pressAdvance = (run: () => void) => () => {
+  settleTaps(0, ADVANCE_DOUBLE_TAP_MS);
+  run();
+};
 
 function afterPaint(): Promise<void> {
   if (typeof requestAnimationFrame !== 'function'
@@ -756,9 +768,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         disabled={advanceBusy || progress.complete}
         focusableWhenDisabled={!progress.complete}
         label={nightLabel}
-        onDisabledPress={() => pressWhileBusy('night')}
+        onDisabledPress={pressAdvance(() => pressWhileBusy('night'))}
         steady
-        onPress={() => pressRef.current?.('night')}
+        onPress={pressAdvance(() => pressRef.current?.('night'))}
         style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, stackedDate && styles.advanceDated, asksFirst && styles.advanceQuiet, inkNight && styles.advancePlaying]}
         textStyle={[asksFirst ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkNight && styles.advanceTextBusyStacked]}
         variant="secondary"
@@ -770,9 +782,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         disabled={advanceBusy || progress.complete}
         focusableWhenDisabled={!progress.complete}
         label={queued === 'week' ? queuedLabel('week', stackLabels) : playingWeek ? busyLabel(false) : stackLabels ? '+1\nweek' : '+1 week'}
-        onDisabledPress={() => pressWhileBusy('week')}
+        onDisabledPress={pressAdvance(() => pressWhileBusy('week'))}
         steady
-        onPress={() => pressRef.current?.('week')}
+        onPress={pressAdvance(() => pressRef.current?.('week'))}
         style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, asksFirst && styles.advanceQuiet, inkWeek && styles.advancePlaying]}
         textStyle={[asksFirst ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkWeek && styles.advanceTextBusyStacked]}
         variant="secondary"
