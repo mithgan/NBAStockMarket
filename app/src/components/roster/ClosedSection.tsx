@@ -84,9 +84,11 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
  * including the players dropped before they played (whose only effect on the
  * score was their fees).
  */
-export function FeesLine({ fees, moves, feeEach = 0, unplayed = 0, totalInset = 0, precision = 'fine' }: {
+export function FeesLine({ fees, moves, feeEach = 0, unplayed = 0, unplayedShorts = 0, totalInset = 0, precision = 'fine' }: {
   fees: number;
   moves: number;
+  /** Of `unplayed`, how many were shorts (closed, not dropped). */
+  unplayedShorts?: number;
   /** The fee for one move, said once: "$250 each". */
   feeEach?: number;
   /** Closed positions that never played a game for you. */
@@ -98,7 +100,8 @@ export function FeesLine({ fees, moves, feeEach = 0, unplayed = 0, totalInset = 
   // Moves, not "roster moves": shorts opened and closed cost the same fee.
   const detail = `${moves} ${moves === 1 ? 'move' : 'moves'}`
     + (feeEach > 0 ? ` · ${exactMoney(feeEach)} each` : '')
-    + (unplayed > 0 ? ` · ${unplayed} closed before playing` : '');
+    + (unplayed - unplayedShorts > 0 ? ` · ${unplayed - unplayedShorts} dropped before playing` : '')
+    + (unplayedShorts > 0 ? ` · ${unplayedShorts} ${unplayedShorts === 1 ? 'short' : 'shorts'} closed before playing` : '');
   return (
     <View
       accessible

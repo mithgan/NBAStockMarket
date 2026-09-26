@@ -300,6 +300,9 @@ test('layout: a table from 768px, the phone row below, one column under 300px or
   assert.equal(marketLayout(299, 1), 'large');
   assert.equal(marketLayout(390, 2), 'large');
   assert.equal(marketLayout(1440, 2), 'large');
+  // Sideways phone: phone rows; short laptop window: still the table.
+  assert.equal(marketLayout(844, 1, 390), 'phone');
+  assert.equal(marketLayout(1280, 1, 480), 'table');
   // A phone turned sideways gets the phone rows, which label their own figures (T1-19, T4-11).
   assert.equal(marketLayout(844, 1, 390), 'phone');
   assert.equal(marketLayout(932, 1, 430), 'phone');

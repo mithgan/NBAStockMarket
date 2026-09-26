@@ -27,6 +27,10 @@ function workedExample(rate: number, raw: boolean): string {
 }
 
 /** Why prices move, and why yours does not. */
+/** What to expect from picking well (walk 3 T1-12: a good plan can trail for weeks). */
+export const LUCK_EXPLAINER =
+  'Single games are noisy: one week is mostly luck, while good picks show over a month or more.';
+
 export const PRICE_EXPLAINER =
   "A player's price moves as people add and drop him and as he plays. The price you add him at is locked for as long as you hold him.";
 
@@ -49,7 +53,7 @@ export function perGameRulesPresentation(rules: PerGameRuleset) {
     ],
     // The loop first (what you do and how you profit), one worked night,
     // then where dividends come from, then the rest.
-    explanation: `${GOAL_EXPLAINER} ${ROSTER_EXPLAINER} ${workedExample(rules.dividendDollarsPerNetPoint, raw)} ${raw ? DIVIDEND_RAW : DIVIDEND_PROJECTION} ${NET_POINTS_EXPLAINER} ${SHORT_EXPLAINER} Your score adds up those games, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${NEGATIVE_DIVIDEND_EXPLAINER} ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
+    explanation: `${GOAL_EXPLAINER} ${ROSTER_EXPLAINER} ${workedExample(rules.dividendDollarsPerNetPoint, raw)} ${raw ? DIVIDEND_RAW : DIVIDEND_PROJECTION} ${NET_POINTS_EXPLAINER} ${SHORT_EXPLAINER} Your score adds up those games, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${NEGATIVE_DIVIDEND_EXPLAINER} ${LUCK_EXPLAINER} ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
     /** Plain definitions of the words the screens use. */
     glossary: [
       { term: 'Price', meaning: 'What one game of a player costs. The price you add him at stays locked while you hold him.' },
@@ -65,7 +69,7 @@ export function perGameRulesPresentation(rules: PerGameRuleset) {
       { term: 'Dividend last season', meaning: 'What he paid out a game last season: the market\'s best guide to what he is worth.' },
       {
         term: 'Value',
-        meaning: "Last season's dividend against his price today. On the Roster side it is dividend minus price; on the Short side, price minus dividend. Green is good for the side you are on.",
+        meaning: "Last season's dividend against his price today. On the Roster side it is dividend minus price; on the Short side, price minus dividend. A plus figure is good for the side you are on.",
       },
       { term: 'Net points', meaning: 'His box score in one number. Scoring and hustle add; turnovers, misses and minutes take away.' },
       { term: 'Roster lock', meaning: "Some nights, moves pause while that night's games are played." },

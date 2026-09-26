@@ -486,7 +486,11 @@ export const ROOMY_MIN_HEIGHT = 560;
  */
 export function marketLayout(width: number, fontScale: number, height = Infinity): MarketLayout {
   if (fontScale > 1.3 || width < 300) return 'large';
-  return width >= 768 && height >= SHORT_WINDOW_BELOW ? 'table' : 'phone';
+  if (width < 768) return 'phone';
+  // A phone turned sideways (short and under 1000px) gets the phone rows, which
+  // label their own figures; a short desktop window keeps the table rather
+  // than stretching phone rows across 1200px (walk 3 T2-10).
+  return height >= SHORT_WINDOW_BELOW || width >= 1000 ? 'table' : 'phone';
 }
 
 export interface MarketColumnSet {

@@ -203,7 +203,9 @@ const styles = StyleSheet.create({
   },
   /** Two parts a line; the gap between the pair is the grid's column gap. */
   partHalf: {
-    flexBasis: 0,
+    // At most two a line: four in a row paired each value with the next
+    // label on a tablet (walk 3 T2-11).
+    flexBasis: '40%',
     flexGrow: 1,
     minWidth: 130,
   },

@@ -186,8 +186,8 @@ function CenteredState({
  * so the money at the end of "…Your short on Shai Gilgeous-Alexander ended:
  * +$378K." can be read before it goes.
  */
-const SUCCESS_NOTICE_MS = 5000;
-const SUCCESS_NOTICE_MAX_MS = 10000;
+const SUCCESS_NOTICE_MS = 8000;
+const SUCCESS_NOTICE_MAX_MS = 14000;
 
 /**
  * Where the last tap landed, so a notice can keep clear of it: a notice that
@@ -236,11 +236,13 @@ function NoticeToast({
   onDismiss: () => void;
   tone: NoticeTone;
 }) {
+  // A pointer resting on a notice holds it (a magnifier user reads it where it is).
+  const [held, setHeld] = useState(false);
   useEffect(() => {
-    if (tone !== 'success') return undefined;
+    if (tone !== 'success' || held) return undefined;
     const timer = setTimeout(onDismiss, successNoticeMs(message));
     return () => clearTimeout(timer);
-  }, [message, onDismiss, tone]);
+  }, [held, message, onDismiss, tone]);
   const noticeRef = useRef<View | null>(null);
   // Chosen once per notice: away from where the player just tapped.
   const atTop = useMemo(() => tone === 'success' && noticeAtTop(), [message, tone]);
@@ -290,6 +292,8 @@ function NoticeToast({
           ref={noticeRef}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
+          onHoverIn={() => setHeld(true)}
+          onHoverOut={() => setHeld(false)}
           onPress={dismissByTap}
           style={styles.notice}
           {...({ tabIndex: -1 } as object)}

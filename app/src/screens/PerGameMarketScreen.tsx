@@ -168,7 +168,7 @@ function MarketRow({
   /** Unwatched while the Watching filter is on: kept in place, dimmed, until the filter changes. */
   dimmed?: boolean;
 }) {
-  const { bootstrap, closePosition, notify, openPosition, pendingActions } = usePerGame();
+  const { bootstrap, closePosition, dismissNotice, notify, openPosition, pendingActions } = usePerGame();
   const { player, position, side } = row;
   const actionKey = `position:${side}:${player.playerId}`;
   const pending = pendingActions.has(actionKey);
@@ -334,6 +334,8 @@ function MarketRow({
           label={word}
           onPress={() => {
             if (fullOffer) {
+              // One message at a time: the note replaces the last notice (walk 3 T3-15).
+              dismissNotice();
               setNoting((open) => !open);
               return;
             }

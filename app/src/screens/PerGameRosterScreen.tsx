@@ -777,6 +777,7 @@ export function PerGameRosterScreen({
         precision={precision}
         totalInset={totalInset}
         unplayed={unplayed}
+        unplayedShorts={closed.filter((row) => row.unplayed && row.side === 'short').length}
       />
     </>
   );

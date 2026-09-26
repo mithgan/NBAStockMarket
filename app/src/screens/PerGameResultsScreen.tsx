@@ -19,6 +19,7 @@ import type {
   PerGameSettledResult,
 } from '../api/contracts';
 import {
+  humanDate,
   humanDay,
   money,
   signedMoney,
@@ -194,7 +195,9 @@ function ResultRow({
   // Desktop puts the two amounts in aligned columns; a row with no settled
   // arithmetic keeps its status sentence instead.
   const priceColumns = columns && math !== null;
-  const label = resultLabel(playerName, result, model);
+  // Each row's name starts with its night, so two rows for the same player on
+  // different nights never share a name in a screen reader's list (walk 3 T3-13).
+  const label = `${result.gameDate ? `${humanDate(result.gameDate)}, ` : ''}${resultLabel(playerName, result, model)}`;
   const net = model.net === null ? (
     <Text accessibilityLabel="Net profit and loss unavailable" style={styles.netUnavailable}>—</Text>
   ) : (
