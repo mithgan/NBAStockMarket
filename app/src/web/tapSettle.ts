@@ -23,12 +23,15 @@ let quietUntil = 0;
 let spot: { x: number; y: number; until: number } | null = null;
 let lastPointer: { x: number; y: number; at: number } | null = null;
 
+/** Record where a finger or mouse lifted (the page's pointerup, or a test). */
+export function notePointer(x: number, y: number): void {
+  lastPointer = { x, y, at: Date.now() };
+}
+
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   // Where the finger or mouse last lifted: presses fire on that lift, so this
   // is where the press being handled happened. Keyboard presses have none.
-  window.addEventListener('pointerup', (event) => {
-    lastPointer = { x: event.clientX, y: event.clientY, at: Date.now() };
-  }, true);
+  window.addEventListener('pointerup', (event) => notePointer(event.clientX, event.clientY), true);
 }
 
 function currentPointer(): { x: number; y: number } | null {
