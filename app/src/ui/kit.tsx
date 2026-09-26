@@ -774,8 +774,11 @@ const styles = StyleSheet.create({
   label: {
     ...labelStyle,
   },
+  // Never wider than what holds it: at 400% zoom "ON YOUR ROSTER" wraps
+  // inside the profile instead of running past it (walk 5 fix-5 note).
   tag: {
     alignSelf: 'flex-start',
+    maxWidth: '100%',
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: radius.xs,
