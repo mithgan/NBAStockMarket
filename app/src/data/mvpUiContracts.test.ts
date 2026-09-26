@@ -80,7 +80,8 @@ test('market discovery supports search and a clear empty result', () => {
 test('an empty portfolio sends the user directly to the market', () => {
   assert.match(appSource, /onOpenMarket=\{\(side\) => \{/);
   assert.match(appSource, /setMarketSide\(side\)/);
-  assert.match(appSource, /setActiveTab\('market'\)/);
+  // The switch goes through switchScreen, which also guards a double tap (walk 5 T4-05).
+  assert.match(appSource, /(setActiveTab|switchScreen)\('market'\)/);
   assert.match(appSource, /<MarketScreen initialSide=\{marketSide\} \/>/);
   assert.match(portfolioSource, /Your cap sheet is clean/);
   assert.match(portfolioSource, /accessibilityLabel="Open the player market"/);

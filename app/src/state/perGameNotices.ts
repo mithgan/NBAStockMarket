@@ -89,8 +89,12 @@ export function refreshNotice(
   if (after && after !== before) {
     const change = earningsBetween(next.ledger?.items, before, after, { gamesOnly: true });
     const span = before ? daysBetween(before, after) : 1;
-    // Several nights at once (+1 week) name their days: "Nov 5–11 games".
-    const when = `${span > 1 ? humanNightsSince(before, after) : humanDate(after)} games`;
+    // Several nights at once (+1 week) name their days: "Nov 5–11 games". A
+    // single game night names itself even when empty days came before it
+    // (+1 night from Oct 25 plays the Oct 27 games: "Oct 27 games", as the
+    // status row and the button say, not "Oct 26–27"; walk 5 T1-16).
+    const oneNight = span <= 1 || previous?.game.nextGameDate === after;
+    const when = `${oneNight ? humanDate(after) : humanNightsSince(before, after)} games`;
     const played = (next.ledger?.items ?? []).some((entry) => (
       entry.gameDate !== null && entry.gameDate <= after && (before === null || entry.gameDate > before)
     ));

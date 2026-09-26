@@ -55,6 +55,10 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
   // is where the press being handled happened. Keyboard presses have none.
   window.addEventListener('pointerup', (event) => notePointer(event.clientX, event.clientY), true);
   window.addEventListener('wheel', noteScrollGesture, { capture: true, passive: true });
+  // Typing changes the list on purpose too: after adding one search result,
+  // the next search's first Add sits where the last one was, and a tap on
+  // it is the next purchase, not a repeat (walk 5 T4-12).
+  window.addEventListener('input', noteScrollGesture, { capture: true, passive: true });
   let touchStartY: number | null = null;
   window.addEventListener('touchstart', (event) => {
     touchStartY = event.touches[0]?.clientY ?? null;

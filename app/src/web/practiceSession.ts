@@ -44,6 +44,87 @@ export function setPracticeProgress(progress: boolean): void {
 
 const LAST_RESULT_KEY = 'nba-stock-market:last-season-result';
 
+/** A finished practice season, for "Your seasons this visit" on Leaders. */
+export interface PastSeason {
+  score: number;
+  /** "#1 of 5", or null when the standings did not include you. */
+  rank: string | null;
+  /** The season's last night (ISO day). */
+  finishedOn: string;
+}
+
+// Finished seasons ride along with "Play another season" and Restart (both
+// load a new page) so a player can compare this visit's seasons; a reload of
+// their own starts over, like the season itself (walk 5, T2 idea NYI-1).
+const PAST_KEY = 'nba-stock-market:past-seasons';
+const PAST_CARRY_KEY = 'nba-stock-market:past-seasons-carry';
+const PAST_KEPT = 20;
+
+function isPastSeason(value: unknown): value is PastSeason {
+  const season = value as PastSeason | null;
+  return Boolean(season)
+    && typeof season?.score === 'number'
+    && Number.isFinite(season.score)
+    && (season.rank === null || typeof season.rank === 'string')
+    && typeof season.finishedOn === 'string';
+}
+
+type SessionStore = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+/**
+ * The seasons a new page was handed by "Play another season" or Restart; any
+ * other load (a reload of the player's own) clears them.
+ */
+export function takeCarriedSeasons(store: SessionStore): PastSeason[] {
+  try {
+    const carried = store.getItem(PAST_CARRY_KEY) === '1';
+    store.removeItem(PAST_CARRY_KEY);
+    const raw = carried ? store.getItem(PAST_KEY) : null;
+    if (!carried) store.removeItem(PAST_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(isPastSeason) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Hand this visit's seasons (oldest first) to the next page. */
+export function carrySeasons(store: SessionStore, seasons: PastSeason[]): void {
+  try {
+    store.setItem(PAST_KEY, JSON.stringify(seasons.slice(-PAST_KEPT)));
+    store.setItem(PAST_CARRY_KEY, '1');
+  } catch {}
+}
+
+function sessionStore(): SessionStore | null {
+  try {
+    return isWeb ? window.sessionStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+const pastSeasons: PastSeason[] = (() => {
+  const store = sessionStore();
+  return store ? takeCarriedSeasons(store) : [];
+})();
+let finishedSeason: PastSeason | null = null;
+
+/** The season on screen has finished (or not): it joins the list if a new one starts. */
+export function noteFinishedSeason(season: PastSeason | null): void {
+  finishedSeason = season;
+}
+
+/** This visit's finished seasons, newest first (practice only). */
+export function pastSeasonResults(): PastSeason[] {
+  return [...pastSeasons].reverse();
+}
+
+function carryPastSeasons(): void {
+  const store = sessionStore();
+  if (store) carrySeasons(store, finishedSeason ? [...pastSeasons, finishedSeason] : pastSeasons);
+}
+
 /**
  * Start a fresh practice season (after the player confirmed). A finished
  * season passes its result ("+$3.97M, #1 of 5") so the new season's notice
@@ -57,6 +138,7 @@ export function restartPractice(lastResult?: string): void {
     if (typeof lastResult === 'string' && lastResult) window.sessionStorage.setItem(LAST_RESULT_KEY, lastResult);
     else window.sessionStorage.removeItem(LAST_RESULT_KEY);
   } catch {}
+  carryPastSeasons();
   try {
     window.sessionStorage.setItem(RESTARTED_KEY, '1');
   } catch {}

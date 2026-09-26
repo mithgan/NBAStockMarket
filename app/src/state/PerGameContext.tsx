@@ -50,6 +50,12 @@ interface PerGameContextValue {
   nextGameDate: string | null;
   message: string | null;
   noticeTone: NoticeTone;
+  /**
+   * Counts every notice, including one that repeats the last word for word
+   * (a second LOCKED press): the notice restarts its timer and screen readers
+   * hear it again instead of silence (walk 5 T3-10).
+   */
+  noticeSeq: number;
   serverError: string | null;
   transitionError: null;
   transitionRequired: false;
@@ -103,14 +109,17 @@ export function PerGameProvider({
   const minimumSnapshotRef = useRef<PerGameBootstrap | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<NoticeTone>('problem');
+  const [noticeSeq, setNoticeSeq] = useState(0);
   // The fee is part of every move's confirmation, so it is never a surprise.
+  // "$250 fee" never splits across lines (walk 5 T1-01 found "fee." alone).
   const feeNote = () => {
     const fee = bootstrapRef.current?.ruleset.transactionFeeDollars ?? 0;
-    return fee > 0 ? ` ${exactMoney(fee)} fee.` : '';
+    return fee > 0 ? ` ${exactMoney(fee)}\u00a0fee.` : '';
   };
   const say = useCallback((text: string, tone: NoticeTone = 'problem') => {
     setNoticeTone(tone);
     setMessage(text);
+    setNoticeSeq((seq) => seq + 1);
   }, []);
   const [serverError, setServerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -118,6 +127,9 @@ export function PerGameProvider({
   const [reconciliationRequired, setReconciliationRequired] = useState(false);
   const [pendingActions, setPendingActions] = useState<ReadonlySet<string>>(new Set());
   const actionLock = useRef(new ActionLock());
+  // Moves pressed while another saves (see queueMove).
+  const moveChain = useRef<Promise<unknown>>(Promise.resolve());
+  const queuedMoves = useRef(new Set<string>());
   const reconciliation = useRef<MutationReconciliationCoordinator | null>(null);
   if (reconciliation.current === null) {
     reconciliation.current = new MutationReconciliationCoordinator(actionLock.current);
@@ -194,7 +206,11 @@ export function PerGameProvider({
 
   const updatePendingActions = useCallback(() => {
     if (mounted.current) {
-      setPendingActions(actionLock.current.snapshot());
+      // A move waiting its turn counts as pending too, so +1 night pressed
+      // after two quick Adds plays once both have saved.
+      const pending = actionLock.current.snapshot();
+      queuedMoves.current.forEach((key) => pending.add(`queued:${key}`));
+      setPendingActions(pending);
       setReconciliationRequired(reconciliation.current?.requiresReconciliation ?? false);
     }
   }, []);
@@ -250,12 +266,12 @@ export function PerGameProvider({
     }
     updatePendingActions();
     setMessage(null);
-    // The second tap of a double tap on a money button must not land on the
-    // next row's button when this move reflows the list (walk 3 T4-01: a
-    // double tap on "Short again" re-shorted the next player). A repeat on
-    // the same spot is ignored for 1.2 s; a tap elsewhere (the next row's
-    // Add, for a player adding several in a row) waits only a moment.
-    settleTaps(250, 1200, 'list');
+    // The second tap of a double tap on a money button must not land on
+    // whatever the move brings under the finger (walk 3 T4-01: a double tap
+    // on "Short again" re-shorted the next player): a repeat on the same spot
+    // is ignored for 1.2 s. A tap anywhere else is a new choice and acts at
+    // once (walk 5 T4-01: adding down the list lost every other player).
+    settleTaps(0, 1200, 'list');
     let reconciliationReason: ReconciliationReason | null = null;
     const actionSnapshot = bootstrapRef.current;
     try {
@@ -297,39 +313,62 @@ export function PerGameProvider({
     }
   }, [loadSnapshot, say, updatePendingActions]);
 
+  // Moves save one at a time (the account has one version), but a move
+  // pressed while another saves waits its turn instead of vanishing: a player
+  // adding down the list, or adding the next search result, gets every one
+  // (walk 5 T4-01, T4-12). The same move pressed twice runs once. Each move
+  // reads the account version when its turn comes, not when it was pressed.
+  const queueMove = useCallback((key: string, run: () => Promise<boolean>): Promise<boolean> => {
+    if (queuedMoves.current.has(key)) return Promise.resolve(false);
+    queuedMoves.current.add(key);
+    updatePendingActions();
+    const turn = moveChain.current.then(run, run).finally(() => {
+      queuedMoves.current.delete(key);
+      updatePendingActions();
+    });
+    moveChain.current = turn.catch(() => undefined);
+    return turn;
+  }, [updatePendingActions]);
+
   const openPosition = useCallback(({
     playerId,
     playerName,
     side,
     expectedQuoteVersion,
   }: PerGameOpenPositionIntent) => {
-    const accountVersion = bootstrapRef.current?.account.version;
-    if (accountVersion === undefined) return Promise.resolve(false);
-    return runPositionAction(
-      `position:${side}:${playerId}`,
-      () => apiClient.openPosition({
-        playerId,
-        side,
-        expectedAccountVersion: accountVersion,
-        expectedQuoteVersion,
-      }),
-      (result) => result.side === 'long'
-        ? `${playerName} added at ${perGame(result.lockedGameCost)}, locked in.${feeNote()}`
-        : `Shorted ${playerName} at ${perGame(result.lockedGameCost)}, locked in.${feeNote()}`,
-    );
-  }, [apiClient, runPositionAction]);
+    const key = `position:${side}:${playerId}`;
+    return queueMove(key, () => {
+      const accountVersion = bootstrapRef.current?.account.version;
+      if (accountVersion === undefined) return Promise.resolve(false);
+      return runPositionAction(
+        key,
+        () => apiClient.openPosition({
+          playerId,
+          side,
+          expectedAccountVersion: accountVersion,
+          expectedQuoteVersion,
+        }),
+        (result) => result.side === 'long'
+          ? `${playerName} added at ${perGame(result.lockedGameCost)}, locked in.${feeNote()}`
+          : `Shorted ${playerName} at ${perGame(result.lockedGameCost)}, locked in.${feeNote()}`,
+      );
+    });
+  }, [apiClient, queueMove, runPositionAction]);
 
   const closePosition = useCallback((position: PerGamePosition) => {
-    const accountVersion = bootstrapRef.current?.account.version;
-    if (accountVersion === undefined) return Promise.resolve(false);
-    return runPositionAction(
-      `position:${position.side}:${position.playerId}`,
-      () => apiClient.closePosition(position.positionId, accountVersion),
-      position.side === 'long'
-        ? `${position.playerName} dropped. His next games won't count toward your score.${feeNote()}`
-        : `Short on ${position.playerName} closed.${feeNote()}`,
-    );
-  }, [apiClient, runPositionAction]);
+    const key = `position:${position.side}:${position.playerId}`;
+    return queueMove(key, () => {
+      const accountVersion = bootstrapRef.current?.account.version;
+      if (accountVersion === undefined) return Promise.resolve(false);
+      return runPositionAction(
+        key,
+        () => apiClient.closePosition(position.positionId, accountVersion),
+        position.side === 'long'
+          ? `${position.playerName} dropped. His next games won't count toward your score.${feeNote()}`
+          : `Short on ${position.playerName} closed.${feeNote()}`,
+      );
+    });
+  }, [apiClient, queueMove, runPositionAction]);
 
   const dismissNotice = useCallback(() => setMessage(null), []);
   const notify = useCallback((text: string) => say(text, 'success'), [say]);
@@ -345,6 +384,7 @@ export function PerGameProvider({
     nextGameDate: bootstrap?.game.nextGameDate ?? null,
     message,
     noticeTone,
+    noticeSeq,
     serverError,
     transitionError: null,
     transitionRequired: false,
@@ -372,6 +412,7 @@ export function PerGameProvider({
     isRefreshing,
     reconciliationRequired,
     message,
+    noticeSeq,
     noticeTone,
     openPosition,
     pendingActions,

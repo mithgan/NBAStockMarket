@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PerGameApiClient as MarketApiClient } from './src/api/perGameClient';
@@ -15,6 +15,7 @@ import { PerGameStatusStrip as SeasonControl } from './src/components/PerGameSta
 import { SimBar } from './src/components/SimBar';
 import { SettingsButton, SettingsSheet } from './src/components/SettingsSheet';
 import { LeadersTabIcon, MarketTabIcon, ResultsTabIcon, RosterTabIcon } from './src/components/TabIcons';
+import { CloseIcon } from './src/components/market/icons';
 import { useReducedMotion } from './src/hooks/useReducedMotion';
 import { PerGameLeaderboardScreen as LeaderboardScreen } from './src/screens/PerGameLeaderboardScreen';
 import { PerGameMarketScreen as MarketScreen } from './src/screens/PerGameMarketScreen';
@@ -26,7 +27,9 @@ import { Button, visuallyHidden } from './src/ui/kit';
 import { registerSettingsOpener, registerTabOpener, settingsReturnStep } from './src/state/uiActions';
 import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
 import { settleTaps } from './src/web/tapSettle';
-import { consumeArrivedByKeyboard, consumeLastSeasonResult, consumePracticeRestarted, setPracticeProgress } from './src/web/practiceSession';
+import { consumeArrivedByKeyboard, consumeLastSeasonResult, consumePracticeRestarted, noteFinishedSeason, setPracticeProgress } from './src/web/practiceSession';
+import { practiceProgress } from './src/data/chromeView';
+import { rankLine } from './src/data/rosterView';
 import {
   PerGameProvider as PortfolioProvider,
   usePerGame as usePortfolio,
@@ -198,62 +201,65 @@ const SUCCESS_NOTICE_MS = 8000;
 const SUCCESS_NOTICE_MAX_MS = 14000;
 
 /**
- * Where notices sit, chosen to cover the least a player needs next (walks 1-4
- * found every floating spot over the content in someone's way: the next
- * row's Add, the market's side toggle, the score a notice reports).
- * - Phones: over the brand bar and status line at the very top. They hold
- *   the logo and yesterday's facts, which the notice is about anyway; the
- *   +1 night buttons, the screen's toolbar and its content stay clear.
- * - Wider screens, and short windows whose brand bar is folded away: the
- *   bottom-left corner, away from the toolbar and the controls at the top
- *   and the row buttons on the right.
+ * Where notices sit. Walks 1-5 found every floating spot in someone's way: the
+ * next row's Add, the market's side toggle, the Settings gear, the button a
+ * zoomed keyboard user had just pressed, two of a landscape list's three rows.
+ * So a notice now takes room in the layout and covers nothing:
+ * - 'bar' / 'barWide': windows tall enough for the brand bar. On a phone the
+ *   logo and wordmark give way to the notice (Settings stays); a wider bar has
+ *   room for it beside them.
+ * - 'dock': short windows (a phone on its side, 200-400% zoom), whose brand bar
+ *   is folded away. A strip at the bottom of the screen, above the tab bar: the
+ *   screen gets shorter instead of covered, so every row can still be scrolled
+ *   to, and a control focused from the keyboard is kept in view.
+ * Nothing sits under a notice, so keyboard focus never has to dismiss it
+ * (walk 5 T3-01): only its timer, a tap, Escape, × or the next notice do.
  */
-const NOTICE_FRAME_MAX_WIDTH = 720;
+type NoticePlacement = 'bar' | 'barWide' | 'dock';
+/** From this width the brand bar keeps its logo and wordmark beside a notice. */
+const NOTICE_BAR_WIDE_MIN_WIDTH = 720;
+/** Below this width (400% zoom) × goes under the words, which keep the width. */
+const NOTICE_STACKED_MAX_WIDTH = 200;
 
 function successNoticeMs(message: string): number {
   return Math.min(SUCCESS_NOTICE_MAX_MS, SUCCESS_NOTICE_MS + Math.max(0, message.length - 60) * 60);
 }
 
 /**
- * Notices float over the bottom of the screen instead of pushing it down, so
- * adding a player never shoves the list the player is tapping through.
- *
- * A success ("added at $105K a game", "games through Nov 5 are in") clears
- * itself and lets taps fall through to the row underneath, so it can never
- * swallow the next Add. A problem stays until the player dismisses it,
- * because it asks them to do something. Screen readers hear every notice
- * through the always-mounted live region in AppBody, not through this view.
+ * A success ("added at $105K a game", "Oct 21 games: your score rose $84K")
+ * clears itself, and a tap on it dismisses it. A problem stays until the
+ * player dismisses it, because it asks them to do something; so does every
+ * notice with Settings > "Keep notices until I close them" (WCAG 2.2.1).
+ * Screen readers hear every notice through the always-mounted live region in
+ * AppBody, not through this view.
  */
 function NoticeToast({
   message,
   onDismiss,
   tone,
   placement,
+  seq,
 }: {
   message: string;
   onDismiss: () => void;
   tone: NoticeTone;
-  /** 'frame': over the top of a phone's frame; 'corner': bottom-left of the screen. */
-  placement: 'frame' | 'corner';
+  placement: NoticePlacement;
+  /** Changes with every notice, even one that repeats the last word for word. */
+  seq: number;
 }) {
-  const insets = useSafeAreaInsets();
   // A pointer resting on a notice holds it (a magnifier user reads it where it is).
   const [held, setHeld] = useState(false);
-  // Settings > "Keep notices until I close them" (WCAG 2.2.1, walk 4 T3-N1):
-  // no timer, and a Dismiss button on every notice.
   const keep = useKeepNotices();
   useEffect(() => {
     if (tone !== 'success' || held || keep) return undefined;
     const timer = setTimeout(onDismiss, successNoticeMs(message));
     return () => clearTimeout(timer);
-  }, [held, keep, message, onDismiss, tone]);
+  }, [held, keep, message, onDismiss, seq, tone]);
   const noticeRef = useRef<View | null>(null);
-  const layer = placement === 'frame'
-    ? [styles.noticeLayer, styles.noticeLayerFrame, { top: insets.top + 6 }]
-    : [styles.noticeLayer, styles.noticeLayerCorner];
-  // A notice that has just appeared (often where a confirm button was) lets
-  // the second tap of a double tap pass without dismissing it (walk 3 T4-02).
-  const shownAt = useMemo(() => Date.now(), [message]);
+  const { height, width } = useWindowDimensions();
+  // The second tap of a double tap that produced the notice never dismisses
+  // it before it could be read (walk 3 T4-02).
+  const shownAt = useMemo(() => Date.now(), [message, seq]);
   const dismissByTap = () => {
     if (Date.now() - shownAt < 500) return;
     onDismiss();
@@ -264,69 +270,87 @@ function NoticeToast({
   const problem = tone === 'problem';
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
-    // Escape dismisses the notice (a sheet or confirm open above it takes
-    // Escape first), and a success notice steps aside when keyboard focus
-    // lands on something it covers.
+    // Escape dismisses the notice (a sheet open above it takes Escape first).
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !sheetIsOpen()) onDismiss();
     };
-    const onFocus = (event: FocusEvent) => {
-      if (problem) return;
-      const node = noticeRef.current as unknown as HTMLElement | null;
-      const target = event.target as HTMLElement | null;
-      if (!node?.getBoundingClientRect || !target?.getBoundingClientRect || node.contains(target)) return;
-      // Focus on the whole screen or a big region (a skip-link target) is not
-      // a control the notice hides: the notice stays to be read.
-      if (target.getBoundingClientRect().height > window.innerHeight * 0.5) return;
-      const a = node.getBoundingClientRect();
-      // Focus on Keep in a Drop question: the notice steps aside if it covers
-      // any of the question, which is what has to be read (walk 3 T3-24).
-      const region = (target.closest?.('[data-question]') as HTMLElement | null) ?? target;
-      const b = region.getBoundingClientRect();
-      if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) onDismiss();
-    };
     document.addEventListener('keydown', onKey);
-    document.addEventListener('focusin', onFocus);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.removeEventListener('focusin', onFocus);
-    };
-  }, [onDismiss, problem]);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onDismiss]);
+  // The dock shortens the screen from the bottom. A control the keyboard is
+  // on that ends up below the new edge comes back into view (walk 5 T3-05);
+  // a tapped one is left where the finger put it, so nothing moves under it.
+  useEffect(() => {
+    if (placement !== 'dock' || typeof document === 'undefined' || typeof requestAnimationFrame === 'undefined') {
+      return undefined;
+    }
+    const frame = requestAnimationFrame(() => {
+      const active = document.activeElement as HTMLElement | null;
+      const node = noticeRef.current as unknown as HTMLElement | null;
+      if (!active || !node?.getBoundingClientRect || !active.matches?.(':focus-visible')) return;
+      if (!document.getElementById('app-screen')?.contains(active)) return;
+      if (active.getBoundingClientRect().bottom > node.getBoundingClientRect().top) {
+        active.scrollIntoView?.({ block: 'nearest' });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [placement, message, seq, height]);
   if (!problem && sheetOpen) return null;
+  const boxStyle = [
+    styles.notice,
+    width < NOTICE_STACKED_MAX_WIDTH && styles.noticeStacked,
+    placement === 'bar' && styles.noticeBar,
+    placement === 'barWide' && styles.noticeBarWide,
+    placement === 'dock' && styles.noticeDock,
+    problem && styles.noticeProblem,
+  ];
+  // At 400% zoom a notice can be taller than the room the dock may take (it
+  // leaves the screen more than half of what is left under the frame): its
+  // first words stay at the top and the rest scrolls inside it (walk 5 T3-06).
+  const dockText = Math.max(36, Math.round(Math.min(height * 0.3, (height - 150) * 0.45)));
+  const words = placement === 'dock' ? (
+    <ScrollView style={[styles.noticeScroll, { maxHeight: dockText }]}>
+      <Text style={styles.noticeText}>{message}</Text>
+    </ScrollView>
+  ) : (
+    <Text style={styles.noticeText}>{message}</Text>
+  );
   if (!problem && !keep) {
-    // A success reads like a snackbar: tapping it dismisses it, and never
-    // presses whatever sits underneath. Screen readers already heard it
-    // through the live region, so the visual copy stays out of their way.
+    // A success reads like a snackbar: tapping it dismisses it. Screen
+    // readers already heard it through the live region, so the visual copy
+    // stays out of their way.
     return (
-      <View style={layer}>
-        <Pressable
-          ref={noticeRef}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-          onHoverIn={() => setHeld(true)}
-          onHoverOut={() => setHeld(false)}
-          onPress={dismissByTap}
-          style={[styles.notice, placement === 'corner' && styles.noticeCorner]}
-          {...({ tabIndex: -1 } as object)}
-        >
-          <Text style={styles.noticeText}>{message}</Text>
-        </Pressable>
-      </View>
+      <Pressable
+        ref={noticeRef}
+        accessibilityElementsHidden
+        aria-hidden
+        importantForAccessibility="no-hide-descendants"
+        onHoverIn={() => setHeld(true)}
+        onHoverOut={() => setHeld(false)}
+        onPress={dismissByTap}
+        style={boxStyle}
+        {...({ tabIndex: -1 } as object)}
+      >
+        {words}
+      </Pressable>
     );
   }
   return (
-    <View style={layer}>
-      <View ref={noticeRef} style={[styles.notice, placement === 'corner' && styles.noticeCorner, problem && styles.noticeProblem]}>
-        <Text style={styles.noticeText}>{message}</Text>
-        <Pressable
-          accessibilityLabel={`Dismiss: ${message}`}
-          accessibilityRole="button"
-          onPress={onDismiss}
-          style={({ pressed }) => [styles.noticeDismiss, pressed && styles.pressed]}
-        >
-          <Text style={styles.noticeClose}>Dismiss</Text>
-        </Pressable>
-      </View>
+    <View ref={noticeRef} style={boxStyle}>
+      {words}
+      <Pressable
+        accessibilityLabel={`Dismiss: ${message}`}
+        accessibilityRole="button"
+        onPress={onDismiss}
+        style={({ pressed }) => [
+          styles.noticeDismiss,
+          placement !== 'dock' && styles.noticeDismissBar,
+          width < NOTICE_STACKED_MAX_WIDTH && styles.noticeDismissStacked,
+          pressed && styles.pressed,
+        ]}
+      >
+        <CloseIcon color={colors.goldInk} size={16} />
+      </Pressable>
     </View>
   );
 }
@@ -413,10 +437,9 @@ function AppBody() {
   const { width, height } = useWindowDimensions();
   const wide = width >= WIDE_LAYOUT_MIN_WIDTH;
   const short = height < SHORT_LAYOUT_MAX_HEIGHT;
-  // Over the frame only while the brand bar is there to be covered: in a
-  // short window (landscape, 200% zoom) the frame's first row holds +1 night
-  // and +1 week, so the notice goes to the bottom instead.
-  const noticePlacement: 'frame' | 'corner' = width < NOTICE_FRAME_MAX_WIDTH && !short ? 'frame' : 'corner';
+  // In the brand bar while there is one; in a short window (landscape, 200%
+  // zoom) the bar is folded away, so the notice docks above the tab bar.
+  const noticePlacement: NoticePlacement = short ? 'dock' : width < NOTICE_BAR_WIDE_MIN_WIDTH ? 'bar' : 'barWide';
   const tabRefs = useRef<Array<View | null>>([]);
   const [appNotice, setAppNotice] = useState<string | null>(null);
 
@@ -436,11 +459,17 @@ function AppBody() {
     pushTab(tab);
     setActiveTab(tab);
   };
-  // Screens switch tabs through uiActions (the Market's "Choose who to drop").
-  useEffect(() => registerTabOpener((tab) => {
+  // A button that changes screen ("Open market", "Find a short", "Choose who
+  // to drop") leaves the finger over the new screen's rows: the second tap of
+  // a double tap there is the same press, not a pick (walk 5 T4-05: it opened
+  // whichever player's profile slid under it).
+  const switchScreen = useCallback((tab: Tab) => {
+    settleTaps(0, 600, 'list');
     pushTab(tab);
     setActiveTab(tab);
-  }), [pushTab]);
+  }, [pushTab]);
+  // Screens switch tabs through uiActions (the Market's "Choose who to drop").
+  useEffect(() => registerTabOpener(switchScreen), [switchScreen]);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     window.history.replaceState({ ...(window.history.state ?? {}), tab: 'portfolio' }, '');
@@ -510,6 +539,7 @@ function AppBody() {
     legacySavePresent,
     message,
     nextGameDate,
+    noticeSeq,
     noticeTone,
     players,
     refreshData,
@@ -521,7 +551,14 @@ function AppBody() {
   const seasonLabel = seasonLabelFor(latestSettledDate ?? nextGameDate);
   const ready = Boolean(state && !isLoading && !serverError && !transitionRequired && !isTransitioning);
   useEffect(() => {
-    if (isMockActive()) setPracticeProgress(practiceHasProgress(bootstrap));
+    if (!isMockActive()) return;
+    setPracticeProgress(practiceHasProgress(bootstrap));
+    // A finished season joins "Your seasons this visit" when the next starts.
+    const finishedOn = bootstrap?.game.lastSettledDate ?? null;
+    const done = finishedOn !== null && practiceProgress(mockSeasonStart(), finishedOn).complete;
+    noteFinishedSeason(done && bootstrap && finishedOn
+      ? { score: bootstrap.account.cumulativePnl, rank: rankLine(bootstrap.leaderboard), finishedOn }
+      : null);
   }, [bootstrap]);
 
   const body = (() => {
@@ -569,8 +606,7 @@ function AppBody() {
           <PortfolioScreen
             onOpenMarket={(side) => {
               setMarketSide(side);
-              pushTab('market');
-              setActiveTab('market');
+              switchScreen('market');
             }}
           />
         )}
@@ -668,11 +704,11 @@ function AppBody() {
   );
 
   const notice = authError && clearAuthMessage ? (
-    <NoticeToast message={authError} onDismiss={clearAuthMessage} placement={noticePlacement} tone="problem" />
+    <NoticeToast message={authError} onDismiss={clearAuthMessage} placement={noticePlacement} seq={-2} tone="problem" />
   ) : message ? (
-    <NoticeToast message={message} onDismiss={dismissNotice} placement={noticePlacement} tone={noticeTone} />
+    <NoticeToast message={message} onDismiss={dismissNotice} placement={noticePlacement} seq={noticeSeq} tone={noticeTone} />
   ) : appNotice ? (
-    <NoticeToast message={appNotice} onDismiss={() => setAppNotice(null)} placement={noticePlacement} tone="success" />
+    <NoticeToast message={appNotice} onDismiss={() => setAppNotice(null)} placement={noticePlacement} seq={-1} tone="success" />
   ) : null;
 
   return (
@@ -685,18 +721,25 @@ function AppBody() {
           In a short window it folds away; the status row carries Settings. */}
       {short ? null : (
       <View role="banner" style={[styles.header, { paddingTop: insets.top + 4 }]}>
-        <View style={styles.mark}>
-          <Text accessibilityElementsHidden aria-hidden importantForAccessibility="no" maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text>
-        </View>
-        <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.brand}>databallr</Text>
-        {/* On a very narrow screen the wordmark keeps the room; the product
-            name is also the page title, so nothing is lost. */}
-        {brandOnly ? <View style={styles.brandCopy} /> : (
+        {/* On a phone a notice takes the logo's place for its few seconds;
+            Settings stays where the thumb expects it (walk 5 T1-06). */}
+        {notice && noticePlacement === 'bar' ? notice : (
           <>
-            <View style={styles.brandDivider} />
-            <View style={styles.brandCopy}>
-              <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.product}>STOCK MARKET</Text>
+            <View style={styles.mark}>
+              <Text accessibilityElementsHidden aria-hidden importantForAccessibility="no" maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text>
             </View>
+            <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.brand}>databallr</Text>
+            {/* On a very narrow screen the wordmark keeps the room; the product
+                name is also the page title, so nothing is lost. */}
+            {brandOnly ? <View style={styles.brandCopy} /> : (
+              <>
+                <View style={styles.brandDivider} />
+                <View style={[styles.brandCopy, notice ? styles.brandCopyBeside : null]}>
+                  <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.product}>STOCK MARKET</Text>
+                </View>
+              </>
+            )}
+            {notice && noticePlacement === 'barWide' ? notice : null}
           </>
         )}
         <SettingsButton onPress={() => setSettingsOpen(true)} />
@@ -718,18 +761,17 @@ function AppBody() {
             content on each tab (the content-first budget in the design doc).
             It is also the skip link's target. */}
         <View nativeID="app-screen" role="main" style={styles.screen} {...({ tabIndex: -1 } as object)}>{body}</View>
-        {noticePlacement === 'corner' ? notice : null}
+        {noticePlacement === 'dock' ? notice : null}
       </View>
       {/* Mounted for the life of the app so a new notice is a change inside an
           existing live region; many screen readers skip text that arrives
           together with a brand-new region. */}
       <View accessibilityLiveRegion="polite" style={visuallyHidden}>
-        <Text>{spoken(authError ?? message ?? appNotice ?? '')}</Text>
+        {/* Keyed by the notice's count, so a notice that repeats the last one
+            word for word is new text to a screen reader, not silence. */}
+        <Text key={noticeSeq}>{spoken(authError ?? message ?? appNotice ?? '')}</Text>
       </View>
       {ready ? (wide ? null : renderTabBar('bottom')) : null}
-      {/* On a phone the notice lies over the top of the frame, so it is drawn
-          after the frame, at the app's own level. */}
-      {noticePlacement === 'frame' ? notice : null}
       <SettingsSheet
         listedPlayers={players.length}
         ruleset={bootstrap?.ruleset}
@@ -947,8 +989,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Ink on the gold disc: Light's cream "d" on its gold was 1.95:1 and all
+  // but vanished (walk 5 T3-08); on the dark themes this is the same navy.
   markText: {
-    color: colors.background,
+    color: colors.onGold,
     fontFamily: fonts.display,
     fontSize: 15,
     fontWeight: '900',
@@ -977,27 +1021,12 @@ const styles = StyleSheet.create({
     ...labelStyle,
     color: colors.muted,
   },
-  // The toast floats over the bottom of the screen; the layer itself lets
-  // taps through so only the toast catches them.
-  noticeLayer: {
-    position: 'absolute',
-    pointerEvents: 'box-none',
-  },
-  noticeLayerFrame: {
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    paddingHorizontal: space.sm,
-    zIndex: 20,
-  },
-  noticeLayerCorner: {
-    left: space.lg,
-    right: space.lg,
-    bottom: space.lg,
-    alignItems: 'flex-start',
-  },
-  noticeCorner: {
-    maxWidth: 440,
+  // Beside a notice in a wide brand bar the product name keeps its own width
+  // and the notice takes the free middle.
+  brandCopyBeside: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 'auto',
   },
   notice: {
     width: '100%',
@@ -1013,6 +1042,44 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceRaised,
     borderColor: colors.borderStrong,
     borderWidth: 1,
+  },
+  // In the brand bar: two lines fit the bar's own height, so the frame keeps
+  // its shape for nearly every notice.
+  noticeBar: {
+    flex: 1,
+    width: 'auto',
+    maxWidth: '100%',
+    minWidth: 0,
+    minHeight: 44,
+    paddingVertical: 1,
+  },
+  noticeBarWide: {
+    flex: 1,
+    width: 'auto',
+    maxWidth: 640,
+    minWidth: 0,
+    minHeight: 44,
+    paddingVertical: 1,
+    marginLeft: 'auto',
+  },
+  // Docked above the tab bar in a short window: the width of the screen, in
+  // the layout, never over it.
+  noticeDock: {
+    width: 'auto',
+    maxWidth: '100%',
+    minHeight: 44,
+    marginHorizontal: space.sm,
+    marginVertical: space.xs,
+  },
+  noticeStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 0,
+  },
+  noticeScroll: {
+    flex: 1,
+    flexGrow: 1,
+    minWidth: 0,
   },
   noticeProblem: {
     backgroundColor: colors.goldSoft,
@@ -1076,10 +1143,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  noticeClose: {
-    color: colors.goldInk,
-    fontSize: type.label,
-    fontWeight: '900',
+  // In the brand bar, × and two lines of words fit the bar's 44 px, so a
+  // kept notice does not nudge the screen down.
+  noticeDismissBar: {
+    minHeight: 40,
+  },
+  // Under the words at 400% zoom: short, so the screen keeps what it can.
+  noticeDismissStacked: {
+    alignSelf: 'flex-end',
+    minHeight: 28,
   },
   stage: {
     flex: 1,
@@ -1173,8 +1245,15 @@ const styles = StyleSheet.create({
   tabIconStack: {
     alignItems: 'center',
     gap: 1,
+    maxWidth: '100%',
   },
+  // A word under a tab icon keeps to its own tab: with a reader's wider text
+  // spacing it is clipped at the tab's edge instead of running into the next
+  // word ("MarketResultsLeaders", walk 5 T3-07). The icon and the tab's name
+  // still say which tab it is.
   tabTiny: {
+    maxWidth: '100%',
+    overflow: 'hidden',
     fontFamily: fonts.display,
     fontSize: type.label,
     fontWeight: '700',

@@ -50,6 +50,12 @@ test('newly settled games lead with what your players made over exactly those da
     refreshNotice(before, snapshot('2025-11-11', '2025-11-12', 30_000, [], week), false),
     'Nov 5–11 games: your score fell $70K.',
   );
+  // +1 night over a day without games: the one game night, not a span.
+  const skip = snapshot('2025-10-25', '2025-10-27', 0, [], []);
+  assert.equal(
+    refreshNotice(skip, snapshot('2025-10-27', '2025-10-28', 112_000, [], [night('2025-10-27', 112_000)]), false),
+    'Oct 27 games: your score rose $112K.',
+  );
   // A player on the roster who had no game that night.
   const held = { positionId: 'a', playerName: 'Kon Knueppel', side: 'long', status: 'active', cumulativePnl: 100_000 } as PerGamePosition;
   const heldBefore = snapshot('2025-11-04', '2025-11-05', 100_000, [held], [night('2025-11-04', 100_000)]);

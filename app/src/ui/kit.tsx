@@ -12,7 +12,7 @@
  *  - radius stays at or under `radius.lg` (8) and text at or over 11px;
  *  - green means a gain, red a loss, and nothing else is green or red.
  */
-import { forwardRef, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { forwardRef, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import { useBackFolds } from '../web/appHistory';
 import { settleTaps, tapsSettling } from '../web/tapSettle';
@@ -205,6 +205,8 @@ export type ButtonProps = {
    * the quiet after a move in a list does not swallow its press.
    */
   steady?: boolean;
+  /** The id of text that explains this button, read after its name (a question's words). */
+  describedBy?: string;
   accessibilityLabel?: string;
   accessibilityHint?: string;
   width?: number;
@@ -246,6 +248,7 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
   onDisabledPress,
   done = false,
   steady = false,
+  describedBy,
   accessibilityLabel,
   accessibilityHint,
   width,
@@ -274,6 +277,7 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       disabled={hardDisabled}
+      {...(describedBy ? ({ 'aria-describedby': describedBy } as object) : null)}
       onPress={() => {
         // The second tap of a double tap on a confirm that just folded away.
         if (tapsSettling(steady)) return;
@@ -405,6 +409,10 @@ export function ConfirmStrip({
   // and is ignored, so the question stays open. The costly button is aimed.
   const guard = useTapGuard();
   const aimed = useTapGuard(CONFIRM_AIMED_GUARD_MS);
+  // Both answers are described by the question, so focus landing on Keep
+  // reads the fee, what stays and what it would cost, not just "Keep,
+  // button" (walk 5 T3-02).
+  const questionId = `question-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const stripRef = useRef<View>(null);
   const keepRef = useRef<View>(null);
   useEffect(() => {
@@ -455,14 +463,13 @@ export function ConfirmStrip({
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onCancel]);
   return (
-    // data-question: a notice that covers any part of this question steps
-    // aside when focus lands in it, not only when it covers Keep itself.
-    <View ref={stripRef} {...({ dataSet: { question: 'confirm' } } as object)} style={[styles.confirmStrip, style]}>
-      {/* The question alone is announced; the buttons are read as focus reaches them. */}
-      <Text accessibilityRole="alert" style={styles.confirmText}>{message}</Text>
+    // data-question marks an open question for browser checks.
+    <View ref={stripRef} role="group" {...({ dataSet: { question: 'confirm' } } as object)} style={[styles.confirmStrip, style]}>
+      <Text nativeID={questionId} style={styles.confirmText}>{message}</Text>
       <View style={styles.confirmButtons}>
         <Button
           accessibilityLabel={confirmAccessibilityLabel}
+          describedBy={questionId}
           label={confirmLabel}
           onPress={aimed(() => {
             settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list');
@@ -472,6 +479,7 @@ export function ConfirmStrip({
         />
         <Button
           ref={keepRef}
+          describedBy={questionId}
           label={cancelLabel}
           onPress={guard(() => {
             settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list');
