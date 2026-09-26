@@ -60,3 +60,20 @@ export function openSettings(): boolean {
   settingsOpener();
   return true;
 }
+
+/**
+ * "Choose who to drop" from a full Market: the Roster, when it opens next,
+ * brings its list forward (focus on "Your roster") and says why the player
+ * is there. One shot: taken by the Roster when it mounts.
+ */
+let rosterPick: string | null = null;
+
+export function requestRosterPick(reason: string): void {
+  rosterPick = reason;
+}
+
+export function takeRosterPick(): string | null {
+  const reason = rosterPick;
+  rosterPick = null;
+  return reason;
+}

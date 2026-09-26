@@ -57,7 +57,7 @@ import {
   type RowLayout,
 } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
-import { openRules } from '../state/uiActions';
+import { openRules, takeRosterPick } from '../state/uiActions';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
 import { Button, ConfirmStrip, EmptyState, headingLevel, Tag, tapsSettling, useAriaDisabled, visuallyHidden } from '../ui/kit';
 import { restartPractice } from '../web/practiceSession';
@@ -383,7 +383,7 @@ export function PerGameRosterScreen({
 }: {
   onOpenMarket: (side: PerGamePosition['side']) => void;
 }) {
-  const { bootstrap, closePosition } = usePerGame();
+  const { bootstrap, closePosition, notify } = usePerGame();
   const { width, fontScale } = useWindowDimensions();
   const [profileId, setProfileId] = useState<string | null>(null);
   const [listWidth, setListWidth] = useState<number | null>(null);
@@ -446,6 +446,19 @@ export function PerGameRosterScreen({
       : (position.side === 'long' ? rosterHeading.current : shortsHeading.current));
     void closePosition(position);
   }, [closePosition]);
+  // Sent here to make room ("Choose who to drop" in a full Market): bring the
+  // roster list forward and say why.
+  useEffect(() => {
+    const reason = takeRosterPick();
+    if (!reason) return undefined;
+    const timer = setTimeout(() => {
+      const heading = rosterHeading.current as unknown as { scrollIntoView?: (options?: object) => void } | null;
+      heading?.scrollIntoView?.({ block: 'start' });
+      focusElement(rosterHeading.current, { preventScroll: true });
+      notify(reason);
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [notify]);
   const actionRef = useCallback((positionId: string) => (node: View | null) => {
     if (node) actionRefs.current.set(positionId, node);
     else actionRefs.current.delete(positionId);
