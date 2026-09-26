@@ -33,27 +33,69 @@ import {
 } from './perGameMetrics';
 import { splitPlayerName } from './playerName';
 
-export type MarketSort = 'price' | 'value' | 'name';
+export type MarketSort = 'price' | 'value' | 'name' | 'dividend';
 
-/** Sort choices, in the order the control shows them. Hints are for screen readers. */
-export const MARKET_SORT_OPTIONS: { key: MarketSort; label: string; hint: string }[] = [
-  { key: 'price', label: 'Price', hint: 'Lowest price a game first' },
-  { key: 'value', label: 'Value', hint: 'Highest value against last season first' },
-  { key: 'name', label: 'Name', hint: 'By last name, A to Z' },
+export interface MarketSortOption {
+  key: MarketSort;
+  /** The word on the control, and the start of its name. */
+  label: string;
+  /** The accessible name: the label, or the column's full words. */
+  name: string;
+}
+
+/** Sort choices, in the order the control shows them. */
+export const MARKET_SORT_OPTIONS: MarketSortOption[] = [
+  { key: 'price', label: 'Price', name: 'Price' },
+  { key: 'value', label: 'Value', name: 'Value' },
+  { key: 'name', label: 'Name', name: 'Name' },
 ];
 
+const DIVIDEND_OPTION: MarketSortOption = { key: 'dividend', label: 'Dividend', name: 'Dividend last season' };
+
 /**
- * The sort choices with the chosen one's direction on it: "Price ↑" runs
- * lowest first, "Price ↓" highest first. Choosing it again flips it.
+ * The sort choices: Price / Value / Name, plus Dividend where the table shows
+ * its column (or while it is the sort, so the chosen one is never hidden).
+ * Choosing one never flips it: the order has its own button (walk 3 T1-08,
+ * T2-05), so the labels carry no arrow and never run out of room.
  */
-export function marketSortOptions(sort: MarketSort, reversed: boolean): { key: MarketSort; label: string; hint: string }[] {
-  return MARKET_SORT_OPTIONS.map((option) => {
-    if (option.key !== sort) return option;
-    // Price and Name run low to high (↑) by default; Value runs highest first (↓).
-    const up = sortAscending(option.key, reversed);
-    return { ...option, label: `${option.label} ${up ? '↑' : '↓'}`, hint: `${sortedLine(option.key, reversed)} Choose again to flip.` };
-  });
+export function marketSortOptions(sort: MarketSort, withDividend = false): MarketSortOption[] {
+  if (!withDividend && sort !== 'dividend') return MARKET_SORT_OPTIONS;
+  const [price, ...rest] = MARKET_SORT_OPTIONS;
+  return [price, DIVIDEND_OPTION, ...rest];
 }
+
+export interface SortState {
+  sort: MarketSort;
+  reversed: boolean;
+}
+
+/**
+ * The one rule for every sort control (toolbar radios and table headers):
+ * choosing a sort shows it in its natural order (Price lowest first, Value
+ * and Dividend highest first, Name A to Z) and choosing the one in use
+ * changes nothing; only the order button flips it.
+ */
+export function nextSortState(current: SortState, action: { choose: MarketSort } | 'flip'): SortState {
+  if (action === 'flip') return { sort: current.sort, reversed: !current.reversed };
+  if (action.choose === current.sort) return current;
+  return { sort: action.choose, reversed: false };
+}
+
+/** The order button's name: "Order: highest first", "Order: A to Z". */
+export function orderButtonName(sort: MarketSort, reversed: boolean): string {
+  return `Order: ${sortDirection(sort, reversed)}`;
+}
+
+/** The order button's hover title: what it shows now and what a press does. */
+export function orderButtonTitle(sort: MarketSort, reversed: boolean): string {
+  return `${orderButtonName(sort, reversed)}. Flip to ${sortDirection(sort, !reversed)}.`;
+}
+
+/** What the table's Value and Dividend last season headers explain on hover and focus. */
+export const COLUMN_EXPLANATIONS = {
+  value: "Last season's dividend minus today's price, for this side",
+  dividend: 'What he paid out a game last season',
+} as const;
 
 /** Under half a thousand either way reads as even, matching valueVerdict. */
 const EVEN_BAND = 500;
@@ -82,9 +124,9 @@ export function sortMarketRows<T extends { player: PerGameMarketPlayer }>(
   const ordered = sortForward(rows, sort, side);
   if (!reversed) return ordered;
   // The other way round, but players with no last season still go last.
-  if (sort !== 'value') return ordered.reverse();
-  const known = ordered.filter((row) => lastYearEdge(row.player, side) !== null);
-  return [...known.reverse(), ...ordered.filter((row) => lastYearEdge(row.player, side) === null)];
+  if (sort !== 'value' && sort !== 'dividend') return ordered.reverse();
+  const known = ordered.filter((row) => row.player.priorSeasonValuePerGame !== null && lastYearEdge(row.player, side) !== null);
+  return [...known.reverse(), ...ordered.filter((row) => !known.includes(row))];
 }
 
 function sortForward<T extends { player: PerGameMarketPlayer }>(
@@ -97,9 +139,12 @@ function sortForward<T extends { player: PerGameMarketPlayer }>(
   const sorted = [...rows];
   if (sort === 'name') return sorted.sort((left, right) => byName(left, right) || byPrice(left, right));
   if (sort === 'price') return sorted.sort((left, right) => byPrice(left, right) || byName(left, right));
+  const figure = sort === 'dividend'
+    ? (row: T) => row.player.priorSeasonValuePerGame
+    : (row: T) => lastYearEdge(row.player, side);
   return sorted.sort((left, right) => {
-    const leftEdge = lastYearEdge(left.player, side);
-    const rightEdge = lastYearEdge(right.player, side);
+    const leftEdge = figure(left);
+    const rightEdge = figure(right);
     if (leftEdge === null || rightEdge === null) {
       if (leftEdge !== rightEdge) return leftEdge === null ? 1 : -1;
       return byPrice(left, right) || byName(left, right);
@@ -137,6 +182,38 @@ export function searchKey(text: string): string {
     .trim();
 }
 
+/** What the Market asks for when a search has no letters or digits left ("🏀", "'", "-"). */
+export const SEARCH_NEEDS_LETTERS = "Type part of a player's name";
+
+/** Whether a search has anything to look for once its symbols are dropped. */
+export function searchHasLetters(query: string): boolean {
+  return /[\p{L}\p{N}]/u.test(searchKey(query));
+}
+
+/**
+ * The name run together from each of its parts: "Karl-Anthony Towns" gives
+ * "karlanthonytowns", "anthonytowns" and "towns", so "karlanthony" finds him
+ * (walk 3 T4-05) while "ad" never matches across "Luka Doncic".
+ */
+function runTogether(text: string): string[] {
+  const parts = searchKey(text).split(/[\s-]+/).filter(Boolean);
+  return parts.map((_, index) => parts.slice(index).join(''));
+}
+
+const NAME_SUFFIXES = new Set(['jr', 'sr', 'ii', 'iii', 'iv']);
+
+/**
+ * A name's initials, as fans type them: "Shai Gilgeous-Alexander" is "sga",
+ * "Karl-Anthony Towns" "kat", "Anthony Davis" "ad"; "Jaren Jackson Jr." is
+ * "jjj" or "jj" (walk 3 T4-12).
+ */
+export function nameInitials(name: string): string[] {
+  const parts = searchKey(name).split(/[\s-]+/).filter(Boolean);
+  const all = parts.map((part) => part[0]).join('');
+  if (parts.length > 2 && NAME_SUFFIXES.has(parts[parts.length - 1])) return [all, all.slice(0, -1)];
+  return [all];
+}
+
 /** The longest search the empty state repeats back before it trims it. */
 const ECHO_MAX = 24;
 
@@ -152,8 +229,12 @@ export function echoQuery(query: string): string {
 }
 
 /**
- * Keep the rows whose name contains every word typed (in any order), and,
- * when `watchedOnly` is on, only the players on the watchlist.
+ * Keep the rows whose name contains every word typed (in any order, spaces
+ * and hyphens ignored, so "karlanthony" and "gilgeousalexander" work), or
+ * whose initials are the 2 to 4 letters typed ("sga", "kat", "ad"), and,
+ * when `watchedOnly` is on, only the players on the watchlist. A search with
+ * no letters or digits ("🏀", "'", "-") matches nobody: the screen asks for
+ * part of a name instead of showing everyone as if nothing were typed.
  */
 export function filterMarketRows<T extends { player: PerGameMarketPlayer }>(
   rows: readonly T[],
@@ -163,13 +244,17 @@ export function filterMarketRows<T extends { player: PerGameMarketPlayer }>(
     watched,
   }: { query: string; watchedOnly: boolean; watched: readonly string[] },
 ): T[] {
-  const words = searchKey(query).split(/\s+/).filter(Boolean);
+  if (query.trim() !== '' && !searchHasLetters(query)) return [];
+  const words = searchKey(query).split(/\s+/).map((word) => word.replace(/-/g, '')).filter(Boolean);
+  const initials = words.length === 1 && /^\p{L}{2,4}$/u.test(words[0]) ? words[0] : null;
   const watchedSet = new Set(watched);
   return rows.filter((row) => {
     if (watchedOnly && !watchedSet.has(row.player.playerId)) return false;
     if (words.length === 0) return true;
     const key = searchKey(row.player.name);
-    return words.every((word) => key.includes(word));
+    const starts = runTogether(row.player.name);
+    if (words.every((word) => key.includes(word) || starts.some((start) => start.startsWith(word)))) return true;
+    return initials !== null && nameInitials(row.player.name).includes(initials);
   });
 }
 
@@ -435,8 +520,28 @@ export function headerStatus({
  */
 export const COLLAPSE_CONTROLS_BELOW = 300;
 
-export function collapseControls(width: number): boolean {
-  return width < COLLAPSE_CONTROLS_BELOW;
+/**
+ * Below this height (a 600x400 window, a phone turned sideways) the phone
+ * rows' toolbar would take most of the screen: search, sort and Watching fold
+ * behind the same toggle, so at least three players show (walk 3 T4-16). The
+ * table keeps its one-row toolbar.
+ */
+export const COLLAPSE_CONTROLS_BELOW_HEIGHT = 450;
+
+export function collapseControls(width: number, height = Infinity, table = false): boolean {
+  return width < COLLAPSE_CONTROLS_BELOW || (!table && height < COLLAPSE_CONTROLS_BELOW_HEIGHT);
+}
+
+/**
+ * The slot line ("0 of 10 on your roster", "$250 to add or drop") sits beside
+ * the side toggle from this width, in up to three short lines; narrower, it
+ * goes under the toggle, left-aligned, so no empty block is left beside it
+ * (walk 3 T1-09).
+ */
+export const SLOT_LINE_BESIDE_MIN_WIDTH = 340;
+
+export function slotLineBeside(width: number): boolean {
+  return width >= SLOT_LINE_BESIDE_MIN_WIDTH;
 }
 
 /**
@@ -446,9 +551,35 @@ export function collapseControls(width: number): boolean {
  */
 export const KICKER_TIER_MIN_WIDTH = 380;
 
-/** "NIKOLA · STAR", or just "NIKOLA" below KICKER_TIER_MIN_WIDTH. */
+/**
+ * "NIKOLA · STAR", or just "NIKOLA" below KICKER_TIER_MIN_WIDTH. The space
+ * before the dot does not break, so a wrapped kicker never starts a line
+ * with "·" (walk 3 T2-12).
+ */
 export function rowKicker(given: string, tier: string | null | undefined, width: number): string {
-  return [given, width >= KICKER_TIER_MIN_WIDTH ? tier : null].filter(Boolean).join(' · ');
+  return [given, width >= KICKER_TIER_MIN_WIDTH ? tier : null].filter(Boolean).join('\u00A0· ');
+}
+
+/** The tier as a word aloud: "role player", "starter", "star" (walk 3 T3-30). */
+export function spokenTier(tier: string | null | undefined): string {
+  const word = (tier ?? '').toLowerCase();
+  return word === 'role' ? 'role player' : word;
+}
+
+/**
+ * What a held row still says about value, aloud: "last season $120K a game,
+ * $6.5K under today's price" (walk 3 T3-30: holding him used to drop it).
+ */
+export function heldValuePhrase(
+  player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
+  side: PerGamePositionSide,
+): string {
+  const signal = valueSignal(player, side);
+  if (signal.edge === null || player.priorSeasonValuePerGame === null) return 'no last season';
+  const lead = `last season ${money(player.priorSeasonValuePerGame)} a game`;
+  if (signal.tone === 'even') return `${lead}, even with today's price`;
+  if (side === 'short') return `${lead}, ${signedMoneyCompact(signal.edge)} for a short at today's price`;
+  return `${lead}, ${moneyCompact(Math.abs(signal.edge))} ${signal.edge > 0 ? 'over' : 'under'} today's price`;
 }
 
 export type MarketLayout = 'phone' | 'large' | 'table';
@@ -509,9 +640,11 @@ export interface MarketColumnSet {
  * and no "Your net a game" column, so the player column keeps room for a name.
  */
 export function marketColumns(width: number): MarketColumnSet {
+  // Each sortable label keeps a 24px sort mark to its left: "PRICE A GAME"
+  // fits one line from 1100px; "DIVIDEND" / "LAST SEASON" takes two.
   return width >= 1100
-    ? { avatar: 36, price: 104, lastSeason: 104, edge: 140, yours: 150, action: 112, gap: 12 }
-    : { avatar: 32, price: 100, lastSeason: 96, edge: 108, yours: 0, action: 96, gap: 12 };
+    ? { avatar: 36, price: 116, lastSeason: 112, edge: 140, yours: 150, action: 112, gap: 12 }
+    : { avatar: 32, price: 96, lastSeason: 110, edge: 108, yours: 0, action: 90, gap: 12 };
 }
 
 /**
@@ -531,7 +664,7 @@ export function rowProfileLabel({
   detail: string;
   reason?: string | null;
 }): string {
-  const facts = [name, tier.toLowerCase(), perGame(price), detail].filter(Boolean).join(', ');
+  const facts = [name, spokenTier(tier), perGame(price), detail].filter(Boolean).join(', ');
   return reason ? `${facts}. ${reason} View profile` : `${facts}, View profile`;
 }
 
@@ -564,6 +697,7 @@ export function listCountLine({
   cleared?: boolean;
 }): string {
   const players = (n: number) => `${n} ${n === 1 ? 'player' : 'players'}`;
+  if (query && !searchHasLetters(query)) return `${SEARCH_NEEDS_LETTERS}.`;
   if (query) return searchResultLine(query, count);
   if (cleared) return watchedOnly ? `Search cleared. Watching: ${players(count)}.` : `Search cleared, ${players(count)}.`;
   if (watchedOnly) return `Watching: ${players(count)}. Show everyone to see all ${total}.`;
@@ -575,7 +709,7 @@ export function listCountLine({
  * Price and Name start low to high; Value starts with the highest value.
  */
 export function sortAscending(sort: MarketSort, reversed = false): boolean {
-  return sort === 'value' ? reversed : !reversed;
+  return sort === 'value' || sort === 'dividend' ? reversed : !reversed;
 }
 
 /** The sort's direction in plain words: "lowest first", "highest first", "A to Z". */
@@ -592,12 +726,13 @@ export function sortDirection(sort: MarketSort, reversed = false): string {
 export function flippedSortNote(sort: MarketSort): { text: string; restore: string } {
   if (sort === 'value') return { text: 'Showing the worst value first.', restore: 'Best value first' };
   if (sort === 'price') return { text: 'Showing the highest price first.', restore: 'Lowest price first' };
+  if (sort === 'dividend') return { text: 'Showing the lowest dividend first.', restore: 'Highest dividend first' };
   return { text: 'Showing names Z to A.', restore: 'A to Z' };
 }
 
 /** What a screen reader hears when the sort changes: "Sorted by price, lowest first." */
 export function sortedLine(sort: MarketSort, reversed = false): string {
-  return `Sorted by ${sort}, ${sortDirection(sort, reversed)}.`;
+  return `Sorted by ${sort === 'dividend' ? 'dividend last season' : sort}, ${sortDirection(sort, reversed)}.`;
 }
 
 /**

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { countsAsPress } from '../components/market/lastActivation';
 import { forgetMarket, marketMemory, openingSide, rememberMarket } from './marketViewMemory';
 
 test('the market keeps side, sort, search and place for the session (T2-50, T4-16)', () => {
@@ -25,4 +26,18 @@ test('a press inside a screen asks for a side; the tab bar brings back the one y
   assert.equal(openingSide({ initialSide: 'short', remembered: { side: 'long', lastInitialSide: 'long' }, requestedFromScreen: false }), 'short');
   // First visit: the app's side.
   assert.equal(openingSide({ initialSide: 'long', remembered: { side: 'long', lastInitialSide: null }, requestedFromScreen: false }), 'long');
+});
+
+test('the tab bar\'s arrow, Home and End keys count as a frame press, so the side survives (T3-20)', () => {
+  // Enter and Space press anything.
+  assert.equal(countsAsPress('Enter', false), true);
+  assert.equal(countsAsPress(' ', false), true);
+  // Arrowing along the tab bar switches tabs: it is the press that brings the Market back.
+  for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']) {
+    assert.equal(countsAsPress(key, true), true, key);
+    // The same key elsewhere (scrolling, a slider) is not a press.
+    assert.equal(countsAsPress(key, false), false, key);
+  }
+  assert.equal(countsAsPress('Tab', true), false);
+  assert.equal(countsAsPress('a', true), false);
 });

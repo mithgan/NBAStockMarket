@@ -54,3 +54,25 @@ export function SearchIcon({ size = 16 }: { size?: number }) {
     </Svg>
   );
 }
+
+/**
+ * The order button's glyph: an arrow and three bars, longest at the top for
+ * "highest first" (arrow down), shortest at the top for "lowest first"
+ * (arrow up). Decorative: the button's name says the order in words.
+ */
+export function SortOrderIcon({ descending, size = 18, color = colors.goldInk }: { descending: boolean; size?: number; color?: string }) {
+  const bars = descending ? [10, 7.5, 5] : [5, 7.5, 10];
+  return (
+    <Svg height={size} viewBox="0 0 18 18" width={size}>
+      <Line stroke={color} strokeLinecap="round" strokeWidth={1.8} x1={4.5} x2={4.5} y1={3} y2={15} />
+      {descending ? (
+        <Path d="M1.8 12.2 L4.5 15 L7.2 12.2" fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} />
+      ) : (
+        <Path d="M1.8 5.8 L4.5 3 L7.2 5.8" fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} />
+      )}
+      {bars.map((length, index) => (
+        <Line key={index} stroke={color} strokeLinecap="round" strokeWidth={1.8} x1={9.5} x2={9.5 + length * 0.8} y1={4 + index * 5} y2={4 + index * 5} />
+      ))}
+    </Svg>
+  );
+}

@@ -27,7 +27,16 @@ import {
   marketColumns,
   marketLayout,
   marketSortOptions,
+  heldValuePhrase,
+  nameInitials,
   netTone,
+  nextSortState,
+  orderButtonName,
+  orderButtonTitle,
+  SEARCH_NEEDS_LETTERS,
+  searchHasLetters,
+  slotLineBeside,
+  spokenTier,
   rowActions,
   rowKicker,
   rowProfileLabel,
@@ -278,8 +287,9 @@ test('below 380px the kicker drops the tier so the given name and price share a 
   assert.equal(KICKER_TIER_MIN_WIDTH, 380);
   assert.equal(rowKicker('Karl-Anthony', 'star', 360), 'Karl-Anthony');
   assert.equal(rowKicker('Karl-Anthony', 'star', 379), 'Karl-Anthony');
-  assert.equal(rowKicker('Karl-Anthony', 'star', 380), 'Karl-Anthony · star');
-  assert.equal(rowKicker('Nikola', 'star', 1440), 'Nikola · star');
+  // The space before the dot does not break: no line starts with "·" (T2-12).
+  assert.equal(rowKicker('Karl-Anthony', 'star', 380), 'Karl-Anthony\u00A0· star');
+  assert.equal(rowKicker('Nikola', 'star', 1440), 'Nikola\u00A0· star');
   assert.equal(rowKicker('Nikola', 'star', 195), 'Nikola');
   assert.equal(rowKicker('Nene', '', 390), 'Nene', 'no tier, no separator');
 });
@@ -289,6 +299,11 @@ test('search, sort and Watching fold behind one toggle below 300px', () => {
   assert.equal(collapseControls(299), true);
   assert.equal(collapseControls(300), false);
   assert.equal(collapseControls(390), false);
+  // Short windows fold too (T4-16), except the table, whose toolbar is one row.
+  assert.equal(collapseControls(600, 400), true);
+  assert.equal(collapseControls(844, 390), true);
+  assert.equal(collapseControls(600, 450), false);
+  assert.equal(collapseControls(1280, 420, true), false);
 });
 
 test('layout: a table from 768px, the phone row below, one column under 300px or with big text', () => {
@@ -406,13 +421,86 @@ test('the edge is the difference of the figures shown, so the row adds up (T2-05
   assert.equal(shownAmount(9_999.4), 9_999);
 });
 
-test('choosing a sort again flips it; no last season still goes last (T2-N03)', () => {
+test('choosing a sort never flips it; only the order button does (T1-08, T2-05, T3-02)', () => {
+  const start = { sort: 'price' as const, reversed: false };
+  // A new sort starts in its natural order; choosing the one in use changes nothing.
+  assert.deepEqual(nextSortState(start, { choose: 'value' }), { sort: 'value', reversed: false });
+  assert.deepEqual(nextSortState({ sort: 'value', reversed: false }, { choose: 'value' }), { sort: 'value', reversed: false });
+  assert.deepEqual(nextSortState({ sort: 'value', reversed: true }, { choose: 'value' }), { sort: 'value', reversed: true });
+  assert.deepEqual(nextSortState({ sort: 'value', reversed: true }, { choose: 'name' }), { sort: 'name', reversed: false });
+  assert.deepEqual(nextSortState({ sort: 'value', reversed: false }, 'flip'), { sort: 'value', reversed: true });
+  // Natural orders: Value and Dividend highest first, Price lowest first, Name A to Z.
+  assert.equal(orderButtonName('value', false), 'Order: highest first');
+  assert.equal(orderButtonName('dividend', false), 'Order: highest first');
+  assert.equal(orderButtonName('price', false), 'Order: lowest first');
+  assert.equal(orderButtonName('name', false), 'Order: A to Z');
+  assert.equal(orderButtonTitle('value', false), 'Order: highest first. Flip to lowest first.');
+  // Labels carry no arrow; Dividend joins where the table shows its column, or while in use.
+  assert.deepEqual(marketSortOptions('price').map((o) => o.label), ['Price', 'Value', 'Name']);
+  assert.deepEqual(marketSortOptions('value', true).map((o) => o.label), ['Price', 'Dividend', 'Value', 'Name']);
+  assert.deepEqual(marketSortOptions('dividend').map((o) => o.name), ['Price', 'Dividend last season', 'Value', 'Name']);
+  // Dividend last season sorts highest first; no last season still goes last either way.
+  assert.equal(ids(sortMarketRows(rows, 'dividend', 'long')), 'eadbc');
+  assert.equal(ids(sortMarketRows(rows, 'dividend', 'long', true)), 'bdaec');
+  assert.equal(sortedLine('dividend'), 'Sorted by dividend last season, highest first.');
+  assert.equal(sortAscending('dividend'), false);
+});
+
+test('the slot line sits beside the side toggle from 340px, under it below (T1-09)', () => {
+  assert.equal(slotLineBeside(360), true);
+  assert.equal(slotLineBeside(340), true);
+  assert.equal(slotLineBeside(320), false);
+});
+
+test('search: no letters asks for a name; spaces and hyphens are ignored; initials find players (T4-05, T4-12)', () => {
+  const list = [
+    { player: player({ playerId: 'k', name: 'Karl-Anthony Towns' }) },
+    { player: player({ playerId: 's', name: 'Shai Gilgeous-Alexander' }) },
+    { player: player({ playerId: 'a', name: 'Anthony Davis' }) },
+    { player: player({ playerId: 'b', name: 'Bam Adebayo' }) },
+    { player: player({ playerId: 'j', name: 'Jaren Jackson Jr.' }) },
+    { player: player({ playerId: 'l', name: 'Luka Doncic' }) },
+  ];
+  const find = (query: string) => ids(filterMarketRows(list, { query, watchedOnly: false, watched: [] }));
+  for (const query of ['🏀', "'", '-', ' - ', '…']) {
+    assert.equal(searchHasLetters(query), false, query);
+    assert.equal(find(query), '', query);
+  }
+  assert.equal(listCountLine({ query: '🏀', count: 0, total: 30, watchedOnly: false }), `${SEARCH_NEEDS_LETTERS}.`);
+  assert.equal(find(''), 'ksabjl');
+  assert.equal(find('karlanthony'), 'k');
+  assert.equal(find('gilgeousalexander'), 's');
+  assert.equal(find('Karl-Anthony'), 'k');
+  assert.equal(find('karl anthony'), 'k');
+  assert.equal(find('sga'), 's');
+  assert.equal(find('KAT'), 'k');
+  // Initials alongside normal matches: "ad" is Anthony Davis and every name with "ad" in
+  // it, never a match across two names ("Luk|a D|oncic").
+  assert.equal(find('ad'), 'ab');
+  assert.equal(find('doncic luka'), 'l');
+  assert.equal(find('jjj'), 'j');
+  assert.equal(find('jj'), 'j');
+  assert.deepEqual(nameInitials('Shai Gilgeous-Alexander'), ['sga']);
+  assert.deepEqual(nameInitials('Jaren Jackson Jr.'), ['jjj', 'jj']);
+  // One letter is not initials.
+  assert.equal(find('k'), 'kjl');
+});
+
+test('spoken rows say the tier as words, and held rows keep their value phrase (T3-30)', () => {
+  assert.equal(spokenTier('role'), 'role player');
+  assert.equal(spokenTier('Starter'), 'starter');
+  assert.equal(spokenTier('star'), 'star');
+  assert.match(rowProfileLabel({ name: 'Kon Knueppel', tier: 'role', price: 111_500, detail: 'No last season' }), /^Kon Knueppel, role player, /);
+  const gillespie = { currentGameCost: 126_500, priorSeasonValuePerGame: 120_000 };
+  assert.equal(heldValuePhrase(gillespie, 'long'), "last season $120K a game, $6.5K under today's price");
+  assert.equal(heldValuePhrase(gillespie, 'short'), "last season $120K a game, +$6.5K for a short at today's price");
+  assert.equal(heldValuePhrase({ currentGameCost: 90_000, priorSeasonValuePerGame: null }, 'long'), 'no last season');
+});
+
+test('a reversed sort runs the other way, words included; no last season still goes last (T2-N03)', () => {
   assert.equal(ids(sortMarketRows(rows, 'price', 'long', true)), 'debac');
   assert.equal(ids(sortMarketRows(rows, 'value', 'long', true)), 'dbeac');
   assert.equal(ids(sortMarketRows(rows, 'name', 'long', true)), 'ecabd');
-  assert.deepEqual(marketSortOptions('price', false).map((o) => o.label), ['Price ↑', 'Value', 'Name']);
-  assert.deepEqual(marketSortOptions('value', false).map((o) => o.label), ['Price', 'Value ↓', 'Name']);
-  assert.equal(marketSortOptions('name', true)[2].label, 'Name ↓');
   // Plain direction words (T3-18): "highest first", not "dearest first".
   assert.equal(sortedLine('price', true), 'Sorted by price, highest first.');
   assert.equal(sortedLine('price'), 'Sorted by price, lowest first.');

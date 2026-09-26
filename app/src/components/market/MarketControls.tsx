@@ -3,14 +3,152 @@
  * desktop column header. The screen composes them; the rows live with the
  * screen because their actions and locks are part of its contract.
  */
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { sortAscending, sortDirection, type MarketColumnSet, type MarketSort } from '../../data/marketView';
+import {
+  COLUMN_EXPLANATIONS,
+  orderButtonName,
+  orderButtonTitle,
+  sortAscending,
+  sortDirection,
+  type MarketColumnSet,
+  type MarketSort,
+  type MarketSortOption,
+} from '../../data/marketView';
 import { colors, control, fonts, radius, space, type, weight } from '../../theme';
-import { Label } from '../../ui/kit';
-import { CloseIcon, SearchIcon, StarIcon } from './icons';
+import { CloseIcon, SearchIcon, SortOrderIcon, StarIcon } from './icons';
 import { spaceToggles } from './switchKeys';
+
+/** A hover title (the browser's tooltip) on a control; react-native-web does not pass `title` through. */
+function useTitle(ref: { current: unknown }, title: string): void {
+  useEffect(() => {
+    const node = ref.current as { setAttribute?: (name: string, value: string) => void } | null;
+    node?.setAttribute?.('title', title);
+  }, [ref, title]);
+}
+
+type KeyEvent = { key: string; preventDefault: () => void };
+
+/**
+ * The one button that flips the order: an arrow icon, 44x44, named for the
+ * order it shows ("Order: highest first"), with a hover title that says what
+ * a press does.
+ */
+export function OrderButton({
+  sort,
+  reversed,
+  onFlip,
+  size = control.height,
+}: {
+  sort: MarketSort;
+  reversed: boolean;
+  onFlip: () => void;
+  size?: number;
+}) {
+  const ref = useRef<View>(null);
+  useTitle(ref, orderButtonTitle(sort, reversed));
+  return (
+    <Pressable
+      ref={ref}
+      accessibilityLabel={orderButtonName(sort, reversed)}
+      accessibilityRole="button"
+      onPress={onFlip}
+      {...spaceToggles(onFlip)}
+      style={(state) => [
+        styles.order,
+        { width: size, height: size },
+        reversed && styles.orderFlipped,
+        (state as { hovered?: boolean }).hovered === true && styles.hover,
+        state.pressed && styles.pressed,
+      ]}
+    >
+      <SortOrderIcon descending={!sortAscending(sort, reversed)} />
+    </Pressable>
+  );
+}
+
+/**
+ * Sort by Price, Value or Name (Dividend where the table shows it): a radio
+ * group, so choosing one only ever chooses it. Arrow keys move and choose,
+ * Space and Enter choose, and nothing here flips the order: the order button
+ * beside it does (walk 3 T1-08, T2-05, T3-02). Labels carry no arrow, so
+ * they never run out of room.
+ */
+export function SortControl({
+  options,
+  sort,
+  reversed,
+  onChoose,
+  onFlip,
+  style,
+}: {
+  options: MarketSortOption[];
+  sort: MarketSort;
+  reversed: boolean;
+  onChoose: (sort: MarketSort) => void;
+  onFlip: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const refs = useRef<Array<View | null>>([]);
+  const selectedIndex = options.findIndex((option) => option.key === sort);
+  const move = (to: number) => {
+    const index = (to + options.length) % options.length;
+    onChoose(options[index].key);
+    (refs.current[index] as unknown as { focus?: () => void } | null)?.focus?.();
+  };
+  const onKeyDown = (event: KeyEvent) => {
+    const from = Math.max(0, selectedIndex);
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); move(from + 1); }
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); move(from - 1); }
+    else if (event.key === 'Home') { event.preventDefault(); move(0); }
+    else if (event.key === 'End') { event.preventDefault(); move(options.length - 1); }
+  };
+  return (
+    <View style={[styles.sortRow, style]}>
+      <View
+        accessibilityLabel="Sort players"
+        role="radiogroup"
+        style={styles.radioGroup}
+        {...({ onKeyDown } as object)}
+      >
+        {options.map((option, index) => {
+          const checked = option.key === sort;
+          return (
+            <Pressable
+              key={option.key}
+              ref={(node) => {
+                refs.current[index] = node;
+              }}
+              accessibilityLabel={option.name}
+              aria-checked={checked}
+              onPress={() => onChoose(option.key)}
+              role="radio"
+              {...({
+                tabIndex: checked || (selectedIndex < 0 && index === 0) ? 0 : -1,
+                onKeyDown: (event: KeyEvent) => {
+                  if (event.key === ' ' || event.key === 'Spacebar') { event.preventDefault(); onChoose(option.key); }
+                },
+              } as object)}
+              style={(state) => [
+                styles.radio,
+                index > 0 && styles.radioDivider,
+                checked && styles.radioChecked,
+                (state as { hovered?: boolean }).hovered === true && !checked && styles.hover,
+                state.pressed && !checked && styles.pressed,
+              ]}
+            >
+              <Text maxFontSizeMultiplier={1.3} style={[styles.radioText, checked && styles.radioTextChecked]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <OrderButton onFlip={onFlip} reversed={reversed} sort={sort} />
+    </View>
+  );
+}
 
 export function MarketSearch({
   value,
@@ -135,18 +273,21 @@ export function ControlsToggle({
 
 /**
  * Column labels above the table; the widths are the rows' own (marketColumns).
- * Player, Price and Value sort the list (again to flip): they read as
- * controls, in capitals with a sort mark (↕, or the gold arrow of the sort in
- * use), and carry aria-sort. Their names start with the words you see (voice
- * control: "Value, sort by value"). The other labels are plain captions, read
- * with each row, so they stay silent.
+ * One style for every label (capitals, the same weight and colour, up to two
+ * lines, set on the bottom edge). Player, Price a game, Dividend last season
+ * and Value sort the list and carry a sort mark (↕, or the gold arrow of the
+ * sort in use) and aria-sort; Your net a game has none. The same rule as the
+ * toolbar: a label chooses its sort in its natural order and never flips it;
+ * the gold arrow of the sort in use is its own button and flips it. Value
+ * and Dividend last season explain themselves on hover and keyboard focus.
  */
 export function MarketColumnHeader({
   columns,
   valueLabel,
   sort,
   reversed,
-  onSort,
+  onChoose,
+  onFlip,
   lead = 0,
 }: {
   columns: MarketColumnSet;
@@ -155,54 +296,126 @@ export function MarketColumnHeader({
   valueLabel: string;
   sort: MarketSort;
   reversed: boolean;
-  onSort: (sort: MarketSort) => void;
+  onChoose: (sort: MarketSort) => void;
+  onFlip: () => void;
 }) {
-  const sorter = (key: MarketSort, label: string, width?: number) => {
-    const on = sort === key;
-    const mark = on ? (sortAscending(key, reversed) ? '↑' : '↓') : '↕';
-    return (
-      <View
-        role="columnheader"
-        {...({ 'aria-sort': on ? (sortAscending(key, reversed) ? 'ascending' : 'descending') : 'none' } as object)}
-        style={width === undefined ? styles.columnPlayer : { width }}
-      >
-        <Pressable
-          accessibilityLabel={on ? `${label}, sorted ${sortDirection(key, reversed)}` : `${label}, sort by ${key}`}
-          accessibilityRole="button"
-          onPress={() => onSort(key)}
-          style={({ pressed }) => [styles.sorter, pressed && styles.pressed]}
-        >
-          <View style={styles.sorterLabel}>
-            <Label style={[width !== undefined && styles.column, styles.sortable, on && styles.columnOn]}>
-              {width === undefined ? `${label}\u00A0${mark}` : label}
-            </Label>
-            {/* A number column's mark sits in the gap to its right, so the label keeps one line. */}
-            {width !== undefined ? (
-              <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.arrow, on && styles.arrowOn]}>{mark}</Text>
-            ) : null}
-          </View>
-        </Pressable>
-      </View>
-    );
-  };
   return (
     <View accessibilityLabel="Market columns" role="table">
       <View role="row" style={[styles.columns, { gap: columns.gap }]}>
         {lead > 0 ? <View style={{ width: lead }} /> : null}
         <View style={{ width: columns.avatar }} />
-        {sorter('name', 'Player')}
-        {sorter('price', 'Price a game', columns.price)}
-        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.quietColumn, { width: columns.lastSeason }]}>
-          <Text maxFontSizeMultiplier={1.4} style={styles.plainColumn}>Dividend last season</Text>
-        </View>
-        {sorter('value', valueLabel, columns.edge)}
+        <SortHeader columnKey="name" label="Player" onChoose={onChoose} onFlip={onFlip} reversed={reversed} sort={sort} />
+        <SortHeader columnKey="price" label={'Price a\u00A0game'} onChoose={onChoose} onFlip={onFlip} reversed={reversed} sort={sort} width={columns.price} />
+        <SortHeader
+          columnKey="dividend"
+          explain={COLUMN_EXPLANATIONS.dividend}
+          label={'Dividend last\u00A0season'}
+          onChoose={onChoose}
+          onFlip={onFlip}
+          reversed={reversed}
+          sort={sort}
+          width={columns.lastSeason}
+        />
+        <SortHeader
+          columnKey="value"
+          explain={COLUMN_EXPLANATIONS.value}
+          label={valueLabel}
+          onChoose={onChoose}
+          onFlip={onFlip}
+          reversed={reversed}
+          sort={sort}
+          width={columns.edge}
+        />
         {columns.yours > 0 ? (
-          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.quietColumn, { width: columns.yours }]}>
-            <Text maxFontSizeMultiplier={1.4} style={styles.plainColumn}>Your net a game</Text>
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.headerCell, styles.headerPlain, { width: columns.yours }]}>
+            <Text maxFontSizeMultiplier={1.4} style={[styles.headerText, styles.headerTextNumber]}>{'Your net a\u00A0game'}</Text>
           </View>
         ) : null}
         <View style={{ width: columns.action }} />
       </View>
+    </View>
+  );
+}
+
+let explainIds = 0;
+
+function SortHeader({
+  columnKey,
+  label,
+  width,
+  explain,
+  sort,
+  reversed,
+  onChoose,
+  onFlip,
+}: {
+  columnKey: MarketSort;
+  label: string;
+  /** A number column's width; none for the Player column, which takes the rest. */
+  width?: number;
+  explain?: string;
+  sort: MarketSort;
+  reversed: boolean;
+  onChoose: (sort: MarketSort) => void;
+  onFlip: () => void;
+}) {
+  const on = sort === columnKey;
+  const number = width !== undefined;
+  const words = label.replace(/\u00A0/g, ' ');
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [explainId] = useState(() => `market-column-explain-${(explainIds += 1)}`);
+  const ascending = sortAscending(columnKey, reversed);
+  const mark = on ? (
+    <Pressable
+      accessibilityLabel={`${words} order: ${sortDirection(columnKey, reversed)}`}
+      accessibilityRole="button"
+      onPress={onFlip}
+      {...spaceToggles(onFlip)}
+      style={(state) => [styles.markButton, (state as { hovered?: boolean }).hovered === true && styles.hover, state.pressed && styles.pressed]}
+    >
+      <Text style={[styles.mark, styles.markOn]}>{ascending ? '↑' : '↓'}</Text>
+    </Pressable>
+  ) : (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.markSlot}>
+      <Text style={styles.mark}>↕</Text>
+    </View>
+  );
+  return (
+    <View
+      role="columnheader"
+      {...({ 'aria-sort': on ? (ascending ? 'ascending' : 'descending') : 'none' } as object)}
+      style={[styles.headerCell, number ? { width } : styles.columnPlayer]}
+    >
+      <View style={[styles.headerInner, number && styles.headerInnerNumber]}>
+        {number ? mark : null}
+        <Pressable
+          accessibilityLabel={on ? `${words}, sorted ${sortDirection(columnKey, reversed)}` : `${words}, sort by ${words.toLowerCase()}`}
+          accessibilityRole="button"
+          onBlur={() => setFocused(false)}
+          // Keyboard focus shows the explanation; a click's focus does not
+          // leave it open over the first row.
+          onFocus={(event) => {
+            const target = event.target as unknown as { matches?: (selector: string) => boolean };
+            setFocused(target.matches?.(':focus-visible') ?? true);
+          }}
+          onHoverIn={() => setHovered(true)}
+          onHoverOut={() => setHovered(false)}
+          onPress={() => onChoose(columnKey)}
+          style={(state) => [styles.sorter, number && styles.sorterNumber, state.pressed && styles.pressed]}
+          {...(explain ? ({ 'aria-describedby': explainId } as object) : {})}
+        >
+          <Text maxFontSizeMultiplier={1.4} style={[styles.headerText, number && styles.headerTextNumber, on && styles.headerTextOn]}>
+            {label}
+          </Text>
+        </Pressable>
+        {number ? null : mark}
+      </View>
+      {explain ? (
+        <View pointerEvents="none" style={[styles.explain, !(hovered || focused) && styles.explainHidden]}>
+          <Text nativeID={explainId} style={styles.explainText}>{explain}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -308,10 +521,77 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
     fontVariant: ['tabular-nums'],
   },
+  order: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.controlBorder,
+    borderRadius: radius.sm,
+    backgroundColor: colors.background,
+  },
+  orderFlipped: {
+    // The unusual order is marked on the button too, not only in the note.
+    borderColor: colors.goldLine,
+    backgroundColor: colors.goldSoft,
+  },
+  hover: {
+    backgroundColor: colors.surfaceHigh,
+  },
+  sortRow: {
+    // A phone at 200% zoom puts the order button under the choices rather
+    // than cutting a label; any wider window keeps one line.
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  radioGroup: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    borderWidth: 1,
+    borderColor: colors.controlBorder,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+    backgroundColor: colors.background,
+  },
+  radio: {
+    // Never narrower than its word: labels are never cut.
+    flexGrow: 1,
+    flexShrink: 0,
+    flexBasis: 'auto',
+    minHeight: control.height - 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.sm,
+  },
+  radioDivider: {
+    borderLeftWidth: 1,
+    borderLeftColor: colors.borderStrong,
+  },
+  radioChecked: {
+    backgroundColor: colors.goldSoft,
+    // The kit's segment mark: a 3px bar in any colour vision and theme.
+    borderBottomWidth: 3,
+    borderBottomColor: colors.goldInk,
+  },
+  radioText: {
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.heavy,
+    letterSpacing: 1,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  radioTextChecked: {
+    color: colors.goldInk,
+  },
   columns: {
     minHeight: control.height,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     paddingHorizontal: space.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.borderStrong,
@@ -320,46 +600,91 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  column: {
-    textAlign: 'right',
+  headerCell: {
+    position: 'relative',
+    justifyContent: 'flex-end',
   },
-  sortable: {
-    // A control: the brighter label colour, in capitals, with its sort mark.
+  headerPlain: {
+    paddingBottom: 8,
+  },
+  headerInner: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  headerInnerNumber: {
+    justifyContent: 'flex-end',
+  },
+  headerText: {
+    // One style for every column label, sortable or not (walk 3 T2-04).
     color: colors.muted,
-  },
-  columnOn: {
-    color: colors.goldInk,
-  },
-  plainColumn: {
-    // A caption, not a control: sentence case, lighter, no sort mark.
-    color: colors.faint,
-    fontFamily: fonts.body,
+    fontFamily: fonts.display,
     fontSize: type.label,
-    fontWeight: weight.bold,
+    fontWeight: weight.heavy,
+    letterSpacing: 1,
     lineHeight: 14,
+    textTransform: 'uppercase',
+  },
+  headerTextNumber: {
     textAlign: 'right',
+  },
+  headerTextOn: {
+    color: colors.goldInk,
   },
   sorter: {
     minHeight: control.height,
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 8,
   },
-  sorterLabel: {
-    position: 'relative',
+  sorterNumber: {
+    flexShrink: 1,
+    alignItems: 'flex-end',
   },
-  arrow: {
-    position: 'absolute',
-    right: -11,
-    top: 0,
+  markSlot: {
+    width: 24,
+    minHeight: control.height,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 8,
+  },
+  markButton: {
+    width: 24,
+    minHeight: control.height,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 8,
+    borderRadius: radius.sm,
+  },
+  mark: {
     color: colors.faint,
     fontFamily: fonts.display,
     fontSize: type.label,
     fontWeight: weight.heavy,
+    lineHeight: 14,
   },
-  arrowOn: {
+  markOn: {
     color: colors.goldInk,
+    fontSize: type.caption,
   },
-  quietColumn: {
-    justifyContent: 'center',
+  explain: {
+    position: 'absolute',
+    top: '100%',
+    right: 0,
+    zIndex: 5,
+    width: 220,
+    paddingHorizontal: space.sm,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceRaised,
+  },
+  explainHidden: {
+    display: 'none',
+  },
+  explainText: {
+    color: colors.text,
+    fontSize: type.caption,
+    lineHeight: 17,
   },
   pressed: {
     opacity: 0.72,
