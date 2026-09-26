@@ -18,6 +18,17 @@ const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
 
 let openSheets = 0;
 let nextSheetId = 1;
+const sheetListeners = new Set<() => void>();
+
+function sheetsChanged() {
+  for (const listener of sheetListeners) listener();
+}
+
+/** Subscribe to sheets opening and closing (for useSyncExternalStore). */
+export function subscribeSheets(listener: () => void): () => void {
+  sheetListeners.add(listener);
+  return () => sheetListeners.delete(listener);
+}
 
 /** The element the app renders into; sheets portal outside it. */
 function appRoot(): HTMLElement | null {
@@ -55,6 +66,7 @@ export function useSheetHistory(visible: boolean, onClose: () => void): void {
       : null;
     openSheets += 1;
     setBackgroundInert(true);
+    sheetsChanged();
     window.history.pushState({ ...(window.history.state ?? {}), sheet: id }, '');
     const onPop = () => {
       // Back left this sheet's entry: close the sheet.
@@ -71,6 +83,7 @@ export function useSheetHistory(visible: boolean, onClose: () => void): void {
       window.removeEventListener('popstate', onPop);
       openSheets = Math.max(0, openSheets - 1);
       if (openSheets === 0) setBackgroundInert(false);
+      sheetsChanged();
       // Closed by Done / Escape / scrim: remove the entry we pushed.
       if (!poppedByBack && (window.history.state as { sheet?: number } | null)?.sheet === id) {
         window.history.back();

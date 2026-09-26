@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,7 +22,7 @@ import { PerGameRosterScreen as PortfolioScreen } from './src/screens/PerGameRos
 import { humanDateWithYear, spoken } from './src/copy/terms';
 import { Button, visuallyHidden } from './src/ui/kit';
 import { registerSettingsOpener, registerTabOpener } from './src/state/uiActions';
-import { sheetIsOpen } from './src/web/appHistory';
+import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
 import { consumePracticeRestarted, setPracticeProgress } from './src/web/practiceSession';
 import {
   PerGameProvider as PortfolioProvider,
@@ -207,7 +207,36 @@ function NoticeToast({
     const timer = setTimeout(onDismiss, successNoticeMs(message));
     return () => clearTimeout(timer);
   }, [message, onDismiss, tone]);
+  const noticeRef = useRef<View | null>(null);
+  // A sheet over the app shows its own result (the profile's tick and note);
+  // a success notice would only sit dimmed under its scrim.
+  const sheetOpen = useSyncExternalStore(subscribeSheets, sheetIsOpen, () => false);
   const problem = tone === 'problem';
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    // Escape dismisses the notice (a sheet or confirm open above it takes
+    // Escape first), and a success notice steps aside when keyboard focus
+    // lands on something it covers.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !sheetIsOpen()) onDismiss();
+    };
+    const onFocus = (event: FocusEvent) => {
+      if (problem) return;
+      const node = noticeRef.current as unknown as HTMLElement | null;
+      const target = event.target as HTMLElement | null;
+      if (!node?.getBoundingClientRect || !target?.getBoundingClientRect || node.contains(target)) return;
+      const a = node.getBoundingClientRect();
+      const b = target.getBoundingClientRect();
+      if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) onDismiss();
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('focusin', onFocus);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('focusin', onFocus);
+    };
+  }, [onDismiss, problem]);
+  if (!problem && sheetOpen) return null;
   if (!problem) {
     // A success reads like a snackbar: tapping it dismisses it, and never
     // presses whatever sits underneath. Screen readers already heard it
@@ -215,6 +244,7 @@ function NoticeToast({
     return (
       <View style={styles.noticeLayer}>
         <Pressable
+          ref={noticeRef}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
           onPress={onDismiss}
@@ -228,7 +258,7 @@ function NoticeToast({
   }
   return (
     <View style={styles.noticeLayer}>
-      <View style={[styles.notice, styles.noticeProblem]}>
+      <View ref={noticeRef} style={[styles.notice, styles.noticeProblem]}>
         <Text style={styles.noticeText}>{message}</Text>
         <Pressable
           accessibilityLabel={`Dismiss: ${message}`}
