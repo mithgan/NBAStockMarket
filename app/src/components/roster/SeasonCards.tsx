@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp,
 import { exactMoney, humanDate } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
 import type { SeasonSummary } from '../../data/perGameMetrics';
-import { finalSummary, formatAt, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
+import { BELOW_ZERO_WELCOME, finalSummary, formatAt, tipWords, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
 import { colors, control, fonts, headingStyle, radius, space, type, weight } from '../../theme';
 import { Button, headingLevel, Label, tapsSettling, visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -47,7 +47,9 @@ export function WelcomeCard({
   const tiny = useWindowDimensions().width < 200;
   const copy = hasPlayers
     ? `Press +1 night to play ${games}. You can keep adding players until then.`
-    : `${earn} Pick players whose dividend should beat their price, then press +1 night to play ${games}.${fee} Practice isn't saved: reloading starts a new season.`;
+    // Right after what a dividend is: that a bad game can take it below zero
+    // (walk 8 T1-01), so a first "-$56K" on the roster is not a surprise.
+    : `${earn} ${BELOW_ZERO_WELCOME} Pick players whose dividend should beat their price, then press +1 night to play ${games}.${fee} Practice isn't saved: reloading starts a new season.`;
   return (
     <View style={[styles.band, tiny && styles.bandTiny]}>
       <View style={[styles.headRow, tiny && styles.headRowTiny]}>
@@ -93,9 +95,11 @@ export function WelcomeCard({
  * beside them, never on a row of its own above them (walk 7 T3-09). × hides
  * it, and it goes by itself after the first week.
  */
-export function FirstNightTip({ onOpenResults, onHide }: {
+export function FirstNightTip({ onOpenResults, onHide, side = 'long' }: {
   onOpenResults: () => void;
   onHide: () => void;
+  /** Who the tip speaks to: a shorts-only player gets the short's reading (`tipSide`, walk 8 T4-10). */
+  side?: 'long' | 'short';
 }) {
   const tiny = useWindowDimensions().width < 200;
   const results = <Button accessibilityLabel="Results: each game's math" label="Results" onPress={onOpenResults} />;
@@ -104,7 +108,7 @@ export function FirstNightTip({ onOpenResults, onHide }: {
       <View style={[styles.headRow, styles.tipRowInline]}>
         <Text style={[styles.headText, styles.tipText]}>
           <Text style={styles.tipTag}>PAYING OFF</Text>
-          {" means his dividends beat your price so far. Results shows each game's math."}
+          {tipWords(side)}
         </Text>
         {tiny ? null : results}
         <Pressable

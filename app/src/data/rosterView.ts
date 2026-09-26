@@ -19,6 +19,7 @@ import {
   exactMoney,
   exactSignedMoney,
   humanDate,
+  humanDay,
   humanDaySpan,
   moneyFine,
   signedMoney,
@@ -143,6 +144,52 @@ export function figureCaptions(side: PerGamePosition['side']): {
   return side === 'long'
     ? { price: 'Price a game', dividend: 'Dividend a game', net: 'Profit a game', total: 'Total' }
     : { price: 'Credit a game', dividend: 'Dividend a game', net: 'Profit a game', total: 'Total' };
+}
+
+/**
+ * One line on a row whose dividend a game is below zero, where the figure
+ * shows (walk 8 T1-01): everything before the first night says a dividend is
+ * money you collect, so "-$56K" beside a -$315K profit read as a mistake. A
+ * roster spot pays a below-zero dividend on top of his price; a short, which
+ * is credited his price and pays his dividend, keeps his price and gets it back.
+ * Null when there is nothing to explain.
+ */
+export function belowZeroNote(
+  side: PerGamePositionSide,
+  summary: Pick<ValueSummary, 'games' | 'avgDividend'>,
+): string | null {
+  const { games, avgDividend } = summary;
+  if (avgDividend === null || games <= 0 || Math.round(avgDividend) >= 0) return null;
+  const more = moneyCompact(-avgDividend);
+  const one = games === 1;
+  if (side === 'long') {
+    return one
+      ? `Bad night: below zero, so you paid his price and ${more} more.`
+      : `Bad games: below zero on average, so you paid his price and ${more} more a game.`;
+  }
+  return one
+    ? `Bad night for him: below zero, so you kept his price and ${more} more.`
+    : `Bad games for him: below zero on average, so you kept his price and ${more} more a game.`;
+}
+
+/** The welcome's word on a bad game, right after it says what a dividend is (walk 8 T1-01). */
+export const BELOW_ZERO_WELCOME = 'A bad game can push his dividend below zero, and you pay that too.';
+
+/**
+ * Which side the first-night tip speaks to (walk 8 T4-10): a player who has
+ * only ever shorted gets the short's reading of PAYING OFF, not the roster's,
+ * which is backwards for a short.
+ */
+export function tipSide(positions: readonly Pick<PerGamePosition, 'side'>[]): PerGamePositionSide {
+  const longs = positions.some((position) => position.side === 'long');
+  return !longs && positions.some((position) => position.side === 'short') ? 'short' : 'long';
+}
+
+/** The first-night tip's words after its PAYING OFF tag, for the side it speaks to. */
+export function tipWords(side: PerGamePositionSide): string {
+  return side === 'short'
+    ? " on a short means his dividends came in under his price so far. Results shows each game's math."
+    : " means his dividends beat your price so far. Results shows each game's math.";
 }
 
 export interface RosterRowView {
@@ -591,6 +638,24 @@ export function weekLabel(
   return { label, spoken: label.replace('\u2013', ' to ') };
 }
 
+/**
+ * The score block's recent line: the games your last press played (a night,
+ * a week or a run of presses), in the words and at the figure the status row
+ * and the notice give them ("Oct 30 games -$40.5K", "Oct 28\u2013Nov 10 games
+ * +$96K"). A rolling seven days beside the status row read as a second
+ * answer to "how did the games I just played go?", even in the other sign
+ * (walk 8 T2-01). `span` is chromeView.resultSpan's; `amount` the games-only
+ * sum over it. `spoken` reads the dash as "to".
+ */
+export function pressLine(
+  span: { label: string } | null | undefined,
+  amount: number | null | undefined,
+): { label: string; spoken: string; value: number } | null {
+  if (!span || amount === null || amount === undefined) return null;
+  const label = `${span.label} games`;
+  return { label, spoken: label.replace('\u2013', ' to '), value: amount };
+}
+
 /** A heavy display figure is about this many ems wide per character. */
 const HERO_EM_PER_CHAR = 0.62;
 /** The score never shrinks below this, so it stays the biggest thing on the screen. */
@@ -936,6 +1001,40 @@ export function chartSummary(series: readonly NightPoint[]): string {
     + `lowest ${signedMoney(worst.cumulativePnl)} ${worst.kind === 'now' ? 'now' : `after ${worst.label}`}.`);
 }
 
+/**
+ * A reading's parts, labels first: what the night's games made, any fees
+ * paid since the night before (they come off the score between nights), and
+ * the score after. A `now` point is the fees paid since the last night.
+ */
+export function nightReadingParts(point: NightPoint, previous: NightPoint | undefined): { when: string; fees: number } {
+  const when = point.kind === 'night' && point.date ? humanDay(point.date) : `After ${previous?.label ?? 'the last night'}`;
+  const fees = point.kind === 'night' && previous
+    ? Math.round(point.cumulativePnl - previous.cumulativePnl - point.change)
+    : 0;
+  return { when, fees };
+}
+
+/** "Wed, Oct 29: that night +$12K, fees -$250, score +$40K", for the slider value. */
+export function nightReadingText(point: NightPoint, previous: NightPoint | undefined): string {
+  const fine = (amount: number) => formatAt(amount, 'fine', true);
+  if (point.kind === 'start') return 'Start: everyone begins at $0';
+  const { when, fees } = nightReadingParts(point, previous);
+  if (point.kind !== 'night') return `${when}: fees ${fine(point.change)}, score ${fine(point.cumulativePnl)}`;
+  const feeText = fees !== 0 ? `, fees ${fine(fees)}` : '';
+  return `${when}: that night ${fine(point.change)}${feeText}, score ${fine(point.cumulativePnl)}`;
+}
+
+/**
+ * The score chart's value for screen readers: the selected night's reading,
+ * else the last night's, never empty, so the slider reads as a night, not
+ * "slider, 6", before anyone focuses it (walk 8 T3-03).
+ */
+export function chartValueText(series: readonly NightPoint[], selected: number | null): string {
+  if (series.length === 0) return 'Start: everyone begins at $0';
+  const index = selected !== null && selected >= 0 && selected < series.length ? selected : series.length - 1;
+  return nightReadingText(series[index], series[index - 1]);
+}
+
 export interface AxisLabel {
   index: number;
   /** Left edge of the label's box, in plot pixels. */
@@ -1011,11 +1110,12 @@ const MARK_HALF = 7;
 /**
  * The y-axis marks: $0 always, the season's high when it is above $0 and its
  * low when it is below, so a score that ran both ways names both (walk 4
- * T4-09: a +$22.8K peak and a -$8,000 low; a -$1.56M season with a short
- * stretch above $0). Each line is drawn at its value. When marks come closer
- * than `minGap` px, $0's words stay on its line and the high's step up, the
- * low's down, just far enough to read, inside the plot (`height`). Only a
- * plot too short for three marks leaves out the extreme nearest $0.
+ * T4-09). Every mark's words sit on the line they name (walk 8 T1-09): "$0"
+ * nudged 8px off its dashed line read as a level above zero. An extreme
+ * whose line runs closer than `minGap` px to $0 has no mark, since its words
+ * could only sit on it by covering "$0" (a night's reading still gives it);
+ * high and low sit on either side of $0, so they never meet. Words stay
+ * inside the plot (`height`).
  */
 export function valueTicks(
   values: readonly number[],
@@ -1025,41 +1125,19 @@ export function valueTicks(
 ): ValueTick[] {
   const high = Math.max(0, ...values);
   const low = Math.min(0, ...values);
-  const zero: ValueTick = { value: 0, y: yOf(0), labelY: yOf(0), kind: 'zero' };
-  // An extreme that would also read "$0" is no second mark.
-  const extremes: ValueTick[] = [];
-  if (Math.round(high) > 0) extremes.push({ value: high, y: yOf(high), labelY: yOf(high), kind: 'high' });
-  if (Math.round(low) < 0) extremes.push({ value: low, y: yOf(low), labelY: yOf(low), kind: 'low' });
   const top = MARK_HALF;
   const bottom = height - MARK_HALF;
   const clamp = (y: number) => Math.min(Math.max(y, top), Math.max(top, bottom));
-  const place = (marks: ValueTick[]): ValueTick[] | null => {
-    const above = marks.find((tick) => tick.kind === 'high');
-    const below = marks.find((tick) => tick.kind === 'low');
-    let at = clamp(zero.y);
-    let up = above ? Math.min(clamp(above.y), at - minGap) : null;
-    let down = below ? Math.max(clamp(below.y), at + minGap) : null;
-    // Out of room at an edge: $0's words give way too.
-    if (up !== null && up < top) {
-      at += top - up;
-      up = top;
-      if (down !== null) down = Math.max(down, at + minGap);
-    }
-    if (down !== null && down > bottom) {
-      at -= down - bottom;
-      down = bottom;
-      if (up !== null) up = Math.min(up, at - minGap);
-    }
-    if ((up !== null && up < top - 0.5) || at < top - 0.5 || at > bottom + 0.5) return null;
-    return [
-      ...(above && up !== null ? [{ ...above, labelY: up }] : []),
-      { ...zero, labelY: at },
-      ...(below && down !== null ? [{ ...below, labelY: down }] : []),
-    ];
+  const zero: ValueTick = { value: 0, y: yOf(0), labelY: clamp(yOf(0)), kind: 'zero' };
+  const mark = (value: number, kind: ValueTick['kind']): ValueTick[] => {
+    const y = yOf(value);
+    const labelY = clamp(y);
+    return Math.abs(labelY - zero.labelY) >= minGap ? [{ value, y, labelY, kind }] : [];
   };
-  const all = place(extremes);
-  if (all) return all;
-  // Too short for every mark: keep the extreme farther from $0.
-  const farther = [...extremes].sort((left, right) => Math.abs(right.y - zero.y) - Math.abs(left.y - zero.y));
-  return place(farther.slice(0, 1)) ?? [{ ...zero, labelY: clamp(zero.y) }];
+  // An extreme that would also read "$0" is no second mark.
+  return [
+    ...(Math.round(high) > 0 ? mark(high, 'high') : []),
+    zero,
+    ...(Math.round(low) < 0 ? mark(low, 'low') : []),
+  ];
 }

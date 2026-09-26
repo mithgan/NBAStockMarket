@@ -70,11 +70,12 @@ function useHeroFit(start: number, text: string) {
 }
 
 /**
- * "How am I doing?" in one block: your score as the hero number, the last
- * seven days and your rank beside it, then the score split by where it came
- * from (roster, shorts, closed positions, fees), each part the total of a list
- * further down. Last night lives in the status bar above every screen, so it
- * is not repeated here.
+ * "How am I doing?" in one block: your score as the hero number, the games
+ * your last press played and your rank beside it, then the score split by
+ * where it came from (roster, shorts, closed positions, fees), each part the
+ * total of a list further down. The games line names the same days, at the
+ * same figure, as the status row and the notice after the press (walk 8
+ * T2-01): a rolling seven days there read as a second, contradicting answer.
  *
  * The score shows its new value at once (no count-up), so a glance or a
  * screenshot never catches it disagreeing with the parts under it. Before
@@ -105,7 +106,10 @@ export function ScoreHeader({
 }: {
   title: string;
   score: number;
-  /** The last seven days, from `recentEarnings`: games only (fees have their own part). */
+  /**
+   * What the games your last press played made (rosterView.pressLine): games
+   * only (fees have their own part), as the status row and the notice say it.
+   */
   week: number | null;
   /** True once a game night has touched your score. */
   started: boolean;
@@ -123,8 +127,8 @@ export function ScoreHeader({
    */
   valueLine?: string | null;
   /**
-   * The week figure's label in the days it covers, from `weekLabel` ("Oct 21
-   * games", "Oct 22–28 games"; walk 7 T1-13, T3-14); WEEK_LABEL without it.
+   * That figure's label in the days it covers, from `pressLine` ("Oct 30
+   * games", "Oct 28–Nov 10 games"; walk 8 T2-01); WEEK_LABEL without it.
    */
   weekWords?: { label: string; spoken: string } | null;
 }) {
@@ -169,9 +173,9 @@ export function ScoreHeader({
     </View>
   ) : null;
 
-  // "Your score +$187.5K, second of 5. Oct 22 to 28 games: +$188.5K." The
-  // score and place first, then the week in words that say what it is
-  // (walk 7 T3-14), as its own sentence.
+  // "Your score +$187.5K, second of 5. Oct 30 games: -$40.5K." The score and
+  // place first, then the last press's games in words that say which days
+  // (walk 7 T3-14, walk 8 T2-01), as its own sentence.
   const head = [
     `${title} ${scoreText}${feesOnly ? ', fees so far' : ''}`,
     // Places in words, as Leaders and the season card speak them: "second of 5" (walk 6 T3-07).

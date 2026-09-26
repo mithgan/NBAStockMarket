@@ -116,7 +116,8 @@ export function TableHeader({ side, actionWidth }: { side: PerGamePositionSide; 
  * your price says what re-adding him would cost today.
  */
 export function TableFigures({ price, dividend, net, total, now = null }: Figures) {
-  const cell = (width: number, value: ReactNode) => <View style={[styles.cell, { width }]}>{value}</View>;
+  // Each figure a cell of the Roster table, under its column header (walk 8 T3-09).
+  const cell = (width: number, value: ReactNode) => <View role="cell" style={[styles.cell, { width }]}>{value}</View>;
   const moved = now !== null && moneyCompact(now) !== moneyCompact(price);
   return (
     <>

@@ -22,13 +22,15 @@ function bindDates(text: string): string {
  * them stays in your score, so they stay on the screen: the section's total
  * is the "Closed" part of the score breakdown and the sum of these rows.
  */
-export function ClosedSection({ rows: allRows, total, totalInset = 0, precision = 'fine', actionFor }: {
+export function ClosedSection({ rows: allRows, total, totalInset = 0, precision = 'fine', actionFor, noteFor }: {
   rows: readonly ClosedRow[];
   total: number;
   totalInset?: number;
   precision?: PartPrecision;
-  /** A follow-up move for a row, such as "Short again" on a short that ran its term. */
+  /** A follow-up move for a row, such as "Short again" on a closed short. */
   actionFor?: (row: ClosedRow) => ReactNode;
+  /** A note under a row, full width (a full side's "Choose who to drop"; walk 8 T4-12). */
+  noteFor?: (row: ClosedRow) => ReactNode;
 }) {
   const [showAll, setShowAll] = useState(false);
   // The roster table (a wide list) keeps a Total column and an action column
@@ -51,9 +53,11 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
       />
       {shown.map((row) => {
         const action = actionFor ? actionFor(row) : null;
+        const note = noteFor ? noteFor(row) : null;
         const label = `${row.name}, ${row.how.replace(/ · /g, ', ')}, ${gamesCount(row.games)}, ${formatAt(row.total, precision, true)} stays in your score`;
         return (
-          <View key={row.positionId} style={[styles.row, table && styles.rowTable]}>
+          <View key={row.positionId}>
+          <View style={[styles.row, table && styles.rowTable]}>
             {/* The facts read as one stop; a follow-up button stays its own stop. */}
             <View accessible accessibilityLabel={label} style={styles.facts}>
               <View style={styles.copy}>
@@ -71,6 +75,8 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
             {table ? (
               <View style={[styles.actionColumn, { width: totalInset - space.sm }]}>{action}</View>
             ) : action ? <View style={styles.rowAction}>{action}</View> : null}
+          </View>
+          {note}
           </View>
         );
       })}
@@ -170,6 +176,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     marginLeft: 'auto',
   },
+
   copy: {
     flexGrow: 1,
     flexShrink: 1,

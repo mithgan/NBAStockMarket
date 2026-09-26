@@ -3,12 +3,12 @@ import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle, ClipPath, Defs, G, Line, Path, Rect } from 'react-native-svg';
 
 import type { PerGameLedgerEntry } from '../api/contracts';
-import { humanDay } from '../copy/terms';
 import {
   axisLabelIndexes,
   axisMark,
   chartSummary,
-  formatAt,
+  chartValueText,
+  nightReadingParts,
   hasNights,
   nearestIndex,
   nightlySeries,
@@ -57,7 +57,13 @@ export function PerGamePnlChart({
   seasonOver?: boolean;
 }) {
   const points = useMemo(() => buildPnlSeries(entries), [entries]);
-  const series = useMemo(() => nightlySeries(points, entries), [entries, points]);
+  // Every point, fees since the last night included: the spoken summary's
+  // "now" is your score as the block above says it.
+  const nights = useMemo(() => nightlySeries(points, entries), [entries, points]);
+  // Drawn: played nights only. A move between nights added a flat, undated
+  // point that read as a night and pushed the last date to the middle (walk 8
+  // T2-02); its fees fold into the next night's reading ("Fees -$250").
+  const series = useMemo(() => nights.filter((point) => point.kind !== 'now'), [nights]);
   const domain = useMemo(() => pnlChartDomain(series), [series]);
   const [width, setWidth] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -196,12 +202,13 @@ export function PerGamePnlChart({
         // Native screen readers step nights with their adjust gesture; the web
         // slider takes arrow keys (see usePlotPointer).
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-        accessibilityLabel={chartSummary(series)}
+        accessibilityLabel={chartSummary(nights)}
         accessibilityRole="adjustable"
         aria-valuemax={last}
         aria-valuemin={0}
         aria-valuenow={shownIndex}
-        aria-valuetext={readingText(series[shownIndex], series[shownIndex - 1])}
+        // Always a reading, the selected night's or the last's (walk 8 T3-03).
+        aria-valuetext={chartValueText(series, readIndex)}
         onAccessibilityAction={(event) => {
           onKey(event.nativeEvent.actionName === 'increment' ? 'ArrowRight' : 'ArrowLeft');
         }}
@@ -313,30 +320,6 @@ export function PerGamePnlChart({
   );
 }
 
-/**
- * A reading's parts, labels first: what the night's games made, any fees
- * paid since the night before (they come off the score between nights), and
- * the score after. A `now` point is the fees paid since the last night.
- */
-function readingParts(point: NightPoint, previous: NightPoint | undefined) {
-  const when = point.kind === 'night' ? humanDay(point.date) : `After ${previous?.label ?? 'the last night'}`;
-  const fees = point.kind === 'night' && previous
-    ? Math.round(point.cumulativePnl - previous.cumulativePnl - point.change)
-    : 0;
-  return { when, fees };
-}
-
-/** "Wed, Oct 29: that night +$12K, fees -$250, score +$40K", for the slider value. */
-function readingText(point: NightPoint, previous: NightPoint | undefined): string {
-  if (point.kind === 'start') return 'Start: everyone begins at $0';
-  const { when, fees } = readingParts(point, previous);
-  if (point.kind !== 'night') {
-    return `${when}: fees ${fineSigned(point.change)}, score ${fineSigned(point.cumulativePnl)}`;
-  }
-  const feeText = fees !== 0 ? `, fees ${fineSigned(fees)}` : '';
-  return `${when}: that night ${fineSigned(point.change)}${feeText}, score ${fineSigned(point.cumulativePnl)}`;
-}
-
 /** The heading while a night is being read: its date, then each figure after its label. */
 function Reading({ point, previous }: { point: NightPoint; previous: NightPoint | undefined }) {
   if (point.kind === 'start') {
@@ -347,7 +330,7 @@ function Reading({ point, previous }: { point: NightPoint; previous: NightPoint 
       </View>
     );
   }
-  const { when, fees } = readingParts(point, previous);
+  const { when, fees } = nightReadingParts(point, previous);
   const figure = (caption: string, value: number) => (
     <View key={caption} style={styles.readingPair}>
       <Text style={styles.readingCaption}>{caption}</Text>
@@ -366,10 +349,6 @@ function Reading({ point, previous }: { point: NightPoint; previous: NightPoint 
   );
 }
 
-/** A reading's figures in the Roster's one millions precision (walk 7 T4-14). */
-function fineSigned(amount: number): string {
-  return formatAt(amount, 'fine', true);
-}
 
 const styles = StyleSheet.create({
   container: {

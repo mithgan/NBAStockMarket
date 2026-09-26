@@ -429,9 +429,10 @@ test('the y-axis marks $0 and the season high and low, each at its line when the
   assert.deepEqual(valueTicks([0, 400_000, -300_000], yOf).map((tick) => [tick.kind, tick.value, tick.labelY]), [
     ['high', 400_000, 60], ['zero', 0, 100], ['low', -300_000, 130],
   ]);
-  // Never below $0: no low mark. A high only 5px above $0 keeps its line and
-  // its mark, the words stepped up clear of "$0" (walk 4 T4-09: no longer dropped).
-  assert.deepEqual(valueTicks([0, 50_000], yOf).map((tick) => [tick.kind, tick.y, tick.labelY]), [['high', 95, 82], ['zero', 100, 100]]);
+  // Never below $0: no low mark. A high only 5px above $0 has no mark: its
+  // words could only sit on its line by covering "$0", and a mark off its
+  // line reads as another level (walk 8 T1-09).
+  assert.deepEqual(valueTicks([0, 50_000], yOf).map((tick) => [tick.kind, tick.y, tick.labelY]), [['zero', 100, 100]]);
   assert.deepEqual(valueTicks([0, 900_000], yOf).map((tick) => tick.kind), ['high', 'zero']);
   // A high that would read "$0" is no second mark.
   assert.deepEqual(valueTicks([0, 0.4], yOf).map((tick) => tick.kind), ['zero']);
@@ -446,17 +447,28 @@ test('the score chart marks both its high and its low when they differ, inside a
       assert.ok(ticks[index].labelY - ticks[index - 1].labelY >= 17.99, `${ticks[index].kind} clear of ${ticks[index - 1].kind}`);
     }
   };
-  // (a) Peaked at +$22.8K, now -$8,000: the low sat 13.5px under $0 and went unlabelled.
+  // Every mark's words sit on its line (walk 8 T1-09).
+  const onLines = (ticks: ReturnType<typeof valueTicks>) => {
+    for (const tick of ticks) assert.equal(tick.labelY, tick.y, `${tick.kind} reads at its line`);
+  };
+  // (a) Peaked at +$22.8K, now -$8,000: the low runs 13.5px under $0, too
+  // close for words of its own, so $0 keeps its line and the high is named.
   const peak = valueTicks([0, 22_800, 5_000, -8_000], plot(-8_000, 22_800), { height: 68 });
-  assert.deepEqual(peak.map((tick) => [tick.kind, tick.value]), [['high', 22_800], ['zero', 0], ['low', -8_000]]);
+  assert.deepEqual(peak.map((tick) => [tick.kind, tick.value]), [['high', 22_800], ['zero', 0]]);
   readable(peak);
-  assert.equal(peak[0].labelY, peak[0].y, 'the high reads at its line');
-  // (b) A -$1.56M season that went a little above $0 in January: the high is named too.
+  onLines(peak);
+  // With room (the 140px season-end chart) both are named, each on its line.
+  const tall = (low: number, high: number) => (value: number) => 8 + ((high - value) / (high - low)) * 124;
+  const roomy = valueTicks([0, 22_800, 5_000, -8_000], tall(-8_000, 22_800), { height: 140 });
+  assert.deepEqual(roomy.map((tick) => tick.kind), ['high', 'zero', 'low']);
+  onLines(roomy);
+  // (b) A -$1.56M season that went a little above $0 in January: the high's
+  // line runs 1px above $0, so "$0" stays on its own line and the low is named.
   const season = valueTicks([0, -400_000, 40_000, -1_560_000], plot(-1_560_000, 40_000), { height: 68 });
-  assert.deepEqual(season.map((tick) => [tick.kind, tick.value]), [['high', 40_000], ['zero', 0], ['low', -1_560_000]]);
+  assert.deepEqual(season.map((tick) => [tick.kind, tick.value]), [['zero', 0], ['low', -1_560_000]]);
   readable(season);
-  // Lines stay at their values; only the words step aside.
-  assert.deepEqual(season.map((tick) => Math.round(tick.y)), [8, 9, 60]);
+  onLines(season);
+  assert.deepEqual(season.map((tick) => Math.round(tick.y)), [9, 60]);
   // A plot too short for three marks keeps the extreme farther from $0.
   assert.deepEqual(valueTicks([0, 22_800, -8_000], plot(-8_000, 22_800), { height: 40 }).map((tick) => tick.kind), ['high', 'zero']);
 });
