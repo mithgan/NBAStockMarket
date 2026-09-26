@@ -20,6 +20,7 @@ import { useReducedMotion } from './src/hooks/useReducedMotion';
 import { PerGameLeaderboardScreen as LeaderboardScreen } from './src/screens/PerGameLeaderboardScreen';
 import { PerGameMarketScreen as MarketScreen } from './src/screens/PerGameMarketScreen';
 import { PerGameResultsScreen as PlaysScreen, scrollResultsToNewest } from './src/screens/PerGameResultsScreen';
+import { reopenGamesProfile, setProfileReopen } from './src/components/results/playerGames';
 import { DesignPreviewScreen } from './src/screens/DesignPreviewScreen';
 import { PerGameRosterScreen as PortfolioScreen } from './src/screens/PerGameRosterScreen';
 import { humanDateWithYear, spoken } from './src/copy/terms';
@@ -591,6 +592,15 @@ function AppBody() {
     const onPop = (event: PopStateEvent) => {
       // Back with a sheet open closes the sheet (the sheet handles it).
       if (sheetIsOpen()) return;
+      // Back from one player's games (opened from his profile) returns to his
+      // profile over Results, in the view it was in, not to the tab before
+      // (walk 9 T1-17). The profile adds its own entry after this one.
+      if (activeTabRef.current === 'plays' && reopenGamesProfile()) {
+        // Once: after his profile closes, Back leaves Results as usual.
+        setProfileReopen(null);
+        window.history.pushState({ tab: 'plays' }, '');
+        return;
+      }
       const tab = (event.state as { tab?: Tab } | null)?.tab;
       if (!tab) return;
       // A sheet closing by its own button also pops history, back to the
