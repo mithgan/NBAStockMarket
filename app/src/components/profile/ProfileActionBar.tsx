@@ -113,8 +113,9 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
   );
   if (!bootstrap) return null;
 
-  const pending = pendingActions.has(`position:${side}:${player.playerId}`);
-  const locked = pendingActions.has('account-mutation');
+  // A move waiting its turn counts as pending; another player's move does not
+  // rest this bar (a press waits its turn; walk 5 T4-01).
+  const pending = pendingActions.has(`position:${side}:${player.playerId}`) || pendingActions.has(`queued:position:${side}:${player.playerId}`);
   const rosterLocked = bootstrap.ruleset.rosterMutationsLocked;
   const fee = bootstrap.ruleset.transactionFeeDollars;
   const seasonOver = isSeasonOver({
@@ -137,7 +138,7 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
   if (seasonOver) return <Bar note="The season is over. No more adds, drops or shorts." />;
   if (position) {
     const held = position.side;
-    const disabled = pending || locked || rosterLocked;
+    const disabled = pending || rosterLocked;
     if (confirming && !disabled) {
       return (
         <ConfirmStrip
@@ -206,8 +207,8 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
     });
   };
   // While its own move is pending it stays, dimmed, so focus stays on it.
-  const otherPending = pendingActions.has(`position:${otherSide}:${player.playerId}`);
-  const otherBlocked = otherPending || pending || locked;
+  const otherPending = pendingActions.has(`position:${otherSide}:${player.playerId}`) || pendingActions.has(`queued:position:${otherSide}:${player.playerId}`);
+  const otherBlocked = otherPending || pending;
   const instead = otherRow && !rosterLocked && (otherPending || (otherRow.canSubmit && !otherRow.isFull)) ? (
     <Button
       accessibilityLabel={`${openVerb(otherSide)} instead: show the ${otherSide === 'short' ? 'short' : 'roster'} terms`}
@@ -227,7 +228,7 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
   ) : null;
 
   // Full: say so in full, and offer the way forward instead of a dead FULL.
-  if (row.isFull && /full/i.test(row.unavailableReason ?? '') && !rosterLocked && !pending && !locked) {
+  if (row.isFull && /full/i.test(row.unavailableReason ?? '') && !rosterLocked && !pending) {
     const limit = side === 'long' ? bootstrap.account.longSlots.limit : bootstrap.account.shortSlots.limit;
     const { message, action } = fullNote(side, player.name, limit);
     const why = side === 'long'
@@ -246,7 +247,7 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
     );
   }
 
-  const disabled = !row.canSubmit || pending || locked || rosterLocked;
+  const disabled = !row.canSubmit || pending || rosterLocked;
   const reason = rosterLocked ? lockLine : row.unavailableReason;
   // Both sides lock his price: a short is credited it each game (walk 5
   // T1-11: never a "credit" of his own). A no-break space keeps "$250 fee"

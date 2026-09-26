@@ -77,7 +77,9 @@ test('market rows expose both decision anchors and one duplicate-safe action', (
   assert.match(market, /priorSeasonValuePerGame/);
   assert.match(market, /priorSeasonValuePerGame === null/);
   assert.match(market, /pendingActions\.has\(actionKey\)/);
-  assert.match(market, /pendingActions\.has\('account-mutation'\)/);
+  // One move at a time is the context's queue now: a row does not rest while
+  // another move saves, its press waits its turn (walk 5 T4-01).
+  assert.match(context, /const queueMove = useCallback/);
   assert.match(market, /if \(disabled\) return/);
   assert.match(market, /row\.unavailableReason/);
   assert.match(market, /<FlatList/);
@@ -177,11 +179,13 @@ test('server roster locks are visible and disable every mutation control accessi
   assert.match(status, /rules\.rosterLockGameDate/);
   assert.match(status, /Roster changes are locked/);
   assert.match(market, /bootstrap\?\.ruleset\.rosterMutationsLocked \?\? true/);
-  assert.match(market, /pending \|\| locked \|\| rosterLocked/);
+  // A server roster lock still disables every move; another move saving no
+  // longer does (moves wait their turn in the context's queue, walk 5 T4-01).
+  assert.match(market, /pending \|\| rosterLocked/);
   assert.match(market, /accessibilityHint=\{rosterLocked/);
   assert.match(market, /accessibilityState=\{\{ disabled \}\}/);
   assert.match(roster, /bootstrap\?\.ruleset\.rosterMutationsLocked \?\? true/);
-  assert.match(roster, /pending \|\| locked \|\| rosterLocked/);
+  assert.match(roster, /pending \|\| rosterLocked/);
   assert.match(roster, /accessibilityHint=\{rosterLocked/);
   assert.match(roster, /accessibilityState=\{\{ disabled \}\}/);
   assert.match(roster, /rosterLocked \? 'LOCKED'/);

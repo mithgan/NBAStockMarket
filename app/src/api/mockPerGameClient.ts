@@ -90,6 +90,21 @@ function seasonSeed(): number {
   return 20_262_027;
 }
 
+/**
+ * A pretend network delay for checking the app under a slow connection
+ * (`?mock&latency=600`, up to 3 s). Practice answers at once without it.
+ */
+function mockLatencyMs(): number {
+  if (typeof window === 'undefined') return 0;
+  const asked = Number(new URLSearchParams(window.location.search).get('latency'));
+  return Number.isFinite(asked) && asked > 0 ? Math.min(3000, Math.round(asked)) : 0;
+}
+
+function networkPause(): Promise<void> {
+  const ms = mockLatencyMs();
+  return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
+}
+
 export class MockPerGameApiClient {
   private snapshot: PerGameBootstrap;
   private rng = makeRng(seasonSeed());
@@ -212,6 +227,7 @@ export class MockPerGameApiClient {
 
   async bootstrap(afterCursor?: number): Promise<PerGameBootstrap> {
     void afterCursor;
+    await networkPause();
     const copy = clone(this.snapshot);
     copy.ledger.nextCursor = null;
     return copy;
@@ -223,6 +239,7 @@ export class MockPerGameApiClient {
     expectedAccountVersion,
     expectedQuoteVersion,
   }: PerGameOpenPositionRequest): Promise<PerGamePositionMutationResult> {
+    await networkPause();
     const state = this.snapshot;
     if (state.ruleset.rosterMutationsLocked) {
       throw new PerGameApiError(
@@ -307,6 +324,7 @@ export class MockPerGameApiClient {
     positionId: string,
     expectedAccountVersion: number,
   ): Promise<PerGameClosePositionMutationResult> {
+    await networkPause();
     const state = this.snapshot;
     if (state.ruleset.rosterMutationsLocked) {
       throw new PerGameApiError(

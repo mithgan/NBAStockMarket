@@ -155,13 +155,14 @@ function PositionRow({
 }) {
   const { bootstrap, notify, pendingActions } = usePerGame();
   const actionKey = `position:${position.side}:${position.playerId}`;
-  const pending = pendingActions.has(actionKey);
-  const locked = pendingActions.has('account-mutation');
+  // A move waiting its turn counts as this row's; another row's move does
+  // not rest this one (its press would wait its turn; walk 5 T4-01).
+  const pending = pendingActions.has(actionKey) || pendingActions.has(`queued:${actionKey}`);
   const rosterLocked = bootstrap?.ruleset.rosterMutationsLocked ?? true;
   const rosterLockDate = bootstrap?.ruleset.rosterLockGameDate ?? null;
   const nextGameDate = bootstrap?.game.nextGameDate ?? null;
   const rosterLockHint = `${rosterReopensLine(rosterLockDate)}.`;
-  const disabled = pending || locked || rosterLocked;
+  const disabled = pending || rosterLocked;
   // The button stays enabled for the browser, so a tap on LOCKED or on a
   // pending Drop is caught here instead of falling through to the row (which
   // would open the profile); its disabled state is written for assistive tech.
@@ -398,15 +399,14 @@ function ShortAgainButton({ row, price, quoteVersion, reason, onShorted, column 
   column?: boolean;
 }) {
   const { bootstrap, openPosition, pendingActions } = usePerGame();
-  const pending = pendingActions.has(`position:short:${row.playerId}`);
-  const busy = pendingActions.has('account-mutation');
+  const pending = pendingActions.has(`position:short:${row.playerId}`) || pendingActions.has(`queued:position:short:${row.playerId}`);
   const fee = bootstrap?.ruleset.transactionFeeDollars ?? 0;
   const name = `Short ${row.name} again at ${perGame(price)}${fee > 0 ? `, ${exactMoney(fee)} fee` : ''}`;
   return (
     <Button
       accessibilityHint={reason ?? undefined}
       accessibilityLabel={pending ? `Shorting ${row.name}` : name}
-      disabled={reason !== null || pending || busy}
+      disabled={reason !== null || pending}
       focusableWhenDisabled
       label={pending ? (column ? 'Wait' : 'Shorting…') : 'Short again'}
       style={column ? styles.columnButton : undefined}

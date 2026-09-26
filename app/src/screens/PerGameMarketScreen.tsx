@@ -175,20 +175,6 @@ function SameHeight({ children, ghosts }: { children: ReactNode; ghosts: ReactNo
 /** The context's moves, behind one stable object so a row's props do not change with every snapshot. */
 type MarketMoves = Pick<ReturnType<typeof usePerGame>, 'closePosition' | 'dismissNotice' | 'notify' | 'openPosition'>;
 
-/** True once `on` has lasted `ms`; false as soon as it clears. */
-function useLastedFor(on: boolean, ms: number): boolean {
-  const [lasted, setLasted] = useState(false);
-  useEffect(() => {
-    if (!on) {
-      setLasted(false);
-      return undefined;
-    }
-    const timer = setTimeout(() => setLasted(true), ms);
-    return () => clearTimeout(timer);
-  }, [on, ms]);
-  return on && lasted;
-}
-
 const TONE_COLOR: Record<SignalTone, string> = {
   gain: colors.green,
   loss: colors.red,
@@ -212,7 +198,6 @@ function MarketRow({
   onToggleWatch,
   dimmed = false,
   pending,
-  locked,
   rosterLocked,
   rosterLockGameDate,
   slotLimit,
@@ -239,10 +224,8 @@ function MarketRow({
   onToggleWatch: (playerId: string) => void;
   /** Unwatched while the Watching filter is on: kept in place, dimmed, until the filter changes. */
   dimmed?: boolean;
-  /** This row's own move is on its way. */
+  /** This row's own move is on its way (or waiting its turn). */
   pending: boolean;
-  /** Another move is still on its way (said only once it takes a moment). */
-  locked: boolean;
   rosterLocked: boolean;
   rosterLockGameDate: string | null;
   /** How many players this side holds at most (the FULL note says it). */
@@ -252,7 +235,9 @@ function MarketRow({
   const { closePosition, dismissNotice, notify, openPosition } = moves;
   const { player, position, side } = row;
   const rosterLockHint = rosterLockMessage(rosterLockGameDate);
-  const disabled = !row.canSubmit || pending || locked || rosterLocked || seasonOver;
+  // Another move saving does not rest this row: a press joins the queue and
+  // plays when that move lands (walk 5 T4-01, with a slow connection too).
+  const disabled = !row.canSubmit || pending || rosterLocked || seasonOver;
   const currentGameCost = player.currentGameCost;
   const priorSeasonValuePerGame = player.priorSeasonValuePerGame;
   const { given, surname } = splitPlayerName(player.name);
@@ -310,7 +295,7 @@ function MarketRow({
     setConfirming(false);
   };
   // FULL answers a tap: a note under the row says why and offers the Roster.
-  const fullOffer = row.isFull && !position && !pending && !locked && !rosterLocked && !seasonOver;
+  const fullOffer = row.isFull && !position && !pending && !rosterLocked && !seasonOver;
   const [noting, setNoting] = useState(false);
   const closeNote = useCallback(() => {
     refocus.current = true;
@@ -779,9 +764,6 @@ function MarketRow({
  */
 const MemoMarketRow = memo(MarketRow, (prev, next) => sameMarketRowProps(prev, next));
 
-/** A move that settles within this long never dims every other row's button. */
-const MOVE_LOCK_SHOWN_AFTER_MS = 150;
-
 export function PerGameMarketScreen({
   initialSide = 'long',
 }: {
@@ -799,10 +781,6 @@ export function PerGameMarketScreen({
     notify: (text) => latestPerGame.current.notify(text),
     openPosition: (intent) => latestPerGame.current.openPosition(intent),
   }), []);
-  // One move at a time: the others' buttons rest while it is on its way, but
-  // only once it takes a moment. A practice move lands in the same frame, and
-  // dimming then undimming every row doubled the work of each Add.
-  const moveLocked = useLastedFor(pendingActions.has('account-mutation'), MOVE_LOCK_SHOWN_AFTER_MS);
   const { fontScale, height, width } = useWindowDimensions();
   const watchlist = useWatchlist();
   // Side, sort, search, Watching and your place in the list come back after a
@@ -1324,8 +1302,7 @@ export function PerGameMarketScreen({
             onOpenProfile={openProfile}
             pastValue={item.position ? undefined : pastValues.get(item.player.playerId)}
             row={item}
-            pending={pendingActions.has(actionKey)}
-            locked={moveLocked}
+            pending={pendingActions.has(actionKey) || pendingActions.has(`queued:${actionKey}`)}
             rosterLocked={rosterLocked}
             rosterLockGameDate={lockDate}
             slotLimit={slots.limit}

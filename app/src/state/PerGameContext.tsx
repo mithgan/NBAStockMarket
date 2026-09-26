@@ -257,6 +257,9 @@ export function PerGameProvider({
     key: string,
     action: () => Promise<T>,
     successMessage: string | ((result: T) => string),
+    /** Which move failed, said first ("Kawhi Leonard was not added."): a move
+     * that waited its turn can fail after the player has moved on. */
+    failedMove = '',
   ): Promise<boolean> => {
     const coordinator = reconciliation.current;
     if (!coordinator || !coordinator.beginMutation()) return false;
@@ -304,7 +307,7 @@ export function PerGameProvider({
           : outcome.refreshed
             ? ' Market refreshed. Review the updated roster and quote before trying again.'
             : '';
-      say(`${errorMessage(outcome.error)}${suffix}`);
+      say(`${failedMove ? `${failedMove} ` : ''}${errorMessage(outcome.error)}${suffix}`);
       return false;
     } finally {
       actionLock.current.release(key);
@@ -351,6 +354,7 @@ export function PerGameProvider({
         (result) => result.side === 'long'
           ? `${playerName} added at ${perGame(result.lockedGameCost)}, locked in.${feeNote()}`
           : `Shorted ${playerName} at ${perGame(result.lockedGameCost)}, locked in.${feeNote()}`,
+        side === 'long' ? `${playerName} was not added.` : `${playerName} was not shorted.`,
       );
     });
   }, [apiClient, queueMove, runPositionAction]);
@@ -366,6 +370,7 @@ export function PerGameProvider({
         position.side === 'long'
           ? `${position.playerName} dropped. His next games won't count toward your score.${feeNote()}`
           : `Short on ${position.playerName} closed.${feeNote()}`,
+        position.side === 'long' ? `${position.playerName} was not dropped.` : `Your short on ${position.playerName} was not closed.`,
       );
     });
   }, [apiClient, queueMove, runPositionAction]);
