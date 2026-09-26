@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { boardLag, boardList, closeCallNotes, leaderStanding, sortBoard, standingLines, standingPlace, type Standing } from './leadersView';
+import { boardLag, boardList, closeCallNotes, leaderStanding, ordinalWords, sortBoard, spokenPlace, spokenRanks, standingLines, standingPlace, type Standing } from './leadersView';
 
 function board(scores: Array<[string, number, boolean?]>): PerGameLeaderboardRow[] {
   return scores.map(([displayName, cumulativePnl, isCurrentUser], index) => ({
@@ -270,8 +270,8 @@ test('your seasons this visit: final score and place, newest first, numbered in 
   assert.deepEqual(lines.map((line) => line.place), [null, '#3 of 5', '#1 of 5']);
   assert.deepEqual(lines.map((line) => line.spoken), [
     'Season 3: $0',
-    'Season 2: -$86.3K, number 3 of 5',
-    'Season 1: +$7.94M, number 1 of 5',
+    'Season 2: -$86.3K, third of 5',
+    'Season 1: +$7.94M, first of 5',
   ]);
   // Wall-clock finish times sort newest first too.
   const clock = pastSeasonLines([
@@ -289,4 +289,17 @@ test('your seasons this visit read safely from a session module with or without 
   assert.deepEqual(readPastSeasons({ pastSeasonResults: () => 'nope' }), []);
   const good = { score: 12_500, rank: '#2 of 5', finishedOn: '2026-04-12' };
   assert.deepEqual(readPastSeasons({ pastSeasonResults: () => [good, { score: 'x' }, null] }), [good]);
+});
+
+test('places are said in words, never as "#" (walk 6 T3-09, T3-07)', () => {
+  assert.deepEqual([1, 2, 3, 5, 10].map(ordinalWords), ['first', 'second', 'third', 'fifth', 'tenth']);
+  assert.deepEqual([11, 12, 13, 21, 22, 23, 101, 111, 112].map(ordinalWords), ['11th', '12th', '13th', '21st', '22nd', '23rd', '101st', '111th', '112th']);
+  assert.equal(spokenPlace(1, 5), 'First of 5');
+  assert.equal(spokenPlace(2, 5, true), 'Tied for second of 5');
+  assert.equal(spokenRanks('#1 of 5'), 'first of 5');
+  assert.equal(spokenRanks('Tied for #2 of 5'), 'Tied for second of 5');
+  assert.equal(spokenRanks('$12K behind #2'), '$12K behind second place');
+  assert.equal(spokenRanks('$30K ahead of #2'), '$30K ahead of second place');
+  assert.equal(spokenRanks('Level with Ava'), 'Level with Ava');
+  assert.doesNotMatch(spokenRanks('$1.2M behind #14'), /#/);
 });

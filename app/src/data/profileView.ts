@@ -23,7 +23,7 @@ import type {
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
-import { gamesCount, humanDate, money, moneyFine, signedMoneyFine } from '../copy/terms';
+import { gamesCount, humanDate, money, moneyFine, perGame, signedMoneyFine } from '../copy/terms';
 import { shownEdge } from './marketView';
 import { currentResults, entryDay, lastYearEdge, type ValueSummary } from './perGameMetrics';
 import {
@@ -1045,4 +1045,87 @@ export function nightReadout(night: ProfileNight, metric: ProfileMetric, side: P
     return `Price ${moneyFine(night.market ?? night.price)} a game`;
   }
   return `Dividend ${moneyFine(night.dividend)} · ${words.priceShort} ${moneyFine(night.price)} · ${signedMoneyFine(night.net)}`;
+}
+
+// ---------------------------------------------------------------------------
+// The action bar's words (walk 6)
+
+/**
+ * The profile's Drop / Close button. In a sheet whose × also closes, a bare
+ * "Close" read like closing the panel (walk 6 T2-04): it names what goes.
+ */
+export function profileCloseWord(side: PerGamePositionSide): 'Drop player' | 'Close short' {
+  return side === 'long' ? 'Drop player' : 'Close short';
+}
+
+/** Its spoken name starts with the words shown (voice control finds it): "Close short on Luka Doncic". */
+export function profileCloseName(side: PerGamePositionSide, playerName: string): string {
+  return side === 'long' ? `Drop player ${playerName}` : `Close short on ${playerName}`;
+}
+
+/** An ISO day `days` later: "2025-10-21" + 6 → "2025-10-27". */
+function isoDayAfter(day: string, days: number): string | null {
+  const date = new Date(`${day.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * The last day a short opened now runs: it starts with the next night of
+ * games and lasts `shortTermDays` days, so the Roster's "Ends Oct 27" and
+ * this promise name the same day. Null when there is no term or no next night.
+ */
+export function shortEndsOn(nextGameDate: string | null, shortTermDays: number | null): string | null {
+  if (!nextGameDate || shortTermDays === null || shortTermDays < 1) return null;
+  return isoDayAfter(nextGameDate, shortTermDays - 1);
+}
+
+/**
+ * The terms beside Add or Short, read before you pay: the price it locks,
+ * for a short how long it runs and when it ends by itself (walk 6 T1-11: the
+ * 7 days used to show only after paying), then the fee. No-break spaces keep
+ * "7 days", "Oct 27" and "$250 fee" whole.
+ * "Locks his price at $176K a game for 7 days (ends Oct 27 by itself) · $250 fee"
+ */
+export function openTermsNote({ side, priceDollars, feeDollars, shortTermDays, nextGameDate }: {
+  side: PerGamePositionSide;
+  priceDollars: number;
+  feeDollars: number;
+  shortTermDays: number | null;
+  nextGameDate: string | null;
+}): string {
+  const fee = feeDollars > 0 ? ` · ${moneyFine(feeDollars)} fee` : '';
+  const lock = `Locks his price at ${perGame(priceDollars)}`;
+  if (side === 'long' || shortTermDays === null || shortTermDays < 1) return `${lock}${fee}`;
+  const days = `${shortTermDays} ${shortTermDays === 1 ? 'day' : 'days'}`;
+  const end = shortEndsOn(nextGameDate, shortTermDays);
+  const ends = end ? ` (ends ${humanDate(end).replace(' ', ' ')} by itself)` : ', then ends by itself';
+  return `${lock} for ${days}${ends}${fee}`;
+}
+
+// ---------------------------------------------------------------------------
+// Hollow bars for missed games (walk 6 T1-09)
+
+/** A missed game's bar is drawn hollow only when an outline can keep a dark centre: this wide and tall. */
+export const HOLLOW_BAR_MIN = 4;
+
+/** True when a missed game's bar is drawn as an outline; below the minimum it is solid. */
+export function drawsHollow(bar: { width: number; height: number }): boolean {
+  return bar.width >= HOLLOW_BAR_MIN && bar.height >= HOLLOW_BAR_MIN;
+}
+
+/** The outline's width: 1px on a narrow bar, so its centre still shows (4px bar → 2px centre), else 1.5px. */
+export function missStroke(barWidth: number): number {
+  return barWidth < 6 ? 1 : 1.5;
+}
+
+/**
+ * The legend's "Missed his price" swatch matches what the bars show: hollow
+ * while the chart draws its misses hollow, solid once every bar is too
+ * narrow for an outline (a whole season on a phone: about 3px a bar, where
+ * the legend used to promise hollow bars the chart never drew).
+ */
+export function missSwatchHollow(bars: readonly { width: number }[]): boolean {
+  return bars.length === 0 || bars.some((bar) => bar.width >= HOLLOW_BAR_MIN);
 }

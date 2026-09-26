@@ -45,11 +45,13 @@ import {
   nightSummaryWrapped,
   nightTotalPending,
   resultRowModel,
+  revealScroll,
   type MonthAnchor,
   type NightSummary,
   type ResultRowModel,
   type ResultsFeedItem,
 } from '../data/resultsView';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
 import { openTab } from '../state/uiActions';
 import {
@@ -58,7 +60,7 @@ import {
   type SettlementEquation,
 } from '../state/perGameState';
 import { colors, fonts, headingStyle, labelStyle, space, type, weight } from '../theme';
-import { Button, EmptyState, headingLevel, Tag, visuallyHidden } from '../ui/kit';
+import { Button, EmptyState, headingLevel, repeatSafe, Tag, visuallyHidden } from '../ui/kit';
 
 /**
  * At this width the screen fills the frame like Roster and Market: a side
@@ -183,6 +185,7 @@ function ResultRow({
   equation,
   expanded,
   layout,
+  onOpened,
   onToggle,
   playerName,
   result,
@@ -191,11 +194,19 @@ function ResultRow({
   equation: SettlementEquation;
   expanded: boolean;
   layout: Layout;
+  /** Called with the row's node once it has opened, so the feed can bring its math into view. */
+  onOpened?: (node: unknown) => void;
   onToggle: () => void;
   playerName: string;
   result: PerGameSettledResult;
   rule: DividendRule;
 }) {
+  const wrapRef = useRef<View>(null);
+  useEffect(() => {
+    if (expanded) onOpened?.(wrapRef.current);
+    // Only an opening counts; the callback itself changes every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
   const { columns, compact, tight } = layout;
   const edge = edges(layout);
   const model = resultRowModel(result, equation);
@@ -288,7 +299,7 @@ function ResultRow({
   // The row is the button; the math it opens sits below it as its own
   // readable block, so a screen reader reaches it after the row.
   return (
-    <View style={[styles.rowLine, expanded && styles.rowOpen]}>
+    <View ref={wrapRef} style={[styles.rowLine, expanded && styles.rowOpen]}>
       <Pressable
         accessibilityHint={expanded ? 'Hides the math.' : 'Shows how this result was worked out.'}
         accessibilityLabel={label}
@@ -450,6 +461,7 @@ function FeesFold({
   count,
   layout,
   moves,
+  onOpened,
   onToggle,
   open,
   shorts,
@@ -459,6 +471,8 @@ function FeesFold({
   count: number;
   layout: Layout;
   moves: boolean;
+  /** Called with the fold's node once it has opened, so the feed can bring its list into view. */
+  onOpened?: (node: unknown) => void;
   onToggle: () => void;
   open: boolean;
   shorts: boolean;
@@ -466,6 +480,11 @@ function FeesFold({
   /** The day's moves, shown while open: read as one list under the fold. */
   children?: ReactNode;
 }) {
+  const wrapRef = useRef<View>(null);
+  useEffect(() => {
+    if (open) onOpened?.(wrapRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   const name = feesLineName(moves, shorts);
   const noun = moves ? (count === 1 ? 'move' : 'moves') : (count === 1 ? 'fee' : 'fees');
   const list = open && Children.count(children) > 0 ? (
@@ -474,7 +493,7 @@ function FeesFold({
     </View>
   ) : null;
   return (
-    <View>
+    <View ref={wrapRef}>
     <Pressable
       accessibilityHint={open ? `Hides the ${noun}.` : `Lists each ${moves ? 'move' : 'fee'}.`}
       accessibilityLabel={`${name}, ${count} ${noun}, ${netWords(total)}`}
@@ -658,8 +677,46 @@ export function PerGameResultsScreen() {
   const moves = useMemo(() => movesByDay(feed), [feed]);
   const anchors = useMemo(() => monthAnchors(visible), [visible]);
   const extraData = useMemo(() => ({ expanded, openFees }), [expanded, openFees]);
-  const toggle = useCallback((key: string) => setExpanded((previous) => toggled(previous, key)), []);
-  const toggleFees = useCallback((date: string) => setOpenFees((previous) => toggled(previous, date)), []);
+  // A row opens and closes on the same spot: a double tap's second tap used
+  // to close the math it had just opened (walk 6 T4-11), so it acts once.
+  // Opening one also asks it to bring its math into view once it is drawn.
+  const expandedNow = useRef(expanded);
+  expandedNow.current = expanded;
+  const revealKey = useRef<string | null>(null);
+  const toggle = useMemo(() => repeatSafe((key: string) => {
+    revealKey.current = expandedNow.current.has(key) ? null : key;
+    setExpanded((previous) => toggled(previous, key));
+  }), []);
+  // Opened near the bottom, the feed scrolls just enough to show the whole
+  // math, and not at all when it fits (walk 6 T2-07); no glide under Reduce
+  // motion. A row drawn again later (scrolled back into view) never scrolls.
+  const reducedMotion = useReducedMotion();
+  const stillMotion = useRef(reducedMotion);
+  stillMotion.current = reducedMotion;
+  const revealOpened = useCallback((key: string, node: unknown) => {
+    if (revealKey.current !== key) return;
+    revealKey.current = null;
+    const scroller = (listRef.current as unknown as { getScrollableNode?: () => unknown } | null)
+      ?.getScrollableNode?.() as HTMLElement | null | undefined;
+    const row = node as HTMLElement | null;
+    if (!scroller || typeof scroller.scrollBy !== 'function' || !row || typeof row.getBoundingClientRect !== 'function') return;
+    const view = scroller.getBoundingClientRect();
+    const box = row.getBoundingClientRect();
+    const by = revealScroll({
+      rowTop: box.top,
+      rowBottom: box.bottom,
+      viewTop: Math.max(view.top, 0),
+      viewBottom: Math.min(view.bottom, window.innerHeight),
+    });
+    if (by > 0) scroller.scrollBy({ top: by, behavior: stillMotion.current ? 'auto' : 'smooth' });
+  }, []);
+  // A day's moves opened near the bottom come into view the same way.
+  const openFeesNow = useRef(openFees);
+  openFeesNow.current = openFees;
+  const toggleFees = useMemo(() => repeatSafe((date: string) => {
+    revealKey.current = openFeesNow.current.has(date) ? null : `fold:${date}`;
+    setOpenFees((previous) => toggled(previous, date));
+  }), []);
 
   // Each month jump's number; a later jump (or Back to newest) ends an earlier one's settling.
   const jumpSeq = useRef(0);
@@ -792,6 +849,7 @@ export function PerGameResultsScreen() {
           count={item.count}
           layout={layout}
           moves={item.moves}
+          onOpened={(node) => revealOpened(`fold:${item.date}`, node)}
           onToggle={() => toggleFees(item.date)}
           open={open}
           shorts={item.shorts}
@@ -820,6 +878,7 @@ export function PerGameResultsScreen() {
         )}
         expanded={expanded.has(item.key)}
         layout={layout}
+        onOpened={(node) => revealOpened(item.key, node)}
         onToggle={() => toggle(item.key)}
         playerName={perGamePlayerName(bootstrap, item.result.playerId, item.result.positionId)}
         result={item.result}
@@ -1014,9 +1073,15 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: colors.background,
   },
+  // The month you are reading looks like a chosen segment: a gold tint, gold
+  // edges and a 3px gold rule under it, so it stands out by more than a shade
+  // in every theme (High contrast's grey tint read like its neighbour; walk 6
+  // T2-17, T3-08). The chip keeps its size: the rule sits inside its height.
   chipHere: {
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.surfaceRaised,
+    borderColor: colors.goldLine,
+    borderBottomWidth: 3,
+    borderBottomColor: colors.goldInk,
+    backgroundColor: colors.goldSoft,
   },
   chipText: {
     color: colors.muted,
@@ -1025,7 +1090,8 @@ const styles = StyleSheet.create({
     fontWeight: weight.bold,
   },
   chipTextHere: {
-    color: colors.text,
+    color: colors.goldInk,
+    fontWeight: weight.black,
   },
   sideBack: {
     marginTop: space.lg,

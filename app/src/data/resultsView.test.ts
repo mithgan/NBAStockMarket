@@ -17,6 +17,7 @@ import {
   nightSummaryLine,
   nightTotalPending,
   resultRowModel,
+  revealScroll,
   monthAnchors,
   nightSummaryWrapped,
   settlementLines,
@@ -765,4 +766,17 @@ test('a day\'s moves live inside their fold as one list, each read with the play
   assert.equal(moveWords('OG Anunoby', 'Dropped from your roster', -250), 'OG Anunoby, dropped from your roster, fee $250');
   assert.equal(moveWords('OG Anunoby', 'Rules penalty', -1_000, 'penalty'), 'OG Anunoby, rules penalty, penalty $1,000');
   assert.equal(moveWords('OG Anunoby', 'Account fee', 250), 'OG Anunoby, account fee, fee refunded, $250');
+});
+
+test('an opened row near the bottom scrolls just enough to show its whole math (walk 6 T2-07)', () => {
+  const view = { viewTop: 100, viewBottom: 900 };
+  // Already fits: no scroll.
+  assert.equal(revealScroll({ ...view, rowTop: 500, rowBottom: 800 }), 0);
+  assert.equal(revealScroll({ ...view, rowTop: 500, rowBottom: 888 }), 0);
+  // The math runs 200px past the bottom: scroll 200 plus the margin, no more.
+  assert.equal(revealScroll({ ...view, rowTop: 700, rowBottom: 1100 }), 212);
+  // Taller than the view: the row's top stops at the top (with the margin), not above it.
+  assert.equal(revealScroll({ ...view, rowTop: 400, rowBottom: 1500 }), 288);
+  // The row's top is already at or above the view's top: never scroll it further away.
+  assert.equal(revealScroll({ ...view, rowTop: 90, rowBottom: 1200 }), 0);
 });

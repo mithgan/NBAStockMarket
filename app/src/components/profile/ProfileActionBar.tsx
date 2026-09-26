@@ -12,23 +12,21 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { PerGameMarketPlayer, PerGamePosition, PerGamePositionSide } from '../../api/contracts';
 import { isMockActive, mockSeasonStart } from '../../api/mockPerGameClient';
 import {
-  closeActionName,
-  closeVerb,
   confirmCloseButton,
   confirmCloseMessage,
   confirmCloseName,
   moneyFine,
   openVerb,
-  perGame,
   rosterReopensLine,
 } from '../../copy/terms';
 import { practiceProgress } from '../../data/chromeView';
 import { actionName, fullNote, isSeasonOver } from '../../data/marketView';
+import { openTermsNote, profileCloseName, profileCloseWord } from '../../data/profileView';
 import { usePerGame } from '../../state/PerGameContext';
 import { buildPerGameMarketRows } from '../../state/perGameState';
 import { openTab, requestRosterPick } from '../../state/uiActions';
 import { colors, control, fonts, space, type, weight } from '../../theme';
-import { Button, ConfirmStrip, useCooldown } from '../../ui/kit';
+import { Button, ConfirmStrip, repeatSafe, useCooldown } from '../../ui/kit';
 import { sheetIsOpen } from '../../web/appHistory';
 
 export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave }: {
@@ -175,10 +173,12 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
         <Button
           ref={closeRef}
           accessibilityHint={rosterLocked ? lockLine : undefined}
-          accessibilityLabel={closeActionName(held, player.name)}
+          // "Close short" / "Drop player": the sheet's × also closes, so a
+          // bare "Close" read like closing the panel (walk 6 T2-04).
+          accessibilityLabel={profileCloseName(held, player.name)}
           disabled={disabled}
           focusableWhenDisabled
-          label={pending ? 'Wait' : rosterLocked ? 'Locked' : closeVerb(held)}
+          label={pending ? 'Wait' : rosterLocked ? 'Locked' : profileCloseWord(held)}
           // A tap on LOCKED says why, as well as the line beside it.
           onDisabledPress={rosterLocked ? () => notify(lockLine) : undefined}
           onPress={() => {
@@ -215,13 +215,15 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
       disabled={otherBlocked}
       focusableWhenDisabled
       label={otherPending ? 'Wait' : `${openVerb(otherSide)} instead`}
-      onPress={() => {
+      // "Add instead" takes the place of "Short instead": a double tap's
+      // second tap would switch straight back, so it acts once (walk 6 T4-11).
+      onPress={repeatSafe(() => {
         if (otherBlocked) return;
         // Switch the bar, don't trade: the terms, the main button and the
         // profile's figures change, and focus moves to that button.
         onSwitchSide(otherSide);
         setTimeout(() => focusView(openRef.current), 0);
-      }}
+      })}
       style={styles.instead}
       variant="quiet"
     />
@@ -250,10 +252,16 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
   const disabled = !row.canSubmit || pending || rosterLocked;
   const reason = rosterLocked ? lockLine : row.unavailableReason;
   // Both sides lock his price: a short is credited it each game (walk 5
-  // T1-11: never a "credit" of his own). A no-break space keeps "$250 fee"
-  // on one line; the fee reads like every other figure ("$1.25K" from $1,000).
-  const note = reason
-    ?? `Locks his price at ${perGame(player.currentGameCost)}${fee > 0 ? ` · ${moneyFine(fee)} fee` : ''}`;
+  // T1-11: never a "credit" of his own). A short also says how long it runs
+  // and the day it ends by itself, before you pay (walk 6 T1-11). The fee
+  // reads like every other figure ("$1.25K" from $1,000).
+  const note = reason ?? openTermsNote({
+    side,
+    priceDollars: player.currentGameCost,
+    feeDollars: fee,
+    shortTermDays: bootstrap.ruleset.shortTermDays,
+    nextGameDate: bootstrap.game.nextGameDate,
+  });
   const word = pending ? 'Wait' : rosterLocked ? 'Locked' : row.isFull ? 'Full' : openVerb(side);
   return (
     <Bar below={instead} note={note} warn={reason !== null}>

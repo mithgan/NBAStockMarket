@@ -31,6 +31,9 @@ import {
   chartDateLabels,
   chartLegend,
   chartSummary,
+  drawsHollow,
+  missStroke,
+  missSwatchHollow,
   nightIndexAt,
   nightReadout,
   profileChartModel,
@@ -42,6 +45,7 @@ import {
   type ProfileNight,
 } from '../../data/profileView';
 import { colors, fonts, radius, space, type, weight } from '../../theme';
+import { repeatSafe } from '../../ui/kit';
 
 const INSETS: ChartInsets = { top: 22, right: 6, bottom: 20, left: 6 };
 /**
@@ -92,6 +96,8 @@ export function ProfileChart({
   );
   const words = sideWords(side);
   const legend = chartLegend(nights, metric, side);
+  // The "Missed his price" swatch is drawn the way the bars are (walk 6 T1-09).
+  const hollowMisses = missSwatchHollow(model.bars);
 
   // A new range or metric starts clean, on his latest game. Keyed on what the
   // nights are, not the array's identity, so a re-render keeps the pick.
@@ -129,12 +135,15 @@ export function ProfileChart({
     // changes the read-out; a sideways drag reads games as it goes.
     let dragged = false;
     const toggle = (index: number | null) => setPinned((current) => (current === index ? null : index));
+    // A double tap on a bar pins it once instead of pinning and unpinning
+    // (the Watch rule; walk 6 T4-11). Drags still read game by game.
+    const tapToggle = repeatSafe(toggle);
     const down = (event: PointerEvent) => {
       dragged = false;
       if (event.pointerType === 'mouse') toggle(at(event));
     };
     const up = (event: PointerEvent) => {
-      if (event.pointerType !== 'mouse' && !dragged) toggle(at(event));
+      if (event.pointerType !== 'mouse' && !dragged) tapToggle(at(event));
     };
     const move = (event: PointerEvent) => {
       if (event.pointerType === 'mouse') setPreview(at(event));
@@ -267,8 +276,11 @@ export function ProfileChart({
                 // A miss is a hollow bar, a beat a solid one: the shape says it
                 // too, not only red against green (walk-1 T3-19). The outline
                 // sits inside the bar so both keep the same size.
-                const missed = nights[index].net < 0 && bar.width >= 4 && bar.height >= 4;
-                const inset = missed ? MISS_STROKE / 2 : 0;
+                // Too narrow for an outline, a miss is solid, and so is the
+                // legend's swatch (missSwatchHollow; walk 6 T1-09).
+                const missed = nights[index].net < 0 && drawsHollow(bar);
+                const stroke = missStroke(bar.width);
+                const inset = missed ? stroke / 2 : 0;
                 return (
                   <Rect
                     fill={missed ? 'none' : barColor(nights[index])}
@@ -277,7 +289,7 @@ export function ProfileChart({
                     opacity={active === null || active === index ? 1 : 0.4}
                     rx={Math.min(2, bar.width / 3)}
                     stroke={missed ? barColor(nights[index]) : undefined}
-                    strokeWidth={missed ? MISS_STROKE : 0}
+                    strokeWidth={missed ? stroke : 0}
                     width={bar.width - inset * 2}
                     x={bar.x + inset}
                     y={bar.y + inset}
@@ -366,7 +378,7 @@ export function ProfileChart({
               <Text style={styles.legendText}>{words.legendGood}</Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.swatch, styles.swatchHollow]} />
+              <View style={[styles.swatch, hollowMisses ? styles.swatchHollow : styles.swatchMiss]} />
               <Text style={styles.legendText}>{words.legendBad}</Text>
             </View>
           </>
@@ -470,6 +482,10 @@ const styles = StyleSheet.create({
     borderWidth: MISS_STROKE,
     borderColor: colors.red,
     backgroundColor: 'transparent',
+  },
+  // Bars too narrow for an outline draw a miss solid: so does its swatch.
+  swatchMiss: {
+    backgroundColor: colors.red,
   },
   swatch: {
     width: 10,

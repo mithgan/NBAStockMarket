@@ -11,6 +11,7 @@ import {
   chartLegend,
   chartSummary,
   defaultRange,
+  drawsHollow,
   formVerdict,
   gameLog,
   holdingStatus,
@@ -21,18 +22,24 @@ import {
   logPriceHeader,
   logRows,
   logStatusNights,
+  missStroke,
+  missSwatchHollow,
   mixNote,
   nightIndexAt,
   nightReadout,
   nightSourceLabel,
+  openTermsNote,
   priceSourceCaption,
   priceStory,
   profileChartModel,
+  profileCloseName,
+  profileCloseWord,
   profileSide,
   rangeNights,
   rangeOptions,
   readoutCaption,
   sideNet,
+  shortEndsOn,
   sideWords,
   pastStintLead,
   positionOpenedDay,
@@ -832,4 +839,65 @@ test('chart dates sit under their game, and a lone game gets its date under its 
   // Too close for both: the latest keeps its date.
   assert.deepEqual(chartDateLabels([100, 120], 300, 64).map((label) => label.index), [1]);
   assert.deepEqual(chartDateLabels([], 300, 64), []);
+});
+
+test('the profile names what its Drop or Close button ends, and the spoken name starts with those words (walk 6 T2-04)', () => {
+  assert.equal(profileCloseWord('short'), 'Close short');
+  assert.equal(profileCloseWord('long'), 'Drop player');
+  assert.equal(profileCloseName('short', 'Luka Doncic'), 'Close short on Luka Doncic');
+  assert.equal(profileCloseName('long', 'Luka Doncic'), 'Drop player Luka Doncic');
+  for (const side of ['long', 'short'] as const) {
+    assert.ok(profileCloseName(side, 'Luka Doncic').startsWith(profileCloseWord(side)));
+  }
+});
+
+test('a short says how long it runs and the day it ends by itself before you pay (walk 6 T1-11)', () => {
+  // Starts with the next night of games and lasts the term: the Roster's "Ends Oct 27".
+  assert.equal(shortEndsOn('2025-10-21', 7), '2025-10-27');
+  assert.equal(shortEndsOn('2025-10-28', 7), '2025-11-03');
+  assert.equal(shortEndsOn('2025-10-21', 1), '2025-10-21');
+  assert.equal(shortEndsOn(null, 7), null);
+  assert.equal(shortEndsOn('2025-10-21', null), null);
+  const base = { priceDollars: 176_000, feeDollars: 250, shortTermDays: 7, nextGameDate: '2025-10-21' };
+  assert.equal(
+    openTermsNote({ ...base, side: 'short' }),
+    'Locks his price at $176K a game for 7 days (ends Oct 27 by itself) · $250 fee',
+  );
+  // The roster side has no term: unchanged.
+  assert.equal(openTermsNote({ ...base, side: 'long' }), 'Locks his price at $176K a game · $250 fee');
+  // Across a month, one day, no next night known, no term, no fee.
+  assert.match(openTermsNote({ ...base, side: 'short', nextGameDate: '2025-10-28' }), /ends Nov 3 by itself/);
+  assert.match(openTermsNote({ ...base, side: 'short', shortTermDays: 1 }), /for 1 day \(ends Oct 21 by itself\)/);
+  assert.equal(
+    openTermsNote({ ...base, side: 'short', nextGameDate: null }),
+    'Locks his price at $176K a game for 7 days, then ends by itself · $250 fee',
+  );
+  assert.equal(openTermsNote({ ...base, side: 'short', shortTermDays: null }), 'Locks his price at $176K a game · $250 fee');
+  assert.equal(openTermsNote({ ...base, side: 'short', feeDollars: 0 }), 'Locks his price at $176K a game for 7 days (ends Oct 27 by itself)');
+});
+
+test('the legend draws "Missed his price" the way the bars are drawn, at every width (walk 6 T1-09)', () => {
+  const nights: ProfileNight[] = Array.from({ length: 82 }, (_, index) => {
+    const dividend = 100_000 + (index % 2 === 0 ? 50_000 : -50_000);
+    const date = new Date(Date.UTC(2025, 9, 21 + index * 2)).toISOString().slice(0, 10);
+    return { date, dividend, price: 100_000, net: dividend - 100_000, source: 'market' };
+  });
+  const insets = { top: 22, right: 6, bottom: 20, left: 6 };
+  // A whole season on a phone: about 3px a bar, too narrow for an outline, so every miss is solid and so is the swatch.
+  const phone = profileChartModel(nights, 'dividends', 358, 180, insets);
+  assert.ok(phone.bars.every((bar) => bar.width < 4));
+  assert.ok(phone.bars.every((bar) => !drawsHollow(bar)));
+  assert.equal(missSwatchHollow(phone.bars), false);
+  // The same season in the desktop panel: hollow bars, hollow swatch.
+  const desk = profileChartModel(nights, 'dividends', 560, 220, insets);
+  assert.ok(desk.bars.some((bar) => drawsHollow(bar)));
+  assert.equal(missSwatchHollow(desk.bars), true);
+  // A week on a phone: wide bars, hollow.
+  const week = profileChartModel(nights.slice(0, 4), 'dividends', 358, 180, insets);
+  assert.equal(missSwatchHollow(week.bars), true);
+  // A narrow bar keeps a dark centre: 1px outline under 6px, 1.5px from 6px.
+  assert.equal(missStroke(4), 1);
+  assert.equal(missStroke(5.9), 1);
+  assert.equal(missStroke(6), 1.5);
+  assert.equal(drawsHollow({ width: 4, height: 3 }), false);
 });

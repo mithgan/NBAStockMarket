@@ -74,7 +74,7 @@ import {
 import type { TrendPoint } from '../data/trendPresentation';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
-import { Button, headingLevel, Label, Money, moneyColor, SectionHeader, Segmented, Tag } from '../ui/kit';
+import { Button, headingLevel, Label, Money, moneyColor, repeatSafe, SectionHeader, Segmented, Tag } from '../ui/kit';
 import { CloseIcon, StarIcon } from './market/icons';
 import { PlayerAvatar } from './PlayerAvatar';
 import { ProfileActionBar } from './profile/ProfileActionBar';
@@ -268,6 +268,10 @@ export function PerGamePlayerProfile({
     event.preventDefault();
     if (!event.repeat) onToggleWatch();
   };
+  // A double tap on Watch (or on "Show all") acts once: its second tap used to
+  // switch it straight back off (walk 6 T4-11). A key press always acts.
+  const toggleWatch = useMemo(() => repeatSafe(onToggleWatch), [onToggleWatch]);
+  const toggleAllGames = useMemo(() => repeatSafe(() => setShowAllGames((current) => !current)), []);
 
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = event.nativeEvent.contentOffset.y > TITLE_AFTER_SCROLL;
@@ -303,7 +307,7 @@ export function PerGamePlayerProfile({
           accessibilityRole="switch"
           accessibilityState={{ checked: watching }}
           aria-checked={watching}
-          onPress={onToggleWatch}
+          onPress={toggleWatch}
           style={({ pressed }) => [styles.watch, narrow && styles.watchIcon, watching && styles.watchOn, pressed && styles.pressed]}
           {...({ onKeyDown: onWatchKey } as object)}
         >
@@ -540,7 +544,7 @@ export function PerGamePlayerProfile({
             <ProfileGameLog
               capped={logCapped}
               mixed={mixedLog}
-              onToggle={() => setShowAllGames((current) => !current)}
+              onToggle={toggleAllGames}
               preview={LOG_PREVIEW}
               priceHeader={priceHeader}
               rows={log}

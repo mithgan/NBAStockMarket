@@ -528,3 +528,24 @@ export function resultRowModel(
     correctionNumber: result.kind === 'correction' ? Math.max(1, result.resultRevision - 1) : 0,
   };
 }
+
+/**
+ * How far to scroll the feed once a row opens, so its whole math shows (walk
+ * 6 T2-07: opened near the bottom, only its first line was on screen).
+ * Nothing when it already fits; otherwise just enough to bring the row's
+ * bottom into view with a small margin, and never so far that the row's own
+ * top leaves the view (a row taller than the view lines its top up instead).
+ * Positions are screen pixels (top < bottom).
+ */
+export function revealScroll({ rowTop, rowBottom, viewTop, viewBottom, margin = 12 }: {
+  rowTop: number;
+  rowBottom: number;
+  viewTop: number;
+  viewBottom: number;
+  margin?: number;
+}): number {
+  const below = rowBottom + margin - viewBottom;
+  if (below <= 0) return 0;
+  const room = rowTop - viewTop - margin;
+  return Math.max(0, Math.round(Math.min(below, room)));
+}

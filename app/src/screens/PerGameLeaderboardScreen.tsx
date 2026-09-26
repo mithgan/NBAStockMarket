@@ -12,6 +12,8 @@ import {
   pastSeasonLines,
   readPastSeasons,
   sortBoard,
+  spokenPlace,
+  spokenRanks,
   standingLines,
   type BoardEntry,
   type PastSeasonLine,
@@ -69,9 +71,21 @@ function Seen({ children, style }: { children: ReactNode; style?: object | objec
   );
 }
 
-/** "Rank 2 of 5" or "Tied for 2 of 5". */
+/** "First of 5" or "Tied for second of 5": the drawn "#1 of 5", said in words. */
 function placeWords(standing: Extract<Standing, { kind: 'ranked' }>): string {
-  return `${standing.tiedWith.length > 0 ? 'Tied for' : 'Rank'} ${standing.rank} of ${standing.of}`;
+  return spokenPlace(standing.rank, standing.of, standing.tiedWith.length > 0);
+}
+
+/**
+ * A heading drawn in capitals is named in sentence case: Chrome hands the
+ * capitals on, and some readers spell out or shout them (walk 6 T3-09).
+ */
+function SmallCapsHeading({ children }: { children: string }) {
+  return (
+    <Text accessibilityLabel={children} accessibilityRole="header" {...headingLevel(2)} style={styles.standingLabel}>
+      {children}
+    </Text>
+  );
 }
 
 /**
@@ -95,11 +109,7 @@ function StandingBlock({
 }) {
   if (standing.kind === 'empty') return null;
   const lines = standingLines(standing);
-  const heading = (
-    <Text accessibilityRole="header" {...headingLevel(2)} style={styles.standingLabel}>
-      {final ? 'Your final standing' : 'Your standing'}
-    </Text>
-  );
+  const heading = <SmallCapsHeading>{final ? 'Your final standing' : 'Your standing'}</SmallCapsHeading>;
   if (standing.kind === 'absent') {
     return (
       <View style={styles.standing}>
@@ -132,7 +142,8 @@ function StandingBlock({
     placeWords(standing),
     `${final ? 'final score' : 'your score'} ${scoreWords(standing.score)}`,
     ...(lagLine ? [lagLine.replace(/\.$/, '')] : []),
-    ...lines,
+    // "$12K behind #2" is said "$12K behind second place".
+    ...lines.map(spokenRanks),
   ].join(', ');
   return (
     <View style={styles.standing}>
@@ -172,7 +183,7 @@ function PastSeasons({ lines }: { lines: readonly PastSeasonLine[] }) {
   if (lines.length === 0) return null;
   return (
     <View style={styles.past}>
-      <Text accessibilityRole="header" {...headingLevel(2)} style={styles.standingLabel}>Your seasons this visit</Text>
+      <SmallCapsHeading>Your seasons this visit</SmallCapsHeading>
       <View accessibilityLabel="Your seasons this visit" role="list" style={styles.pastList}>
         {lines.map((line) => (
           <View key={line.key} role="listitem">
@@ -206,7 +217,7 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
   const who = `${row.displayName}${tagged ? ', you' : ''}`;
   const spoken = level
     ? `${who}, level at $0`
-    : `${tied ? 'Tied for' : 'Rank'} ${place}, ${who}, ${scoreText}${closeCalls.map((note) => `, ${note}`).join('')}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`;
+    : `${tied ? 'Tied for' : 'Rank'} ${place}, ${who}, ${scoreText}${closeCalls.map((note) => `, ${spokenRanks(note)}`).join('')}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`;
   return (
     <View role="listitem" style={[styles.item, you && styles.currentRow]}>
       <Spoken>{spoken}</Spoken>
