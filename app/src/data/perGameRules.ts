@@ -29,7 +29,7 @@ export function perGameRulesPresentation(rules: PerGameRuleset) {
     ],
     explanation: `${raw
       ? "A player's dividend comes from his net points each game."
-      : "A player's dividend comes from how far his net points beat his pregame projection."} ${NET_POINTS_EXPLAINER} ${ROSTER_EXPLAINER} ${SHORT_EXPLAINER} Your score adds up those games, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add, drop, open or close. ${NEGATIVE_DIVIDEND_EXPLAINER} ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
+      : "A player's dividend comes from how far his net points beat his pregame projection."} ${NET_POINTS_EXPLAINER} ${ROSTER_EXPLAINER} ${SHORT_EXPLAINER} Your score adds up those games, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${NEGATIVE_DIVIDEND_EXPLAINER} ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
     /** Plain definitions of the words the screens use. */
     glossary: [
       { term: 'Price', meaning: 'What one game of a player costs. The price you add him at stays locked while you hold him.' },
