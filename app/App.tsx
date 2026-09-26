@@ -705,11 +705,15 @@ function AppBody() {
     </View>
   );
 
+  // A sheet over the app shows its own result, so a success notice waits
+  // behind it: the brand bar keeps its logo and Settings its place meanwhile
+  // (walk 6 T4-08, T1-04: the bar went blank and Settings slid left).
+  const sheetOpen = useSyncExternalStore(subscribeSheets, sheetIsOpen, () => false);
   const notice = authError && clearAuthMessage ? (
     <NoticeToast message={authError} onDismiss={clearAuthMessage} placement={noticePlacement} seq={-2} tone="problem" />
-  ) : message ? (
+  ) : message && (noticeTone === 'problem' || !sheetOpen) ? (
     <NoticeToast message={message} onDismiss={dismissNotice} placement={noticePlacement} seq={noticeSeq} tone={noticeTone} />
-  ) : appNotice ? (
+  ) : appNotice && !sheetOpen && !message ? (
     <NoticeToast message={appNotice} onDismiss={() => setAppNotice(null)} placement={noticePlacement} seq={-1} tone="success" />
   ) : null;
 
