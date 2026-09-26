@@ -61,7 +61,16 @@ import {
   heldValueLine,
   nicknameFor,
   PLAYER_NICKNAMES,
-  RESORT_AFTER_MS,
+  heldOrderLine,
+  listHeading,
+  searchFooterLine,
+  stillFilteredLine,
+  surnameFontSize,
+  valueLineParts,
+  lastSlotTakenBy,
+  savingMoves,
+  spokenForNote,
+  resortName,
   resortedLine,
   rowTier,
   rowValueEdge,
@@ -724,8 +733,10 @@ test('spaced single letters are initials, and a few nicknames find their player 
   assert.equal(nicknameFor('luka'), null);
 });
 
-test('after a night the list re-sorts a moment later and says for which games (walk 6 T4-13)', () => {
-  assert.ok(RESORT_AFTER_MS >= 800 && RESORT_AFTER_MS <= 1500, 'about a second');
+test('after a night the list keeps its order, says so for which games, and re-sorts only when asked (walk 7 T4-11)', () => {
+  assert.equal(heldOrderLine('2025-10-20', '2025-10-21'), 'Same order as before the Oct 21 games.');
+  assert.equal(heldOrderLine('2025-10-20', '2025-10-27'), 'Same order as before the Oct 21–27 games.');
+  assert.equal(resortName('2025-10-21'), 'Re-sort for the Oct 21 games');
   assert.equal(resortedLine('2025-10-20', '2025-10-21'), 'Re-sorted for the Oct 21 games.');
   assert.equal(resortedLine('', '2025-10-21'), 'Re-sorted for the Oct 21 games.');
   assert.equal(resortedLine('2025-10-20', '2025-10-27'), 'Re-sorted for the Oct 21–27 games.');
@@ -754,4 +765,55 @@ test('the Short side says how long a short runs before one is bought (walk 6 T1-
   assert.equal(shortTermLine(7), 'Each short runs 7 days, then ends by itself.');
   assert.equal(shortTermLine(1), 'Each short runs 1 day, then ends by itself.');
   assert.equal(shortTermLine(null), 'Each short runs until you close it.');
+});
+
+test('Adds still saving count toward the free slots: once the last one is spoken for, other rows are FULL and say whose Add took it (walk 7 T4-01)', () => {
+  const names = new Map([['brunson', 'Jalen Brunson'], ['kawhi', 'Kawhi Leonard'], ['bane', 'Desmond Bane'], ['luka', 'Luka Doncic']]);
+  const held = new Set(['luka']);
+  // A press claimed on screen first, then the context's running and queued keys; drops (held) and the other side are left out.
+  const saving = savingMoves({
+    side: 'long',
+    keys: ['position:long:brunson', 'queued:position:long:brunson', 'queued:position:long:kawhi', 'position:long:luka', 'position:short:bane'],
+    held,
+    names,
+  });
+  assert.deepEqual(saving.map((move) => move.id), ['brunson', 'kawhi']);
+  // One slot left, Brunson's Add saving: every other row is FULL, his is not.
+  assert.equal(lastSlotTakenBy(1, saving.slice(0, 1), 'kawhi'), 'Jalen Brunson');
+  assert.equal(lastSlotTakenBy(1, saving.slice(0, 1), 'bane'), 'Jalen Brunson');
+  assert.equal(lastSlotTakenBy(1, saving.slice(0, 1), 'brunson'), null);
+  // Two slots, two saving: the second Add takes the last one.
+  assert.equal(lastSlotTakenBy(2, saving, 'bane'), 'Kawhi Leonard');
+  assert.equal(lastSlotTakenBy(2, saving, 'kawhi'), null, 'his own Add still fits');
+  assert.equal(lastSlotTakenBy(3, saving, 'bane'), null, 'a slot is still free');
+  assert.equal(lastSlotTakenBy(0, saving, 'bane'), null, 'already full: the usual FULL says so');
+  const note = spokenForNote('long', 'Jalen Brunson', 'Kawhi Leonard', 10);
+  assert.equal(note.hint, "Full once Jalen Brunson's add saves.");
+  assert.equal(note.message, "Full once Jalen Brunson's add saves (10 of 10). Drop a player to add Kawhi Leonard.");
+  assert.equal(note.action, 'Choose who to drop');
+  assert.equal(spokenForNote('short', 'Jalen Brunson', 'Kawhi Leonard', 5).hint, "Full once Jalen Brunson's short saves.");
+});
+
+test('the player list has a heading with its count, and a search still on is said on return and under the list (walk 7 T3-13, T3-19)', () => {
+  assert.equal(listHeading('long', 30, 30), 'Players (30)');
+  assert.equal(listHeading('short', 30, 30), 'Players to short (30)');
+  assert.equal(listHeading('long', 6, 30), 'Players (6 of 30)');
+  assert.equal(stillFilteredLine({ query: 'ja', count: 6, total: 30, watchedOnly: false }), 'Still showing 6 players matching "ja". Show all 30 is under the list.');
+  assert.equal(stillFilteredLine({ query: 'ja', count: 1, total: 30, watchedOnly: true }), 'Still showing 1 player you watch matching "ja". Show all 30 is under the list.');
+  assert.equal(stillFilteredLine({ query: 'zz', count: 0, total: 30, watchedOnly: false }), 'Search still on: no players match "zz".');
+  assert.equal(stillFilteredLine({ query: '', count: 3, total: 30, watchedOnly: true }), 'Still showing only players you watch: 3 players. Show all 30 is under the list.');
+  assert.equal(stillFilteredLine({ query: '', count: 30, total: 30, watchedOnly: false }), null, 'nothing on: nothing to say');
+  assert.equal(stillFilteredLine({ query: '🏀', count: 30, total: 30, watchedOnly: false }), null, 'no letters: the empty state says what search needs');
+  assert.equal(searchFooterLine('ja', 6), '6 players match "ja"');
+});
+
+test('a value line never ends on a lone "·" and a large-text surname shrinks rather than break mid-word (walk 7 T1-02, T4-08)', () => {
+  assert.deepEqual(valueLineParts('Dividend last season $488.5K a game ·', '$71K over his price', false), { first: 'Dividend last season $488.5K a game', joiner: '', second: '$71K over his price' });
+  assert.deepEqual(valueLineParts('No last season ·', 'nothing to compare with his price', true), { first: 'No last season', joiner: '·\u00A0', second: 'nothing to compare with his price' });
+  // 180px window: 112px for the name at 15px.
+  assert.ok(surnameFontSize('Antetokounmpo', 112, 15) < 15, 'shrinks to fit');
+  assert.ok(surnameFontSize('Antetokounmpo', 112, 15) * 13 * 0.62 <= 112, 'the whole word fits');
+  assert.equal(surnameFontSize('Doncic', 112, 15), 15, 'short names keep full size');
+  assert.equal(surnameFontSize('Gilgeous-Alexander', 112, 15), 15, 'a plain hyphen may end the line');
+  assert.equal(surnameFontSize('Antetokounmpo', 20, 15), 11, 'never below the floor');
 });

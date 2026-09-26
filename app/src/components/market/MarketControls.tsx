@@ -417,7 +417,11 @@ function PlainHeader({
   return (
     <View style={[styles.headerCell, { width }]}>
       <Pressable
-        accessibilityLabel={label.replace(/\u00A0/g, ' ')}
+        // A real control with a name and a role, like its neighbours (walk 7
+        // T3-01: a focusable stop with no role read as nothing): a press
+        // shows or hides what the column means.
+        accessibilityLabel={`${label.replace(/\u00A0/g, ' ')}, about this column`}
+        accessibilityRole="button"
         onBlur={() => onTip('yours', 'focus', false)}
         onFocus={(event) => {
           const target = event.target as unknown as { matches?: (selector: string) => boolean };
@@ -425,6 +429,7 @@ function PlainHeader({
         }}
         onHoverIn={() => onTip('yours', 'hover', true)}
         onHoverOut={() => onTip('yours', 'hover', false)}
+        onPress={repeatSafe(() => (tipShown ? onTip('yours', 'escape', false) : onTip('yours', 'focus', true)))}
         style={[styles.headerInner, styles.sorter, styles.headerInnerNumber]}
         {...({
           'aria-describedby': explainId,
@@ -485,7 +490,9 @@ function SortHeader({
       {`\u00A0${on ? (ascending ? '↑' : '↓') : '↕'}`}
     </Text>
   );
-  const press = on ? onFlip : () => onChoose(columnKey);
+  // A double-click acts once, as the other toggles do (walk 7 T4-07: the
+  // column in use reversed twice and ended where it started).
+  const press = repeatSafe(on ? onFlip : () => onChoose(columnKey));
   return (
     <View style={[styles.headerCell, number ? { width } : styles.columnPlayer]}>
       <Pressable
@@ -685,7 +692,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexShrink: 0,
     flexBasis: 'auto',
-    minHeight: control.height - 2,
+    // A full 44px target on phones too (walk 7 T3-15: 42px inside the border).
+    minHeight: control.height,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: space.sm,

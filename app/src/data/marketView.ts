@@ -538,6 +538,34 @@ export function unheldValueLines(signal: ValueSignal): { first: string; second: 
   return { first: signal.lead, second: signal.text };
 }
 
+/** Width of a display-face letter in ems (bold, generous), for fitting a surname on its line. */
+const NAME_EM_PER_CHAR = 0.62;
+/** A surname never shrinks below this. */
+const NAME_MIN_SIZE = 11;
+
+/**
+ * The surname's font size for a line `room` px wide: full size when its
+ * longest word fits, smaller when that word would be broken mid-word (walk 7
+ * T4-08: "Antetokounm / po" at 180px). A plain hyphen may end a line, so
+ * "Gilgeous-" and "Alexander" are words of their own; a kept-whole name's
+ * non-breaking hyphen is not a break.
+ */
+export function surnameFontSize(surname: string, room: number, fullSize: number): number {
+  const longest = surname.replace(/-/g, '- ').split(/[\s\u00A0]+/).reduce((most, word) => Math.max(most, word.length), 0);
+  const fits = Math.floor(room / (Math.max(1, longest) * NAME_EM_PER_CHAR));
+  return Math.max(NAME_MIN_SIZE, Math.min(fullSize, fits));
+}
+
+/**
+ * A row's value line as drawn: on two lines the first ends without its "·"
+ * (walk 7 T1-02: "…$488.5K a game ·" pointed at nothing); on one line the dot
+ * leads the second part, held to its first word, so a wrap can never leave
+ * it alone at a line's end.
+ */
+export function valueLineParts(first: string, second: string, oneLine: boolean): { first: string; joiner: string; second: string } {
+  return { first: first.replace(/\s*·\s*$/, ''), joiner: oneLine ? '·\u00A0' : '', second };
+}
+
 /**
  * From this width the phone row's two value lines fit side by side (a phone
  * turned sideways, 844x390): one line, so a short window shows more players.
@@ -941,6 +969,38 @@ export function listCountLine({
 }
 
 /**
+ * The player list's heading, for jumping past the toolbar to the players
+ * (walk 7 T3-13): "Players (30)", "Players to short (30)", "Players (6 of 30)"
+ * while a search or the Watching filter is on.
+ */
+export function listHeading(side: PerGamePositionSide, shown: number, total: number): string {
+  const words = side === 'short' ? 'Players to short' : 'Players';
+  return shown === total ? `${words} (${total})` : `${words} (${shown} of ${total})`;
+}
+
+/**
+ * Said once when the Market opens with a search or the Watching filter still
+ * on (walk 7 T3-19: a listener met a short list with no reason): "Still
+ * showing 6 players matching "ja". Show all 30 is under the list."
+ */
+export function stillFilteredLine({ query, count, total, watchedOnly }: { query: string; count: number; total: number; watchedOnly: boolean }): string | null {
+  const players = `${count} ${count === 1 ? 'player' : 'players'}`;
+  if (query && searchHasLetters(query)) {
+    const watching = watchedOnly ? ' you watch' : '';
+    return count > 0
+      ? `Still showing ${players}${watching} matching "${query}". Show all ${total} is under the list.`
+      : `Search still on: no players${watching} match "${query}".`;
+  }
+  if (watchedOnly) return `Still showing only players you watch: ${players}. Show all ${total} is under the list.`;
+  return null;
+}
+
+/** The line under a searched list, on screen as well as aloud: "6 players match "ja"" (walk 7 T3-19). */
+export function searchFooterLine(query: string, count: number): string {
+  return searchResultLine(query, count).replace(/\.$/, '');
+}
+
+/**
  * Whether a sort runs low to high (aria-sort "ascending", the ↑ arrow).
  * Price and Name start low to high; Value starts with the highest value.
  */
@@ -979,6 +1039,60 @@ export function fullNote(side: PerGamePositionSide, playerName: string, limit: n
   return side === 'long'
     ? { message: `Your roster is full (${limit} of ${limit}). Drop a player to add ${playerName}.`, action: 'Choose who to drop' }
     : { message: `All ${limit} short ${limit === 1 ? 'slot is' : 'slots are'} in use. Close a short to short ${playerName}.`, action: 'Choose a short to close' };
+}
+
+/** A player whose Add (or Short) is still saving on this side, in press order. */
+export type SavingMove = { id: string; name: string };
+
+/**
+ * The players whose Adds are still saving on a side, oldest first, from move
+ * keys in press order: this screen's own presses, then what `pendingActions`
+ * holds (`position:<side>:<id>` while a move runs,
+ * `queued:position:<side>:<id>` while it waits). Players already held on the
+ * side are left out: their key is a Drop, or a move that has landed.
+ */
+export function savingMoves({
+  side,
+  keys,
+  held,
+  names,
+}: {
+  side: PerGamePositionSide;
+  keys: Iterable<string>;
+  held: ReadonlySet<string>;
+  names: ReadonlyMap<string, string>;
+}): SavingMove[] {
+  const ids: string[] = [];
+  const prefix = `position:${side}:`;
+  for (const key of keys) {
+    const bare = key.startsWith('queued:') ? key.slice('queued:'.length) : key;
+    if (!bare.startsWith(prefix)) continue;
+    const id = bare.slice(prefix.length);
+    if (!held.has(id) && !ids.includes(id)) ids.push(id);
+  }
+  return ids.map((id) => ({ id, name: names.get(id) ?? 'another player' }));
+}
+
+/**
+ * Whose saving Add takes this side's last free slot, when the saving Adds of
+ * other players already fill every free one: this row then shows FULL at
+ * once instead of an "Added ✓" that would fail (walk 7 T4-01). Null while a
+ * slot is still free for this player, and for a side that is full already
+ * (the row's own FULL says that).
+ */
+export function lastSlotTakenBy(remaining: number, saving: readonly SavingMove[], playerId: string): string | null {
+  if (remaining <= 0) return null;
+  const others = saving.filter((move) => move.id !== playerId);
+  return others.length >= remaining ? others[remaining - 1].name : null;
+}
+
+/** The FULL note while the last slot's Add is still saving: why, and the usual way to make room. */
+export function spokenForNote(side: PerGamePositionSide, takenBy: string, playerName: string, limit: number): { message: string; hint: string; action: string } {
+  const hint = side === 'long' ? `Full once ${takenBy}'s add saves.` : `Full once ${takenBy}'s short saves.`;
+  const { action } = fullNote(side, playerName, limit);
+  return side === 'long'
+    ? { hint, action, message: `Full once ${takenBy}'s add saves (${limit} of ${limit}). Drop a player to add ${playerName}.` }
+    : { hint, action, message: `Full once ${takenBy}'s short saves (${limit} of ${limit} shorts). Close a short to short ${playerName}.` };
 }
 
 /**
@@ -1093,9 +1207,6 @@ export function keepListOrder<T extends { player: { playerId: string } }>(
   return [...known, ...added];
 }
 
-/** How long the list keeps its order after a night before it re-sorts (walk 6 T4-13). */
-export const RESORT_AFTER_MS = 1000;
-
 /** The day after an ISO date ("2025-10-21" -> "2025-10-22"). */
 function dayAfter(isoDate: string): string {
   const date = new Date(`${isoDate}T00:00:00Z`);
@@ -1110,9 +1221,27 @@ function dayAfter(isoDate: string): string {
  * the night the old order was sorted for ('' before any game).
  */
 export function resortedLine(previousNight: string, night: string): string {
+  return `Re-sorted for the ${gamesSince(previousNight, night)} games.`;
+}
+
+/** The games played since the night the list was sorted for: "Oct 21", "Oct 21–27". */
+function gamesSince(previousNight: string, night: string): string {
   const first = previousNight ? dayAfter(previousNight) : night;
-  const when = first < night ? humanDaySpan(first, night) : humanDate(night);
-  return `Re-sorted for the ${when} games.`;
+  return first < night ? humanDaySpan(first, night) : humanDate(night);
+}
+
+/**
+ * After a night the list keeps the order it had, so nothing moves under a tap
+ * (walk 7 T4-11); a tall table says so in its sentence slot: "Same order as
+ * before the Oct 21 games."
+ */
+export function heldOrderLine(previousNight: string, night: string): string {
+  return `Same order as before the ${gamesSince(previousNight, night)} games.`;
+}
+
+/** "Re-sort"'s accessible name: what it sorts for ("Re-sort for the Oct 21 games"). */
+export function resortName(night: string): string {
+  return `Re-sort for the ${humanDate(night)} games`;
 }
 
 /** Two orders list the same players in the same places. */

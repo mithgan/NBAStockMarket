@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   FlatList,
   type NativeScrollEvent,
@@ -90,11 +90,20 @@ import {
   sortedLine,
   sortMarketRows,
   keepListOrder,
-  RESORT_AFTER_MS,
+  lastSlotTakenBy,
+  savingMoves,
+  spokenForNote,
+  heldOrderLine,
+  resortName,
   resortedLine,
   sameOrder,
   shortTermLine,
   unheldValueLines,
+  listHeading,
+  surnameFontSize,
+  searchFooterLine,
+  stillFilteredLine,
+  valueLineParts,
   watchingLine,
   VALUE_ONE_LINE_MIN_WIDTH,
   valueByPosition,
@@ -114,7 +123,7 @@ import { requestRosterPick } from '../state/uiActions';
 import { useWatchlist } from '../state/watchlist';
 import { colors, control, fonts, labelStyle, space, type, weight } from '../theme';
 import { rowMarker } from '../ui/domMarkers';
-import { Button, ConfirmStrip, EmptyState, headingLevel, repeatSafe, Segmented, settleTaps, Tag, tapsSettling, useCooldown, visuallyHidden } from '../ui/kit';
+import { Button, ConfirmStrip, EmptyState, headingLevel, repeatSafe, Segmented, Tag, tapsSettling, useCooldown, visuallyHidden } from '../ui/kit';
 
 // Start listening at load, so the press that first opens the Market is seen.
 listenForActivations();
@@ -127,14 +136,18 @@ const PHONE_ACTION_WIDTH = 76;
  */
 const STAR_LEAD = space.sm + control.height + space.sm - space.lg - 12;
 const PHONE_AVATAR = 34;
+/**
+ * Lists up to this long are drawn whole, so a screen reader's element list
+ * and find reach every player at any zoom (walk 7 T3-11: 18-25 of 30 at
+ * 195x422); longer ones render in windows as before.
+ */
+const WHOLE_LIST_MAX = 60;
+/** From this width the toolbar's lock line keeps to one line. */
+const LOCK_LINE_ROOMY_WIDTH = 1280;
 /** Phone row padding: 44px band + one value line keeps six rows above the fold. */
 const ROW_PAD = 6;
 /** A second press on Drop/Close this soon after it opened its question is the same tap bouncing (the Roster's 400 ms). */
 const QUESTION_DOUBLE_TAP_MS = 400;
-/** Rows ignore taps this long after a night's re-sort moves them, as after a move. */
-const RESORT_QUIET_MS = 300;
-/** A press this recent (or a finger still down) puts off the re-sort a little. */
-const RESORT_PRESS_GAP_MS = 450;
 
 /** The tag a player carries when he is held on a side. */
 function sideTag(side: PerGamePositionSide): 'On your roster' | 'Shorted' {
@@ -155,6 +168,9 @@ function afterPaint(run: () => void): void {
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(run, 0));
   else setTimeout(run, 0);
 }
+
+/** Marks a phone row's given name (`data-kicker-given`), so the list can tell when one is cut. */
+const givenMarker = { dataSet: { kickerGiven: '1' } } as object;
 
 /** The row's hover marker, plus its player (`data-player`), so the list can find its place by player. */
 function playerMarker(playerId: string): object {
@@ -233,12 +249,16 @@ function MarketRow({
   seasonOver,
   width,
   fullTier,
+  tierAfterSurname,
   onOpenProfile,
   onAnnounce,
   watched,
   onToggleWatch,
   dimmed = false,
   pending,
+  lastSlotTo,
+  onClaimSlot,
+  onReleaseSlot,
   rosterLocked,
   rosterLockGameDate,
   slotLimit,
@@ -260,6 +280,8 @@ function MarketRow({
   width: number;
   /** The list says "Role player" at this width (fullTierFits), else "Role" on every row. */
   fullTier: boolean;
+  /** Some given name was cut beside its tier: the tier goes after the surname on every row. */
+  tierAfterSurname: boolean;
   onOpenProfile: (playerId: string) => void;
   onAnnounce: (message: string) => void;
   /** On your watchlist; the table row carries a star to change it in place. */
@@ -269,6 +291,11 @@ function MarketRow({
   dimmed?: boolean;
   /** This row's own move is on its way (or waiting its turn). */
   pending: boolean;
+  /** Another player's Add still saving takes this side's last free slot: FULL now, says whose. */
+  lastSlotTo: string | null;
+  /** Claims a free slot for this row's press; the name of whose Add took the last one when none is left. */
+  onClaimSlot: (side: PerGamePositionSide, playerId: string) => string | null;
+  onReleaseSlot: (side: PerGamePositionSide, playerId: string) => void;
   rosterLocked: boolean;
   rosterLockGameDate: string | null;
   /** How many players this side holds at most (the FULL note says it). */
@@ -280,7 +307,9 @@ function MarketRow({
   const rosterLockHint = rosterLockMessage(rosterLockGameDate);
   // Another move saving does not rest this row: a press joins the queue and
   // plays when that move lands (walk 5 T4-01, with a slow connection too).
-  const disabled = !row.canSubmit || pending || rosterLocked || seasonOver;
+  // Spoken for: another Add still saving takes the last slot (walk 7 T4-01).
+  const spokenFor = lastSlotTo !== null && !position;
+  const disabled = !row.canSubmit || spokenFor || pending || rosterLocked || seasonOver;
   const currentGameCost = player.currentGameCost;
   const priorSeasonValuePerGame = player.priorSeasonValuePerGame;
   const { given, surname } = splitPlayerName(player.name);
@@ -296,7 +325,10 @@ function MarketRow({
   // name from 380px (a long given name is cut short first), after the
   // surname below that (walk 6 T4-06; walk 5 T1-03).
   const phone = layout === 'phone';
-  const phoneTier = rowTier({ given, tier: player.tier, width, fullTier });
+  const fitted = rowTier({ given, tier: player.tier, width, fullTier });
+  // A given name cut on any row (a text-spacing style, walk 7 T3-07) puts
+  // every row's tier after the surname, as narrow phones do.
+  const phoneTier = tierAfterSurname ? { ...fitted, place: 'after' as const } : fitted;
   // Below 380px (the large-text row) the tier follows the surname, so every
   // width says the same thing. The chevron says the row opens more.
   const tierAfter = phone
@@ -312,6 +344,11 @@ function MarketRow({
     </>
   );
   const [priceAmount, priceUnit] = perGameShort(currentGameCost).split('/');
+  // A large-text row's surname shrinks until its longest word fits its line,
+  // never broken mid-word (walk 7 T4-08: "Antetokounm / po" at 180px).
+  const largeNameSize = layout === 'large'
+    ? surnameFontSize(whole(surname), width - 2 * space.md - PHONE_AVATAR - 10, type.value)
+    : type.value;
 
   // After an Add or Short the same spot shows "Added ✓" for a moment and takes
   // no taps, so a double or triple tap never lands on Drop or Close. The
@@ -344,7 +381,7 @@ function MarketRow({
     setConfirming(false);
   };
   // FULL answers a tap: a note under the row says why and offers the Roster.
-  const fullOffer = row.isFull && !position && !pending && !rosterLocked && !seasonOver;
+  const fullOffer = (row.isFull || spokenFor) && !position && !pending && !rosterLocked && !seasonOver;
   const [noting, setNoting] = useState(false);
   const closeNote = useCallback(() => {
     refocus.current = true;
@@ -376,7 +413,7 @@ function MarketRow({
     held: shownHeld,
     pending,
     rosterLocked,
-    full: row.isFull,
+    full: row.isFull || spokenFor,
     justOpened,
     justClosed,
   });
@@ -403,22 +440,29 @@ function MarketRow({
       {second}
     </View>
   );
+  // No line ever ends on a lone "·" (walk 7 T1-02): on two lines the first
+  // drops it; on one line it leads the second part (valueLineParts).
+  const joiner = valueLineParts('', '', oneLine).joiner;
   const heldLine = (text: string, tone: SignalTone, value: ReturnType<typeof heldValueLine>) => valueLines(
     <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.heldText]}>
       {`${sideTag(side)} · `}
       <Text style={{ color: TONE_COLOR[tone] }}>{text}</Text>
-      {' ·'}
     </Text>,
     <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[value.tone] }]}>
+      {joiner ? <Text style={styles.leadText}>{joiner}</Text> : null}
       {value.value}
-      <Text style={styles.leadText}>{` · ${value.now}`}</Text>
+      <Text style={styles.leadText}>{` ·\u00A0${value.now}`}</Text>
     </Text>,
   );
   const unheldLineFor = (shown: typeof signal) => {
     const lines = unheldValueLines(shown);
+    const parts = valueLineParts(lines.first, lines.second, oneLine);
     return valueLines(
-      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>{lines.first}</Text>,
-      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[shown.tone] }]}>{lines.second}</Text>,
+      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>{parts.first}</Text>,
+      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[shown.tone] }]}>
+        {parts.joiner ? <Text style={styles.leadText}>{parts.joiner}</Text> : null}
+        {parts.second}
+      </Text>,
     );
   };
   const unheldLine = unheldLineFor(signal);
@@ -468,7 +512,7 @@ function MarketRow({
   // The given name gives way (cut short) before the tier or the price move.
   const kickerWords = (
     <View style={styles.kickerParts}>
-      <Text maxFontSizeMultiplier={1.6} numberOfLines={1} style={[styles.kicker, styles.kickerGiven]}>{whole(given)}</Text>
+      <Text maxFontSizeMultiplier={1.6} numberOfLines={1} style={[styles.kicker, styles.kickerGiven]} {...givenMarker}>{whole(given)}</Text>
       {phoneTier.place === 'kicker' && phoneTier.tier ? (
         <Text maxFontSizeMultiplier={1.6} numberOfLines={1} style={[styles.kicker, styles.kickerTier]}>{`\u00A0· ${phoneTier.tier}`}</Text>
       ) : null}
@@ -532,7 +576,10 @@ function MarketRow({
             : justClosed
               ? justClosedName(side, player.name)
               : word === 'Full'
-                ? fullActionName(side, player.name)
+                // Spoken for: whose saving Add took the last slot (walk 7 T4-01).
+                ? spokenFor && lastSlotTo
+                  ? `${fullActionName(side, player.name)}. ${spokenForNote(side, lastSlotTo, player.name, slotLimit).hint}`
+                  : fullActionName(side, player.name)
                 : actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}
           // While the confirm strip is open the row's own button looks
           // pressed and a later tap folds it (a bounce does nothing). FULL
@@ -570,6 +617,14 @@ function MarketRow({
               askedAt.current = Date.now();
               setConfirming(true);
             } else {
+              // A press in the same moment as another Add into the last slot:
+              // FULL's note says whose Add took it, and nothing is painted added.
+              const takenBy = onClaimSlot(side, player.playerId);
+              if (takenBy) {
+                dismissNotice();
+                setNoting(true);
+                return;
+              }
               lastAction.current = 'open';
               setOptimistic('open');
               startCooling();
@@ -582,8 +637,12 @@ function MarketRow({
                   expectedQuoteVersion: player.quoteVersion,
                 }).then((opened) => {
                   setOptimistic(null);
+                  onReleaseSlot(side, player.playerId);
                   if (opened) startCooling();
-                }, () => setOptimistic(null));
+                }, () => {
+                  setOptimistic(null);
+                  onReleaseSlot(side, player.playerId);
+                });
               });
             }
           }}
@@ -633,7 +692,9 @@ function MarketRow({
     />
   ) : null;
   const note = noting && fullOffer ? (() => {
-    const { message, action: actionLabel } = fullNote(side, player.name, slotLimit);
+    const { message, action: actionLabel } = spokenFor && lastSlotTo
+      ? spokenForNote(side, lastSlotTo, player.name, slotLimit)
+      : fullNote(side, player.name, slotLimit);
     return (
       <FullNote
         actionLabel={actionLabel}
@@ -680,7 +741,8 @@ function MarketRow({
     const tableEdge = rowValueEdge(player, side, position);
     return (
       <>
-      <View style={[styles.row, styles.rowTable, dimmed && styles.rowDimmed]} {...playerMarker(player.playerId)}>
+      <View style={[styles.row, styles.rowTable]} {...playerMarker(player.playerId)}>
+        {dimmed ? <View pointerEvents="none" style={styles.dimMarker} /> : null}
         <Pressable
           ref={starRef}
           accessibilityLabel={`Watch ${player.name}`}
@@ -794,7 +856,8 @@ function MarketRow({
 
   return (
     <>
-    <View style={[styles.row, large && styles.rowLarge, dimmed && styles.rowDimmed]} {...playerMarker(player.playerId)}>
+    <View style={[styles.row, large && styles.rowLarge]} {...playerMarker(player.playerId)}>
+      {dimmed ? <View pointerEvents="none" style={styles.dimMarker} /> : null}
       <Pressable
         ref={profileRef}
         accessibilityLabel={label}
@@ -809,7 +872,7 @@ function MarketRow({
           {large ? (
             <>
               <Text maxFontSizeMultiplier={1.6} style={styles.kicker}>{kicker}</Text>
-              <Text maxFontSizeMultiplier={1.6} style={styles.surname}>{nameLine}</Text>
+              <Text maxFontSizeMultiplier={1.6} style={[styles.surname, largeNameSize < type.value && { fontSize: largeNameSize, lineHeight: Math.ceil(largeNameSize * 1.35) }]}>{nameLine}</Text>
               {priceBox}
             </>
           ) : (
@@ -958,41 +1021,104 @@ export function PerGameMarketScreen({
     () => (bootstrap ? buildPerGameMarketRows(bootstrap, side) : []),
     [bootstrap, side],
   );
+  // Adds still saving count toward the side's free slots (walk 7 T4-01: three
+  // quick Adds into the last slot all painted "Added ✓"): once they fill it,
+  // every other row shows FULL at once. A press is claimed here as it lands,
+  // before its move is queued, so even a press in the same frame sees it.
+  const claimsRef = useRef<readonly string[]>([]);
+  const [claims, setClaims] = useState<readonly string[]>([]);
+  const slotView = useMemo(() => {
+    const held = new Set(allRows.filter((row) => row.position).map((row) => row.player.playerId));
+    const names = new Map(allRows.map((row) => [row.player.playerId, row.player.name] as const));
+    const slotsNow = bootstrap ? (side === 'long' ? bootstrap.account.longSlots : bootstrap.account.shortSlots) : null;
+    const remaining = slotsNow ? slotsNow.remaining : 0;
+    return { side, held, names, remaining, pendingActions, saving: savingMoves({ side, keys: [...claims, ...pendingActions], held, names }) };
+  }, [allRows, bootstrap, side, claims, pendingActions]);
+  const slotRef = useRef(slotView);
+  slotRef.current = slotView;
+  const claimSlot = useCallback((rowSide: PerGamePositionSide, playerId: string): string | null => {
+    const view = slotRef.current;
+    if (view.side !== rowSide) return null;
+    const saving = savingMoves({ side: rowSide, keys: [...claimsRef.current, ...view.pendingActions], held: view.held, names: view.names });
+    const takenBy = lastSlotTakenBy(view.remaining, saving, playerId);
+    if (takenBy) return takenBy;
+    const key = `position:${rowSide}:${playerId}`;
+    if (!claimsRef.current.includes(key)) {
+      claimsRef.current = [...claimsRef.current, key];
+      setClaims(claimsRef.current);
+    }
+    return null;
+  }, []);
+  const releaseSlot = useCallback((rowSide: PerGamePositionSide, playerId: string) => {
+    const key = `position:${rowSide}:${playerId}`;
+    if (!claimsRef.current.includes(key)) return;
+    claimsRef.current = claimsRef.current.filter((claim) => claim !== key);
+    setClaims(claimsRef.current);
+  }, []);
   // The longest given name on either side decides the tier word for a width.
   const longestGiven = useMemo(
     () => (bootstrap?.market ?? []).reduce((most, entry) => Math.max(most, splitPlayerName(entry.name).given.length), 0),
     [bootstrap?.market],
   );
   const fullTier = fullTierFits(width, longestGiven);
+  // Under a text-spacing style long given names were cut ("KARL-AN… · STAR",
+  // walk 7 T3-07): once any row's given name is cut beside its tier, every
+  // row puts its tier after the surname, the narrow phones' place, so names
+  // stay whole. Checked after each layout and when a style sheet is added.
+  const [tierAfterSurname, setTierAfterSurname] = useState(false);
+  useEffect(() => {
+    setTierAfterSurname(false);
+  }, [width]);
   // The list keeps its order while the player works through it: an Add
   // nudges that player's price (and so his value), and a re-sort swapped
   // rows under the finger (Barnes and Booker traded places after an Add).
   // A new sort, side, search or filter sorts afresh; so does coming back to
-  // the Market. A night re-sorts a moment later (below).
+  // the Market. A night never re-sorts it by itself (below).
   const night = bootstrap?.game.lastSettledDate ?? '';
   // The night the list's order was sorted for. After +1 night the list keeps
-  // its order until the player scrolls, changes the view, or about a second
-  // passes, so a tap aimed a moment before lands on the player it was aimed
-  // at (walk 6 T4-13: Booker's Add opened Barnes's profile).
+  // its order, with no timer and no scroll moving a row: a re-sort a second
+  // after the night pushed every row 25px under a tap and added Booker
+  // instead of Barnes (walk 7 T4-11). A new sort, side, search or filter,
+  // the sort in use chosen again, "Re-sort" on a tall table, or coming back
+  // to the Market sorts for the latest night.
   const [sortedNight, setSortedNight] = useState(night);
-  const [resortNote, setResortNote] = useState<string | null>(null);
   const orderKey = `${sort}|${reversed}|${side}|${query}|${watchedOnly}|${sortedNight}`;
   const orderRef = useRef<{ key: string; ids: readonly string[] } | null>(null);
-  // The order a fresh sort would give now, to tell whether a re-sort moves anyone.
-  const freshIds = useRef<readonly string[]>([]);
-  const rows = useMemo(() => {
+  const { rows, orderMoved } = useMemo(() => {
     const fresh = actionableFirst(sortMarketRows(
       filterMarketRows(allRows, { query, watchedOnly, watched: kept.length > 0 ? [...watchlist.watched, ...kept] : watchlist.watched }),
       sort,
       side,
       reversed,
     ));
-    freshIds.current = fresh.map((row) => row.player.playerId);
     const ordered = keepListOrder(fresh, orderRef.current?.key === orderKey ? orderRef.current.ids : null);
-    orderRef.current = { key: orderKey, ids: ordered.map((row) => row.player.playerId) };
-    return ordered;
+    const ids = ordered.map((row) => row.player.playerId);
+    orderRef.current = { key: orderKey, ids };
+    // Whether a fresh sort would put anyone somewhere else now.
+    return { rows: ordered, orderMoved: !sameOrder(fresh.map((row) => row.player.playerId), ids) };
   }, [allRows, query, side, sort, reversed, watchedOnly, watchlist.watched, kept, orderKey]);
   const firstBlockedId = rows.find((row) => row.blockedByOpposingPosition)?.player.playerId ?? null;
+  // Measured before the first paint, so a list that needs it never shows the
+  // other place first; a style sheet added later is checked a frame after.
+  useLayoutEffect(() => {
+    if (layout !== 'phone' || tierAfterSurname || typeof document === 'undefined' || typeof requestAnimationFrame !== 'function') return undefined;
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      const cut = Array.from(document.querySelectorAll('[data-kicker-given]')).some((node) => node.scrollWidth > node.clientWidth + 1);
+      if (cut) setTierAfterSurname(true);
+    };
+    const later = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    check();
+    const observer = typeof MutationObserver === 'function' ? new MutationObserver(later) : null;
+    observer?.observe(document.head, { childList: true, subtree: true, characterData: true });
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [layout, tierAfterSurname, width, rows]);
   const positionValues = useMemo(
     () => valueByPosition(bootstrap?.settledResults ?? []),
     [bootstrap?.settledResults],
@@ -1017,85 +1143,29 @@ export function PerGameMarketScreen({
     if (announceTimer.current) clearTimeout(announceTimer.current);
   }, []);
 
-  // Re-sorting after a night: never while a finger or the mouse is down or
-  // has just pressed (the rows would move under that tap), and with the
-  // list's short quiet after it, as after a move.
-  const holding = night !== sortedNight;
-  const holdRefs = useRef({ night, sortedNight, holding, pointerDown: false, pressedAt: 0, holdOffset: 0 });
-  holdRefs.current.night = night;
-  holdRefs.current.sortedNight = sortedNight;
-  holdRefs.current.holding = holding;
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return undefined;
-    const down = () => {
-      holdRefs.current.pointerDown = true;
-      holdRefs.current.pressedAt = Date.now();
-    };
-    const up = () => {
-      holdRefs.current.pointerDown = false;
-    };
-    window.addEventListener('pointerdown', down, true);
-    window.addEventListener('pointerup', up, true);
-    window.addEventListener('pointercancel', up, true);
-    return () => {
-      window.removeEventListener('pointerdown', down, true);
-      window.removeEventListener('pointerup', up, true);
-      window.removeEventListener('pointercancel', up, true);
-    };
-  }, []);
-  const resort = useCallback(() => {
-    const { night: current, sortedNight: previous } = holdRefs.current;
-    if (current === previous) return;
-    holdRefs.current.sortedNight = current;
-    const moved = !sameOrder(freshIds.current, orderRef.current?.ids);
-    if (moved) settleTaps(RESORT_QUIET_MS, 0, 'list');
-    setSortedNight(current);
-    // Said where the side explainer sits, and aloud, only when someone moved.
-    if (moved) {
-      const line = resortedLine(previous, current);
-      setResortNote(line);
-      announce(line);
-    } else {
-      setResortNote((shown) => (shown ? resortedLine(previous, current) : shown));
-    }
+  // The latest night, for a re-sort the player asks for.
+  const nightRef = useRef(night);
+  nightRef.current = night;
+  const sortedNightRef = useRef(sortedNight);
+  sortedNightRef.current = sortedNight;
+  // Kept from before the latest night, and a fresh sort would move someone:
+  // said only in the tall table's reserved sentence slot, with "Re-sort"
+  // (nothing else on screen may move for it).
+  const heldNote = night !== sortedNight && orderMoved ? heldOrderLine(sortedNight, night) : null;
+  const resortNow = useCallback(() => {
+    const previous = sortedNightRef.current;
+    if (previous === nightRef.current) return;
+    setSortedNight(nightRef.current);
+    announce(resortedLine(previous, nightRef.current));
   }, [announce]);
-  useEffect(() => {
-    if (!holding) return undefined;
-    holdRefs.current.holdOffset = place.current.offset;
-    const started = Date.now();
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const attempt = () => {
-      const { pointerDown, pressedAt } = holdRefs.current;
-      const busy = pointerDown || Date.now() - pressedAt < RESORT_PRESS_GAP_MS;
-      if (busy && Date.now() - started < 4000) {
-        timer = setTimeout(attempt, 150);
-        return;
-      }
-      resort();
-    };
-    timer = setTimeout(attempt, RESORT_AFTER_MS);
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [holding, resort]);
   // Changing the view sorts afresh for the latest night, with nothing to say.
   const viewKey = `${sort}|${reversed}|${side}|${query}|${watchedOnly}`;
   const lastViewKey = useRef(viewKey);
   useEffect(() => {
     if (lastViewKey.current === viewKey) return;
     lastViewKey.current = viewKey;
-    setSortedNight(holdRefs.current.night);
-    setResortNote(null);
+    setSortedNight(nightRef.current);
   }, [viewKey]);
-  // On a tall table the note borrows the side sentence's reserved slot for a
-  // while; elsewhere it keeps its line until the view changes, so nothing
-  // moves when it goes.
-  const noteInSlot = layout === 'table' && height >= ROOMY_MIN_HEIGHT;
-  useEffect(() => {
-    if (!resortNote || !noteInSlot) return undefined;
-    const timer = setTimeout(() => setResortNote(null), 8000);
-    return () => clearTimeout(timer);
-  }, [resortNote, noteInSlot]);
 
   // Your place in the list: the first player you can see, and the offset.
   const listRef = useRef<FlatList<PerGameMarketRow>>(null);
@@ -1126,9 +1196,7 @@ export function PerGameMarketScreen({
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     place.current.offset = event.nativeEvent.contentOffset.y;
     if (!aligning.current) recordAnchor();
-    // Scrolling after a night brings the new order at once.
-    if (holdRefs.current.holding && Math.abs(place.current.offset - holdRefs.current.holdOffset) > 24) resort();
-  }, [recordAnchor, resort]);
+  }, [recordAnchor]);
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     const first = viewableItems.find((token) => token.isViewable);
     if (first) place.current.anchorId = (first.item as PerGameMarketRow).player.playerId;
@@ -1248,6 +1316,23 @@ export function PerGameMarketScreen({
     const timer = setTimeout(() => announce(note ? `${note} ${line}` : line), note ? 150 : 700);
     return () => clearTimeout(timer);
   }, [searchText, spokenCount, totalCount, watchedOnly, announce]);
+  // Opened with a search or the Watching filter still on (coming back to the
+  // Market): said once, so a listener knows why the list is short (walk 7
+  // T3-19); the line under the list shows it too.
+  const filterNow = useRef({ query: searchText, count: spokenCount, total: totalCount, watchedOnly });
+  filterNow.current = { query: searchText, count: spokenCount, total: totalCount, watchedOnly };
+  const hasBootstrap = bootstrap !== null;
+  const saidFilters = useRef(false);
+  useEffect(() => {
+    if (saidFilters.current || !hasBootstrap) return undefined;
+    saidFilters.current = true;
+    if (!stillFilteredLine(filterNow.current)) return undefined;
+    const timer = setTimeout(() => {
+      const line = stillFilteredLine(filterNow.current);
+      if (line) announce(line);
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [hasBootstrap, announce]);
   // If the list empties under the keyboard (the focused row left and focus
   // fell to the page), focus the empty state's way out ("Show everyone",
   // "Clear search") instead of leaving the user at the top (walk 2: T3-27).
@@ -1271,6 +1356,8 @@ export function PerGameMarketScreen({
     const next = nextSortState({ sort, reversed }, action);
     setSort(next.sort);
     setReversed(next.reversed);
+    // The sort in use chosen again sorts the list for the latest night.
+    if (next.sort === sort && next.reversed === reversed) setSortedNight(nightRef.current);
     announce(sortedLine(next.sort, next.reversed));
   }, [announce, reversed, sort]);
   const chooseSort = useCallback((next: MarketSort) => applySort({ choose: next }), [applySort]);
@@ -1335,7 +1422,7 @@ export function PerGameMarketScreen({
   // Folded and too narrow to share the search button's row: a line of its own.
   const slotOwnLine = folded && !foldWide && !foldedSlotBeside(width);
   const slotStatus = (
-    <View style={[styles.slotStatus, !slotBeside && styles.slotStatusUnder, rowToolbar && styles.slotStatusWide, folded && !slotOwnLine && styles.slotStatusFolded]}>
+    <View style={[styles.slotStatus, !slotBeside && styles.slotStatusUnder, rowToolbar && styles.slotStatusWide, rowToolbar && width >= LOCK_LINE_ROOMY_WIDTH && styles.slotStatusRoomy, folded && !slotOwnLine && styles.slotStatusFolded]}>
       <Text maxFontSizeMultiplier={1.4} style={[styles.slotText, slotRight && styles.textRight]}>{slotLine(side, slots)}</Text>
       {status.kind === 'lock' ? (
         <View style={styles.lockLine}>
@@ -1441,8 +1528,11 @@ export function PerGameMarketScreen({
           T2-02: the header moved 44px and a third click missed). */}
       {wide && roomy ? (
         <View style={[styles.explainerWide, styles.explainerSlot]}>
-          {resortNote ? (
-            <Text maxFontSizeMultiplier={1.4} style={[styles.explainer, styles.resortText]}>{resortNote}</Text>
+          {heldNote ? (
+            <View style={styles.flipNote}>
+              <Text maxFontSizeMultiplier={1.4} style={[styles.explainer, styles.resortText]}>{heldNote}</Text>
+              <Button accessibilityLabel={resortName(night)} label="Re-sort" onPress={resortNow} variant="secondary" />
+            </View>
           ) : reversed ? (
             <View style={styles.flipNote}>
               <Text maxFontSizeMultiplier={1.4} style={styles.flipText}>{flippedSortNote(sort).text}</Text>
@@ -1458,11 +1548,6 @@ export function PerGameMarketScreen({
           <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="secondary" />
         </View>
       ) : null}
-      {/* Elsewhere the re-sort note takes a line of its own on the gutter; it
-          appears as the rows re-sort and stays until the view changes. */}
-      {resortNote && !(wide && roomy) ? (
-        <Text maxFontSizeMultiplier={1.4} style={[styles.explainer, styles.resortText, styles.resortGutter, folded && styles.flipNoteFolded]}>{resortNote}</Text>
-      ) : null}
       {wide ? (
         <MarketColumnHeader
           // No button column at season end, so the labels line up with quiet rows.
@@ -1476,6 +1561,12 @@ export function PerGameMarketScreen({
           reversed={reversed}
           sort={sort}
         />
+      ) : null}
+      {/* A heading to jump to the players, with their count (walk 7 T3-13). */}
+      {resultCount > 0 ? (
+        <View style={visuallyHidden}>
+          <Text accessibilityRole="header" {...headingLevel(2)}>{listHeading(side, spokenCount, totalCount)}</Text>
+        </View>
       ) : null}
     </View>
   );
@@ -1540,6 +1631,20 @@ export function PerGameMarketScreen({
       />
     </View>
   ) : null;
+  // Under a searched list, the count and the way back to everyone, on screen
+  // as well as aloud, so coming back to a search says it is still on (walk 7
+  // T3-19), as the Watching list's line does.
+  const searchFooter = trimmed && searchHasLetters(trimmed) && spokenCount > 0 ? (
+    <View style={[styles.watchingFooter, { paddingHorizontal: wide ? space.lg : space.md }]}>
+      <Text maxFontSizeMultiplier={1.4} style={styles.watchingFooterText}>{searchFooterLine(echoQuery(trimmed), spokenCount)}</Text>
+      <Button
+        accessibilityLabel={`Show all ${totalCount} players`}
+        label={`Show all ${totalCount}`}
+        onPress={clearFilters}
+        variant="secondary"
+      />
+    </View>
+  ) : null;
 
   return (
     <>
@@ -1548,11 +1653,11 @@ export function PerGameMarketScreen({
         contentContainerStyle={styles.content}
         data={rows}
         extraData={[layout, columns, positionValues, pastValues, fee, width, seasonOver, watchlist.watched, kept, watchedOnly]}
-        initialNumToRender={18}
+        initialNumToRender={Math.min(Math.max(rows.length, 18), WHOLE_LIST_MAX)}
         keyboardShouldPersistTaps="handled"
         keyExtractor={(row) => row.player.playerId}
         ListEmptyComponent={emptyState}
-        ListFooterComponent={watchingFooter}
+        ListFooterComponent={watchingFooter ?? searchFooter}
         ListHeaderComponent={pinned ? null : listHeader}
         onScroll={onScroll}
         onScrollToIndexFailed={({ index, averageItemLength }) => {
@@ -1590,6 +1695,7 @@ export function PerGameMarketScreen({
             wholeNames={keepNamesWhole(width)}
             width={width}
             fullTier={fullTier}
+            tierAfterSurname={tierAfterSurname}
             onAnnounce={announce}
             onToggleWatch={toggleWatchStable}
             watched={watchlist.isWatched(item.player.playerId)}
@@ -1598,6 +1704,9 @@ export function PerGameMarketScreen({
             pastValue={item.position ? undefined : pastValues.get(item.player.playerId)}
             row={item}
             pending={pendingActions.has(actionKey) || pendingActions.has(`queued:${actionKey}`)}
+            lastSlotTo={item.position ? null : lastSlotTakenBy(slotView.remaining, slotView.saving, item.player.playerId)}
+            onClaimSlot={claimSlot}
+            onReleaseSlot={releaseSlot}
             rosterLocked={rosterLocked}
             rosterLockGameDate={lockDate}
             slotLimit={slots.limit}
@@ -1747,6 +1856,11 @@ const styles = StyleSheet.create({
     // its placeholder (walk 6 T2-19: 138px at 1024x768).
     maxWidth: 150,
   },
+  slotStatusRoomy: {
+    // A wide screen has room for "🔒 Moves reopen after Oct 28" on one line
+    // (walk 7 T2-03: a two-line stub with the date alone at 1440).
+    maxWidth: 240,
+  },
   slotText: {
     color: colors.muted,
     fontFamily: fonts.display,
@@ -1799,10 +1913,6 @@ const styles = StyleSheet.create({
   },
   resortText: {
     color: colors.text,
-  },
-  resortGutter: {
-    paddingHorizontal: space.lg,
-    paddingBottom: space.sm,
   },
   flipText: {
     color: colors.goldInk,
@@ -1870,9 +1980,16 @@ const styles = StyleSheet.create({
   // Unwatched under the Watching filter, still live: full-strength words (a
   // faded row read at 2.5:1, walk 4 T3-08), marked by an edge and the
   // "No longer watching · Watch again" line under it.
-  rowDimmed: {
-    borderLeftWidth: 3,
-    borderLeftColor: colors.borderStrong,
+  // The kept row's marker sits over its left edge, so his star, photo and
+  // name keep their column (walk 7 T2-01: a border moved them 3px right).
+  dimMarker: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    zIndex: 1,
+    backgroundColor: colors.borderStrong,
   },
   keptLine: {
     flexDirection: 'row',
