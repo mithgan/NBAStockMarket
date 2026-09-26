@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 
+import { settleTaps } from './tapSettle';
+
 /**
  * Browser history for the app's own places, so the Back button (and the
  * phone's back gesture) does what a player expects: close the sheet that is
@@ -63,6 +65,9 @@ export function useSheetHistory(visible: boolean, onClose: () => void): void {
     };
     window.addEventListener('popstate', onPop);
     return () => {
+      // The tap that closed the sheet (on the scrim) must not also press what
+      // was under the scrim, such as +1 night in a landscape phone's frame.
+      settleTaps(450);
       window.removeEventListener('popstate', onPop);
       openSheets = Math.max(0, openSheets - 1);
       if (openSheets === 0) setBackgroundInert(false);
