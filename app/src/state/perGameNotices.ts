@@ -21,11 +21,14 @@ function endedSentence(ended: PerGamePosition[]): string {
   const result = (amount: number) => (Math.round(amount) < 0
     ? `lost ${moneyFine(Math.abs(amount))}`
     : `made ${signedMoneyFine(amount)}`);
+  // Short, so a week's notice stays about two lines in a phone's brand bar
+  // (walk 6 T1-16: four lines pushed the page down); the Closed list keeps
+  // the detail.
   if (ended.length === 1) {
-    return ` Your short on ${ended[0].playerName} is over: it ${result(ended[0].cumulativePnl)} in all, already in your score.`;
+    return ` Your short on ${ended[0].playerName} ended: it ${result(ended[0].cumulativePnl)}.`;
   }
   const total = ended.reduce((sum, position) => sum + position.cumulativePnl, 0);
-  return ` ${ended.length} shorts are over: they ${result(total)} in all, already in your score.`;
+  return ` ${ended.length} shorts ended: they ${result(total)}.`;
 }
 
 /** A roster lock that begins with these games, in one sentence. */
@@ -35,8 +38,8 @@ function lockSentence(previous: PerGameBootstrap | null, next: PerGameBootstrap)
   if (!locked || wasLocked) return '';
   const date = next.ruleset.rosterLockGameDate;
   return date
-    ? ` Roster moves pause for the ${humanDate(date)} games.`
-    : ' Roster moves pause for the next games.';
+    ? ` Moves pause for the ${humanDate(date)} games.`
+    : ' Moves pause for the next games.';
 }
 
 /** Your place on the board, by your own score. */
@@ -46,7 +49,8 @@ function standing(next: PerGameBootstrap): string {
   const score = next.account.cumulativePnl;
   const others = board.filter((row) => !row.isCurrentUser);
   const rank = 1 + others.filter((row) => row.cumulativePnl > score).length;
-  return `, #${rank} of ${others.length + 1}`;
+  // "#2 of 5" never splits across lines (walk 6 T1-10).
+  return `, #${rank}\u00a0of\u00a0${others.length + 1}`;
 }
 
 /**

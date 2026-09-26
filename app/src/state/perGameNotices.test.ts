@@ -70,14 +70,14 @@ test('a short that ran its term is named with what it made', () => {
   const after = snapshot('2025-11-05', '2025-11-06', 345_000, [short('s1', 'Tyrese Maxey', 'closed', 345_000)], [night('2025-11-05', 145_000)]);
   assert.equal(
     refreshNotice(before, after, false),
-    'Nov 5 games: your score rose $145K. Your short on Tyrese Maxey is over: it made +$345K in all, already in your score.',
+    'Nov 5 games: your score rose $145K. Your short on Tyrese Maxey ended: it made +$345K.',
   );
   const two = snapshot('2025-11-05', '2025-11-06', 0, [
     short('s1', 'A', 'closed', 345_000),
     short('s2', 'B', 'closed', -45_000),
   ]);
   const twoBefore = snapshot('2025-11-04', '2025-11-05', 0, [short('s1', 'A', 'active', 0), short('s2', 'B', 'active', 0)]);
-  assert.match(refreshNotice(twoBefore, two, false), /2 shorts are over: they made \+\$300K in all, already in your score\.$/);
+  assert.match(refreshNotice(twoBefore, two, false), /2 shorts ended: they made \+\$300K\.$/);
 });
 
 test('a score that moved without new games is reported as a change', () => {
@@ -115,7 +115,7 @@ test('a night that breaks even says so, and a new roster lock is announced', () 
   const locked = { ...even, ruleset: { rosterMutationsLocked: true, rosterLockGameDate: '2025-11-06' } } as unknown as PerGameBootstrap;
   assert.equal(
     refreshNotice(before, locked, false),
-    'Nov 5 games: your players broke even. Roster moves pause for the Nov 6 games.',
+    'Nov 5 games: your players broke even. Moves pause for the Nov 6 games.',
   );
 });
 
@@ -130,7 +130,7 @@ test('the last night of the season announces the final result', () => {
     ],
   } as unknown as PerGameBootstrap;
   const complete = (b: PerGameBootstrap) => b.game.nextGameDate === null;
-  assert.equal(refreshNotice(before, after, false, { seasonComplete: complete }), 'Season complete. Final score +$1.06M, #2 of 3.');
+  assert.equal(refreshNotice(before, after, false, { seasonComplete: complete }), 'Season complete. Final score +$1.06M, #2\u00a0of\u00a03.');
 });
 
 test('nights played with nobody on the roster say so (walk 4 T2-16)', () => {
