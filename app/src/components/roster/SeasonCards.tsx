@@ -177,15 +177,11 @@ export function SeasonCompleteCard({
   const moves = movesText ?? (`${summary.moves}${split ? '' : ` · fees ${signedMoneyFine(fees)}`}`
     + (summary.shortsMade > 0 ? ` · ${summary.shortsMade} ${summary.shortsMade === 1 ? 'short' : 'shorts'}` : ''));
   const spokenMoves = `Moves ${moves.replace(/ · /g, ', ')}`;
-  // One spoken summary, like the score block's in season (walk 6 T3-07):
-  // "Final score +$4.95 million, first of 5. Roster +$4.95 million, shorts
-  // $0, closed $0, fees -$500." The drawn split repeats it, so it is hidden
-  // from screen readers.
-  const spoken = finalSummary(
-    summary.finalScore,
-    summary.rank !== null ? { rank: summary.rank, of: summary.of } : null,
-    split,
-  );
+  // One spoken summary, like the score block's in season, with places in
+  // words as Leaders speaks them (walk 6 T3-07): "Final score +$4.95M, first
+  // of 5. Roster +$4.95M, shorts $0, closed $0, fees -$500." The drawn split
+  // repeats it, so it is hidden from screen readers.
+  const spoken = finalSummary(summary.finalScore, place, split);
   const movesLine = (
     <View
       accessibilityLabel={onOpenPlayer ? spokenMoves : undefined}

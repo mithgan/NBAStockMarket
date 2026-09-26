@@ -722,22 +722,26 @@ test('the season card reads millions one way, and says the exact final when roun
   assert.equal(exactFinalLine(shownParts(parts(148_449, -2_250), 146_199), 146_199), null);
 });
 
-test('the season card has one spoken summary with its place in words (walk 6 T3-07)', async () => {
-  const { finalSummary, spokenPlace } = await import('./rosterView');
-  assert.equal(spokenPlace(1, 5), 'first of 5');
-  assert.equal(spokenPlace(2, 5), 'second of 5');
-  assert.equal(spokenPlace(14, 20), '14th of 20');
-  assert.equal(spokenPlace(3, null), 'third place');
+test('the season card has one spoken summary, places in words as Leaders speaks them (walk 6 T3-07)', async () => {
+  const { finalSummary, ordinalWords, spokenRanks } = await import('./rosterView');
+  // The shared helpers from copy/terms, as Leaders and the notices use them.
+  assert.deepEqual([1, 2, 3, 10].map(ordinalWords), ['first', 'second', 'third', 'tenth']);
+  assert.deepEqual([11, 12, 13, 21, 22, 23, 101, 111].map(ordinalWords), ['11th', '12th', '13th', '21st', '22nd', '23rd', '101st', '111th']);
+  assert.equal(spokenRanks('#1 of 5'), 'first of 5');
+  assert.equal(spokenRanks('#2'), 'second place');
+  assert.equal(spokenRanks('#2\u00a0of\u00a05'), 'second of 5');
+  assert.equal(spokenRanks('#14 of 20'), '14th of 20');
+  assert.equal(spokenRanks('Your last one finished +$4.95M, #1 of 5.'), 'Your last one finished +$4.95M, first of 5.');
   assert.equal(
-    finalSummary(4_950_000, { rank: 1, of: 5 }, [
+    finalSummary(4_950_000, '#1\u00a0of\u00a05', [
       { key: 'roster', label: 'Roster', value: 4_950_000 },
       { key: 'shorts', label: 'Shorts', value: 0 },
       { key: 'closed', label: 'Closed', value: 0 },
       { key: 'fees', label: 'Fees', value: -500 },
     ]),
-    'Final score +$4.95 million, first of 5. Roster +$4.95 million, shorts $0, closed $0, fees -$500.',
+    'Final score +$4.95M, first of 5. Roster +$4.95M, shorts $0, closed $0, fees -$500.',
   );
-  assert.equal(finalSummary(-220_300, null, null), 'Final score -$220.3 thousand.');
+  assert.equal(finalSummary(-220_300, null, null), 'Final score -$220.3K.');
 });
 
 test('at season end the row tags read in the past tense (walk 6 T1-10c)', async () => {

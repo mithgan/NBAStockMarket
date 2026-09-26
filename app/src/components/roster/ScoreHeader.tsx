@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { humanDate, signedMoney } from '../../copy/terms';
-import { formatAt, heroFontSize, WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
+import { formatAt, heroFontSize, spokenRanks, WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { headingLevel, Label, Money, visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -137,7 +137,7 @@ export function ScoreHeader({
       )}
       {rank ? (
         <StackRow label="Rank">
-          <Text accessibilityLabel={`Rank ${rank.replace('#', 'number ')}`} style={styles.stackText}>{rank}</Text>
+          <Text accessibilityLabel={`Rank ${spokenRanks(rank)}`} style={styles.stackText}>{rank}</Text>
         </StackRow>
       ) : null}
     </View>
@@ -152,7 +152,8 @@ export function ScoreHeader({
   const summary = [
     `${title} ${signedMoney(score)}${feesOnly ? ', fees so far' : ''}`,
     started && week !== null ? `${WEEK_LABEL.toLowerCase()} ${signedMoney(week)}` : null,
-    started && rank ? `rank ${rank.replace('#', 'number ')}` : null,
+    // Places in words, as Leaders and the season card speak them: "second of 5" (walk 6 T3-07).
+    started && rank ? spokenRanks(rank) : null,
     !started && nextGameDate ? `next games ${humanDate(nextGameDate)}` : null,
   ].filter(Boolean).join(', ');
 

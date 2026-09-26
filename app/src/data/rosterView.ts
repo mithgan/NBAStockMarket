@@ -25,6 +25,7 @@ import {
   moneyCompact,
   ordinalWords,
   signedMoneyCompact,
+  spokenRanks,
 } from '../copy/terms';
 import type { PnlPoint } from '../state/perGameState';
 import type { TagTone } from '../ui/kit';
@@ -665,32 +666,25 @@ export function exactFinalLine(parts: readonly BreakdownPart[], score: number): 
 // ---------------------------------------------------------------------------
 // Season card, welcome and first-night tip
 
-/**
- * Spoken places (walk 6 T3-07), in the words Leaders and the notices use:
- * "first of 5", "14th of 20", "third place" without a field size.
- */
-export function spokenPlace(rank: number, of: number | null): string {
-  return of === null ? `${ordinalWords(rank)} place` : `${ordinalWords(rank)} of ${of}`;
-}
-
-/** Money for a spoken sentence: "+$4.95 million", "-$220.3 thousand", "$250". */
-export function spokenMoney(text: string): string {
-  return text.replace(/M$/, ' million').replace(/K$/, ' thousand');
-}
+// Places in words, shared with Leaders and the notices (copy/terms).
+export { ordinalWords, spokenRanks };
 
 /**
- * The season card's one spoken summary (walk 6 T3-07): "Final score +$4.95
- * million, first of 5. Roster +$4.95 million, shorts $0, closed $0, fees
- * -$500." `parts` are the shown parts, so the words match the figures.
+ * The season card's one spoken summary (walk 6 T3-07), in the Leaders style
+ * ("First of 5, your score +$453.8K, $113.5K ahead of second place"): places
+ * in words, money as the screen writes it. "Final score +$4.95M, first of 5.
+ * Roster +$4.95M, shorts $0, closed $0, fees -$500." The score leads, as it
+ * does on the card. `place` is the drawn "#1 of 5"; `parts` are the shown
+ * parts, so the words match the figures.
  */
 export function finalSummary(
   score: number,
-  place: { rank: number; of: number | null } | null,
+  place: string | null,
   parts: readonly BreakdownPart[] | null,
 ): string {
-  const head = `Final score ${spokenMoney(signedMoney(score))}${place ? `, ${spokenPlace(place.rank, place.of)}` : ''}.`;
+  const head = `Final score ${signedMoney(score)}${place ? `, ${spokenRanks(place)}` : ''}.`;
   if (!parts || parts.length === 0) return head;
-  const split = parts.map((part, index) => `${index === 0 ? part.label : part.label.toLowerCase()} ${spokenMoney(signedMoney(part.value))}`);
+  const split = parts.map((part, index) => `${index === 0 ? part.label : part.label.toLowerCase()} ${signedMoney(part.value)}`);
   return `${head} ${split.join(', ')}.`;
 }
 
