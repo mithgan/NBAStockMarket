@@ -163,7 +163,10 @@ export function SettingsSheet({
             <Text style={styles.closeText}>Done</Text>
           </Pressable>
         </View>
-        <ScrollView style={styles.sheetBody}>
+        {/* A named, focusable scroll region, as Rules and the profile have, so
+            arrow keys reach This season and Practice mode below the themes
+            (on a theme, arrows change the theme; walk 4 T3-06). */}
+        <ScrollView aria-label="Settings content" role="region" style={styles.sheetBody} tabIndex={0}>
           <Section narrow={narrow} title="Appearance">
             <View accessibilityLabel="Theme" accessibilityRole="radiogroup" {...({ onKeyDown: onChoiceKey } as object)}>
               {APPEARANCE_CHOICES.map((choice, index) => {

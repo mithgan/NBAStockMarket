@@ -197,28 +197,16 @@ const SUCCESS_NOTICE_MS = 8000;
 const SUCCESS_NOTICE_MAX_MS = 14000;
 
 /**
- * Where the last tap landed, so a notice can keep clear of it: a notice that
- * slides up over the row you just tapped hides its "Added ✓" (walk 3 T1-01).
+ * Where notices sit, chosen to cover the least a player needs next (walks 1-4
+ * found every floating spot over the content in someone's way: the next
+ * row's Add, the market's side toggle, the score a notice reports).
+ * - Phones: over the brand bar and status line at the very top. They hold
+ *   the logo and yesterday's facts, which the notice is about anyway; the
+ *   +1 night buttons, the screen's toolbar and its content stay clear.
+ * - Wider screens: the bottom-left corner of the screen, away from the
+ *   toolbar at the top and the row buttons on the right.
  */
-let lastTap = { y: -1, at: 0 };
-if (typeof document !== 'undefined') {
-  document.addEventListener('pointerdown', (event) => {
-    lastTap = { y: event.clientY, at: Date.now() };
-  }, { capture: true, passive: true });
-}
-
-/**
- * Where a success notice goes. On a phone it always sits at the top of the
- * content, clear of the list's buttons: at the bottom it covered the next
- * row's Add, so the next tap only dismissed it and the player was silently
- * not added (walk 3 T1-07). Wider screens keep it at the bottom unless the
- * last tap was down there.
- */
-function noticeAtTop(): boolean {
-  if (typeof window === 'undefined') return false;
-  if (window.innerWidth < 720) return true;
-  return Date.now() - lastTap.at < 3000 && lastTap.y > window.innerHeight * 0.5;
-}
+const NOTICE_FRAME_MAX_WIDTH = 720;
 
 function successNoticeMs(message: string): number {
   return Math.min(SUCCESS_NOTICE_MAX_MS, SUCCESS_NOTICE_MS + Math.max(0, message.length - 60) * 60);
@@ -238,11 +226,15 @@ function NoticeToast({
   message,
   onDismiss,
   tone,
+  placement,
 }: {
   message: string;
   onDismiss: () => void;
   tone: NoticeTone;
+  /** 'frame': over the top of a phone's frame; 'corner': bottom-left of the screen. */
+  placement: 'frame' | 'corner';
 }) {
+  const insets = useSafeAreaInsets();
   // A pointer resting on a notice holds it (a magnifier user reads it where it is).
   const [held, setHeld] = useState(false);
   useEffect(() => {
@@ -251,8 +243,9 @@ function NoticeToast({
     return () => clearTimeout(timer);
   }, [held, message, onDismiss, tone]);
   const noticeRef = useRef<View | null>(null);
-  // Chosen once per notice: away from where the player just tapped.
-  const atTop = useMemo(() => tone === 'success' && noticeAtTop(), [message, tone]);
+  const layer = placement === 'frame'
+    ? [styles.noticeLayer, styles.noticeLayerFrame, { top: insets.top + 6 }]
+    : [styles.noticeLayer, styles.noticeLayerCorner];
   // A notice that has just appeared (often where a confirm button was) lets
   // the second tap of a double tap pass without dismissing it (walk 3 T4-02).
   const shownAt = useMemo(() => Date.now(), [message]);
@@ -300,7 +293,7 @@ function NoticeToast({
     // presses whatever sits underneath. Screen readers already heard it
     // through the live region, so the visual copy stays out of their way.
     return (
-      <View style={[styles.noticeLayer, atTop && styles.noticeLayerTop]}>
+      <View style={layer}>
         <Pressable
           ref={noticeRef}
           accessibilityElementsHidden
@@ -308,7 +301,7 @@ function NoticeToast({
           onHoverIn={() => setHeld(true)}
           onHoverOut={() => setHeld(false)}
           onPress={dismissByTap}
-          style={styles.notice}
+          style={[styles.notice, placement === 'corner' && styles.noticeCorner]}
           {...({ tabIndex: -1 } as object)}
         >
           <Text style={styles.noticeText}>{message}</Text>
@@ -317,8 +310,8 @@ function NoticeToast({
     );
   }
   return (
-    <View style={[styles.noticeLayer, atTop && styles.noticeLayerTop]}>
-      <View ref={noticeRef} style={[styles.notice, styles.noticeProblem]}>
+    <View style={layer}>
+      <View ref={noticeRef} style={[styles.notice, placement === 'corner' && styles.noticeCorner, styles.noticeProblem]}>
         <Text style={styles.noticeText}>{message}</Text>
         <Pressable
           accessibilityLabel={`Dismiss: ${message}`}
@@ -414,6 +407,7 @@ function AppBody() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const wide = width >= WIDE_LAYOUT_MIN_WIDTH;
+  const noticePlacement: 'frame' | 'corner' = width < NOTICE_FRAME_MAX_WIDTH ? 'frame' : 'corner';
   const short = height < SHORT_LAYOUT_MAX_HEIGHT;
   const tabRefs = useRef<Array<View | null>>([]);
   const [appNotice, setAppNotice] = useState<string | null>(null);
@@ -629,9 +623,23 @@ function AppBody() {
                   the bar is at the bottom. */}
               <View style={[styles.tabMarker, position === 'top' && styles.tabMarkerBottomEdge, active && styles.tabMarkerActive]} />
               {iconTabs ? (
-                // Too narrow for the words (a phone at 400% zoom): an icon each,
-                // the tab still named in full for screen readers.
-                <TabIcon color={active ? colors.goldInk : colors.faint} tab={tab.key} />
+                // Narrow (a phone at 200% or 400% zoom): an icon each, with its
+                // word under it while there is room for one, since a zoomed
+                // reader is the one who needs the words (walk 4 T3-02). The
+                // tab is named in full for screen readers either way.
+                <View style={styles.tabIconStack}>
+                  <TabIcon color={active ? colors.goldInk : colors.faint} tab={tab.key} />
+                  {width >= 120 ? (
+                    <Text
+                      aria-hidden
+                      maxFontSizeMultiplier={1}
+                      numberOfLines={1}
+                      style={[styles.tabTiny, active && styles.activeTabText]}
+                    >
+                      {tab.label}
+                    </Text>
+                  ) : null}
+                </View>
               ) : (
                 <Text
                   maxFontSizeMultiplier={1.5}
@@ -647,6 +655,14 @@ function AppBody() {
       </View>
     </View>
   );
+
+  const notice = authError && clearAuthMessage ? (
+    <NoticeToast message={authError} onDismiss={clearAuthMessage} placement={noticePlacement} tone="problem" />
+  ) : message ? (
+    <NoticeToast message={message} onDismiss={dismissNotice} placement={noticePlacement} tone={noticeTone} />
+  ) : appNotice ? (
+    <NoticeToast message={appNotice} onDismiss={() => setAppNotice(null)} placement={noticePlacement} tone="success" />
+  ) : null;
 
   return (
     <View nativeID="app-root" style={styles.app}>
@@ -691,13 +707,7 @@ function AppBody() {
             content on each tab (the content-first budget in the design doc).
             It is also the skip link's target. */}
         <View nativeID="app-screen" role="main" style={styles.screen} {...({ tabIndex: -1 } as object)}>{body}</View>
-        {authError && clearAuthMessage ? (
-          <NoticeToast message={authError} onDismiss={clearAuthMessage} tone="problem" />
-        ) : message ? (
-          <NoticeToast message={message} onDismiss={dismissNotice} tone={noticeTone} />
-        ) : appNotice ? (
-          <NoticeToast message={appNotice} onDismiss={() => setAppNotice(null)} tone="success" />
-        ) : null}
+        {noticePlacement === 'corner' ? notice : null}
       </View>
       {/* Mounted for the life of the app so a new notice is a change inside an
           existing live region; many screen readers skip text that arrives
@@ -706,6 +716,9 @@ function AppBody() {
         <Text>{spoken(authError ?? message ?? appNotice ?? '')}</Text>
       </View>
       {ready ? (wide ? null : renderTabBar('bottom')) : null}
+      {/* On a phone the notice lies over the top of the frame, so it is drawn
+          after the frame, at the app's own level. */}
+      {noticePlacement === 'frame' ? notice : null}
       <SettingsSheet
         listedPlayers={players.length}
         ruleset={bootstrap?.ruleset}
@@ -957,16 +970,23 @@ const styles = StyleSheet.create({
   // taps through so only the toast catches them.
   noticeLayer: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: space.md,
-    alignItems: 'center',
-    paddingHorizontal: space.md,
     pointerEvents: 'box-none',
   },
-  noticeLayerTop: {
-    top: space.md,
-    bottom: undefined,
+  noticeLayerFrame: {
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingHorizontal: space.sm,
+    zIndex: 20,
+  },
+  noticeLayerCorner: {
+    left: space.lg,
+    right: space.lg,
+    bottom: space.lg,
+    alignItems: 'flex-start',
+  },
+  noticeCorner: {
+    maxWidth: 440,
   },
   notice: {
     width: '100%',
@@ -1138,6 +1158,16 @@ const styles = StyleSheet.create({
   },
   tabTextNarrow: {
     fontSize: type.label,
+  },
+  tabIconStack: {
+    alignItems: 'center',
+    gap: 1,
+  },
+  tabTiny: {
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: '700',
+    color: colors.faint,
   },
   activeTabText: {
     color: colors.goldInk,

@@ -412,6 +412,11 @@ export function PerGameRosterScreen({
   // Sent from a full Market to make room for a player: a slim banner keeps
   // the errand in view and offers him the moment there is room (walk 3 T2-07).
   const [making, setMaking] = useState<{ side: PerGamePosition['side']; playerId: string; playerName: string } | null>(null);
+  // Read inside callbacks: whether a drop on this side is the errand's.
+  const makingRef = useRef(making);
+  makingRef.current = making;
+  // The banner's "Add at $239K": where focus goes once the drop makes room.
+  const errandAddRef = useRef<View>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [listWidth, setListWidth] = useState<number | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -472,6 +477,17 @@ export function PerGameRosterScreen({
     setConfirmingId((current) => (current === position.positionId ? null : current));
     if (outcome === 'kept') {
       focusElement(actionRefs.current.get(position.positionId));
+      return;
+    }
+    // Making room for a player (sent from a full Market): once the drop is
+    // in, focus goes to the offer to add him, the reason for the detour, not
+    // to the next player's Drop (walk 4 T3-09). Until then the list heading
+    // holds focus, so it is not lost when the row goes.
+    if (makingRef.current?.side === position.side) {
+      focusElement(position.side === 'long' ? rosterHeading.current : shortsHeading.current, { preventScroll: true });
+      void closePosition(position).then((ok) => {
+        if (ok) setTimeout(() => focusElement(errandAddRef.current), 150);
+      });
       return;
     }
     // Focus moves on before the row goes: to the next row's button, or to
@@ -651,8 +667,10 @@ export function PerGameRosterScreen({
     const verb = side === 'long' ? 'Add' : 'Short';
     const opening = pendingActions.has(`position:${side}:${makingFor.playerId}`);
     return (
-      <View accessibilityLiveRegion="polite" style={styles.errand}>
-        <Text style={styles.errandText}>
+      <View style={styles.errand}>
+        {/* Only the sentence is announced; the buttons are read as focus
+            reaches them (it was "…Add at $239KNot now", walk 4 T3-10). */}
+        <Text accessibilityLiveRegion="polite" style={styles.errandText}>
           {room
             ? `Room made for ${makingFor.playerName}.`
             : `Making room for ${makingFor.playerName}: ${side === 'long' ? 'drop a player' : 'close a short'} below.`}
@@ -660,6 +678,7 @@ export function PerGameRosterScreen({
         <View style={styles.errandActions}>
           {room && listed && !rosterLocked ? (
             <Button
+              ref={errandAddRef}
               accessibilityLabel={`${verb} ${makingFor.playerName} at ${perGame(listed.currentGameCost)}${fee > 0 ? `, ${exactMoney(fee)} fee` : ''}`}
               disabled={opening}
               focusableWhenDisabled

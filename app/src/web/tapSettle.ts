@@ -26,12 +26,37 @@ let lastPointer: { x: number; y: number; at: number } | null = null;
 /** Record where a finger or mouse lifted (the page's pointerup, or a test). */
 export function notePointer(x: number, y: number): void {
   lastPointer = { x, y, at: Date.now() };
+  // A tap somewhere else, once the short quiet is over, is a new intent: the
+  // quieted spot is released, so a later deliberate tap there (Short, then
+  // Roster side, then Add in the same place) is not taken for a repeat (walk
+  // 4 T3 note). Inside the short quiet it is part of the same flurry.
+  if (spot && Date.now() >= quietUntil && Math.hypot(x - spot.x, y - spot.y) > SPOT_RADIUS) spot = null;
+}
+
+/**
+ * The player scrolled on purpose (a wheel, or a finger dragging the list):
+ * whatever is under the old spot now is something they chose to bring there,
+ * so a tap on it is new, not a repeat (walk 4 T2-04: scrolling one row so the
+ * next Add sat under the pointer, then clicking it, was ignored).
+ */
+export function noteScrollGesture(): void {
+  spot = null;
 }
 
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   // Where the finger or mouse last lifted: presses fire on that lift, so this
   // is where the press being handled happened. Keyboard presses have none.
   window.addEventListener('pointerup', (event) => notePointer(event.clientX, event.clientY), true);
+  window.addEventListener('wheel', noteScrollGesture, { capture: true, passive: true });
+  let touchStartY: number | null = null;
+  window.addEventListener('touchstart', (event) => {
+    touchStartY = event.touches[0]?.clientY ?? null;
+  }, { capture: true, passive: true });
+  window.addEventListener('touchmove', (event) => {
+    const y = event.touches[0]?.clientY;
+    // A tap's own jitter is a few pixels; a drag that scrolls is more.
+    if (touchStartY !== null && y !== undefined && Math.abs(y - touchStartY) > 12) noteScrollGesture();
+  }, { capture: true, passive: true });
 }
 
 function currentPointer(): { x: number; y: number } | null {

@@ -466,15 +466,7 @@ export class MockPerGameApiClient {
 
     // A short ends once its last game is in, so its slot is free for the
     // next night's games (no $250 to close a short that is already over).
-    for (const position of state.positions) {
-      if (position.status !== 'active' || position.expiresOn === null || position.expiresOn > date) continue;
-      this.sequence += 1;
-      position.status = 'closed';
-      position.closedEventSequence = this.sequence;
-      const slots = position.side === 'long' ? state.account.longSlots : state.account.shortSlots;
-      slots.used = Math.max(0, slots.used - 1);
-      slots.remaining = Math.max(0, slots.limit - slots.used);
-    }
+    this.closeShortsEndedBy(date);
 
     for (const player of state.market) {
       // Prices wander, and slowly follow what the player is really worth, so
@@ -532,6 +524,24 @@ export class MockPerGameApiClient {
     }
     if ((this.snapshot.game.lastSettledDate ?? start) < target) {
       this.snapshot.game.lastSettledDate = target;
+      // The clock passed days with no games: a short whose term ended on one
+      // of them is over too, not left holding its slot and offering a $250
+      // close that changes nothing (walk 4 T2-12).
+      this.closeShortsEndedBy(target);
+    }
+  }
+
+  /** Close every active short whose term ends on or before `date`. */
+  private closeShortsEndedBy(date: string): void {
+    const state = this.snapshot;
+    for (const position of state.positions) {
+      if (position.status !== 'active' || position.expiresOn === null || position.expiresOn > date) continue;
+      this.sequence += 1;
+      position.status = 'closed';
+      position.closedEventSequence = this.sequence;
+      const slots = position.side === 'long' ? state.account.longSlots : state.account.shortSlots;
+      slots.used = Math.max(0, slots.used - 1);
+      slots.remaining = Math.max(0, slots.limit - slots.used);
     }
   }
 

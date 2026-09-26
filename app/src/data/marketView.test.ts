@@ -508,7 +508,7 @@ test('a reversed sort runs the other way, words included; no last season still g
   assert.equal(sortedLine('value', true), 'Sorted by value, lowest first.');
   assert.equal(sortedLine('name', true), 'Sorted by name, Z to A.');
   assert.equal(sortDirection('value'), 'highest first');
-  // aria-sort follows the arrow: Price and Name start ascending, Value descending.
+  // The arrow (and the header's spoken order) follows this: Price and Name start ascending, Value descending.
   assert.equal(sortAscending('price'), true);
   assert.equal(sortAscending('value'), false);
   assert.equal(sortAscending('value', true), true);

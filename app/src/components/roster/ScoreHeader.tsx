@@ -4,7 +4,7 @@ import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { humanDate, signedMoney } from '../../copy/terms';
 import { formatAt, heroFontSize, WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
-import { headingLevel, Label, Money } from '../../ui/kit';
+import { headingLevel, Label, Money, visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
 
 /** One line of the stack beside the score: a label, then its value. */
@@ -110,11 +110,10 @@ export function ScoreHeader({
       <Text accessibilityRole="header" {...headingLevel(2)}>
         <Label>{title}</Label>
       </Text>
-      <View
-        accessible
-        accessibilityLabel={summary}
-        style={[styles.heroRow, variant !== 'compact' && styles.heroColumn]}
-      >
+      {/* One sentence for screen readers (walk 4 T3-12); the drawn figures
+          below say the same and are hidden from them. */}
+      <Text style={visuallyHidden}>{summary}</Text>
+      <View aria-hidden style={[styles.heroRow, variant !== 'compact' && styles.heroColumn]}>
         <View>
           <Money
             colored={started && score !== 0}

@@ -185,7 +185,8 @@ export function MarketSearch({
         style={[styles.searchInput, value.length > 0 && styles.searchInputClearable]}
         value={value}
       />
-      <View style={styles.searchIcon}>
+      {/* Decorative: the field is named "Search players" (walk 4 T3-13). */}
+      <View aria-hidden style={styles.searchIcon}>
         <SearchIcon />
       </View>
       {value.length > 0 ? (
@@ -272,14 +273,14 @@ export function ControlsToggle({
 }
 
 /**
- * Column labels above the table; the widths are the rows' own (marketColumns).
+ * Column labels above the list; the widths are the rows' own (marketColumns).
  * One style for every label (capitals, the same weight and colour, up to two
  * lines, set on the bottom edge). Player, Price a game, Dividend last season
- * and Value sort the list and carry a sort mark (↕, or the gold arrow of the
- * sort in use) and aria-sort; Your net a game has none. The same rule as the
- * toolbar: a label chooses its sort in its natural order and never flips it;
- * the gold arrow of the sort in use is its own button and flips it. Value
- * and Dividend last season explain themselves on hover and keyboard focus.
+ * and Value are sort buttons with a mark (↕, or the gold arrow of the sort in
+ * use); Your net a game is a plain label. Pressing another column chooses it
+ * in its natural order; pressing the column in use reverses it, as a table
+ * header does, and its button's name says the order ("sorted lowest first").
+ * Value and Dividend last season explain themselves on hover and focus.
  */
 export function MarketColumnHeader({
   columns,
@@ -300,8 +301,11 @@ export function MarketColumnHeader({
   onFlip: () => void;
 }) {
   return (
-    <View accessibilityLabel="Market columns" role="table">
-      <View role="row" style={[styles.columns, { gap: columns.gap }]}>
+    // A row of sort buttons over the list, not a table: the player rows are
+    // buttons, not table rows, so a table role promised navigation it could
+    // not deliver (walk 4 T3-01). Each button's name says its sort state.
+    <View accessibilityLabel="Sort by column" role="group">
+      <View style={[styles.columns, { gap: columns.gap }]}>
         {lead > 0 ? <View style={{ width: lead }} /> : null}
         <View style={{ width: columns.avatar }} />
         <SortHeader columnKey="name" label="Player" onChoose={onChoose} onFlip={onFlip} reversed={reversed} sort={sort} />
@@ -377,11 +381,7 @@ function SortHeader({
   );
   const press = on ? onFlip : () => onChoose(columnKey);
   return (
-    <View
-      role="columnheader"
-      {...({ 'aria-sort': on ? (ascending ? 'ascending' : 'descending') : 'none' } as object)}
-      style={[styles.headerCell, number ? { width } : styles.columnPlayer]}
-    >
+    <View style={[styles.headerCell, number ? { width } : styles.columnPlayer]}>
       <Pressable
         accessibilityLabel={on ? `${words}, sorted ${sortDirection(columnKey, reversed)}` : `${words}, sort by ${words.toLowerCase()}`}
         accessibilityRole="button"
@@ -398,7 +398,9 @@ function SortHeader({
         style={(state) => [
           styles.headerInner,
           styles.sorter,
-          number && styles.headerInnerNumber,
+          // Player's label starts over the names; number labels end over
+          // their figures (walk 4 T2-02: Player sat ~360px right of the names).
+          number ? styles.headerInnerNumber : styles.headerInnerStart,
           (state as { hovered?: boolean }).hovered === true && styles.hover,
           state.pressed && styles.pressed,
         ]}
@@ -612,6 +614,9 @@ const styles = StyleSheet.create({
   },
   headerInnerNumber: {
     justifyContent: 'flex-end',
+  },
+  headerInnerStart: {
+    justifyContent: 'flex-start',
   },
   headerText: {
     // One style for every column label, sortable or not (walk 3 T2-04).

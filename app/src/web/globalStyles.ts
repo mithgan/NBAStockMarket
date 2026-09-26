@@ -197,7 +197,8 @@ input:focus-visible,
 /* A focus ring drawn inside where the box would clip it: the More menu's
    items and rows that span the screen (their 2px ring fell off the edges). */
 #practice-more [role="button"]:focus-visible,
-[role="button"][aria-label$="View profile"]:focus-visible {
+[role="button"][aria-label$="View profile"]:focus-visible,
+[data-row="full"]:focus-visible {
   outline-offset: -3px !important;
 }
 

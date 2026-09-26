@@ -349,7 +349,13 @@ function MarketRow({
       accessibilityState={{ disabled }}
       style={[
         styles.actionCell,
-        table ? { width: actionWidth } : large ? styles.actionCellLarge : [styles.actionFloat, { width: actionWidth }],
+        table
+          ? { width: actionWidth }
+          : large
+            // At 400% zoom (about 100px wide) the name's indent would push the
+            // button past the edge: it starts at the row's own inset instead.
+            ? [styles.actionCellLarge, width < 160 && styles.actionCellTiny]
+            : [styles.actionFloat, { width: actionWidth }],
       ]}
     >
       {blocked ? (table ? <Tag style={styles.cellTag}>{tagText}</Tag> : null) : (
@@ -658,10 +664,18 @@ export function PerGameMarketScreen({
     setKept((list) => (list.length > 0 ? [] : list));
   }, [watchedOnly]);
   const { isWatched, toggle: toggleWatchlist } = watchlist;
+  // What a star press under the Watching filter changed, said before the new
+  // count ("No longer watching Dyson Daniels…"), so a listener hears the
+  // change itself, not only a number (walk 4 T3-07).
+  const watchNote = useRef<string | null>(null);
   const toggleWatch = useCallback((playerId: string) => {
-    if (watchedOnly && isWatched(playerId)) setKept((list) => (list.includes(playerId) ? list : [...list, playerId]));
+    if (watchedOnly && isWatched(playerId)) {
+      setKept((list) => (list.includes(playerId) ? list : [...list, playerId]));
+      const name = bootstrap?.market.find((player) => player.playerId === playerId)?.name;
+      if (name) watchNote.current = `No longer watching ${name}; Watch again is under his row.`;
+    }
     toggleWatchlist(playerId);
-  }, [isWatched, toggleWatchlist, watchedOnly]);
+  }, [bootstrap, isWatched, toggleWatchlist, watchedOnly]);
   const [reversed, setReversed] = useState(remembered.reversed);
   useEffect(() => {
     rememberMarket({ query, side, sort, reversed, watchedOnly });
@@ -802,8 +816,10 @@ export function PerGameMarketScreen({
       spokenOnce.current = true;
       return undefined;
     }
+    const note = watchNote.current;
+    watchNote.current = null;
     const line = listCountLine({ query: searchText, count: spokenCount, total: totalCount, watchedOnly, cleared });
-    const timer = setTimeout(() => announce(line), 700);
+    const timer = setTimeout(() => announce(note ? `${note} ${line}` : line), note ? 150 : 700);
     return () => clearTimeout(timer);
   }, [searchText, spokenCount, totalCount, watchedOnly, announce]);
   // If the list empties under the keyboard (the focused row left and focus
@@ -876,6 +892,7 @@ export function PerGameMarketScreen({
         { key: 'short', label: 'Short side', hint: positionSlotHint('short', bootstrap.account.shortSlots.limit) },
       ]}
       // In the folded column a flex basis would become a height, so it only sizes rows.
+      stacked={width < 140}
       style={rowToolbar || foldWide ? styles.sideToggleWide : folded || !slotLineBeside(width) ? undefined : styles.sideToggle}
       value={side}
     />
@@ -1309,8 +1326,12 @@ const styles = StyleSheet.create({
   rowLarge: {
     flexDirection: 'column',
   },
+  // Unwatched under the Watching filter, still live: full-strength words (a
+  // faded row read at 2.5:1, walk 4 T3-08), marked by an edge and the
+  // "No longer watching · Watch again" line under it.
   rowDimmed: {
-    opacity: 0.5,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.borderStrong,
   },
   keptLine: {
     flexDirection: 'row',
@@ -1516,6 +1537,9 @@ const styles = StyleSheet.create({
     // Lines the button up with the name above it: row inset + avatar + gap.
     paddingLeft: space.md + PHONE_AVATAR + 10,
     paddingBottom: space.md,
+  },
+  actionCellTiny: {
+    paddingLeft: space.md,
   },
   phoneButton: {
     // "ADDED ✓" and "SEASON OVER" fit a 76px button on one and two lines.

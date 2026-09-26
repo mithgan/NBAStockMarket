@@ -46,7 +46,7 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
 import { openSettings, registerRulesOpener } from '../state/uiActions';
 import { colors, control, fonts, labelStyle, radius, space, type, weight } from '../theme';
-import { headingLevel, moneyColor, Tag } from '../ui/kit';
+import { headingLevel, moneyColor, Tag, visuallyHidden } from '../ui/kit';
 import { useSheetHistory } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
@@ -417,9 +417,12 @@ export function PerGameStatusStrip() {
           layout.largeText && styles.rowLarge,
         ]}
       >
+        {/* One sentence for screen readers: a name on a plain container was
+            ignored and the fragments read piecemeal (walk 4 T3-12). The drawn
+            facts below say the same and are hidden from them. */}
+        <Text style={visuallyHidden}>{summary}</Text>
         <View
-          accessibilityLabel={summary}
-          accessible
+          aria-hidden
           style={[
             styles.facts,
             practice ? (layout.compact ? styles.factsCompact : styles.factsPractice) : styles.factsLive,

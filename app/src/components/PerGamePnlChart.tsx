@@ -268,7 +268,20 @@ export function PerGamePnlChart({
       </View>
       <View style={styles.axis}>
         {width > 0 ? axisLabels.map(({ index, left, align }) => (
-          <Text key={index} maxFontSizeMultiplier={1.3} style={[styles.axisLabel, { left, textAlign: align }]}>
+          // The end labels hang from their edge and grow inward, so wider text
+          // (text-spacing overrides) never cuts "Oct 26" to "Oct" (walk 4 T3-13).
+          <Text
+            key={index}
+            maxFontSizeMultiplier={1.3}
+            style={[
+              styles.axisLabel,
+              align === 'right'
+                ? { right: 0, width: undefined, textAlign: 'right' }
+                : align === 'left'
+                  ? { left: 0, width: undefined, textAlign: 'left' }
+                  : { left, textAlign: 'center' },
+            ]}
+          >
             {series[index].label}
           </Text>
         )) : null}

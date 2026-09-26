@@ -294,6 +294,9 @@ function ResultRow({
         accessibilityState={{ expanded }}
         aria-expanded={expanded}
         onPress={onToggle}
+        // A full-width row: its focus ring is drawn inside (the next row
+        // painted over an outside ring, leaving a line on top; walk 4 T3-04).
+        {...({ dataSet: { row: 'full' } } as object)}
         style={({ pressed }) => [styles.row, rowEdges, columns && styles.rowColumns, pressed && styles.rowOpen]}
       >
         {body}

@@ -563,12 +563,18 @@ export function Segmented<K extends string>({
   onChange,
   accessibilityLabel,
   style,
+  stacked = false,
 }: {
   options: SegmentOption<K>[];
   value: K;
   onChange: (key: K) => void;
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
+  /**
+   * One choice a line, for widths where even a wrapped word cannot fit side
+   * by side ("OSTER / SIDE" at 400% zoom, walk 4 T3-05).
+   */
+  stacked?: boolean;
 }) {
   const refs = useRef<Array<View | null>>([]);
   const selectedIndex = Math.max(0, options.findIndex((option) => option.key === value));
@@ -587,7 +593,7 @@ export function Segmented<K extends string>({
     <View
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="tablist"
-      style={[styles.segmented, style]}
+      style={[styles.segmented, stacked && styles.segmentedStacked, style]}
       {...({ onKeyDown } as object)}
     >
       {options.map((option, index) => {
@@ -614,7 +620,7 @@ export function Segmented<K extends string>({
               const hovered = (state as { hovered?: boolean }).hovered === true;
               return [
                 styles.segment,
-                index > 0 && styles.segmentDivider,
+                index > 0 && (stacked ? styles.segmentDividerStacked : styles.segmentDivider),
                 selected && styles.segmentSelected,
                 hovered && !selected && styles.hover,
                 state.pressed && !selected && styles.pressed,
@@ -859,6 +865,13 @@ const styles = StyleSheet.create({
   segmentDivider: {
     borderLeftWidth: 1,
     borderLeftColor: colors.borderStrong,
+  },
+  segmentedStacked: {
+    flexDirection: 'column',
+  },
+  segmentDividerStacked: {
+    borderTopWidth: 1,
+    borderTopColor: colors.borderStrong,
   },
   segmentSelected: {
     backgroundColor: colors.goldSoft,
