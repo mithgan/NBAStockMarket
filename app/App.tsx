@@ -463,10 +463,16 @@ function AppBody() {
   // to drop") leaves the finger over the new screen's rows: the second tap of
   // a double tap there is the same press, not a pick (walk 5 T4-05: it opened
   // whichever player's profile slid under it).
-  const switchScreen = useCallback((tab: Tab) => {
+  const switchScreen = useCallback((tab: Tab, options?: { focusScreen?: boolean }) => {
     settleTaps(0, 600, 'list');
     pushTab(tab);
     setActiveTab(tab);
+    // From the keyboard, focus goes to the new screen, so the next Tab is on
+    // its first control rather than back at the top of the page (walk 6
+    // T2-02: "Open market" in the empty-roster question left it on the page).
+    if (options?.focusScreen && typeof document !== 'undefined') {
+      setTimeout(() => (document.getElementById('app-screen') as HTMLElement | null)?.focus?.({ preventScroll: true }), 0);
+    }
   }, [pushTab]);
   // Screens switch tabs through uiActions (the Market's "Choose who to drop").
   useEffect(() => registerTabOpener(switchScreen), [switchScreen]);
@@ -1224,12 +1230,15 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
     paddingBottom: space.sm,
   },
+  // The tab you are on reads at a glance in every theme: a 3px rule in the
+  // ink gold (Light's pale gold rule was 1.69:1 on its cream bar, walk 6
+  // T1-06) and a heavier label.
   tabMarker: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 2,
+    height: 3,
     backgroundColor: 'transparent',
   },
   tabMarkerBottomEdge: {
@@ -1237,7 +1246,7 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   tabMarkerActive: {
-    backgroundColor: colors.gold,
+    backgroundColor: colors.goldInk,
   },
   tabText: {
     fontFamily: fonts.display,
@@ -1267,6 +1276,7 @@ const styles = StyleSheet.create({
   },
   activeTabText: {
     color: colors.goldInk,
+    fontWeight: '900',
   },
   pressed: {
     opacity: 0.65,

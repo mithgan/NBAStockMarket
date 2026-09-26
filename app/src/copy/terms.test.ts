@@ -126,7 +126,12 @@ test('a Drop or Close asks once, with the fee, what stays and what coming back c
   );
   assert.equal(
     confirmCloseMessage({ side: 'long', playerName: 'LeBron James', feeDollars: 0, total: 0 }),
-    'Drop LeBron James? He has not changed your score yet. Adding him back later costs his price at that time.',
+    'Drop LeBron James? His games have not changed your score yet. Adding him back later costs his price at that time.',
+  );
+  // Before his first game only the add fee is in the score (walk 6 T4-02).
+  assert.equal(
+    confirmCloseMessage({ side: 'long', playerName: 'Luka Doncic', feeDollars: 250, total: 0, priceNow: 418_500 }),
+    'Drop Luka Doncic for a $250 fee? His games have not changed your score yet; only his $250 add fee has. Adding him back later costs his price at that time (today about $418.5K a game), plus another $250 fee.',
   );
 });
 

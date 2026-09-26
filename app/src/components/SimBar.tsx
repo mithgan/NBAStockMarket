@@ -38,6 +38,7 @@ import { openTab } from '../state/uiActions';
 import { colors, fonts, radius, space, type, weight } from '../theme';
 import { Button, ConfirmDialog, settleTaps, visuallyHidden } from '../ui/kit';
 import { useSheetHistory } from '../web/appHistory';
+import { pressedByPointer } from '../web/tapSettle';
 import { leavePractice, restartPractice } from '../web/practiceSession';
 import { ChromeButton } from './chrome/ChromeButton';
 import { LockIcon, MoreIcon } from './chrome/ChromeIcons';
@@ -333,8 +334,10 @@ function PracticeQuestionHost() {
   const empty = asked.kind === 'empty-night' || asked.kind === 'empty-week';
   // "Open market": close the question, then take the player to the Market.
   const openMarket = () => {
+    // Asked before the question closes: the press is still fresh.
+    const focusScreen = !pressedByPointer();
     setAskedQuestion(null);
-    afterDialogCloses(() => openTab('market'));
+    afterDialogCloses(() => openTab('market', { focusScreen }));
   };
   return (
     <ConfirmDialog

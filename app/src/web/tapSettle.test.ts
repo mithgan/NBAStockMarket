@@ -70,3 +70,11 @@ test('a deliberate scroll releases the quieted spot (walk 4 T2-04)', async () =>
     mock.timers.reset();
   }
 });
+
+test('a key press right after a click is the keyboard\'s, not a repeat tap', async () => {
+  const { notePointer, notePressKey, pressedByPointer } = await import('./tapSettle');
+  notePointer(10, 10);
+  assert.equal(pressedByPointer(), true);
+  notePressKey();
+  assert.equal(pressedByPointer(), false);
+});

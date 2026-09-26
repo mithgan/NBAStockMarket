@@ -301,8 +301,14 @@ export function confirmCloseMessage({
     sentences.push(side === 'long'
       ? `His ${signedMoneyFine(total)} stays in your score.`
       : `This short's ${signedMoneyFine(total)} stays in your score.`);
+  } else if (fee) {
+    // His add fee is already in the score, so "has not changed your score"
+    // read as "dropping puts me back to $0" (walk 6 T4-02).
+    sentences.push(side === 'long'
+      ? `His games have not changed your score yet; only his ${fee} add fee has.`
+      : `This short's games have not changed your score yet; only its ${fee} fee has.`);
   } else {
-    sentences.push(side === 'long' ? 'He has not changed your score yet.' : 'This short has not changed your score yet.');
+    sentences.push(side === 'long' ? 'His games have not changed your score yet.' : "This short's games have not changed your score yet.");
   }
   if (side === 'short' && endsFreeAfter) {
     // The day, not "the Oct 27 games": his term can end on a day he does

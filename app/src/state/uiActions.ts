@@ -11,7 +11,12 @@ export type AppTab = 'portfolio' | 'market' | 'plays' | 'leaderboard';
 
 let rulesOpener: Opener | null = null;
 let settingsOpener: Opener | null = null;
-let tabOpener: ((tab: AppTab) => void) | null = null;
+/** `focusScreen`: the press came from the keyboard, so focus moves to the new screen. */
+export interface TabOpenOptions {
+  focusScreen?: boolean;
+}
+
+let tabOpener: ((tab: AppTab, options?: TabOpenOptions) => void) | null = null;
 
 /** Register the Rules sheet opener; returns an unregister function. */
 export function registerRulesOpener(open: Opener): () => void {
@@ -30,7 +35,7 @@ export function registerSettingsOpener(open: Opener): () => void {
 }
 
 /** Register the tab switcher (the app frame); returns an unregister function. */
-export function registerTabOpener(open: (tab: AppTab) => void): () => void {
+export function registerTabOpener(open: (tab: AppTab, options?: TabOpenOptions) => void): () => void {
   tabOpener = open;
   return () => {
     if (tabOpener === open) tabOpener = null;
@@ -41,9 +46,9 @@ export function registerTabOpener(open: (tab: AppTab) => void): () => void {
  * Switch to a tab the way pressing it would (it lands in browser history, so
  * Back returns). Returns false when no frame is mounted.
  */
-export function openTab(tab: AppTab): boolean {
+export function openTab(tab: AppTab, options?: TabOpenOptions): boolean {
   if (!tabOpener) return false;
-  tabOpener(tab);
+  tabOpener(tab, options);
   return true;
 }
 
