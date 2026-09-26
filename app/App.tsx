@@ -26,7 +26,7 @@ import { humanDateWithYear, spoken } from './src/copy/terms';
 import { Button, visuallyHidden } from './src/ui/kit';
 import { registerSettingsOpener, registerTabOpener, settingsReturnStep } from './src/state/uiActions';
 import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
-import { settleTaps, tapsSettling } from './src/web/tapSettle';
+import { pressedByPointer, settleTaps, tapsSettling } from './src/web/tapSettle';
 import { consumeArrivedByKeyboard, consumeLastSeasonResult, consumePracticeRestarted, noteFinishedSeason, setPracticeProgress } from './src/web/practiceSession';
 import { practiceProgress } from './src/data/chromeView';
 import { rankLine } from './src/data/rosterView';
@@ -218,6 +218,8 @@ const SUCCESS_NOTICE_MAX_MS = 14000;
 type NoticePlacement = 'bar' | 'barWide' | 'dock';
 /** From this width the brand bar keeps its logo and wordmark beside a notice. */
 const NOTICE_BAR_WIDE_MIN_WIDTH = 720;
+/** Below this height the docked notice keeps to one line (400% zoom). */
+const TINY_DOCK_MAX_HEIGHT = 260;
 /** Below this width (400% zoom) × goes under the words, which keep the width. */
 const NOTICE_STACKED_MAX_WIDTH = 200;
 
@@ -257,6 +259,9 @@ function NoticeToast({
   }, [held, keep, message, onDismiss, seq, tone]);
   const noticeRef = useRef<View | null>(null);
   const { height, width } = useWindowDimensions();
+  // Under about 260px of height (400% zoom) the strip keeps to one line, so a
+  // player row still fits above it; the rest scrolls inside (walk 7 T3-05).
+  const tinyDock = placement === 'dock' && height < TINY_DOCK_MAX_HEIGHT;
   // Where the keyboard was when the notice came: closing it with × goes back
   // there instead of dropping focus on the page (walk 6 T2-15).
   const returnFocusTo = useRef<HTMLElement | null>(null);
@@ -319,12 +324,13 @@ function NoticeToast({
     placement === 'bar' && styles.noticeBar,
     placement === 'barWide' && styles.noticeBarWide,
     placement === 'dock' && styles.noticeDock,
+    tinyDock && styles.noticeDockTiny,
     problem && styles.noticeProblem,
   ];
   // At 400% zoom a notice can be taller than the room the dock may take (it
   // leaves the screen more than half of what is left under the frame): its
   // first words stay at the top and the rest scrolls inside it (walk 5 T3-06).
-  const dockText = Math.max(36, Math.round(Math.min(height * 0.3, (height - 150) * 0.45)));
+  const dockText = tinyDock ? 18 : Math.max(36, Math.round(Math.min(height * 0.3, (height - 150) * 0.45)));
   const words = placement === 'dock' ? (
     <ScrollView style={[styles.noticeScroll, { maxHeight: dockText }]}>
       <Text style={styles.noticeText}>{message}</Text>
@@ -435,6 +441,12 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
   if (tab === 'plays') return <ResultsTabIcon color={color} />;
   return <LeadersTabIcon color={color} />;
 }
+/**
+ * Under the tab icons, words while each tab can hold "Leaders" whole (a phone
+ * at 200% zoom is 195px); narrower, icons alone, named in full to screen
+ * readers ("Leade…" at 180px; walk 7 T4-08).
+ */
+const TAB_WORDS_MIN_WIDTH = 188;
 /** Below this width the brand bar keeps the wordmark and drops "STOCK MARKET" whole (never "STOCK MAR…"). */
 const BRAND_PRODUCT_MIN_WIDTH = 330;
 
@@ -481,15 +493,25 @@ function AppBody() {
   // a double tap there is the same press, not a pick (walk 5 T4-05: it opened
   // whichever player's profile slid under it).
   const switchScreen = useCallback((tab: Tab, options?: { focusScreen?: boolean }) => {
+    // A key press is still fresh here for a button's own switch ("Open
+    // market", "Find a short"); a switch that waited for a question to close
+    // says so itself.
+    const byKey = options?.focusScreen ?? !pressedByPointer();
     settleTaps(0, 600, 'list');
     pushTab(tab);
     setActiveTab(tab);
-    // From the keyboard, focus goes to the new screen, so the next Tab is on
-    // its first control rather than back at the top of the page (walk 6
-    // T2-02: "Open market" in the empty-roster question left it on the page).
-    if (options?.focusScreen && typeof document !== 'undefined') {
-      setTimeout(() => (document.getElementById('app-screen') as HTMLElement | null)?.focus?.({ preventScroll: true }), 0);
-    }
+    if (typeof document === 'undefined') return;
+    // The button that was pressed belongs to the old screen and is gone, so
+    // focus would fall to the page and a screen reader hear nothing (walk 6
+    // T2-02, walk 7 T3-04). Focus goes to the new screen, which is named
+    // ("Market, main"), unless the new screen has already put it somewhere.
+    setTimeout(() => {
+      const active = document.activeElement as HTMLElement | null;
+      const lost = !active || active === document.body || !active.isConnected;
+      if (!lost && !byKey) return;
+      if (!lost && active && document.getElementById('app-screen')?.contains(active)) return;
+      (document.getElementById('app-screen') as HTMLElement | null)?.focus?.({ preventScroll: true });
+    }, 60);
   }, [pushTab]);
   // Screens switch tabs through uiActions (the Market's "Choose who to drop").
   useEffect(() => registerTabOpener(switchScreen), [switchScreen]);
@@ -565,6 +587,7 @@ function AppBody() {
     message,
     nextGameDate,
     noticeSeq,
+    noticeSpoken,
     noticeTone,
     players,
     refreshData,
@@ -588,7 +611,11 @@ function AppBody() {
 
   const body = (() => {
     if (isLoading) {
-      return (
+      // Practice builds its season in this browser; there is no account or
+      // server to load from (walk 7 T4-05).
+      return isMockActive() ? (
+        <CenteredState busy copy="Setting up a practice season in this browser." title="Starting practice" />
+      ) : (
         <CenteredState
           busy
           copy="Loading your roster, per-game market, and P&L from the server."
@@ -706,7 +733,7 @@ function AppBody() {
                 // tab is named in full for screen readers either way.
                 <View style={styles.tabIconStack}>
                   <TabIcon color={active ? colors.goldInk : colors.faint} tab={tab.key} />
-                  {width >= 120 ? (
+                  {width >= TAB_WORDS_MIN_WIDTH ? (
                     <Text
                       aria-hidden
                       maxFontSizeMultiplier={1}
@@ -794,7 +821,14 @@ function AppBody() {
         {/* nativeID lets the QA harness measure how much chrome sits above the
             content on each tab (the content-first budget in the design doc).
             It is also the skip link's target. */}
-        <View nativeID="app-screen" role="main" style={styles.screen} {...({ tabIndex: -1 } as object)}>{body}</View>
+        <View
+          nativeID="app-screen"
+          role="main"
+          style={styles.screen}
+          {...({ tabIndex: -1, 'aria-label': tabs.find((entry) => entry.key === activeTab)?.label } as object)}
+        >
+          {body}
+        </View>
         {noticePlacement === 'dock' ? notice : null}
       </View>
       {/* Mounted for the life of the app so a new notice is a change inside an
@@ -803,7 +837,7 @@ function AppBody() {
       <View accessibilityLiveRegion="polite" style={visuallyHidden}>
         {/* Keyed by the notice's count, so a notice that repeats the last one
             word for word is new text to a screen reader, not silence. */}
-        <Text key={noticeSeq}>{spoken(authError ?? message ?? appNotice ?? '')}</Text>
+        <Text key={noticeSeq}>{spoken(authError ?? (message ? noticeSpoken ?? message : null) ?? appNotice ?? '')}</Text>
       </View>
       {ready ? (wide ? null : renderTabBar('bottom')) : null}
       <SettingsSheet
@@ -1109,6 +1143,11 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'stretch',
     gap: 0,
+  },
+  noticeDockTiny: {
+    minHeight: 28,
+    paddingVertical: 2,
+    marginVertical: 2,
   },
   noticeScroll: {
     flex: 1,

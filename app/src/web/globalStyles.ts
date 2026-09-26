@@ -51,6 +51,14 @@ html, body, #root {
   background-color: ${colors.background};
 }
 
+/* A pull down at the top of a screen must never reload the page: practice
+   lives in memory, and iPhone Safari leaves without asking first (walk 7
+   T1-16). The screens scroll inside; the page itself never chains into the
+   browser's pull-to-refresh or its bounce. */
+html, body {
+  overscroll-behavior-y: none;
+}
+
 /* Rows answer the pointer.
 
    A list of thirty players that only responds on click reads as a printed

@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 
 import { settleTaps } from './tapSettle';
 
+/** How long the spot of the tap that opened a sheet stays quiet. */
+const SHEET_OPEN_SPOT_MS = 450;
+
 /**
  * Browser history for the app's own places, so the Back button (and the
  * phone's back gesture) does what a player expects: close the sheet that is
@@ -75,6 +78,9 @@ export function useSheetHistory(visible: boolean, onClose: () => void): void {
     if (onPage) lastPageOpener = active;
     const opener = onPage ? active : (lastPageOpener?.isConnected ? lastPageOpener : null);
     openSheets += 1;
+    // The tap that opened the sheet quiets its spot for a moment: its second
+    // tap, in a double tap, would land on the backdrop or Done (walk 7 T2-17).
+    settleTaps(0, SHEET_OPEN_SPOT_MS);
     setBackgroundInert(true);
     sheetsChanged();
     window.history.pushState({ ...(window.history.state ?? {}), sheet: id }, '');

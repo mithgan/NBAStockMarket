@@ -55,6 +55,7 @@ import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton'
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
 import { measuredFloatTop, measuredSheetTop } from './chrome/sheetTop';
 import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, usePracticeRulesContext, useRecentAdvances } from './SimBar';
+import { unlessSettling } from '../web/tapSettle';
 
 /**
  * How the facts sit beside the controls.
@@ -625,7 +626,7 @@ function RulesSheet({
           responder system has no tabindex at all; keyboard and screen-reader
           users close with Done or Escape. */}
       <View
-        onResponderRelease={onClose}
+        onResponderRelease={unlessSettling(onClose)}
         onStartShouldSetResponder={() => true}
         style={styles.scrim}
       />
@@ -639,7 +640,7 @@ function RulesSheet({
           <Pressable
             accessibilityLabel="Done, close the game rules"
             accessibilityRole="button"
-            onPress={onClose}
+            onPress={unlessSettling(onClose)}
             style={({ pressed }) => [styles.done, narrow && styles.doneNarrow, pressed && styles.pressed]}
           >
             <Text style={styles.doneText}>Done</Text>

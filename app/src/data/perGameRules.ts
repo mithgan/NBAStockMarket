@@ -149,8 +149,12 @@ export function positionSlotHint(side: PerGamePositionSide, limit: number) {
     : `Short up to ${limit} players`;
 }
 
-/** Where the fees sentence starts ("Your score adds up those games, minus a $250 fee…"). */
-const FEES_LEAD = 'Your score adds up those games';
+/**
+ * Where the fees sentence starts. Under its own heading it cannot lean on the
+ * section before it ("adds up those games" had nothing to point at; walk 7
+ * T2-07).
+ */
+const FEES_LEAD = 'Your score adds up the games of every player you hold or short';
 
 /**
  * The rules' parts and their short headings, each starting at its sentence

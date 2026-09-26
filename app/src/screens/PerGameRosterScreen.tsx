@@ -37,6 +37,7 @@ import {
   moneyCompact,
   perGame,
   ROSTER_EXPLAINER,
+  lockNotice,
   rosterReopensLine,
   seasonResultLine,
   SHORT_EXPLAINER,
@@ -275,7 +276,7 @@ function PositionRow({
     if (tapsSettling()) return;
     // LOCKED answers a tap with why and when (a silent button teaches nothing).
     if (rosterLocked) {
-      notify(`${rosterReopensLine(rosterLockDate)}. Moves pause while those games are played.`);
+      notify(lockNotice(rosterLockDate));
       return;
     }
     if (disabled) return;
@@ -768,7 +769,7 @@ export function PerGameRosterScreen({
       <ShortAgainButton
         column={layout === 'table'}
         onShorted={onShorted}
-        notice={lockLine ? `${rosterReopensLine(rosterLockDate)}. Moves pause while those games are played.` : null}
+        notice={lockLine ? lockNotice(rosterLockDate) : null}
         price={listed.currentGameCost}
         quoteVersion={listed.quoteVersion}
         reason={shortReason}

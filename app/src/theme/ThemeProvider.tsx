@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { applyVariant } from './applyVariant';
@@ -20,12 +20,34 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+const MORE_CONTRAST = '(prefers-contrast: more)';
+
+function moreContrastQuery(): MediaQueryList | null {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(MORE_CONTRAST) : null;
+}
+
+function prefersMoreContrast(): boolean {
+  return moreContrastQuery()?.matches ?? false;
+}
+
+function subscribeMoreContrast(onChange: () => void): () => void {
+  const query = moreContrastQuery();
+  if (!query) return () => {};
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [choice, setChoice] = useState<AppearanceChoice>(DEFAULT_VARIANT);
-  // "Match device" follows the phone or computer's light or dark setting as
-  // it changes (walk 4 T2-N4, walk 6 T1 NYI-4, T2-N6).
+  // A new player starts on "Match device": the app follows the phone or
+  // computer's light or dark setting as it changes, and its ask for more
+  // contrast (walk 4 T2-N4, walk 6 T1 NYI-4, T2-N6; walk 7 T1-06, T2-16,
+  // T3-N1). A saved choice still wins.
+  const [choice, setChoice] = useState<AppearanceChoice>('device');
   const scheme = useColorScheme();
-  const variantId: VariantId = choice === 'device' ? (scheme === 'light' ? 'light' : DEFAULT_VARIANT) : choice;
+  const moreContrast = useSyncExternalStore(subscribeMoreContrast, prefersMoreContrast, () => false);
+  const variantId: VariantId = choice !== 'device'
+    ? choice
+    : moreContrast ? 'contrast' : scheme === 'light' ? 'light' : DEFAULT_VARIANT;
 
   const selectionRevision = useRef(0);
 

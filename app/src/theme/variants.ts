@@ -193,8 +193,10 @@ export const VARIANTS: Record<VariantId, DesignVariant> = {
   },
   grain: {
     id: 'grain',
-    name: 'Default',
-    blurb: 'Databallr navy. The standard look.',
+    // Named for what it is: "Match device" is where a new player starts, so
+    // a theme called "Default" would mislead (walk 7 T1-N5).
+    name: 'Navy',
+    blurb: "Databallr's navy, the standard look.",
     palette: variant({}),
     fonts: { ...BASE_FONTS },
     layout: 'chrome',
@@ -206,13 +208,15 @@ export const VARIANTS: Record<VariantId, DesignVariant> = {
     id: 'dark',
     name: 'Dark',
     blurb: 'Near-black, easier on the eyes at night.',
+    // Truly near-black and less blue: a step or two below Default's navy read
+    // as the same theme on a phone (walk 7 T1-15).
     palette: variant({
-      background: '#07090d',
-      surface: '#10141b',
-      surfaceRaised: '#171d26',
-      surfaceHigh: '#1c2330',
-      border: '#1a202a',
-      borderStrong: '#2b3441',
+      background: '#040506',
+      surface: '#0a0c0f',
+      surfaceRaised: '#121519',
+      surfaceHigh: '#171a1f',
+      border: '#171a1f',
+      borderStrong: '#282d34',
       controlBorder: '#66708a',
     }),
     fonts: { ...BASE_FONTS },

@@ -80,6 +80,7 @@ import { PlayerAvatar } from './PlayerAvatar';
 import { ProfileActionBar } from './profile/ProfileActionBar';
 import { ProfileChart } from './profile/ProfileChart';
 import { ProfileGameLog } from './profile/ProfileGameLog';
+import { unlessSettling } from '../web/tapSettle';
 
 const METRIC_OPTIONS: { key: ProfileMetric; label: string; hint: string }[] = [
   { key: 'dividends', label: 'Dividends', hint: 'His dividend each game, against his price' },
@@ -285,7 +286,7 @@ export function PerGamePlayerProfile({
         <Pressable
           accessibilityLabel="Close player profile"
           accessibilityRole="button"
-          onPress={onClose}
+          onPress={unlessSettling(onClose)}
           style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
         >
           <CloseIcon size={18} />

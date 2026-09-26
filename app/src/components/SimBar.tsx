@@ -46,7 +46,7 @@ import { openTab } from '../state/uiActions';
 import { colors, fonts, radius, space, type, weight } from '../theme';
 import { Button, ConfirmDialog, settleTaps, visuallyHidden } from '../ui/kit';
 import { useSheetHistory } from '../web/appHistory';
-import { pressedByPointer } from '../web/tapSettle';
+import { pressedByPointer, unlessSettling } from '../web/tapSettle';
 import { leavePractice, restartPractice } from '../web/practiceSession';
 import { ChromeButton } from './chrome/ChromeButton';
 import { LockIcon, MoreIcon } from './chrome/ChromeIcons';
@@ -465,7 +465,7 @@ function MoreMenu({ open, setOpen, buttonRef, children }: {
         expanded={open}
         icon={(color) => <MoreIcon color={color} />}
         label="More"
-        onPress={() => setOpen(!open)}
+        onPress={unlessSettling(() => setOpen(!open))}
         placement="stacked"
       />
       {open ? (
@@ -481,7 +481,7 @@ function MoreMenu({ open, setOpen, buttonRef, children }: {
         >
           {/* A tap outside closes the menu; the scrim is never a focus stop. */}
           <View
-            onResponderRelease={() => setOpen(false)}
+            onResponderRelease={unlessSettling(() => setOpen(false))}
             onStartShouldSetResponder={() => true}
             style={styles.menuScrim}
           />

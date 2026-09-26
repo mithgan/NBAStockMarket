@@ -266,6 +266,17 @@ export function confirmCloseButton(side: PerGamePositionSide, feeDollars: number
 }
 
 /**
+ * What a LOCKED button says when pressed: when moves pause and when they come
+ * back, in one sentence that names the games ("those games" pointed at
+ * nothing; walk 7 T2-02).
+ */
+export function lockNotice(lockGameDate: string | null | undefined): string {
+  return lockGameDate
+    ? `Moves pause for the ${humanDate(lockGameDate)} games and reopen after them.`
+    : 'Moves pause for these games and reopen after them.';
+}
+
+/**
  * The confirm strip's sentence before a Drop or Close: what it costs, what
  * stays in your score, and what changing your mind later would cost.
  * "Drop Nikola Jokic for a $250 fee? His +$1.24M stays in your score. Adding

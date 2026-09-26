@@ -70,14 +70,14 @@ test('a short that ran its term is named with what it made', () => {
   const after = snapshot('2025-11-05', '2025-11-06', 345_000, [short('s1', 'Tyrese Maxey', 'closed', 345_000)], [night('2025-11-05', 145_000)]);
   assert.equal(
     refreshNotice(before, after, false),
-    'Nov 5 games: your score rose $145K. Your short on Tyrese Maxey ended: it made +$345K.',
+    "Nov 5 games: your score rose $145K. Tyrese Maxey's short ended: +$345K.",
   );
   const two = snapshot('2025-11-05', '2025-11-06', 0, [
     short('s1', 'A', 'closed', 345_000),
     short('s2', 'B', 'closed', -45_000),
   ]);
   const twoBefore = snapshot('2025-11-04', '2025-11-05', 0, [short('s1', 'A', 'active', 0), short('s2', 'B', 'active', 0)]);
-  assert.match(refreshNotice(twoBefore, two, false), /2 shorts ended: they made \+\$300K\.$/);
+  assert.match(refreshNotice(twoBefore, two, false), /2 shorts ended: \+\$300K\.$/);
 });
 
 test('a score that moved without new games is reported as a change', () => {

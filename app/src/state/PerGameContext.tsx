@@ -41,6 +41,9 @@ import { settleTaps } from '../web/tapSettle';
  */
 export type NoticeTone = 'success' | 'problem';
 
+/** A lock that begins with the settled games, as the refresh notice says it. */
+const LOCK_SENTENCE = / Moves pause for the (?:[A-Z][a-z]{2} \d{1,2}|next) games\./;
+
 interface PerGameContextValue {
   state: PerGameBootstrap | null;
   bootstrap: PerGameBootstrap | null;
@@ -56,6 +59,13 @@ interface PerGameContextValue {
    * hear it again instead of silence (walk 5 T3-10).
    */
   noticeSeq: number;
+  /**
+   * What screen readers hear for the notice, when it says more than the
+   * drawn one: a new lock ("Moves pause for the Oct 28 games.") is spoken,
+   * while the eye reads it in the status row's gold lock line instead of a
+   * third or fourth notice line (walk 7 T3-18, T2-21, T4-13).
+   */
+  noticeSpoken: string | null;
   serverError: string | null;
   transitionError: null;
   transitionRequired: false;
@@ -115,6 +125,7 @@ export function PerGameProvider({
   const [message, setMessage] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<NoticeTone>('problem');
   const [noticeSeq, setNoticeSeq] = useState(0);
+  const [noticeSpoken, setNoticeSpoken] = useState<string | null>(null);
   // The fee is part of every move's confirmation, so it is never a surprise.
   // "$250 fee" never splits across lines (walk 5 T1-01 found "fee." alone).
   const feeNote = () => {
@@ -122,8 +133,10 @@ export function PerGameProvider({
     return fee > 0 ? ` ${exactMoney(fee)}\u00a0fee.` : '';
   };
   const say = useCallback((text: string, tone: NoticeTone = 'problem') => {
+    const lock = tone === 'success' ? text.match(LOCK_SENTENCE) : null;
     setNoticeTone(tone);
-    setMessage(text);
+    setMessage(lock && lock.index !== undefined && lock.index > 0 ? text.slice(0, lock.index) + text.slice(lock.index + lock[0].length) : text);
+    setNoticeSpoken(lock ? text : null);
     setNoticeSeq((seq) => seq + 1);
   }, []);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -258,13 +271,30 @@ export function PerGameProvider({
     return () => subscription.remove();
   }, [isLoading, refreshData]);
 
+  // Queued moves that fail one after another for the same reason (racing
+  // Adds into the last slot) are told together, not only the last one (walk
+  // 7 T4-01: "Kawhi Leonard" was never named).
+  const recentFailure = useRef<{ verb: string; reason: string; names: string[]; at: number } | null>(null);
+  const failureNotice = useCallback((move: { name: string; verb: string }, reason: string): string => {
+    const now = Date.now();
+    const last = recentFailure.current;
+    const names = last && last.verb === move.verb && last.reason === reason && now - last.at < 4000 && !last.names.includes(move.name)
+      ? [...last.names, move.name]
+      : [move.name];
+    recentFailure.current = { verb: move.verb, reason, names, at: now };
+    const who = names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    return `${who} ${names.length === 1 ? 'was' : 'were'} not ${move.verb}. ${reason}`;
+  }, []);
+
   const runPositionAction = useCallback(async <T extends { accountVersion: number },>(
     key: string,
     action: () => Promise<T>,
     successMessage: string | ((result: T) => string),
     /** Which move failed, said first ("Kawhi Leonard was not added."): a move
      * that waited its turn can fail after the player has moved on. */
-    failedMove = '',
+    failedMove: { name: string; verb: string } | null = null,
   ): Promise<boolean> => {
     const coordinator = reconciliation.current;
     if (!coordinator || !coordinator.beginMutation()) return false;
@@ -273,7 +303,9 @@ export function PerGameProvider({
       return false;
     }
     updatePendingActions();
-    setMessage(null);
+    // The last move's notice stays until this one lands: clearing it here
+    // wiped a queued move's result before anyone saw or heard it (walk 7
+    // T3-16: with any network delay the first of two moves was never spoken).
     // The second tap of a double tap on a money button must not land on
     // whatever the move brings under the finger (walk 3 T4-01: a double tap
     // on "Short again" re-shorted the next player): a repeat on the same spot
@@ -312,14 +344,15 @@ export function PerGameProvider({
           : outcome.refreshed
             ? ' Market refreshed. Review the updated roster and quote before trying again.'
             : '';
-      say(`${failedMove ? `${failedMove} ` : ''}${errorMessage(outcome.error)}${suffix}`);
+      const reason = `${errorMessage(outcome.error)}${suffix}`;
+      say(failedMove ? failureNotice(failedMove, reason) : reason);
       return false;
     } finally {
       actionLock.current.release(key);
       coordinator.finishMutation(reconciliationReason);
       updatePendingActions();
     }
-  }, [loadSnapshot, say, updatePendingActions]);
+  }, [failureNotice, loadSnapshot, say, updatePendingActions]);
 
   // Moves save one at a time (the account has one version), but a move
   // pressed while another saves waits its turn instead of vanishing: a player
@@ -359,7 +392,7 @@ export function PerGameProvider({
         (result) => result.side === 'long'
           ? `${playerName} added at ${perGame(result.lockedGameCost)}, locked in.${feeNote()}`
           : `Shorted ${playerName} at ${perGame(result.lockedGameCost)}, locked in.${feeNote()}`,
-        side === 'long' ? `${playerName} was not added.` : `${playerName} was not shorted.`,
+        { name: playerName, verb: side === 'long' ? 'added' : 'shorted' },
       );
     });
   }, [apiClient, queueMove, runPositionAction]);
@@ -376,7 +409,9 @@ export function PerGameProvider({
         position.side === 'long'
           ? `${position.playerName} dropped. His next games won't count toward your score.${feeNote()}${also}`
           : `Short on ${position.playerName} closed.${feeNote()}${also}`,
-        position.side === 'long' ? `${position.playerName} was not dropped.` : `Your short on ${position.playerName} was not closed.`,
+        position.side === 'long'
+          ? { name: position.playerName, verb: 'dropped' }
+          : { name: `Your short on ${position.playerName}`, verb: 'closed' },
       );
     });
   }, [apiClient, queueMove, runPositionAction]);
@@ -396,6 +431,7 @@ export function PerGameProvider({
     message,
     noticeTone,
     noticeSeq,
+    noticeSpoken,
     serverError,
     transitionError: null,
     transitionRequired: false,
@@ -424,6 +460,7 @@ export function PerGameProvider({
     reconciliationRequired,
     message,
     noticeSeq,
+    noticeSpoken,
     noticeTone,
     openPosition,
     pendingActions,

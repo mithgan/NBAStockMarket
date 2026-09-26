@@ -17,18 +17,15 @@ function endedShorts(previous: PerGameBootstrap | null, next: PerGameBootstrap):
 
 function endedSentence(ended: PerGamePosition[]): string {
   if (ended.length === 0) return '';
-  // "Lost $15.5K", never "made -$15.5K" (walk 3 T1-10).
-  const result = (amount: number) => (Math.round(amount) < 0
-    ? `lost ${moneyFine(Math.abs(amount))}`
-    : `made ${signedMoneyFine(amount)}`);
   // Short, so a week's notice stays about two lines in a phone's brand bar
-  // (walk 6 T1-16: four lines pushed the page down); the Closed list keeps
-  // the detail.
+  // (walk 6 T1-16, walk 7 T3-18: four lines pushed the page down); the
+  // Closed list keeps the detail. A signed figure after a colon reads as a
+  // result either way, never "made -$15.5K" (walk 3 T1-10).
   if (ended.length === 1) {
-    return ` Your short on ${ended[0].playerName} ended: it ${result(ended[0].cumulativePnl)}.`;
+    return ` ${ended[0].playerName}'s short ended: ${signedMoneyFine(ended[0].cumulativePnl)}.`;
   }
   const total = ended.reduce((sum, position) => sum + position.cumulativePnl, 0);
-  return ` ${ended.length} shorts ended: they ${result(total)}.`;
+  return ` ${ended.length} shorts ended: ${signedMoneyFine(total)}.`;
 }
 
 /** A roster lock that begins with these games, in one sentence. */

@@ -27,7 +27,15 @@ let quietUntil = 0;
  * press there is meant (walk 5 T2-12: +1 week 0.1 s after an Add vanished).
  */
 let listQuietUntil = 0;
-let spot: { x: number; y: number; until: number } | null = null;
+let spot: { x: number; y: number; until: number; at: number } | null = null;
+/**
+ * A scroll this long after a tap moved the page on purpose (a screen reader,
+ * switch access or the app's own scroll into view for the next control): the
+ * control now under the old spot is a new choice (walk 7 T3-08, T4-02). A
+ * scroll sooner than this is the tap's own doing (a question scrolling into
+ * view) and keeps the spot.
+ */
+const SCROLL_RELEASES_AFTER_MS = 150;
 let lastPointer: { x: number; y: number; at: number } | null = null;
 /** When Enter or Space last went down: a press after it is the keyboard's. */
 let lastPressKeyAt = 0;
@@ -67,6 +75,11 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') notePressKey();
   }, true);
   window.addEventListener('wheel', noteScrollGesture, { capture: true, passive: true });
+  // Any scroll a moment after the tap, whoever made it (scroll events do not
+  // bubble, but a capturing listener on the window sees every one).
+  window.addEventListener('scroll', () => {
+    if (spot && Date.now() - spot.at > SCROLL_RELEASES_AFTER_MS) spot = null;
+  }, { capture: true, passive: true });
   // Typing changes the list on purpose too: after adding one search result,
   // the next search's first Add sits where the last one was, and a tap on
   // it is the next purchase, not a repeat (walk 5 T4-12).
@@ -96,7 +109,7 @@ export function settleTaps(ms = SETTLE_MS, sameSpotMs = 0, scope: 'all' | 'list'
   if (scope === 'all') quietUntil = Math.max(quietUntil, now + ms);
   else listQuietUntil = Math.max(listQuietUntil, now + ms);
   const at = sameSpotMs > 0 ? currentPointer() : null;
-  if (at) spot = { x: at.x, y: at.y, until: now + sameSpotMs };
+  if (at) spot = { x: at.x, y: at.y, until: now + sameSpotMs, at: now };
 }
 
 /**
@@ -131,5 +144,18 @@ export function repeatSafe<A extends unknown[]>(press: (...args: A) => void, ms 
     if (tapsSettling(true)) return;
     settleTaps(0, ms);
     press(...args);
+  };
+}
+
+/**
+ * A sheet's own closers (its backdrop, Done, a menu's toggle): the second tap
+ * of the double tap that opened it lands on one of them and must not close
+ * it again at once (walk 7 T2-17, T4-06). Opening a sheet quiets the spot of
+ * the tap that opened it; these ignore a press while it lasts.
+ */
+export function unlessSettling<A extends unknown[]>(close: (...args: A) => void): (...args: A) => void {
+  return (...args: A) => {
+    if (tapsSettling(true)) return;
+    close(...args);
   };
 }

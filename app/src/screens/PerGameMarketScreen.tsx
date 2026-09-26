@@ -31,6 +31,7 @@ import {
   exactMoney,
   money,
   perGameShort,
+  lockNotice,
   rosterReopensLine,
   signedMoney,
   unbrokenName,
@@ -551,7 +552,7 @@ function MarketRow({
             }
             // LOCKED answers a tap with why and when, as on the Roster.
             : rosterLocked
-              ? () => notify(`${rosterReopensLine(rosterLockGameDate)}. Moves pause while those games are played.`)
+              ? () => notify(lockNotice(rosterLockGameDate))
               : undefined}
           label={word}
           onPress={() => {

@@ -83,7 +83,7 @@ test('the rules read in steps: goal, scoring with the example after net points, 
   assert.ok(scoring.indexOf('Net points boil his box score') < scoring.indexOf('Example: 3.5 net points'));
   assert.match(sections[2].text, /^A short pays you/);
   assert.match(sections[2].text, /negative/);
-  assert.match(sections[3].text, /^Your score adds up those games, minus a \$[\d,]+ fee/);
+  assert.match(sections[3].text, /^Your score adds up the games of every player you hold or short, minus a \$[\d,]+ fee/);
   // Settings' lede: the goal and the loop in one breath.
   assert.equal(
     rulesSummary(explanation),

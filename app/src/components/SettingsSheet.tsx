@@ -1,12 +1,12 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line } from 'react-native-svg';
 
 import type { PerGameRuleset } from '../api/contracts';
 import { appearanceTagUnder, chromeFolded, sheetFloats, sheetNarrow } from '../data/chromeView';
 import { perGameRulesPresentation, rulesSummary } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { tapsSettling } from '../web/tapSettle';
+import { tapsSettling, unlessSettling } from '../web/tapSettle';
 import { useDesignVariant } from '../theme/ThemeProvider';
 import { APPEARANCE_CHOICES, DEFAULT_VARIANT, VARIANTS, type DesignVariant } from '../theme/variants';
 import type { AppearanceChoice } from '../theme/variantPersistence';
@@ -14,7 +14,7 @@ import type { AppearanceChoice } from '../theme/variantPersistence';
 /** "Match device" first, then the themes. */
 const CHOICES: AppearanceChoice[] = ['device', ...APPEARANCE_CHOICES];
 const DEVICE_NAME = 'Match device';
-const DEVICE_BLURB = 'Light while your device is set to light, Default while it is dark.';
+const DEVICE_BLURB = 'Light while your device is set to light, Navy while it is dark, High contrast when it asks for more contrast.';
 import { rowMarker } from '../ui/domMarkers';
 import { headingLevel } from '../ui/kit';
 import { reduceMotionChosen, setReduceMotion, useReduceMotionChoice } from '../state/motionPreference';
@@ -55,7 +55,9 @@ export function SettingsButton({ onPress }: { onPress: () => void }) {
   return (
     <Pressable
       ref={ref}
-      accessibilityLabel="Settings"
+      // On the web the hover title names the button; an aria-label as well
+      // made screen readers say "Settings, button, Settings" (walk 7 T3-03).
+      accessibilityLabel={Platform.OS === 'web' ? undefined : 'Settings'}
       accessibilityRole="button"
       onPress={() => {
         // A double tap on a sheet's Done must not reopen Settings (walk 6 T4-12).
@@ -193,7 +195,7 @@ export function SettingsSheet({
           child, so the scrim is a plain view on the responder system. Done
           and Escape close the sheet for keyboard and screen-reader users. */}
       <View
-        onResponderRelease={onClose}
+        onResponderRelease={unlessSettling(onClose)}
         onStartShouldSetResponder={() => true}
         style={styles.scrim}
       />
@@ -207,7 +209,7 @@ export function SettingsSheet({
             ref={doneRef}
             accessibilityLabel="Done, close settings"
             accessibilityRole="button"
-            onPress={onClose}
+            onPress={unlessSettling(onClose)}
             style={({ pressed }) => [styles.close, narrow && styles.closeNarrow, pressed && styles.pressed]}
           >
             <Text style={styles.closeText}>Done</Text>

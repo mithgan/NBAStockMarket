@@ -14,6 +14,7 @@ import { useWatchlist } from '../state/watchlist';
 import { colors, radius } from '../theme';
 import { useSheetHistory } from '../web/appHistory';
 import { PerGamePlayerProfile } from './PerGamePlayerProfile';
+import { unlessSettling } from '../web/tapSettle';
 
 /** Desktop opens the profile as a panel on the right; below this it is a sheet. */
 const PANEL_MIN_WIDTH = 1024;
@@ -118,7 +119,7 @@ export function PlayerProfileSheet({
           system, not a control: react-native-web's modal focus trap would
           otherwise focus it first. Keyboard and screen-reader users close with
           the profile's own "Close player profile" button or Escape. */}
-      <View onResponderRelease={onClose} onStartShouldSetResponder={() => true} style={styles.scrim} />
+      <View onResponderRelease={unlessSettling(onClose)} onStartShouldSetResponder={() => true} style={styles.scrim} />
       <View
         style={[
           styles.sheet,
