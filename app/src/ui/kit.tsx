@@ -621,8 +621,9 @@ export function Segmented<K extends string>({
               ];
             }}
           >
-            {/* One line: "VALUE ↑" never breaks its arrow onto a second line (walk 3 T1-09). */}
-            <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[styles.segmentText, selected && styles.segmentTextSelected]}>
+            {/* A label that does not fit wraps, centred, rather than being cut
+                ("ROSTER SIDE" at 200% zoom, "VALU…" on a 360px phone). */}
+            <Text maxFontSizeMultiplier={1.3} style={[styles.segmentText, selected && styles.segmentTextSelected]}>
               {option.label}
             </Text>
           </Pressable>
@@ -868,6 +869,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.goldInk,
   },
   segmentText: {
+    textAlign: 'center',
     color: colors.muted,
     fontFamily: fonts.display,
     fontSize: type.label,

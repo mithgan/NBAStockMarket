@@ -99,6 +99,13 @@ export function useSheetHistory(visible: boolean, onClose: () => void): void {
   }, [visible]);
 }
 
+// A question that closed on the page leaves its entry for a moment: when the
+// same commit opens another question (Drop on the next row while one is
+// open), the new question takes the entry over instead of pushing a second
+// one that the old question's Back would then pop, folding the new question
+// the moment it opened.
+let pendingQuestionBack: ReturnType<typeof setTimeout> | null = null;
+
 /**
  * An inline question (a Drop or Close confirm strip) in browser history: the
  * first Back folds the question, as it closes a sheet, instead of leaving the
@@ -112,7 +119,14 @@ export function useBackFolds(visible: boolean, onFold: () => void): void {
     if (!isWeb || !visible) return undefined;
     const id = nextSheetId++;
     let poppedByBack = false;
-    window.history.pushState({ ...(window.history.state ?? {}), question: id }, '');
+    const current = window.history.state as { question?: number } | null;
+    if (pendingQuestionBack !== null && current?.question !== undefined) {
+      clearTimeout(pendingQuestionBack);
+      pendingQuestionBack = null;
+      window.history.replaceState({ ...current, question: id }, '');
+    } else {
+      window.history.pushState({ ...(current ?? {}), question: id }, '');
+    }
     const onPop = () => {
       if ((window.history.state as { question?: number } | null)?.question !== id) {
         poppedByBack = true;
@@ -122,9 +136,14 @@ export function useBackFolds(visible: boolean, onFold: () => void): void {
     window.addEventListener('popstate', onPop);
     return () => {
       window.removeEventListener('popstate', onPop);
-      // Answered or cancelled on the page: remove the entry we pushed.
+      // Answered or cancelled on the page: remove the entry we pushed, unless
+      // another question takes it over first.
       if (!poppedByBack && (window.history.state as { question?: number } | null)?.question === id) {
-        window.history.back();
+        if (pendingQuestionBack !== null) clearTimeout(pendingQuestionBack);
+        pendingQuestionBack = setTimeout(() => {
+          pendingQuestionBack = null;
+          if ((window.history.state as { question?: number } | null)?.question === id) window.history.back();
+        }, 0);
       }
     };
   }, [visible]);
