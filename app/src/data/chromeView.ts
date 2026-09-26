@@ -174,6 +174,17 @@ export function practiceQuestion(
     };
 }
 
+/**
+ * Restart on a season with nothing in it yet (the opening eve, no moves):
+ * there is nothing to throw away, so it says so instead of reloading into an
+ * identical screen, which looked like a dead button (walk 7 T1-09, T2-08).
+ */
+export const FRESH_SEASON_NOTICE = "This season hasn't started yet, so there's nothing to restart.";
+
+export function restartHasNothingToDo({ day, moves }: { day: number; moves: number }): boolean {
+  return !practiceAsksFirst('restart', { day, moves });
+}
+
 /** The practice control that plays the rest of the season (walk 6 T2-N1, T4-N3). */
 export const PLAY_TO_END_LABEL = 'Play to the end';
 
@@ -183,7 +194,12 @@ export const PLAY_TO_END_LABEL = 'Play to the end';
  * is counted in days ("Day 16 of 174" leaves 158). With nobody on the roster
  * it says the score won't move. Escape or "Not now" keeps the season.
  */
-export function playToEndQuestion(remainingDays: number, emptyRoster: boolean): {
+export function playToEndQuestion(
+  remainingDays: number,
+  emptyRoster: boolean,
+  /** Each open short's last covered date (PerGamePosition.expiresOn). */
+  shortEnds: readonly (string | null)[] = [],
+): {
   title: string;
   lines: string[];
   confirmLabel: string;
@@ -193,12 +209,29 @@ export function playToEndQuestion(remainingDays: number, emptyRoster: boolean): 
   return {
     title: `Play the remaining ${days} ${days === 1 ? 'day' : 'days'} now?`,
     lines: [
-      'Your roster and shorts stay as they are; no moves between nights.',
+      ...(shortEnds.length > 0 ? playToEndShortLines(shortEnds) : ['Your roster and shorts stay as they are; no moves between nights.']),
       ...(emptyRoster ? ["Nobody is on your roster, so your score won't move."] : []),
     ],
     confirmLabel: PLAY_TO_END_LABEL,
     cancelLabel: 'Not now',
   };
+}
+
+/**
+ * With shorts open, "stay as they are" read as "keep running", but every
+ * short ends by itself after its term and its slot then sits empty for the
+ * rest of the season (walk 7 T4-04): say when they end.
+ */
+function playToEndShortLines(shortEnds: readonly (string | null)[]): string[] {
+  const dated = shortEnds.filter((end): end is string => Boolean(end)).sort();
+  const n = shortEnds.length;
+  if (dated.length < n) return ['Your roster and shorts stay as they are; no moves between nights.'];
+  const last = humanDate(dated[dated.length - 1]);
+  const same = dated[0] === dated[dated.length - 1];
+  const ends = n === 1
+    ? `Your short ends by itself after ${last}; its slot stays empty.`
+    : `Your ${n} shorts end by themselves ${same ? `after ${last}` : `by the ${last} games`}; their slots stay empty.`;
+  return ['Your roster stays as it is; no moves between nights.', ends];
 }
 
 /**
@@ -703,26 +736,38 @@ export const EMPTY_ROSTER_HINT = "Add a player first. +1 night plays the next ni
  * line keeps its place, so nothing under the player's finger moves the
  * moment an Add lands (a second tap would otherwise hit the row below).
  */
-export function readyHint(nextGameDate: string | null | undefined): string {
-  return nextGameDate ? `Ready. +1 night plays the ${humanDate(nextGameDate)} games.` : "Ready. +1 night plays the next night's games.";
+export function readyHint(_nextGameDate?: string | null): string {
+  // No date: the +1 night button right above names it ("OCT 21") and the
+  // status row says when the season opens; the first screen said "Oct 21"
+  // four or five times (walk 7 T1-11).
+  return "Ready. +1 night plays the next night's games.";
 }
 
 /**
  * The hint line once the night it promised is in: "Oct 21 games in." (or
  * "Oct 21–27 games in." after a week). The line keeps its place through the
  * press, so the frame does not get shorter under the finger (it went at
- * once and the list jumped 24px; walk 6 T4-13), and goes once the player
- * pauses (HINT_HOLD_IDLE_MS) or scrolls.
+ * once and the list jumped 24px; walk 6 T4-13).
  */
 export function gamesInLine(label: string): string {
   return `${keepTogether(label)} games in.`;
 }
 
 /**
- * How long the player must leave the screen alone (no tap, key or wheel)
- * before the held line goes. It never goes while a night plays or waits.
+ * What ends the held "Oct 21 games in." line (heldLineEnds). The frame may
+ * change height only when the player acts on it: their own press of +1
+ * night, +1 week or Play to the end (the line sits under those buttons, so
+ * they stay put), or a tab switch, when the whole screen changes anyway.
+ * Never time alone: it went after 3 s without a touch and the list jumped
+ * 24px under a finger that was about to tap (walk 7 T1-14); never a press
+ * that was queued behind another (it plays by itself, later), nor a night
+ * landing.
  */
-export const HINT_HOLD_IDLE_MS = 3000;
+export type HeldLineEvent = 'idle' | 'night-landed' | 'queued-press' | 'press' | 'tab-switch';
+
+export function heldLineEnds(event: HeldLineEvent): boolean {
+  return event === 'press' || event === 'tab-switch';
+}
 
 /**
  * Once the player has answered "Play anyway" to the empty-roster question,
@@ -766,6 +811,31 @@ export const EMPTY_ROSTER_HINT_SHORT = 'Add a player first';
 export const EMPTY_ROSTER_PLAYING_HINT_SHORT = 'No players yet';
 export const READY_HINT_SHORT = 'Ready for +1 night';
 
+/**
+ * +1 week's own description, where +1 night's is the hint line: it said
+ * "+1 night plays the next night's games" on +1 week too (walk 7 T3-02).
+ * `hint`: the hint line now; `weekSpan`: the days +1 week plays ("Oct 21–27").
+ */
+export function practiceWeekHint(hint: string | null, weekSpan: string | null): string | null {
+  if (hint === null) return null;
+  const plays = weekSpan ? `+1 week plays the ${weekSpan} games.` : '+1 week plays the next seven days.';
+  if (hint === EMPTY_ROSTER_HINT) return `Add a player first. ${plays}`;
+  if (hint === EMPTY_ROSTER_PLAYING_HINT) return 'Nobody on your roster: the week plays without you.';
+  return `Ready. ${plays}`;
+}
+
+/**
+ * The figure the status row names beside the day: the last night or run,
+ * except on the opening eve (nothing played yet) and once the season is
+ * complete, where the final score is the result: after +1 week then Play to
+ * the end the row read "Oct 28–Apr 12 games +$7.89M" beside "Final score
+ * +$9.49M" (walk 7 T4-09).
+ */
+export function statusRowResult<T>(progress: Pick<PracticeProgress, 'day' | 'complete'> | null, result: T | null): T | null {
+  if (progress && (progress.day === 0 || progress.complete)) return null;
+  return result;
+}
+
 export function practiceHintShort(input: Parameters<typeof practiceHint>[0]): string | null {
   const full = practiceHint(input);
   if (full === null) return null;
@@ -798,8 +868,43 @@ export function weekSpanLabel(from: string, seasonEnd: string | null | undefined
  * so a steady run of presses advanced only every other time (walk 5 T3-11,
  * T4-06). `playing`: the nights playing now ("Oct 21–27"), if any.
  */
-export function queuedLine(pressed: 'night' | 'week', playing: string | null): string {
-  return `Next ${pressed} queued. It plays ${playing ? `once ${playing} is in` : 'in a moment'}.`;
+export function queuedLine(pressed: 'night' | 'week', playing: string | null, count = 1): string {
+  const when = playing ? `once ${playing} is in` : 'in a moment';
+  // A second press on a queued button queues one more and says so; it was
+  // swallowed without a word (walk 7 T2-06).
+  return count > 1 ? `${count} ${pressed}s queued. They play ${when}.` : `Next ${pressed} queued. It plays ${when}.`;
+}
+
+/** At most this many presses wait behind the one playing (a steady run of presses still counts each). */
+export const MAX_QUEUED_PRESSES = 5;
+
+/**
+ * A press that arrives this soon after the last step landed continues that
+ * step's run, as a queued press does: one notice for the whole run, and the
+ * status row names all of it. Without a network delay each night finished
+ * before the next press, so two quick presses got two notices and the first
+ * night's news was gone in half a second (walk 7 T4-03, T2-05).
+ */
+export const RUN_CONTINUE_MS = 1500;
+
+/**
+ * Whether a press continues the run before it: a press queued behind a step
+ * still playing always does; any other does when it comes within
+ * RUN_CONTINUE_MS of the last step landing (`sinceLandedMs`, null when no run
+ * has landed or the last one was closed by Play to the end or a question).
+ */
+export function continuesRun(queued: boolean, sinceLandedMs: number | null): boolean {
+  if (queued) return true;
+  return sinceLandedMs !== null && sinceLandedMs >= 0 && sinceLandedMs <= RUN_CONTINUE_MS;
+}
+
+/**
+ * Play to the end confirmed while a night still plays (or a move saves): it
+ * waits its turn and plays once the screen has caught up, rather than doing
+ * nothing (walk 7 T2-04).
+ */
+export function playToEndQueuedLine(playing: string | null): string {
+  return `Play to the end queued. It plays ${playing ? `once ${playing} is in` : 'in a moment'}.`;
 }
 
 /**
@@ -808,7 +913,8 @@ export function queuedLine(pressed: 'night' | 'week', playing: string | null): s
  * button's own label, so nothing beside it moves; "Next" over "queued" in a
  * stacked row (195px), where the button is 55px wide.
  */
-export function queuedLabel(step: 'night' | 'week', stacked: boolean): string {
+export function queuedLabel(step: 'night' | 'week', stacked: boolean, count = 1): string {
+  if (count > 1) return stacked ? `×${count}\nqueued` : `+1 ${step}\n×${count} queued`;
   return stacked ? 'Next\nqueued' : `+1 ${step}\nqueued`;
 }
 

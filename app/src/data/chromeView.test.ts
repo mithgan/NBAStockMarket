@@ -313,7 +313,8 @@ test('a folded row at 400% zoom keeps to one line: the day and More (walk 2 T3-1
 });
 
 test('the hint under the advance buttons keeps its line once the first player is in', () => {
-  assert.equal(readyHint('2025-10-21'), 'Ready. +1 night plays the Oct 21 games.');
+  // No date: the button above names the night (walk 7 T1-11: "Oct 21" four or five times).
+  assert.equal(readyHint('2025-10-21'), "Ready. +1 night plays the next night's games.");
   assert.equal(readyHint(null), "Ready. +1 night plays the next night's games.");
 });
 
@@ -346,7 +347,7 @@ test('the empty-roster question is asked once a season; then the hint line says 
   assert.equal(practiceHint({ ...base, playedWithoutRoster: true }), 'Nobody on your roster: nights play without you');
   assert.equal(EMPTY_ROSTER_PLAYING_HINT, 'Nobody on your roster: nights play without you');
   // The first add swaps in Ready until the next advance, whichever way the empty nights went.
-  assert.equal(practiceHint({ ...base, emptyRoster: false, playedWithoutRoster: true }), 'Ready. +1 night plays the Oct 21 games.');
+  assert.equal(practiceHint({ ...base, emptyRoster: false, playedWithoutRoster: true }), "Ready. +1 night plays the next night's games.");
   assert.equal(practiceHint({ ...base, emptyRoster: false, justFilled: false }), null);
   assert.equal(practiceHint({ ...base, complete: true }), null);
 });
@@ -543,10 +544,16 @@ test('a run of presses played back to back has one notice and one row figure for
 });
 
 test('the hint line keeps its place once its night is in (walk 6 T4-13)', async () => {
-  const { gamesInLine, HINT_HOLD_IDLE_MS } = await import('./chromeView');
+  const { gamesInLine, heldLineEnds } = await import('./chromeView');
   assert.equal(gamesInLine('Oct 21'), 'Oct 21 games in.');
   assert.equal(gamesInLine('Oct 21–27'), 'Oct 21–27 games in.');
-  assert.ok(HINT_HOLD_IDLE_MS >= 2000);
+  // It never goes by itself: only the player's press or a tab switch ends it
+  // (walk 7 T1-14: it went after 3 s idle and the list jumped 24px).
+  assert.equal(heldLineEnds('idle'), false);
+  assert.equal(heldLineEnds('night-landed'), false);
+  assert.equal(heldLineEnds('queued-press'), false);
+  assert.equal(heldLineEnds('press'), true);
+  assert.equal(heldLineEnds('tab-switch'), true);
 });
 
 test('a tiny row keeps "Day 1 of 174" on one line where it has room, and capitals are spoken in sentence case (walk 6 T3-05, T3-09)', async () => {
@@ -577,4 +584,63 @@ test('Play to the end asks what it plays and what stays, in days (walk 6 T2-N1, 
     "Nobody is on your roster, so your score won't move.",
   ]);
   assert.equal(PLAY_TO_END_LABEL, 'Play to the end');
+});
+
+test('quick presses form one run, with or without a delay; a queued button counts its presses (walk 7 T4-03, T2-05, T2-06)', async () => {
+  const { continuesRun, MAX_QUEUED_PRESSES, playToEndQueuedLine, queuedLabel, queuedLine, RUN_CONTINUE_MS } = await import('./chromeView');
+  // A press queued behind a playing step always continues its run.
+  assert.equal(continuesRun(true, null), true);
+  // A press soon after the last step landed continues it too (no network delay).
+  assert.equal(continuesRun(false, 430), true);
+  assert.equal(continuesRun(false, RUN_CONTINUE_MS), true);
+  assert.ok(RUN_CONTINUE_MS >= 1000 && RUN_CONTINUE_MS <= 2000);
+  // Later, or with no run landed, it starts a new one.
+  assert.equal(continuesRun(false, RUN_CONTINUE_MS + 1), false);
+  assert.equal(continuesRun(false, null), false);
+  // A second press on a queued button queues one more and says so.
+  assert.equal(queuedLine('week', 'Oct 21–27', 1), 'Next week queued. It plays once Oct 21–27 is in.');
+  assert.equal(queuedLine('week', 'Oct 21–27', 2), '2 weeks queued. They play once Oct 21–27 is in.');
+  assert.equal(queuedLabel('week', false, 2), '+1 week\n×2 queued');
+  assert.equal(queuedLabel('night', true, 3), '×3\nqueued');
+  assert.equal(queuedLabel('week', false, 1), '+1 week\nqueued');
+  assert.ok(MAX_QUEUED_PRESSES >= 2);
+  // Play to the end confirmed mid-night waits its turn and says so (walk 7 T2-04).
+  assert.equal(playToEndQueuedLine('Oct 21'), 'Play to the end queued. It plays once Oct 21 is in.');
+  assert.equal(playToEndQueuedLine(null), 'Play to the end queued. It plays in a moment.');
+});
+
+test('Restart on a season with nothing in it says so instead of reloading into the same screen (walk 7 T1-09, T2-08)', async () => {
+  const { FRESH_SEASON_NOTICE, restartHasNothingToDo } = await import('./chromeView');
+  assert.equal(restartHasNothingToDo({ day: 0, moves: 0 }), true);
+  assert.equal(restartHasNothingToDo({ day: 0, moves: 1 }), false);
+  assert.equal(restartHasNothingToDo({ day: 3, moves: 0 }), false);
+  assert.equal(FRESH_SEASON_NOTICE, "This season hasn't started yet, so there's nothing to restart.");
+});
+
+test('+1 week describes the week; Play to the end says when shorts end; a finished season names only its final score (walk 7 T3-02, T4-04, T4-09)', async () => {
+  const { EMPTY_ROSTER_HINT, EMPTY_ROSTER_PLAYING_HINT, playToEndQuestion, practiceWeekHint, statusRowResult } = await import('./chromeView');
+  assert.equal(practiceWeekHint(EMPTY_ROSTER_HINT, 'Oct 21–27'), 'Add a player first. +1 week plays the Oct 21–27 games.');
+  assert.equal(practiceWeekHint(EMPTY_ROSTER_PLAYING_HINT, 'Oct 21–27'), 'Nobody on your roster: the week plays without you.');
+  assert.equal(practiceWeekHint(readyHint(null), 'Oct 21–27'), 'Ready. +1 week plays the Oct 21–27 games.');
+  assert.equal(practiceWeekHint(readyHint(null), null), 'Ready. +1 week plays the next seven days.');
+  assert.equal(practiceWeekHint(null, 'Oct 21–27'), null);
+  assert.ok(!/\+1 night/.test(practiceWeekHint(EMPTY_ROSTER_HINT, 'Oct 21–27') ?? ''));
+  // Five shorts opened on the opening eve all end after Oct 27.
+  assert.deepEqual(playToEndQuestion(174, false, Array(5).fill('2025-10-27')).lines, [
+    'Your roster stays as it is; no moves between nights.',
+    'Your 5 shorts end by themselves after Oct 27; their slots stay empty.',
+  ]);
+  assert.deepEqual(playToEndQuestion(170, false, ['2025-10-31']).lines, [
+    'Your roster stays as it is; no moves between nights.',
+    'Your short ends by itself after Oct 31; its slot stays empty.',
+  ]);
+  assert.equal(playToEndQuestion(170, false, ['2025-10-27', '2025-10-31']).lines[1],
+    'Your 2 shorts end by themselves by the Oct 31 games; their slots stay empty.');
+  // No shorts: today's line.
+  assert.deepEqual(playToEndQuestion(158, false, []).lines, ['Your roster and shorts stay as they are; no moves between nights.']);
+  // The row's figure: none on the opening eve or once the season is complete.
+  assert.equal(statusRowResult(practiceProgress(OPENING_EVE, '2025-11-05'), 7_890_000), 7_890_000);
+  assert.equal(statusRowResult(practiceProgress(OPENING_EVE, '2026-04-12'), 7_890_000), null);
+  assert.equal(statusRowResult(practiceProgress(OPENING_EVE, OPENING_EVE), 5), null);
+  assert.equal(statusRowResult(null, 5), 5);
 });

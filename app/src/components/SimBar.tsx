@@ -14,13 +14,17 @@ import {
   CHROME_FOLDED_ONE_LINE_MIN_WIDTH,
   chromeFolded,
   chromeLayout,
+  continuesRun,
+  FRESH_SEASON_NOTICE,
   gamesInLine,
-  HINT_HOLD_IDLE_MS,
+  heldLineEnds,
   lockIconName,
   lockShortText,
+  MAX_QUEUED_PRESSES,
   NIGHT_DATE_STACKED_MIN_WIDTH,
   PLAY_TO_END_LABEL,
   playToEndQuestion,
+  playToEndQueuedLine,
   type PracticeAdvance,
   practiceAsksFirst,
   practiceHint,
@@ -30,6 +34,8 @@ import {
   practiceQuestion,
   practiceSeasonEnd,
   practiceStakes,
+  practiceWeekHint,
+  restartHasNothingToDo,
   queuedLabel,
   queuedLine,
   resultSpan,
@@ -192,8 +198,10 @@ export function usePracticeRulesContext(): PracticeRulesContext | null {
   };
 }
 
-/** The hint line's DOM id: +1 night and +1 week point at it (aria-describedby). */
+/** The hint line's DOM id: +1 night points at it (aria-describedby). */
 export const PRACTICE_HINT_ID = 'practice-hint';
+/** +1 week's own description (practiceWeekHint), spoken only. */
+const PRACTICE_WEEK_HINT_ID = 'practice-hint-week';
 
 /**
  * Point a control at the hint line while one shows, so a screen reader says
@@ -326,7 +334,11 @@ function PracticeQuestionHost() {
   });
   // "Play to the end" says what it plays and what stays (walk 6 T2-N1, T4-N3).
   const prompt = asked.kind === 'play-to-end'
-    ? playToEndQuestion(SEASON_TOTAL_DAYS - progress.day, open.length === 0)
+    ? playToEndQuestion(
+      SEASON_TOTAL_DAYS - progress.day,
+      open.length === 0,
+      open.filter((position) => position.side === 'short').map((position) => position.expiresOn),
+    )
     : practiceQuestion(
       asked.kind,
       stakes,
@@ -391,11 +403,18 @@ function focusLater(ref: { current: unknown }, delay = 60): void {
  * Escape (focus back on More), on a tap anywhere else, when the window
  * changes size, and once an item is used.
  */
-function MoreMenu({ open, setOpen, buttonRef, children }: {
+function MoreMenu({ open, setOpen, buttonRef, children, footer = null }: {
   open: boolean;
   setOpen: (open: boolean) => void;
   buttonRef: { current: View | null };
   children: ReactNode;
+  /**
+   * Pinned under the scrolling items, whole: the latest result at 400% zoom.
+   * Under the buttons inside the scroller it showed "Oct 21 games: your"
+   * and the rest needed scrolling (walk 7 T3-17). Pinned below, the scroller
+   * gets shorter from the bottom, so the buttons at its top stay put.
+   */
+  footer?: ReactNode;
 }) {
   const { width, height } = useWindowDimensions();
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
@@ -502,6 +521,7 @@ function MoreMenu({ open, setOpen, buttonRef, children }: {
             <ScrollView contentContainerStyle={styles.moreItems} style={styles.moreScroll}>
               {children}
             </ScrollView>
+            {footer}
           </View>
         </Modal>
       ) : null}
@@ -585,6 +605,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   const { fontScale, width } = useWindowDimensions();
   const {
     bootstrap,
+    dismissNotice,
     isGameplayReady,
     isRefreshing,
     message,
@@ -622,6 +643,19 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // finished run of two or more steps waiting for its notice.
   const runRef = useRef<PracticeRun | null>(null);
   const [runOver, setRunOver] = useState<PracticeRun | null>(null);
+  // The last run that landed with nothing waiting behind it, and when: a
+  // press soon after continues it (continuesRun), so two quick presses with
+  // no network delay still get one notice (walk 7 T4-03, T2-05).
+  const landedRun = useRef<{ run: PracticeRun; at: number } | null>(null);
+  // A step that landed while another press waited behind it: its own notice
+  // comes down before it paints, so the run is seen and heard once, with one
+  // total (walk 7 T3-12: "rose $194.5K", then "rose $205K").
+  const holdStepNotice = useRef(false);
+  useLayoutEffect(() => {
+    if (!holdStepNotice.current) return;
+    holdStepNotice.current = false;
+    dismissNotice();
+  }, [noticeSeq, dismissNotice]);
   // In the render that shows the run's last nights, before it paints, so the
   // last step's own notice never shows on its own.
   useLayoutEffect(() => {
@@ -648,23 +682,32 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // screen readers (it said "Still playing" and did nothing, so a steady run
   // of presses advanced every other time; walk 5 T3-11, T4-06, T4-N2). A key
   // held down is one press (react-native-web presses on key up).
-  const queuedStep = useRef<'night' | 'week' | null>(null);
-  const [queued, setQueued] = useState<'night' | 'week' | null>(null);
-  const queuePress = (pressed: 'night' | 'week', playingDate: string | null) => {
-    // One waits at most: a third press keeps the one already queued.
-    const step = queuedStep.current ?? pressed;
-    queuedStep.current = step;
-    setQueued(step);
-    const line = queuedLine(step, playingDate);
+  const queuedSteps = useRef<Array<'night' | 'week'>>([]);
+  const [queued, setQueued] = useState<ReadonlyArray<'night' | 'week'>>([]);
+  // Play to the end confirmed while a night plays or a move saves: it waits
+  // its turn too (walk 7 T2-04: the confirm did nothing right after a night).
+  const endQueuedRef = useRef(false);
+  const [endQueued, setEndQueued] = useState(false);
+  const sayBusy = (line: string) => {
     // The same words twice still count as news for the live region.
     setBusyLine((current) => (current === line ? `${line} ` : line));
     if (busyLineTimer.current) clearTimeout(busyLineTimer.current);
     busyLineTimer.current = setTimeout(() => setBusyLine(''), 4000);
   };
+  const queuePress = (pressed: 'night' | 'week', playingDate: string | null) => {
+    // Every deliberate press waits its turn (a bounce on the same spot is
+    // already ignored), up to MAX_QUEUED_PRESSES, and the pressed button
+    // counts them ("+1 week" over "×2 queued"): a second press on a queued
+    // button was swallowed without a word (walk 7 T2-06).
+    if (queuedSteps.current.length < MAX_QUEUED_PRESSES) queuedSteps.current = [...queuedSteps.current, pressed];
+    setQueued(queuedSteps.current);
+    const step = queuedSteps.current.includes(pressed) ? pressed : queuedSteps.current[0];
+    sayBusy(queuedLine(step, playingDate, queuedSteps.current.filter((entry) => entry === step).length));
+  };
   const pressWhileBusy = (pressed: 'night' | 'week') => {
     // Busy with nothing that will finish (the game is still loading), or
     // playing the season out (nothing will be left to play): no queue.
-    if (playing?.step === 'end' || (!playing && pendingActions.size === 0 && !isRefreshing)) return;
+    if (playing?.step === 'end' || endQueuedRef.current || (!playing && pendingActions.size === 0 && !isRefreshing)) return;
     queuePress(pressed, playing?.date ?? null);
   };
   // State updates land a render later; a second tap in the same frame still
@@ -707,8 +750,11 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // The hint line under the buttons ("Ready. +1 night plays the Oct 21
   // games.") keeps its place once the night is in, as "Oct 21 games in.", so
   // the frame does not get 24px shorter under the finger (walk 6 T4-13). It
-  // goes once the player leaves the screen alone for a moment, never while a
-  // night plays or waits. Set before paint, so no frame goes without it.
+  // never goes by itself: it went after 3 s without a touch and everything
+  // under it jumped 24px while the player read (walk 7 T1-14). It goes at the
+  // player's next press of +1 night, +1 week or Play to the end (the buttons
+  // above it stay put), or at a tab switch, when the whole screen changes
+  // anyway. Set before paint, so no frame goes without it.
   const advances = useRecentAdvances();
   const [held, setHeld] = useState(false);
   const hadHint = useRef(hintText !== null);
@@ -718,24 +764,16 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     if (hintText !== null || complete) setHeld(false);
     else if (had) setHeld(true);
   }, [hintText, complete]);
-  const holdBusy = useRef(false);
-  holdBusy.current = playing !== null || queued !== null;
   useEffect(() => {
-    if (!held || typeof document === 'undefined') return undefined;
-    let last = Date.now();
-    const touch = () => {
-      last = Date.now();
-    };
-    const inputs = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
-    inputs.forEach((name) => document.addEventListener(name, touch, { capture: true, passive: true }));
-    const timer = setInterval(() => {
-      if (holdBusy.current) last = Date.now();
-      else if (Date.now() - last >= HINT_HOLD_IDLE_MS) setHeld(false);
-    }, 250);
-    return () => {
-      clearInterval(timer);
-      inputs.forEach((name) => document.removeEventListener(name, touch, { capture: true }));
-    };
+    if (!held || typeof document === 'undefined' || typeof MutationObserver === 'undefined') return undefined;
+    // The screen's name changes with the tab ("Market", "Roster").
+    const screen = document.getElementById('app-screen');
+    if (!screen) return undefined;
+    const observer = new MutationObserver(() => {
+      if (heldLineEnds('tab-switch')) setHeld(false);
+    });
+    observer.observe(screen, { attributes: true, attributeFilter: ['aria-label'] });
+    return () => observer.disconnect();
   }, [held]);
   const lastSettledNow = bootstrap?.game.lastSettledDate ?? null;
   const heldText = held && lastSettledNow
@@ -746,7 +784,12 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // 400% zoom, short where the row is tight (walk 4 T1-09, T3-11).
   const hintId = hintText ? PRACTICE_HINT_ID : null;
   useDescribedBy(nightRef, hintId);
-  useDescribedBy(weekRef, hintId);
+  // +1 week says what the week plays, not what +1 night does (walk 7 T3-02).
+  const weekHint = practiceWeekHint(
+    hintText,
+    lastSettledNow ? weekSpanLabel(lastSettledNow, practiceSeasonEnd(mockSeasonStart())) : null,
+  );
+  useDescribedBy(weekRef, weekHint ? PRACTICE_WEEK_HINT_ID : null);
 
   // Restart or Exit asks first (SimBar draws the question). An item in More
   // closes the menu and lets its history entry go before the question adds
@@ -755,11 +798,18 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     // Nothing to lose (the opening eve with no moves, or a finished season):
     // Restart just restarts, Exit just leaves, and Play another season
     // starts the next one, as the result card's button does (walk 4 T1-13).
-    if ((kind === 'restart' || kind === 'exit' || kind === 'play-again') && bootstrap
-      && !practiceAsksFirst(kind, {
-        day: practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).day,
-        moves: bootstrap.ledger.items.length,
-      })) {
+    const held = bootstrap ? {
+      day: practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).day,
+      moves: bootstrap.ledger.items.length,
+    } : null;
+    // Restart with nothing to restart: say so (a reload into the same screen
+    // looked like a dead button; walk 7 T1-09, T2-08).
+    if (kind === 'restart' && held && restartHasNothingToDo(held)) {
+      notify(FRESH_SEASON_NOTICE);
+      return;
+    }
+    if ((kind === 'restart' || kind === 'exit' || kind === 'play-again') && bootstrap && held
+      && !practiceAsksFirst(kind, held)) {
       if (kind === 'exit') leavePractice();
       else if (kind === 'play-again') restartPractice(seasonResultLine(bootstrap.account.cumulativePnl, rankLine(bootstrap.leaderboard)));
       else restartPractice();
@@ -785,13 +835,24 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // season is over.
   const busyNow = !isGameplayReady || isRefreshing || pendingActions.size > 0 || advancing;
   useEffect(() => {
-    if (busyNow || !queuedStep.current) return;
-    const step = queuedStep.current;
-    queuedStep.current = null;
-    setQueued(null);
+    if (busyNow) return;
+    if (endQueuedRef.current) {
+      // The rest of the season plays now; presses queued before it have
+      // nothing left to play.
+      endQueuedRef.current = false;
+      setEndQueued(false);
+      queuedSteps.current = [];
+      setQueued([]);
+      if (!complete) playToEndRef.current?.();
+      return;
+    }
+    if (queuedSteps.current.length === 0) return;
+    const [step, ...rest] = queuedSteps.current;
+    queuedSteps.current = complete ? [] : rest;
+    setQueued(queuedSteps.current);
     if (!complete) pressRef.current?.(step, true);
     else runRef.current = null;
-  }, [busyNow, complete]);
+  }, [busyNow, complete, endQueued, queued]);
   if (!bootstrap || !isMockActive() || typeof window === 'undefined') return null;
 
   const layout = chromeLayout(width, fontScale);
@@ -819,6 +880,8 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   const busyAnnouncer = (
     <View style={visuallyHidden}>
       <Text accessibilityLiveRegion="polite">{busyLine}</Text>
+      {/* Read as +1 week's description only, never on its own. */}
+      {weekHint ? <Text aria-hidden nativeID={PRACTICE_WEEK_HINT_ID}>{weekHint}</Text> : null}
     </View>
   );
 
@@ -832,10 +895,17 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     }
     advancingRef.current = true;
     advancedRef.current = true;
+    // The player's own press: the held "Oct 21 games in." line goes now,
+    // under the button being pressed, not later by itself (walk 7 T1-14).
+    if (heldLineEnds(queuedPress ? 'queued-press' : 'press')) setHeld(false);
     const from = bootstrap.game.lastSettledDate ?? null;
-    // A press that waited behind another continues its run; any other
+    // A press that waited behind another continues its run, and so does a
+    // press soon after the last step landed (continuesRun); any other
     // starts one, from the account as it stands now.
-    const continued = queuedPress ? runRef.current : null;
+    const landed = landedRun.current;
+    landedRun.current = null;
+    const continued = queuedPress ? runRef.current
+      : landed && continuesRun(false, Date.now() - landed.at) ? landed.run : null;
     const run: PracticeRun = continued
       ? { ...continued, steps: [...continued.steps, step], lastFrom: from }
       : { start: bootstrap, steps: [step], lastFrom: from };
@@ -844,6 +914,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       : from ? weekSpanLabel(from, practiceSeasonEnd(mockSeasonStart())) : null;
     playingDateRef.current = date;
     setPlaying({ step, date });
+    let stepIn = false;
     try {
       // "Playing Oct 21…" paints before the night's heavy work (walk 5 T4-11).
       await afterPaint();
@@ -856,7 +927,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       if (step === 'week') playPracticeWeek();
       else playPracticeNight(from, practiceSeasonEnd(mockSeasonStart()));
       for (let attempt = 0; attempt < ADVANCE_REFRESH_ATTEMPTS; attempt += 1) {
-        if (await refreshData()) break;
+        if (await refreshData()) {
+          stepIn = true;
+          break;
+        }
         await wait(ADVANCE_RETRY_MS);
       }
     } finally {
@@ -866,11 +940,18 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       advancingRef.current = false;
       playingDateRef.current = null;
       setPlaying(null);
-      // Nothing waits behind it: the run is over, and a run of two or more
-      // steps gets one notice for all of it (in the render that shows it).
-      if (!queuedStep.current) {
+      if (queuedSteps.current.length === 0 && !endQueuedRef.current) {
+        // Nothing waits behind it: the run is over for now, and a run of two
+        // or more steps gets one notice for all of it (in the render that
+        // shows it). A press in the next moment picks it up again.
         runRef.current = null;
+        landedRun.current = stepIn ? { run, at: Date.now() } : null;
         if (run.steps.length > 1) setRunOver(run);
+      } else {
+        // Another press waits: this step's own notice never shows, the
+        // run's does once it is all in (Play to the end says its own).
+        if (stepIn) holdStepNotice.current = true;
+        if (endQueuedRef.current) runRef.current = null;
       }
     }
   };
@@ -881,12 +962,20 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // T2-N1, T4-N3): a week at a time, letting the page paint between weeks,
   // then one refresh, so one notice says how the season ended.
   const playToEnd = async () => {
-    if (advancingRef.current) return;
+    if (advancingRef.current || pendingActions.size > 0 || isRefreshing) {
+      // Confirmed while a night plays or a move saves: it waits its turn and
+      // says so, rather than doing nothing (walk 7 T2-04).
+      endQueuedRef.current = true;
+      setEndQueued(true);
+      sayBusy(playToEndQueuedLine(playingDateRef.current));
+      return;
+    }
     const end = practiceSeasonEnd(mockSeasonStart());
     const from = bootstrap.game.lastSettledDate ?? null;
     advancingRef.current = true;
     advancedRef.current = true;
     runRef.current = null;
+    landedRun.current = null;
     setPlaying({ step: 'end', date: end ? humanDate(end) : null });
     try {
       await afterPaint();
@@ -911,6 +1000,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   pressRef.current = (step, queuedPress = false) => {
     if (asksFirst) {
       runRef.current = null;
+      landedRun.current = null;
+      queuedSteps.current = [];
+      setQueued([]);
       askQuestion(step === 'night' ? 'empty-night' : 'empty-week');
     } else void advance(step, queuedPress);
   };
@@ -930,8 +1022,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   const playingNight = playing?.step === 'night';
   const playingWeek = playing?.step === 'week';
   const playingText = playing?.date ? `Playing ${playing.date}…` : 'Playing…';
-  const inkNight = playingNight || queued === 'night';
-  const inkWeek = playingWeek || queued === 'week';
+  const nightsQueued = queued.filter((step) => step === 'night').length;
+  const weeksQueued = queued.length - nightsQueued;
+  const inkNight = playingNight || nightsQueued > 0;
+  const inkWeek = playingWeek || weeksQueued > 0;
   // Stacked labels still name the night where the row allows: "+1 NIGHT"
   // over "OCT 21", the night button taking the larger share (walk 4 T3-11).
   const stackedDate = stackLabels && nightDate !== null && width >= NIGHT_DATE_STACKED_MIN_WIDTH;
@@ -939,13 +1033,18 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   const busyLabel = (withDate: boolean) => (
     withDate && !stackLabels && playing?.date ? `Playing\n${playing.date}…` : 'Playing…'
   );
-  const queuedName = (step: 'night' | 'week') => (queued === step ? ` Next ${step} queued.` : '');
-  const nightLabel = queued === 'night' ? queuedLabel('night', stackLabels)
+  // "…, to the Oct 28 games. Next night queued." (a sentence of its own).
+  const queuedName = (step: 'night' | 'week', name: string) => {
+    const count = step === 'night' ? nightsQueued : weeksQueued;
+    if (count === 0) return name;
+    return `${name}${/[.…]$/.test(name) ? '' : '.'} ${count === 1 ? `Next ${step} queued.` : `${count} ${step}s queued.`}`;
+  };
+  const nightLabel = nightsQueued > 0 ? queuedLabel('night', stackLabels, nightsQueued)
     : playingNight ? busyLabel(true)
       : stackedDate ? `+1 night\n${nightDate}` : stackLabels ? '+1\nnight' : nightDate ? `+1 night\n${nightDate}` : '+1 night';
-  const nightName = (playingNight
+  const nightName = queuedName('night', playingNight
     ? `+1 night: advance one night. ${playingText}`
-    : nightDate ? `+1 night: advance one night, to the ${nightDate} games` : '+1 night: advance one night') + queuedName('night');
+    : nightDate ? `+1 night: advance one night, to the ${nightDate} games` : '+1 night: advance one night');
   const advanceButtons = (
     <>
       <Button
@@ -964,10 +1063,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       <Button
         ref={weekRef}
         // The span it plays is in the name; the label keeps the button's width.
-        accessibilityLabel={`${playingWeek ? `+1 week: advance one week. ${playingText}` : '+1 week: advance one week'}${queuedName('week')}`}
+        accessibilityLabel={queuedName('week', playingWeek ? `+1 week: advance one week. ${playingText}` : '+1 week: advance one week')}
         disabled={advanceBusy || progress.complete}
         focusableWhenDisabled={!progress.complete}
-        label={queued === 'week' ? queuedLabel('week', stackLabels) : playingWeek ? busyLabel(false) : stackLabels ? '+1\nweek' : '+1 week'}
+        label={weeksQueued > 0 ? queuedLabel('week', stackLabels, weeksQueued) : playingWeek ? busyLabel(false) : stackLabels ? '+1\nweek' : '+1 week'}
         onDisabledPress={pressAdvance(() => pressWhileBusy('week'))}
         steady
         onPress={pressAdvance(() => pressRef.current?.('week'))}
@@ -981,19 +1080,23 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // "Play to" over "the end"), and in More wherever More holds Restart. It
   // always asks first (walk 6 T2-N1, T4-N3).
   const playingEnd = playing?.step === 'end';
-  const playToEndButton = (stacked: boolean) => (progress.complete ? null : (
+  const playToEndButton = (stacked: boolean, inMenu = false) => (progress.complete ? null : (
     <Button
-      accessibilityLabel={`${PLAY_TO_END_LABEL} of the season${playingEnd ? '. Playing the rest of the season…' : ''}`}
-      disabled={advanceBusy}
+      accessibilityLabel={`${PLAY_TO_END_LABEL} of the season${playingEnd ? '. Playing the rest of the season…' : endQueued ? '. Queued: it plays once the games on screen are in.' : ''}`}
+      // It opens its question while a night plays or a move saves (it did
+      // nothing then); its confirm waits its turn (walk 7 T2-04).
+      disabled={playingEnd || endQueued || !isGameplayReady}
       focusableWhenDisabled
-      label={playingEnd ? 'Playing…' : stacked ? 'Play to\nthe end' : PLAY_TO_END_LABEL}
+      label={playingEnd ? 'Playing…' : endQueued ? 'Queued' : stacked ? 'Play to\nthe end' : PLAY_TO_END_LABEL}
       onPress={() => askQuestion('play-to-end')}
-      style={[styles.quiet, narrow && styles.quietNarrow, stacked && styles.quietStacked, playingEnd && styles.advancePlaying]}
+      style={[styles.quiet, !inMenu && styles.quietEdge, narrow && styles.quietNarrow, stacked && styles.quietStacked, playingEnd && styles.advancePlaying]}
       textStyle={stacked ? styles.quietStackedText : undefined}
       variant="quiet"
     />
   ));
-  const secondaryButtons = (
+  // In the row, Restart and Exit are outlined like the controls beside them
+  // (bare words read as captions; walk 7 T1-01); in More they are menu items.
+  const secondaryButtons = (inMenu = false) => (
     <>
       {/* Both lose the whole season, so both ask first (ConfirmDialog says
           what would be lost). Start over reloads into a fresh season, which
@@ -1011,7 +1114,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         onPress={() => askQuestion(progress.complete ? 'play-again' : 'restart')}
         // At season end it is the way on, so it looks like one (it read as a
         // disabled grey slab on Results and Leaders; walk 5 T2-09).
-        style={progress.complete ? undefined : [styles.quiet, narrow && styles.quietNarrow]}
+        style={progress.complete ? undefined : [styles.quiet, !inMenu && styles.quietEdge, narrow && styles.quietNarrow]}
         variant={progress.complete ? 'primary' : 'quiet'}
       />
       {/* Exit only where there is a live market to go to (walk 4 T2-10). */}
@@ -1021,7 +1124,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
           accessibilityLabel="Exit practice"
           label="Exit"
           onPress={() => askQuestion('exit')}
-          style={[styles.quiet, narrow && styles.quietNarrow]}
+          style={[styles.quiet, !inMenu && styles.quietEdge, narrow && styles.quietNarrow]}
           variant="quiet"
         />
       ) : null}
@@ -1034,7 +1137,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     return (
       <View style={[styles.controls, styles.controlsNarrow]}>
         <View style={[styles.group, styles.moreRow]}>
-          {secondaryButtons}
+          {secondaryButtons()}
         </View>
       </View>
     );
@@ -1108,7 +1211,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     ) : null;
     return (
       <View style={styles.foldedControls}>
-        <MoreMenu buttonRef={moreRef} open={moreOpen} setOpen={setMoreOpen}>
+        <MoreMenu buttonRef={moreRef} footer={resultNote} open={moreOpen} setOpen={setMoreOpen}>
           {/* The notes above the buttons never get shorter while the menu is
               open (a lock that lifts, say), so the buttons stay put. */}
           <View
@@ -1122,11 +1225,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
             {hintNote}
           </View>
           {progress.complete ? null : advanceButtons}
-          {resultNote}
           {busyAnnouncer}
           {rulesItem}
-          {playToEndButton(false)}
-          {secondaryButtons}
+          {playToEndButton(false, true)}
+          {secondaryButtons(true)}
           {settingsItem}
         </MoreMenu>
       </View>
@@ -1138,8 +1240,8 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   if (folded) {
     return (
       <View style={[styles.foldedControls, foldFill && styles.foldedFill]}>
-        {progress.complete ? secondaryButtons : advanceButtons}
-        {menu(progress.complete ? rulesItem : <>{rulesItem}{playToEndButton(false)}{secondaryButtons}</>)}
+        {progress.complete ? secondaryButtons() : advanceButtons}
+        {menu(progress.complete ? rulesItem : <>{rulesItem}{playToEndButton(false, true)}{secondaryButtons(true)}</>)}
         {busyAnnouncer}
       </View>
     );
@@ -1150,10 +1252,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       <View style={[styles.controls, styles.controlsNarrow]}>
         <View style={[styles.group, styles.groupFill]}>
           {/* Nothing left to play at season end: no dimmed advance buttons. */}
-          {progress.complete ? secondaryButtons : (
+          {progress.complete ? secondaryButtons() : (
             <>
               {advanceButtons}
-              {menu(<>{playToEndButton(false)}{secondaryButtons}</>)}
+              {menu(<>{playToEndButton(false, true)}{secondaryButtons(true)}</>)}
             </>
           )}
         </View>
@@ -1170,9 +1272,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
           {advanceButtons}
         </View>
       )}
-      <View style={[styles.group, styles.secondary, inline && styles.secondaryInline]}>
+      <View style={[styles.group, styles.secondary, narrow && styles.secondaryNarrow, inline && styles.secondaryInline]}>
         {playToEndButton(!layout.wide)}
-        {secondaryButtons}
+        {secondaryButtons()}
       </View>
       {hint}
       {busyAnnouncer}
@@ -1245,9 +1347,10 @@ const styles = StyleSheet.create({
     flexBasis: '100%',
     gap: 6,
   },
+  // Outlined buttons never touch (Exit beside Play another season).
   moreRow: {
     marginLeft: 'auto',
-    gap: 0,
+    gap: 4,
   },
   // More's menu floats over the screen, right-aligned under the button.
   menuScrim: {
@@ -1308,8 +1411,11 @@ const styles = StyleSheet.create({
   // full ink: it is the answer to the press. It wraps in the menu's width
   // rather than widening it (the buttons would move under the finger).
   moreResult: {
+    flexShrink: 0,
     width: 0,
     minWidth: '100%',
+    borderTopColor: colors.borderStrong,
+    borderTopWidth: StyleSheet.hairlineWidth,
     color: colors.text,
     fontFamily: fonts.body,
     fontSize: type.caption,
@@ -1338,7 +1444,10 @@ const styles = StyleSheet.create({
   },
   secondary: {
     marginLeft: 'auto',
-    gap: 0,
+    gap: 6,
+  },
+  secondaryNarrow: {
+    gap: 4,
   },
   secondaryInline: {
     marginLeft: 0,
@@ -1409,13 +1518,20 @@ const styles = StyleSheet.create({
   quiet: {
     paddingHorizontal: space.sm + 2,
   },
+  // A quiet control in the row: the 3:1 control edge, no fill, so Play to
+  // the end, Restart and Exit read as buttons of the same family as +1
+  // night and +1 week, only quieter (walk 7 T1-01).
+  quietEdge: {
+    borderColor: colors.controlBorder,
+  },
+  // Outlined, the pair keeps to the row's one line down to 320px.
   quietNarrow: {
-    paddingHorizontal: space.sm,
+    paddingHorizontal: 6,
   },
   // "Play to" over "the end" in a phone's row, beside Restart.
   quietStacked: {
     minWidth: 0,
-    paddingHorizontal: space.sm,
+    paddingHorizontal: 6,
   },
   quietStackedText: {
     textAlign: 'center',

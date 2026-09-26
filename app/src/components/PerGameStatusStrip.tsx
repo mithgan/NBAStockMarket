@@ -41,6 +41,7 @@ import {
   sheetNarrow,
   shortTermText,
   spokenLabel,
+  statusRowResult,
   statusSummary,
 } from '../data/chromeView';
 import { earningsBetween } from '../data/perGameMetrics';
@@ -131,7 +132,9 @@ export function PerGameStatusStrip() {
   const progress = practice ? practiceProgress(mockSeasonStart(), lastSettled) : null;
   // Before the first night there is no "last night" to report; a day with no
   // games for your players says so rather than "$0".
-  const lastNight = progress?.day === 0 ? null : spanResult;
+  // Once the season is complete the row states the final score alone, not
+  // the last run's figure beside it (walk 7 T4-09).
+  const lastNight = statusRowResult(progress, spanResult);
   const next = nextGamesText(nextGameDate);
 
   const pendingBeyondReconciliation = [...pendingActions]
@@ -303,12 +306,12 @@ export function PerGameStatusStrip() {
     // read as a second, tappable-looking control (walk 3 T4-04, T2-16).
     // Compact rows have no room for it; the notice and the Roster card carry
     // the final score there.
-    layout.compact ? null : (
-      <Text key="over" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
-        <Text style={styles.factLabel}>{'Final score '}</Text>
-        <LastNightMoney tight={tight} value={bootstrap.account.cumulativePnl} />
-      </Text>
-    )
+    // Compact rows (a phone at 200% zoom, 180px) say it shorter, on the line
+    // the last run's figure had: it was the only number there (walk 7 T4-09).
+    <Text key="over" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
+      <Text style={styles.factLabel}>{layout.compact ? 'Final ' : 'Final score '}</Text>
+      <LastNightMoney tight={tight} value={bootstrap.account.cumulativePnl} />
+    </Text>
   ) : (
     <Text key="next" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
       <Text style={styles.factLabel}>{progress?.day === 0 ? 'Season opens ' : 'Next '}</Text>
