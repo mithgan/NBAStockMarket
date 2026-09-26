@@ -180,8 +180,8 @@ test('rule wording matches the shared rules copy for both dividend bases', () =>
     assert.equal(dividendBasisText(dividendBasis), facts.find((fact) => fact.label === 'Dividend basis')?.value);
   }
   assert.equal(dividendText('raw_net_points', 40_000), 'Net points scored · $40,000\u00a0per\u00a0net\u00a0point');
-  assert.equal(shortTermText(7), 'A short closes after 7 days');
-  assert.equal(shortTermText(1), 'A short closes after 1 day');
+  assert.equal(shortTermText(7), 'A short runs 7 days, then ends by itself with no fee');
+  assert.equal(shortTermText(1), 'A short runs 1 day, then ends by itself with no fee');
   assert.equal(shortTermText(null), 'A short stays open until you close it');
 });
 

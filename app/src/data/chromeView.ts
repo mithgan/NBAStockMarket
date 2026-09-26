@@ -345,5 +345,5 @@ export const EMPTY_ROSTER_HINT = "Add a player first. +1 night plays the next ni
 /** How long a short stays open, in words. */
 export function shortTermText(shortTermDays: number | null): string {
   if (shortTermDays === null) return 'A short stays open until you close it';
-  return `A short closes after ${shortTermDays} ${shortTermDays === 1 ? 'day' : 'days'}`;
+  return `A short runs ${shortTermDays} ${shortTermDays === 1 ? 'day' : 'days'}, then ends by itself with no fee`;
 }
