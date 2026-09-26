@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp,
 import { exactMoney, humanDate } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
 import type { SeasonSummary } from '../../data/perGameMetrics';
-import { BELOW_ZERO_WELCOME, finalSummary, formatAt, tipWords, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
+import { BELOW_ZERO_WELCOME, finalSummary, formatAt, tipTag, tipWords, type BreakdownPart, type PartPrecision, type TipVerdict } from '../../data/rosterView';
 import { colors, control, fonts, headingStyle, radius, space, type, weight } from '../../theme';
 import { Button, headingLevel, Label, tapsSettling, visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -95,11 +95,13 @@ export function WelcomeCard({
  * beside them, never on a row of its own above them (walk 7 T3-09). × hides
  * it, and it goes by itself after the first week.
  */
-export function FirstNightTip({ onOpenResults, onHide, side = 'long' }: {
+export function FirstNightTip({ onOpenResults, onHide, side = 'long', verdict = 'profit' }: {
   onOpenResults: () => void;
   onHide: () => void;
   /** Who the tip speaks to: a shorts-only player gets the short's reading (`tipSide`, walk 8 T4-10). */
   side?: 'long' | 'short';
+  /** The tag it explains: the one the rows show (`tipVerdict`, walk 9 T1-14). */
+  verdict?: TipVerdict;
 }) {
   const tiny = useWindowDimensions().width < 200;
   const results = <Button accessibilityLabel="Results: each game's math" label="Results" onPress={onOpenResults} />;
@@ -107,8 +109,8 @@ export function FirstNightTip({ onOpenResults, onHide, side = 'long' }: {
     <View style={[styles.band, styles.tipBand, tiny && styles.bandTiny]}>
       <View style={[styles.headRow, styles.tipRowInline]}>
         <Text style={[styles.headText, styles.tipText]}>
-          <Text style={styles.tipTag}>PAYING OFF</Text>
-          {tipWords(side)}
+          <Text style={styles.tipTag}>{tipTag(verdict)}</Text>
+          {tipWords(side, verdict)}
         </Text>
         {tiny ? null : results}
         <Pressable

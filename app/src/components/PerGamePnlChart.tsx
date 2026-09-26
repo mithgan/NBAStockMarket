@@ -8,18 +8,21 @@ import {
   axisMark,
   chartSummary,
   chartValueText,
+  MARK_MIN_GAP,
   nightReadingParts,
   hasNights,
   nearestIndex,
   nightlySeries,
   placeAxisLabels,
   valueTicks,
+  weekStepIndex,
+  widestReading,
   type NightPoint,
 } from '../data/rosterView';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { buildPnlSeries, pnlChartDomain } from '../state/perGameState';
 import { colors, fonts, space, type, weight } from '../theme';
-import { headingLevel, Label } from '../ui/kit';
+import { headingLevel, Label, visuallyHidden } from '../ui/kit';
 import { FineMoney } from './roster/FineMoney';
 import { usePlotPointer, type PlotIntent } from './roster/usePlotPointer';
 
@@ -66,7 +69,16 @@ export function PerGamePnlChart({
   const series = useMemo(() => nights.filter((point) => point.kind !== 'now'), [nights]);
   const domain = useMemo(() => pnlChartDomain(series), [series]);
   const [width, setWidth] = useState(0);
-  const [selected, setSelected] = useState<number | null>(null);
+  // The night being read: one a mouse points at (desktop hover, walk 9
+  // T2-N3) wins over the one pinned by a click, a tap, a slide or the keys;
+  // leaving the plot goes back to the pinned one.
+  const [pinned, setPinned] = useState<number | null>(null);
+  const [hovered, setHovered] = useState<number | null>(null);
+  const selected = hovered ?? pinned;
+  // Whether the longest reading needs two lines: the resting words then take
+  // two as well, so the heading never changes height (walk 9 T1-03).
+  const [tallReading, setTallReading] = useState(true);
+  const keysId = `${useId().replace(/[^a-zA-Z0-9_-]/g, '')}-keys`;
   // The value marks' drawn widths, by kind: the gutter fits the widest.
   const [markWidths, setMarkWidths] = useState<Record<string, number>>({});
   const onMarkLayout = useCallback((kind: string, room: number) => {
@@ -80,7 +92,8 @@ export function PerGamePnlChart({
   ), [domain.maximum, domain.minimum, plotHeight]);
   const zeroY = INSET_Y + domain.zeroRatio * (plotHeight - INSET_Y * 2);
   const ticks = useMemo(
-    () => valueTicks(series.map((night) => night.cumulativePnl), yOf, { height: plotHeight }),
+    // A high or low close to "$0" gives way to it (walk 9 T1-11).
+    () => valueTicks(series.map((night) => night.cumulativePnl), yOf, { height: plotHeight, minGap: MARK_MIN_GAP }),
     [plotHeight, series, yOf],
   );
   // Only the marks drawn now count: a low that is gone no longer widens it.
@@ -100,7 +113,8 @@ export function PerGamePnlChart({
 
   // A new reading of the data means old indexes point at other nights.
   useEffect(() => {
-    setSelected(null);
+    setPinned(null);
+    setHovered(null);
   }, [series.length]);
 
   // Grow into newly settled nights (never on first paint, never with reduced motion).
@@ -131,25 +145,35 @@ export function PerGamePnlChart({
   const read = useCallback((x: number, intent: PlotIntent) => {
     const index = nearestIndex(xs, x);
     if (index === null) return;
-    setSelected((current) => (intent === 'tap' && current === index ? null : index));
+    // Pointing reads a night; a click pins it, and a click on the pinned
+    // night lets it go, as a second tap does.
+    if (intent === 'point') setHovered(index);
+    else if (intent === 'slide') setPinned(index);
+    else setPinned((current) => (current === index ? null : index));
   }, [xs]);
   const onKey = useCallback((key: string) => {
     if (key === 'Escape') {
       if (selected === null) return false;
-      setSelected(null);
+      setPinned(null);
+      setHovered(null);
       return true;
     }
     const current = Math.min(selected ?? last, last);
+    // Arrows move a night, Page keys a week (walk 9 T3-N1), Home and End the ends.
     const next = key === 'ArrowLeft' ? Math.max(0, current - 1)
       : key === 'ArrowRight' ? Math.min(last, current + 1)
-        : key === 'Home' ? 0
-          : key === 'End' ? last
-            : null;
+        : key === 'PageDown' ? weekStepIndex(series, current, -1)
+          : key === 'PageUp' ? weekStepIndex(series, current, 1)
+            : key === 'Home' ? 0
+              : key === 'End' ? last
+                : null;
     if (next === null) return false;
-    setSelected(next);
+    // The keys own the reading until the mouse moves again.
+    setHovered(null);
+    setPinned(next);
     return true;
-  }, [last, selected]);
-  const { ref, responderProps } = usePlotPointer({ onRead: read, onLeave: () => setSelected(null), onKey });
+  }, [last, selected, series]);
+  const { ref, responderProps } = usePlotPointer({ onRead: read, onLeave: () => setHovered(null), onKey });
   const onLayout = (event: LayoutChangeEvent) => setWidth(Math.round(event.nativeEvent.layout.width));
 
   if (!hasNights(series)) {
@@ -184,20 +208,52 @@ export function PerGamePnlChart({
   const endUp = end.cumulativePnl >= 0;
   const axisLabels = placeAxisLabels(xs, axisLabelIndexes(series, width), width, AXIS_LABEL_WIDTH);
   const revealX = gutter + revealed * span + 4;
+  const widest = widestReading(series);
+  const restWords = (
+    <View style={tallReading ? styles.restStacked : styles.restLine}>
+      <Text accessibilityLabel="Score by night" accessibilityRole="header" {...headingLevel(2)}><Label>Score by night</Label></Text>
+      {/* Tap, click or arrow keys: one word for all of them. */}
+      <Text style={styles.hint}>Select a night to read it</Text>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
+      {/* The heading holds the height of its longest reading from the start,
+          so reading a night never pushes the chart and the rows under it
+          (walk 9 T1-03): unseen copies of the resting words and of the
+          longest reading share its one cell with what is shown. */}
       <View style={styles.heading}>
-        {point ? <Reading point={point} previous={series[shownIndex - 1]} /> : (
-          <>
-            <Text accessibilityLabel="Score by night" accessibilityRole="header" {...headingLevel(2)}><Label>Score by night</Label></Text>
-            {/* Tap, click or arrow keys: one word for all of them. */}
-            <Text style={styles.hint}>Select a night to read it</Text>
-          </>
-        )}
+        <View style={styles.headingLayer}>
+          {point ? <Reading point={point} previous={series[shownIndex - 1]} stacked={tallReading} /> : restWords}
+        </View>
+        <View aria-hidden pointerEvents="none" style={[styles.headingLayer, styles.headingGhost]}>
+          {restWords}
+        </View>
+        {/* Measured as it would wrap by itself: two lines or more, and every
+            reading takes its date line and its figures line. */}
+        <View
+          aria-hidden
+          onLayout={(event) => {
+            const tall = event.nativeEvent.layout.height > 26;
+            setTallReading((current) => (current === tall ? current : tall));
+          }}
+          pointerEvents="none"
+          style={[styles.headingLayer, styles.headingGhost]}
+        >
+          <Reading point={series[widest]} previous={series[widest - 1]} />
+        </View>
+        {tallReading ? (
+          <View aria-hidden pointerEvents="none" style={[styles.headingLayer, styles.headingGhost]}>
+            <Reading point={series[widest]} previous={series[widest - 1]} stacked />
+          </View>
+        ) : null}
       </View>
+      {/* How the keys move, said once after the slider's name (walk 9 T3-N1). */}
+      <Text nativeID={keysId} style={visuallyHidden}>Arrow keys move a night, Page keys a week.</Text>
       <View
         key="plot"
+        {...({ 'aria-describedby': keysId } as object)}
         accessible
         // Native screen readers step nights with their adjust gesture; the web
         // slider takes arrow keys (see usePlotPointer).
@@ -244,9 +300,12 @@ export function PerGamePnlChart({
             {ticks.map((tick) => (
               <Line
                 key={tick.kind}
-                stroke={tick.kind === 'zero' ? colors.borderStrong : colors.border}
+                // Above or below $0 is the chart's message: its line is drawn
+                // at 3:1 in the muted-text colour (walk 9 T3-13); the high
+                // and low guides stay faint.
+                stroke={tick.kind === 'zero' ? colors.muted : colors.border}
                 strokeDasharray={tick.kind === 'zero' ? '4 4' : '1 4'}
-                strokeWidth={1}
+                strokeWidth={tick.kind === 'zero' ? 1.5 : 1}
                 x1={gutter - 2}
                 x2={width}
                 y1={tick.y}
@@ -320,11 +379,16 @@ export function PerGamePnlChart({
   );
 }
 
-/** The heading while a night is being read: its date, then each figure after its label. */
-function Reading({ point, previous }: { point: NightPoint; previous: NightPoint | undefined }) {
+/**
+ * The heading while a night is being read: its date, then each figure after
+ * its label. `stacked` puts the figures on the line under the date, where a
+ * narrow chart would wrap the longest reading anyway, so every night reads in
+ * the same two lines.
+ */
+function Reading({ point, previous, stacked = false }: { point: NightPoint; previous: NightPoint | undefined; stacked?: boolean }) {
   if (point.kind === 'start') {
     return (
-      <View style={styles.reading}>
+      <View style={[styles.reading, stacked && styles.readingStacked]}>
         <Text style={styles.readingDate}>Start</Text>
         <Text style={styles.readingCaption}>Everyone starts at $0</Text>
       </View>
@@ -338,7 +402,7 @@ function Reading({ point, previous }: { point: NightPoint; previous: NightPoint 
     </View>
   );
   return (
-    <View style={styles.reading}>
+    <View style={[styles.reading, stacked && styles.readingStacked]}>
       <Text style={styles.readingDate}>{when}</Text>
       <View style={styles.readingFigures}>
         {point.kind === 'night' ? figure('That night', point.change) : figure('Fees', point.change)}
@@ -359,14 +423,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
   },
+  // One cell, as tall as the tallest of its layers.
   heading: {
     minHeight: 18,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 2,
+  },
+  headingLayer: {
+    width: '100%',
+    flexShrink: 0,
+  },
+  // Laid out, never drawn, read, found or selected.
+  headingGhost: {
+    marginLeft: '-100%',
+    ...({ visibility: 'hidden' } as object),
+  },
+  restLine: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     columnGap: space.md,
-    marginBottom: 2,
+  },
+  restStacked: {
+    rowGap: 2,
   },
   hint: {
     color: colors.faint,
@@ -381,6 +462,10 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     justifyContent: 'space-between',
     columnGap: space.md,
+  },
+  readingStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
   },
   readingDate: {
     color: colors.text,
@@ -459,9 +544,10 @@ const styles = StyleSheet.create({
   emptyRule: {
     flex: 1,
     height: 0,
-    borderTopWidth: 1,
+    borderTopWidth: 1.5,
     borderStyle: 'dashed',
-    borderTopColor: colors.borderStrong,
+    // The $0 line, at 3:1 as on the drawn chart (walk 9 T3-13).
+    borderTopColor: colors.muted,
   },
   emptyText: {
     marginTop: space.xs,

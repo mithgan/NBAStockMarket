@@ -3,8 +3,8 @@ import { Platform, type GestureResponderEvent, type ViewProps } from 'react-nati
 
 import { chartTouchIsTap, chartTouchMove } from '../../data/rosterView';
 
-/** How a reading was asked for: a mouse pointing, a finger tapping, or a finger sliding. */
-export type PlotIntent = 'point' | 'tap' | 'slide';
+/** How a reading was asked for: a mouse pointing or clicking, a finger tapping, or a finger sliding. */
+export type PlotIntent = 'point' | 'click' | 'tap' | 'slide';
 
 export interface PlotPointerHandlers {
   /** x is in plot-local pixels. */
@@ -21,7 +21,8 @@ export interface PlotPointerHandlers {
  * Web listens on the real DOM node: react-native-web's responder events do not
  * give a trustworthy x inside an SVG (it is relative to whichever path was
  * hit), so x is measured from `clientX` against the plot's own rectangle.
- *  - Mouse: moving reads a night; leaving goes back to the latest.
+ *  - Mouse: moving reads a night; a click pins it (walk 9 T2-N3); leaving
+ *    goes back to the pinned one, or the latest.
  *  - Touch and pen: a tap reads a night when the finger lifts, and the
  *    reading stays; a mostly sideways drag scrubs. A touch that goes up or
  *    down is the page's scroll and never selects a night (walk 5 T1-21):
@@ -71,6 +72,10 @@ export function usePlotPointer(handlers: PlotPointerHandlers): {
       if (mode === 'slide') latest.current.onRead(x, 'slide');
     };
     const up = (event: PointerEvent) => {
+      if (event.pointerType === 'mouse') {
+        if (event.button === 0) latest.current.onRead(xOf(event), 'click');
+        return;
+      }
       if (start !== null && event.pointerType !== 'mouse' && mode === 'wait'
         && chartTouchIsTap(xOf(event) - start.x, yOf(event) - start.y)) {
         latest.current.onRead(start.x, 'tap');

@@ -1,16 +1,19 @@
 import { useState, type ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { gamesCount, unbrokenName } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
-import { feesDetail, formatAt, holdDots, type ClosedRow, type PartPrecision } from '../../data/rosterView';
+import { feesDetail, formatAt, spokenRepeats, type ClosedRow, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { Button } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
+import { TABLE_COLUMNS } from './RowFigures';
 import { SectionHead } from './SectionHead';
 
 /** Closed positions listed before "Show all" takes over. */
 const COLLAPSED_COUNT = 5;
+/** The room a " · " takes between two parts of a line. */
+const DOT_WIDTH = 12;
 
 /** "Short ended Oct 28": a narrow row may wrap the words, never the date. */
 function bindDates(text: string): string {
@@ -18,11 +21,38 @@ function bindDates(text: string): string {
 }
 
 /**
+ * Parts of a line joined by " · " ("Dropped Oct 21 · 1 game"). A part that
+ * wraps starts its own line without the dot, and no line ends on one (walk 9
+ * T1-04, T4-05; walk 7 T1-12): each part carries its dot in front, and the
+ * dot of a part that opens a line sits in a clipped gutter off the left edge.
+ */
+export function DotLine({ parts, style }: { parts: readonly string[]; style?: StyleProp<TextStyle> }) {
+  return (
+    <View style={styles.dotClip}>
+      <View style={styles.dotLine}>
+        {parts.map((part, index) => (
+          <View key={`${index}:${part}`} style={styles.dotPart}>
+            <Text aria-hidden style={[style, styles.dot]}>{'\u00b7'}</Text>
+            <Text style={[style, styles.dotText]}>{part}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/**
  * Dropped players and ended shorts. What they made or lost while you held
  * them stays in your score, so they stay on the screen: the section's total
  * is the "Closed" part of the score breakdown and the sum of these rows.
+ *
+ * Every row sits on the lists' grid (walk 9 T1-04): name and "Dropped Oct 21
+ * · 1 game" at the left, the figure at the right under the lists' Total. Its
+ * "Add again" never squeezes them: on a phone it takes its own line under the
+ * words, and in the wide table it reads on one line just before the figure
+ * (walk 9 T2-07), in the room the price columns leave free on a closed row.
  */
-export function ClosedSection({ rows: allRows, total, totalInset = 0, precision = 'fine', actionFor, noteFor }: {
+export function ClosedSection({ rows: allRows, total, totalInset = 0, precision = 'fine', actionFor, noteFor, backFor }: {
   rows: readonly ClosedRow[];
   total: number;
   totalInset?: number;
@@ -31,6 +61,8 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
   actionFor?: (row: ClosedRow) => ReactNode;
   /** A note under a row, full width (a full side's "Choose who to drop"; walk 8 T4-12). */
   noteFor?: (row: ClosedRow) => ReactNode;
+  /** Where he is now when he is on a list again: "Back on your roster since Oct 22" (walk 9 T4-N2). */
+  backFor?: (row: ClosedRow) => string | null;
 }) {
   const [showAll, setShowAll] = useState(false);
   // The roster table (a wide list) keeps a Total column and an action column
@@ -54,29 +86,32 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
       {shown.map((row) => {
         const action = actionFor ? actionFor(row) : null;
         const note = noteFor ? noteFor(row) : null;
-        const label = `${row.name}, ${row.how.replace(/ · /g, ', ')}, ${gamesCount(row.games)}, ${formatAt(row.total, precision, true)} stays in your score`;
-        return (
-          <View key={row.positionId}>
-          <View style={[styles.row, table && styles.rowTable]}>
-            {/* The facts read as one stop; a follow-up button stays its own stop. */}
-            <View accessible accessibilityLabel={label} style={styles.facts}>
-              <View style={styles.copy}>
-                <Text style={styles.name}>{unbrokenName(row.name)}</Text>
-                {/* A wrap never leaves a "·" at a line's end (walk 7 T1-12). */}
-                <Text style={styles.detail}>{holdDots(`${bindDates(row.how)} · ${keepTogether(gamesCount(row.games))}`)}</Text>
-              </View>
-              <View style={[styles.money, { marginRight: table ? 0 : totalInset }]}>
-                <FineMoney precision={precision} value={row.total} />
-              </View>
-            </View>
-            {/* In the table the figure stays under Total, like the section
-                total and Fees, and Short again sits in the action column,
-                where Drop and Close sit above it (walk 4 T2-20). */}
-            {table ? (
-              <View style={[styles.actionColumn, { width: totalInset - space.sm }]}>{action}</View>
-            ) : action ? <View style={styles.rowAction}>{action}</View> : null}
+        const back = backFor ? backFor(row) : null;
+        const label = `${row.name}, ${row.how.replace(/ · /g, ', ')}, ${gamesCount(row.games)}, ${formatAt(row.total, precision, true)} stays in your score${back ? `. ${back}` : ''}`;
+        const figure = (hidden: boolean) => (
+          // In the table the figure is drawn after Add again; the facts'
+          // name already says it, so it is not heard twice.
+          <View aria-hidden={hidden || undefined} style={[styles.money, table && { marginRight: totalInset, minWidth: TABLE_COLUMNS.total, alignItems: 'flex-end' }]}>
+            <FineMoney precision={precision} value={row.total} />
           </View>
-          {note}
+        );
+        return (
+          <View key={row.positionId} style={styles.item}>
+            <View style={styles.row}>
+              {/* The facts read as one stop; a follow-up button stays its own stop. */}
+              <View accessible accessibilityLabel={label} style={[styles.facts, table && styles.factsTable]}>
+                <View style={styles.copy}>
+                  <Text style={styles.name}>{unbrokenName(row.name)}</Text>
+                  <DotLine parts={[...row.how.split(' · ').map(bindDates), keepTogether(gamesCount(row.games))]} style={styles.detail} />
+                  {back ? <Text style={styles.back}>{back}</Text> : null}
+                </View>
+                {table ? null : figure(false)}
+              </View>
+              {table && action ? <View style={styles.inlineAction}>{action}</View> : null}
+              {table ? figure(true) : null}
+            </View>
+            {!table && action ? <View style={styles.actionLine}>{action}</View> : null}
+            {note}
           </View>
         );
       })}
@@ -117,12 +152,12 @@ export function FeesLine({ fees, moves, feeEach = 0, unplayed = [], unplayedShor
   return (
     <View
       accessible
-      accessibilityLabel={`Fees, ${detail.replace(/ \u00b7 /g, ', ')}, ${formatAt(fees, precision, true)}`}
-      style={[styles.row, styles.fees]}
+      accessibilityLabel={`Fees, ${spokenRepeats(detail).replace(/ \u00b7 /g, ', ')}, ${formatAt(fees, precision, true)}`}
+      style={[styles.row, totalInset > 0 ? null : styles.rowBaseline]}
     >
       <View style={styles.copy}>
         <Text style={styles.name}>Fees</Text>
-        <Text style={styles.detail}>{holdDots(detail)}</Text>
+        <DotLine parts={detail.split(' \u00b7 ')} style={styles.detail} />
       </View>
       <View style={{ marginRight: totalInset }}>
         <FineMoney precision={precision} value={fees} />
@@ -136,31 +171,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
   },
-  // Too narrow for the words, the figure and Short again on one line (200%
-  // zoom): the button takes the next line, then the figure goes under the
-  // words, instead of squeezing the words to one letter a line.
+  item: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  // The words at the left, the figure at the right on the name's line (in
+  // the table: words, Add again, then the figure under Total). Too narrow
+  // for both (200% zoom), the figure goes under the words instead of
+  // squeezing them to a letter a line.
   row: {
     minHeight: 48,
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     gap: space.md,
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
   },
-  // The table: one line, figure then action column, spaced like a roster row.
-  rowTable: {
-    flexWrap: 'nowrap',
-    gap: space.sm,
-  },
-  actionColumn: {
-    flexShrink: 0,
-    alignItems: 'flex-end',
-  },
-  fees: {
-    borderTopWidth: 0,
+  // A phone's Fees figure sits on the "Fees" line, as a Closed row's does.
+  rowBaseline: {
+    alignItems: 'baseline',
   },
   facts: {
     flexGrow: 1,
@@ -169,14 +198,23 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: space.md,
+    alignItems: 'baseline',
+    columnGap: space.md,
   },
-  rowAction: {
+  factsTable: {
+    flexBasis: 0,
+  },
+  // Its own line under the words (a phone): the button never shares the
+  // figure's line, so neither squeezes the other.
+  actionLine: {
+    alignItems: 'flex-start',
+    paddingHorizontal: space.lg,
+    paddingBottom: space.sm,
+    marginTop: -2,
+  },
+  inlineAction: {
     flexShrink: 0,
-    marginLeft: 'auto',
   },
-
   copy: {
     flexGrow: 1,
     flexShrink: 1,
@@ -185,6 +223,7 @@ const styles = StyleSheet.create({
   },
   money: {
     marginLeft: 'auto',
+    flexShrink: 0,
   },
   name: {
     color: colors.muted,
@@ -193,11 +232,40 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
   },
   detail: {
-    marginTop: 1,
     color: colors.faint,
     fontFamily: fonts.display,
     fontSize: type.caption,
     fontWeight: weight.bold,
+  },
+  back: {
+    marginTop: 1,
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
+  },
+  dotClip: {
+    marginTop: 1,
+    overflow: 'hidden',
+  },
+  dotLine: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginLeft: -DOT_WIDTH,
+  },
+  dotPart: {
+    flexShrink: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  dot: {
+    width: DOT_WIDTH,
+    textAlign: 'center',
+  },
+  dotText: {
+    flexShrink: 1,
+    minWidth: 0,
   },
   more: {
     alignItems: 'flex-start',

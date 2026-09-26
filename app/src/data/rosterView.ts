@@ -185,11 +185,44 @@ export function tipSide(positions: readonly Pick<PerGamePosition, 'side'>[]): Pe
   return !longs && positions.some((position) => position.side === 'short') ? 'short' : 'long';
 }
 
-/** The first-night tip's words after its PAYING OFF tag, for the side it speaks to. */
-export function tipWords(side: PerGamePositionSide): string {
-  return side === 'short'
-    ? " on a short means his dividends came in under his price so far. Results shows each game's math."
-    : " means his dividends beat your price so far. Results shows each game's math.";
+/** The tag the first-night tip explains (`tipVerdict`). */
+export type TipVerdict = 'profit' | 'loss';
+
+/**
+ * The tag the first-night tip explains: the one on screen (walk 9 T1-14).
+ * PAYING OFF while any open row on the tip's side shows it; LOSING MONEY when
+ * none does and one shows that, so a shorts-only player whose short lost is
+ * told what his red tag means, not what a green one would.
+ */
+export function tipVerdict(
+  positions: readonly PerGamePosition[],
+  results: readonly PerGameSettledResult[],
+  side: PerGamePositionSide,
+): TipVerdict {
+  const verdicts = positions
+    .filter((position) => position.status === 'active' && position.side === side)
+    .map((position) => valueVerdict(positionValue(results, position.positionId)));
+  if (verdicts.includes('profit')) return 'profit';
+  return verdicts.includes('loss') ? 'loss' : 'profit';
+}
+
+/** The first-night tip's tag, as the rows draw it. */
+export function tipTag(verdict: TipVerdict): string {
+  return verdict === 'loss' ? 'LOSING MONEY' : 'PAYING OFF';
+}
+
+/** The first-night tip's words after its tag, for the side it speaks to and the tag on screen. */
+export function tipWords(side: PerGamePositionSide, verdict: TipVerdict = 'profit'): string {
+  const results = " Results shows each game's math.";
+  if (side === 'short') {
+    return verdict === 'loss'
+      // Why a short loses when he plays well, in the tip's slim band.
+      ? ` on a short means he played well: his dividends beat his price so far.${results}`
+      : ` on a short means his dividends came in under his price so far.${results}`;
+  }
+  return verdict === 'loss'
+    ? ` means his dividends came in under your price so far.${results}`
+    : ` means his dividends beat your price so far.${results}`;
 }
 
 export interface RosterRowView {
@@ -586,6 +619,56 @@ export function namesList(names: readonly string[]): string {
 }
 
 /**
+ * Names in the order they first came, a repeated one named once with how
+ * many times (walk 9 T4-09): "Luka Doncic ×3", never "Luka Doncic, Luka
+ * Doncic and Luka Doncic". The count holds on to the name.
+ */
+export function countedNames(names: readonly string[]): string[] {
+  const counts = new Map<string, number>();
+  for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
+  return [...counts].map(([name, count]) => (count > 1 ? `${name}\u00a0\u00d7${count}` : name));
+}
+
+/** The words as a screen reader should say them: "Luka Doncic ×3" is "Luka Doncic 3 times". */
+export function spokenRepeats(text: string): string {
+  return text.replace(/\u00a0\u00d7(\d+)/g, ' $1 times');
+}
+
+/**
+ * Where a player from Closed is now, when he is on a list again (walk 9
+ * T4-N2), keyed by his latest shown Closed row: "Back on your roster since
+ * Oct 22". The day is his new move's fee day; without a fee it is left out.
+ */
+export function backLines(
+  rows: readonly ClosedRow[],
+  positions: readonly PerGamePosition[],
+  ledger: readonly PerGameLedgerEntry[],
+): Map<string, string> {
+  const openedOn = new Map<string, string | null>();
+  for (const entry of ledger) {
+    if (entry.kind === 'open_fee' && entry.positionId && !openedOn.has(entry.positionId)) {
+      openedOn.set(entry.positionId, entryDay(entry));
+    }
+  }
+  const lines = new Map<string, string>();
+  const seen = new Set<string>();
+  // Rows come most recent first; a row folded into the Fees line is not shown.
+  for (const row of rows) {
+    if (row.unplayed || seen.has(row.playerId)) continue;
+    seen.add(row.playerId);
+    const now = positions.find((position) => position.status === 'active' && position.playerId === row.playerId);
+    if (!now) continue;
+    const day = openedOn.get(now.positionId);
+    const again = now.side === row.side;
+    const where = now.side === 'long'
+      ? again ? 'Back on your roster' : 'On your roster'
+      : again ? 'Back in your shorts' : 'In your shorts';
+    lines.set(row.positionId, day ? `${where} since ${humanDate(day)}` : where);
+  }
+  return lines;
+}
+
+/**
  * The Fees line's words: the moves, the fee each, and who was dropped or
  * whose short was closed before playing, by name, so every paid move can be
  * traced on the Roster (walk 7 T2-18): "13 moves · $250 each · 1 dropped
@@ -602,9 +685,9 @@ export function feesDetail({ moves, feeEach, dropped, closedShorts }: {
   return [
     `${moves} ${moves === 1 ? 'move' : 'moves'}`,
     feeEach > 0 ? `${exactMoney(feeEach)} each` : null,
-    dropped.length > 0 ? `${dropped.length} dropped before playing (${namesList(dropped)})` : null,
+    dropped.length > 0 ? `${dropped.length} dropped before playing (${namesList(countedNames(dropped))})` : null,
     closedShorts.length > 0
-      ? `${closedShorts.length} ${closedShorts.length === 1 ? 'short' : 'shorts'} closed before playing (${namesList(closedShorts)})`
+      ? `${closedShorts.length} ${closedShorts.length === 1 ? 'short' : 'shorts'} closed before playing (${namesList(countedNames(closedShorts))})`
       : null,
   ].filter(Boolean).join(' \u00b7 ');
 }
@@ -1106,6 +1189,80 @@ export function axisMark(value: number): string {
 
 /** Half a value mark's height: its words are about 14px tall. */
 const MARK_HALF = 7;
+
+/**
+ * The score chart's least distance between a high or low mark and "$0",
+ * centre to centre (walk 9 T1-11): the marks are about 14px tall, so 26px
+ * leaves 12px of clear air between their words. A mark any closer gives way;
+ * $0 always stays, and a night's reading still gives the figure.
+ */
+export const MARK_MIN_GAP = 26;
+
+/**
+ * The night whose reading takes the most room (its date and figures, by
+ * length), so the chart's heading can keep that height from the start and a
+ * selected night never pushes the page (walk 9 T1-03).
+ */
+export function widestReading(series: readonly NightPoint[]): number {
+  const fine = (amount: number) => formatAt(amount, 'fine', true).length;
+  let widest = 0;
+  let room = -1;
+  series.forEach((point, index) => {
+    let length: number;
+    if (point.kind === 'start') {
+      length = 'Start'.length + 'Everyone starts at $0'.length;
+    } else {
+      const { when, fees } = nightReadingParts(point, series[index - 1]);
+      length = when.length + 'That night'.length + fine(point.change)
+        + (fees !== 0 ? 'Fees'.length + fine(fees) : 0)
+        + 'Score'.length + fine(point.cumulativePnl);
+    }
+    if (length > room) {
+      room = length;
+      widest = index;
+    }
+  });
+  return widest;
+}
+
+/** The days since 1970 of a "2025-10-21" date. */
+function dayNumber(date: string): number {
+  return Math.round(Date.parse(`${date.slice(0, 10)}T00:00:00Z`) / 86_400_000);
+}
+
+/**
+ * Page Up / Page Down on the score chart (walk 9 T3-N1): the night a week
+ * later (1) or earlier (-1), by date: the first night at least seven days on,
+ * or the last one at least seven days back; the season's last night or the
+ * start when there is none that far. The start counts as the day before the
+ * first night.
+ */
+export function weekStepIndex(series: readonly NightPoint[], from: number, direction: 1 | -1): number {
+  const last = series.length - 1;
+  if (last < 0) return 0;
+  const firstDated = series.find((point) => point.date);
+  const dayOf = (index: number): number | null => {
+    const date = series[index]?.date;
+    if (date) return dayNumber(date);
+    return series[index]?.kind === 'start' && firstDated?.date ? dayNumber(firstDated.date) - 1 : null;
+  };
+  const start = Math.min(Math.max(from, 0), last);
+  const today = dayOf(start);
+  if (today === null) return Math.min(Math.max(start + direction * 7, 0), last);
+  const target = today + direction * 7;
+  if (direction > 0) {
+    for (let index = start + 1; index <= last; index += 1) {
+      const day = dayOf(index);
+      if (day !== null && day >= target) return index;
+    }
+    return last;
+  }
+  for (let index = start - 1; index >= 0; index -= 1) {
+    const day = dayOf(index);
+    if (day !== null && day <= target) return index;
+  }
+  return 0;
+}
 
 /**
  * The y-axis marks: $0 always, the season's high when it is above $0 and its

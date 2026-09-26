@@ -71,13 +71,15 @@ import {
   tipRetired,
   tipSide,
   belowZeroNote,
+  backLines,
+  tipVerdict,
   type ClosedRow,
   type RowLayout,
 } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
 import { openRules, openTab, takeRosterPick } from '../state/uiActions';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
-import { Button, ConfirmStrip, EmptyState, headingLevel, Tag, tapsSettling, useAriaDisabled, visuallyHidden } from '../ui/kit';
+import { Button, ConfirmStrip, EmptyState, headingLevel, repeatSafe, Tag, tapsSettling, useAriaDisabled, visuallyHidden } from '../ui/kit';
 import { restartPractice } from '../web/practiceSession';
 
 /** Desktop: score and chart beside the lists. */
@@ -449,7 +451,9 @@ function PositionRow({
             onPress={profileProps.onPress}
             style={({ pressed }) => [styles.tableProfile, pressed && styles.pressed]}
           >
-            <View role="cell" style={styles.tablePlayerCell}>
+            {/* The row's header (walk 9 T3-02): moving down a column, a
+                screen reader names the player before each figure. */}
+            <View role="rowheader" style={styles.tablePlayerCell}>
               <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
               <Pressable
                 ref={profileRef}
@@ -510,10 +514,12 @@ function PositionRow({
  * "Short again" on a closed short, "Add again" on a dropped player: the same
  * player at today's price, shown on the button ("Add again · $261.4K"; walk 8
  * T2-04), one tap, as the market's buttons would. Unavailable (with the
- * reason in its name) while roster moves are locked or that side is full; on
- * a full side a tap opens the way to make room (`onFull`, walk 8 T4-12).
+ * reason in its name) while roster moves are locked. On a full side it is
+ * the Market's live FULL (walk 9 T4-05): "Full · make room", solid-edged,
+ * its press opening and folding the way to make room (`onFull`, walk 8
+ * T4-12); dashed stays for LOCKED.
  */
-function ShortAgainButton({ row, price, quoteVersion, reason, notice = null, onShorted, onFull, buttonRef, column = false }: {
+function ShortAgainButton({ row, price, quoteVersion, reason, notice = null, onShorted, onFull, fullOpen = false, buttonRef }: {
   row: ClosedRow;
   price: number;
   quoteVersion: number;
@@ -522,15 +528,11 @@ function ShortAgainButton({ row, price, quoteVersion, reason, notice = null, onS
   /** What a tap while it is unavailable says (as LOCKED does: when moves reopen); defaults to `reason`. */
   notice?: string | null;
   onShorted: (playerId: string) => void;
-  /** Set when his side is full: a tap offers "Choose who to drop" instead of a notice. */
+  /** Set when his side is full: the button offers the way to make room instead. */
   onFull?: () => void;
+  /** The full side's note is open under the row. */
+  fullOpen?: boolean;
   buttonRef?: (node: View | null) => void;
-  /**
-   * The roster table's action column: as wide as Drop and Close above it,
-   * the words on two lines, so the row's figure keeps the Total column
-   * (walk 4 T2-20).
-   */
-  column?: boolean;
 }) {
   const { bootstrap, notify, openPosition, pendingActions } = usePerGame();
   // A dropped player is added again, an ended short shorted again: a new move
@@ -540,29 +542,56 @@ function ShortAgainButton({ row, price, quoteVersion, reason, notice = null, onS
   const pending = pendingActions.has(`position:${side}:${row.playerId}`) || pendingActions.has(`queued:position:${side}:${row.playerId}`);
   const fee = bootstrap?.ruleset.transactionFeeDollars ?? 0;
   const name = `${verb} ${row.name} again at ${perGame(price)}${fee > 0 ? `, ${exactMoney(fee)} fee` : ''}`;
+  const full = onFull !== undefined && !pending;
+  const own = useRef<View | null>(null);
+  // FULL opens a note, as on the Market: it says whether the note is open.
+  useEffect(() => {
+    const node = own.current as unknown as { setAttribute?: (name: string, value: string) => void; removeAttribute?: (name: string) => void } | null;
+    if (!node?.setAttribute || !node.removeAttribute) return;
+    if (full) node.setAttribute('aria-expanded', fullOpen ? 'true' : 'false');
+    else node.removeAttribute('aria-expanded');
+  });
+  // A double tap opens the note once (a toggle).
+  const onFullRef = useRef(onFull);
+  onFullRef.current = onFull;
+  const toggleFull = useMemo(() => repeatSafe(() => onFullRef.current?.()), []);
+  const buttonRefRef = useRef(buttonRef);
+  buttonRefRef.current = buttonRef;
+  const setRef = useCallback((node: View | null) => {
+    own.current = node;
+    buttonRefRef.current?.(node);
+  }, []);
   return (
     <Button
-      ref={buttonRef}
-      accessibilityHint={reason ?? undefined}
-      accessibilityLabel={pending ? `${side === 'long' ? 'Adding' : 'Shorting'} ${row.name}` : name}
-      disabled={reason !== null || pending}
+      ref={setRef}
+      accessibilityHint={full ? undefined : reason ?? undefined}
+      accessibilityLabel={pending
+        ? `${side === 'long' ? 'Adding' : 'Shorting'} ${row.name}`
+        : full
+          ? side === 'long'
+            ? `Full, make room: drop a player to add ${row.name} again`
+            : `Full, make room: close a short to short ${row.name} again`
+          : name}
+      disabled={full ? false : reason !== null || pending}
       focusableWhenDisabled
       // Today's price on the button, as the Market's price column shows it:
-      // a re-add is a new move at a new price (walk 8 T2-04). The table's
-      // narrow column puts it on a line of its own.
-      label={pending ? (column ? 'Wait' : side === 'long' ? 'Adding…' : 'Shorting…')
-        : column ? `${verb} again\n${moneyCompact(price)}` : `${verb} again \u00b7 ${moneyCompact(price)}`}
-      // A tap while it is unavailable says why and when, like LOCKED (walk 6
-      // T1-15); on a full side it offers the way to make room (walk 8 T4-12).
+      // a re-add is a new move at a new price (walk 8 T2-04). One line
+      // wherever there is room (walk 9 T2-07); zoomed in, the dot goes with
+      // the words after it, never ending a line (walk 7 T1-12).
+      label={pending ? (side === 'long' ? 'Adding…' : 'Shorting…')
+        : full ? 'Full \u00b7\u00a0make room' : `${verb} again \u00b7\u00a0${moneyCompact(price)}`}
+      // A tap while it is unavailable says why and when, like LOCKED (walk 6 T1-15).
       onDisabledPress={() => {
         if (reason === null || pending) return;
-        if (onFull) onFull();
-        else notify(notice ?? reason);
+        notify(notice ?? reason);
       }}
-      style={column ? styles.columnButton : undefined}
-      textStyle={column ? styles.columnButtonText : undefined}
-      width={column ? ACTION_WIDTH : undefined}
+      style={fullOpen && full ? styles.againArmed : undefined}
+      textStyle={fullOpen && full ? styles.actionTextArmed : undefined}
       onPress={() => {
+        if (full) {
+          toggleFull();
+          return;
+        }
         void openPosition({
           playerId: row.playerId,
           playerName: row.name,
@@ -635,6 +664,11 @@ export function PerGameRosterScreen({
   const closed = useMemo(
     () => closedRows(bootstrap?.positions ?? [], bootstrap?.ledger.items ?? [], bootstrap?.settledResults ?? []),
     [bootstrap?.ledger.items, bootstrap?.positions, bootstrap?.settledResults],
+  );
+  // A player on a list again says so on his old Closed row (walk 9 T4-N2).
+  const backOn = useMemo(
+    () => backLines(closed, bootstrap?.positions ?? [], bootstrap?.ledger.items ?? []),
+    [bootstrap?.ledger.items, bootstrap?.positions, closed],
   );
   const season = useMemo(
     () => seasonSummary({
@@ -920,8 +954,10 @@ export function PerGameRosterScreen({
           if (node) closedAgainRefs.current.set(row.positionId, node);
           else closedAgainRefs.current.delete(row.positionId);
         }}
-        column={layout === 'table'}
-        onFull={!lockLine && sideFull(row.side) ? () => setFullFor((current) => (current === row.positionId ? current : row.positionId)) : undefined}
+        fullOpen={fullFor === row.positionId}
+        // Its press opens the way to make room and a second folds it, as
+        // the Market's FULL does (walk 9 T4-05).
+        onFull={!lockLine && sideFull(row.side) ? () => setFullFor((current) => (current === row.positionId ? null : row.positionId)) : undefined}
         onShorted={row.side === 'long' ? onReadded : onShorted}
         notice={lockLine ? lockNotice(rosterLockDate) : null}
         price={listed.currentGameCost}
@@ -1049,6 +1085,8 @@ export function PerGameRosterScreen({
   ) : tipOpen ? (
     <FirstNightTip
       side={tipSide(bootstrap.positions)}
+      // It explains the tag the rows show (walk 9 T1-14).
+      verdict={tipVerdict(bootstrap.positions, bootstrap.settledResults ?? [], tipSide(bootstrap.positions))}
       // Results at the end of the tip's words at every width, so the tip
       // keeps to a slim band (walk 6 T1-08, walk 7 T1-10).
       onHide={() => {
@@ -1113,11 +1151,12 @@ export function PerGameRosterScreen({
       {showWelcome ? null : (
         <PerGamePnlChart
           entries={bootstrap.ledger.items}
-          // Phones keep the plot short so roster rows start high; wider lists
-          // afford more, and desktop is capped so nightly swings stay readable.
-          // At season end the chart is the season's story, and a finger picks
-          // one of 174 nights: it gets room (walk 8 T1-09).
-          plotHeight={wide ? 208 : seasonOver ? 140 : layout === 'table' ? 120 : 68}
+          // A phone's plot is tall enough from the first night to read a
+          // week of swings and to pick a night with a finger (walk 9 T1-11):
+          // it scrolls with the page. Desktop is capped so nightly swings stay
+          // readable. At season end the chart is the season's story, and a
+          // finger picks one of 174 nights: it gets more room (walk 8 T1-09).
+          plotHeight={wide ? 208 : seasonOver ? 140 : 120}
           seasonOver={seasonOver}
         />
       )}
@@ -1207,6 +1246,7 @@ export function PerGameRosterScreen({
       </View>
       <ClosedSection
         actionFor={shortAgain}
+        backFor={(row) => backOn.get(row.positionId) ?? null}
         noteFor={fullNoteFor}
         precision={precision}
         rows={closed}
@@ -1311,7 +1351,9 @@ const styles = StyleSheet.create({
   stackTop: {
     minHeight: control.height,
     flexDirection: 'row',
-    alignItems: 'center',
+    // The photo sits beside the name, whatever lines follow under it (a
+    // "Bad night" line; walk 9 T1-02), never centred on the whole block.
+    alignItems: 'flex-start',
     gap: space.md,
     // Keeps the name and verdict clear of the Drop button that sits over this corner.
     paddingRight: ACTION_WIDTH + space.sm,
@@ -1402,7 +1444,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     flexDirection: 'row',
-    alignItems: 'center',
+    // Beside the name, as on a phone (walk 9 T1-02).
+    alignItems: 'flex-start',
     gap: space.sm,
   },
   tableNameButton: {
@@ -1478,12 +1521,10 @@ const styles = StyleSheet.create({
   actionLocked: {
     borderStyle: 'dashed',
   },
-  // "Short again" in the table's 72px action column: two short lines.
-  columnButton: {
-    paddingHorizontal: space.xs,
-  },
-  columnButtonText: {
-    textAlign: 'center',
+  // FULL with its note open: the Roster's "question open" look, as on the Market.
+  againArmed: {
+    borderColor: colors.gold,
+    backgroundColor: colors.goldSoft,
   },
   actionArmed: {
     borderColor: colors.gold,
