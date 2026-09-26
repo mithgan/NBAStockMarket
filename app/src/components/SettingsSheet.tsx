@@ -1,8 +1,9 @@
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line } from 'react-native-svg';
 
 import type { PerGameRuleset } from '../api/contracts';
+import { chromeFolded, sheetNarrow } from '../data/chromeView';
 import { perGameRulesPresentation, rulesParagraphs } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useDesignVariant } from '../theme/ThemeProvider';
@@ -46,10 +47,10 @@ export function SettingsButton({ onPress }: { onPress: () => void }) {
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, narrow = false, children }: { title: string; narrow?: boolean; children: ReactNode }) {
   return (
     <View style={styles.section}>
-      <Text accessibilityRole="header" {...headingLevel(3)} style={styles.sectionTitle}>{title}</Text>
+      <Text accessibilityRole="header" {...headingLevel(3)} style={[styles.sectionTitle, narrow && styles.gutterNarrow]}>{title}</Text>
       {children}
     </View>
   );
@@ -81,13 +82,41 @@ export function SettingsSheet({
   profile?: SettingsProfile;
   visible: boolean;
 }) {
-  const floating = useWindowDimensions().width >= FLOATING_MIN_WIDTH;
+  const { height, width } = useWindowDimensions();
+  const floating = width >= FLOATING_MIN_WIDTH;
+  // A phone at 400% zoom (98px wide): Done gets a full-width row under the
+  // title, gutters narrow so headings wrap between words, and each theme's
+  // swatch sits under its name (walk 3 T3-31).
+  const narrow = sheetNarrow(width);
   const reducedMotion = useReducedMotion();
   const rules = ruleset ? perGameRulesPresentation(ruleset) : null;
   const { setVariant, variantId } = useDesignVariant();
   // Back closes the sheet; the app behind it is inert while it is open.
   useSheetHistory(visible, onClose);
   const choiceRefs = useRef<Array<View | null>>([]);
+  // Rules opened from here hand back to Settings when they close (the frame
+  // reopens it); focus goes back to "Read the full rules", where the player
+  // was, not to Done at the top (walk 3 T3-25).
+  const rulesLinkRef = useRef<View | null>(null);
+  const doneRef = useRef<View | null>(null);
+  const backFromRules = useRef(false);
+  useEffect(() => {
+    if (!visible || !backFromRules.current || typeof document === 'undefined') return undefined;
+    backFromRules.current = false;
+    // The sheet's focus trap puts focus on Done as it opens; move it on as
+    // soon as the link is there, and never away from a control the player
+    // has since moved to.
+    const focusLink = () => {
+      const link = rulesLinkRef.current as unknown as HTMLElement | null;
+      const done = doneRef.current as unknown as HTMLElement | null;
+      const current = document.activeElement;
+      const sheet = link?.closest('[aria-modal="true"]');
+      const unset = !current || current === done || !current.isConnected || !sheet?.contains(current);
+      if (link?.isConnected && current !== link && unset) link.focus();
+    };
+    const timers = [0, 120, 320].map((delay) => setTimeout(focusLink, delay));
+    return () => timers.forEach(clearTimeout);
+  }, [visible]);
   // Appearance is a radio group: arrow keys move and choose, like any other
   // radio group, and only the chosen theme is a Tab stop.
   const onChoiceKey = (event: { key: string; preventDefault: () => void }) => {
@@ -120,24 +149,42 @@ export function SettingsSheet({
         onStartShouldSetResponder={() => true}
         style={styles.scrim}
       />
-      <View style={[styles.sheet, floating && styles.sheetFloating]}>
-        <View style={styles.sheetHead}>
+      {/* A short window keeps the settings, not the gap above them (as Rules). */}
+      <View style={[styles.sheet, floating && styles.sheetFloating, chromeFolded(height) && styles.sheetShort]}>
+        <View style={[styles.sheetHead, narrow && styles.sheetHeadNarrow]}>
           <Text accessibilityRole="header" {...headingLevel(2)} style={styles.sheetTitle}>Settings</Text>
           <Pressable
+            ref={doneRef}
             accessibilityLabel="Done, close settings"
             accessibilityRole="button"
             onPress={onClose}
-            style={({ pressed }) => [styles.close, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.close, narrow && styles.closeNarrow, pressed && styles.pressed]}
           >
             <Text style={styles.closeText}>Done</Text>
           </Pressable>
         </View>
         <ScrollView style={styles.sheetBody}>
-          <Section title="Appearance">
+          <Section narrow={narrow} title="Appearance">
             <View accessibilityLabel="Theme" accessibilityRole="radiogroup" {...({ onKeyDown: onChoiceKey } as object)}>
               {APPEARANCE_CHOICES.map((choice, index) => {
                 const variant = VARIANTS[choice];
                 const selected = choice === variantId;
+                // A small preview of the theme itself: its page, a card with
+                // a line of text, and its gain, loss and accent colours, so
+                // themes can be told apart before trying them.
+                const swatch = (
+                  <View style={[styles.swatch, { backgroundColor: variant.palette.background }]}>
+                    <View style={[styles.swatchCard, { backgroundColor: variant.palette.surface }]}>
+                      <View style={[styles.swatchLine, { backgroundColor: variant.palette.text }]} />
+                      <View style={styles.swatchMarks}>
+                        <View style={[styles.swatchMark, { backgroundColor: variant.palette.green }]} />
+                        <View style={[styles.swatchMark, { backgroundColor: variant.palette.red }]} />
+                        <View style={[styles.swatchMark, { backgroundColor: variant.palette.gold }]} />
+                      </View>
+                    </View>
+                  </View>
+                );
+                const inUse = selected ? <Text style={styles.check}>IN USE</Text> : null;
                 return (
                   <Pressable
                     key={choice}
@@ -151,33 +198,28 @@ export function SettingsSheet({
                     // radio says which theme is in use through aria-checked.
                     aria-checked={selected}
                     onPress={() => setVariant(choice)}
-                    style={({ pressed }) => [styles.choice, selected && styles.choiceSelected, pressed && styles.pressed]}
+                    style={({ pressed }) => [styles.choice, narrow && styles.choiceNarrow, selected && styles.choiceSelected, pressed && styles.pressed]}
                     {...rowMarker}
                     {...({ tabIndex: selected ? 0 : -1 } as object)}
                   >
-                    {/* A small preview of the theme itself: its page, a card with
-                        a line of text, and its gain, loss and accent colours,
-                        so themes can be told apart before trying them. */}
-                    <View style={[styles.swatch, { backgroundColor: variant.palette.background }]}>
-                      <View style={[styles.swatchCard, { backgroundColor: variant.palette.surface }]}>
-                        <View style={[styles.swatchLine, { backgroundColor: variant.palette.text }]} />
-                        <View style={styles.swatchMarks}>
-                          <View style={[styles.swatchMark, { backgroundColor: variant.palette.green }]} />
-                          <View style={[styles.swatchMark, { backgroundColor: variant.palette.red }]} />
-                          <View style={[styles.swatchMark, { backgroundColor: variant.palette.gold }]} />
-                        </View>
-                      </View>
-                    </View>
-                    <View style={styles.choiceCopy}>
+                    {narrow ? null : swatch}
+                    <View style={[styles.choiceCopy, narrow && styles.choiceCopyNarrow]}>
                       <Text style={[styles.choiceName, selected && styles.choiceNameSelected]}>{variant.name}</Text>
-                      <Text numberOfLines={2} style={styles.choiceBlurb}>{variant.blurb}</Text>
+                      {/* Narrow, the blurb wraps in full rather than stopping at "…". */}
+                      <Text numberOfLines={narrow ? undefined : 2} style={styles.choiceBlurb}>{variant.blurb}</Text>
                     </View>
-                    {selected ? <Text style={styles.check}>IN USE</Text> : null}
+                    {narrow ? (
+                      // The swatch under the name, so the name keeps the width.
+                      <View style={styles.choiceMarks}>
+                        {swatch}
+                        {inUse}
+                      </View>
+                    ) : inUse}
                   </Pressable>
                 );
               })}
             </View>
-            <Text style={styles.note}>Every theme is checked to be easy to read.</Text>
+            <Text style={[styles.note, narrow && styles.gutterNarrow]}>Every theme is checked to be easy to read.</Text>
             {onOpenTreatments ? (
               <Pressable accessibilityRole="button" onPress={onOpenTreatments} style={styles.choice}>
                 <Text style={[styles.choiceName, styles.choiceNameSelected]}>View all treatments</Text>
@@ -185,37 +227,41 @@ export function SettingsSheet({
             ) : null}
           </Section>
 
-          <Section title="How the game works">
-            {firstParagraph ? <Text style={styles.lede}>{firstParagraph}</Text> : (
-              <Text style={styles.note}>The rules will appear when your account loads.</Text>
+          <Section narrow={narrow} title="How the game works">
+            {firstParagraph ? <Text style={[styles.lede, narrow && styles.gutterNarrow]}>{firstParagraph}</Text> : (
+              <Text style={[styles.note, narrow && styles.gutterNarrow]}>The rules will appear when your account loads.</Text>
             )}
             <Pressable
+              ref={rulesLinkRef}
               accessibilityRole="button"
               onPress={() => {
                 onClose();
                 // Let this sheet close first; two sheets never stack.
                 returnToSettingsAfterRules();
+                backFromRules.current = true;
                 setTimeout(() => {
-                  if (!openRules()) cancelSettingsReturn();
+                  if (openRules()) return;
+                  cancelSettingsReturn();
+                  backFromRules.current = false;
                 }, 50);
               }}
-              style={({ pressed }) => [styles.choice, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.choice, narrow && styles.gutterNarrow, pressed && styles.pressed]}
             >
               <Text style={[styles.choiceName, styles.choiceNameSelected]}>Read the full rules</Text>
             </Pressable>
           </Section>
 
-          <Section title="This season">
-            <View style={styles.factRow}>
+          <Section narrow={narrow} title="This season">
+            <View style={[styles.factRow, narrow && styles.factRowNarrow]}>
               <Text style={styles.factLabel}>Season</Text>
               <Text style={styles.factValue}>{seasonLabel}</Text>
             </View>
-            <View style={styles.factRow}>
+            <View style={[styles.factRow, narrow && styles.factRowNarrow]}>
               <Text style={styles.factLabel}>Listed players</Text>
               <Text style={styles.factValue}>{listedPlayers}</Text>
             </View>
             {rules ? rules.facts.filter((fact) => ['Roster slots', 'Short slots', 'Shorts last'].includes(fact.label)).map((fact) => (
-              <View key={fact.label} style={styles.factRow}>
+              <View key={fact.label} style={[styles.factRow, narrow && styles.factRowNarrow]}>
                 <Text style={styles.factLabel}>{fact.label}</Text>
                 <Text style={styles.factValue}>{fact.value}</Text>
               </View>
@@ -248,8 +294,8 @@ export function SettingsSheet({
               ) : null}
             </Section>
           ) : (
-            <Section title="Practice mode">
-              <Text style={styles.note}>
+            <Section narrow={narrow} title="Practice mode">
+              <Text style={[styles.note, narrow && styles.gutterNarrow]}>
                 This is practice. It plays generated games in this browser's memory and starts over when you reload. Your saved account is separate and untouched.
               </Text>
             </Section>
@@ -317,6 +363,10 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: radius.lg,
     borderBottomRightRadius: radius.lg,
   },
+  // A short window keeps the settings, not the gap above them.
+  sheetShort: {
+    marginTop: space.sm,
+  },
   sheetHead: {
     minHeight: 52,
     flexDirection: 'row',
@@ -325,6 +375,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
+  },
+  // Narrow (400% zoom): the title, then Done on its own full-width row.
+  sheetHeadNarrow: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    rowGap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
   },
   sheetTitle: {
     color: colors.text,
@@ -336,6 +395,14 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
     paddingLeft: space.md,
+  },
+  // Done with a row to itself reads as a button: a 3:1 edge, words centred.
+  closeNarrow: {
+    alignItems: 'center',
+    paddingLeft: 0,
+    borderWidth: 1,
+    borderColor: colors.controlBorder,
+    borderRadius: radius.sm,
   },
   closeText: {
     color: colors.goldInk,
@@ -365,6 +432,22 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
   },
   choiceSelected: { backgroundColor: colors.surface },
+  // Narrow: the name and blurb take the width; the swatch goes under them.
+  choiceNarrow: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+  },
+  choiceCopyNarrow: { flex: 0, flexBasis: 'auto' },
+  choiceMarks: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  // Narrow gutters leave the words room to wrap between words, never inside one.
+  gutterNarrow: { paddingHorizontal: space.sm },
   swatch: {
     width: 44,
     height: 36,
@@ -421,6 +504,10 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontFamily: fonts.body,
     fontSize: type.body,
+  },
+  factRowNarrow: {
+    flexWrap: 'wrap',
+    paddingHorizontal: space.sm,
   },
   factValue: {
     ...numeric,

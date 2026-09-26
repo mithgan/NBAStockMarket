@@ -24,20 +24,23 @@ import {
   keepTogether,
   lastNightFigure,
   LOCK_REASON,
+  lockIconName,
   lockLine,
+  lockShortText,
   nextGamesText,
   NO_PLAYERS_PLAYED,
-  playedOn,
-  PRACTICE_OVER_TEXT,
+  playedBetween,
   practiceDayShort,
   practiceDayText,
   practiceDayTiny,
   practiceProgress,
   type PracticeProgress,
+  resultSpan,
+  sheetNarrow,
   shortTermText,
   statusSummary,
 } from '../data/chromeView';
-import { recentEarnings } from '../data/perGameMetrics';
+import { earningsBetween } from '../data/perGameMetrics';
 import { perGameRulesPresentation, positionSlotHint, rulesParagraphs } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
@@ -47,7 +50,7 @@ import { headingLevel, moneyColor, Tag } from '../ui/kit';
 import { useSheetHistory } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
-import { PracticeControls, usePracticeHint } from './SimBar';
+import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, useRecentAdvances } from './SimBar';
 
 /**
  * How the facts sit beside the controls.
@@ -89,8 +92,15 @@ export function PerGameStatusStrip() {
   useEffect(() => registerRulesOpener(() => setRulesOpen(true)), []);
   const lastSettled = bootstrap?.game.lastSettledDate ?? null;
   const ledgerItems = bootstrap?.ledger.items;
-  const earnings = useMemo(() => recentEarnings(ledgerItems, lastSettled), [lastSettled, ledgerItems]);
-  const noGames = useMemo(() => !playedOn(ledgerItems, lastSettled), [lastSettled, ledgerItems]);
+  // The games the row reports: the last settled night, or after +1 week the
+  // whole week it played, until the next advance lands (walk 3 T1-20), games
+  // only, as the notice after the advance counts them.
+  const advances = useRecentAdvances();
+  const span = useMemo(() => resultSpan(advances, lastSettled), [advances, lastSettled]);
+  const spanResult = useMemo(() => (
+    span && ledgerItems ? earningsBetween(ledgerItems, span.after, span.through, { gamesOnly: true }) : null
+  ), [ledgerItems, span]);
+  const noGames = useMemo(() => !span || !playedBetween(ledgerItems, span.after, span.through), [ledgerItems, span]);
   // Desktop has no line under +1 night / +1 week, so the practice hint ("Add
   // a player first…", then "Ready…") rides at the end of the facts.
   const practiceHint = usePracticeHint();
@@ -111,7 +121,7 @@ export function PerGameStatusStrip() {
   const progress = practice ? practiceProgress(mockSeasonStart(), lastSettled) : null;
   // Before the first night there is no "last night" to report; a day with no
   // games for your players says so rather than "$0".
-  const lastNight = progress?.day === 0 ? null : earnings?.night ?? null;
+  const lastNight = progress?.day === 0 ? null : spanResult;
   const next = nextGamesText(nextGameDate);
 
   const pendingBeyondReconciliation = [...pendingActions]
@@ -139,6 +149,8 @@ export function PerGameStatusStrip() {
     noGames,
     progress: progress ?? undefined,
     lockSentence,
+    resultLabel: span?.label ?? null,
+    finalScore: progress?.complete ? bootstrap.account.cumulativePnl : null,
   });
 
   const arrangement: FactsArrangement = layout.wide || foldedFacts
@@ -155,6 +167,9 @@ export function PerGameStatusStrip() {
 
   // ---- facts ---------------------------------------------------------------
   const settledDate = lastSettled ? keepTogether(humanDate(lastSettled)) : null;
+  // The days a named result covers: "Oct 28", or "Oct 21–27" after +1 week,
+  // held together (word joiners keep the dash with its dates).
+  const resultDate = span ? keepTogether(span.label).replace('–', '\u2060–\u2060') : settledDate;
   // The narrowest rows (a phone at high zoom, a folded row) keep a short day
   // count, "Day 16/174"; the bar after it is the season's progress.
   const shortDay = layout.compact || (folded && !foldedFacts);
@@ -179,7 +194,7 @@ export function PerGameStatusStrip() {
   const lead = practice ? (
     <Text key="lead" maxFontSizeMultiplier={1.5} style={[styles.lead, tight && styles.tight]}>
       <Text style={styles.practiceWord}>{PRACTICE_LABEL}</Text>
-      {settledDate && (!named || arrangement === 'pair') ? `${dot}${settledDate}` : null}
+      {settledDate && (!named || arrangement === 'pair') ? `${dot}${named ? resultDate : settledDate}` : null}
       {arrangement === 'wide' && dayText ? <Text style={styles.leadMuted}>{`${dot}${dayText}`}</Text> : null}
       {arrangement === 'pair' && named ? (
         // The words at the facts' size, so "Oct 22: none of your players
@@ -197,7 +212,7 @@ export function PerGameStatusStrip() {
   );
   const night = !named || arrangement === 'pair' ? null : (
     <Text key="night" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
-      {settledDate ?? 'Latest'}
+      {resultDate ?? 'Latest'}
       <Text style={styles.factLabel}>{nightWords}</Text>
       {money}
     </Text>
@@ -211,7 +226,9 @@ export function PerGameStatusStrip() {
       </Text>
       <View style={styles.dayTinyMarks}>
         {meter}
-        {locked ? <LockIcon color={colors.goldInk} size={12} /> : null}
+        {/* No room for words here: the padlock is named, and More opens on
+            the lock's short words (walk 3 T3-29). */}
+        {locked ? <LockIcon color={colors.goldInk} label={lockIconName(lockDate)} size={12} /> : null}
       </View>
     </View>
   ) : dayText && arrangement !== 'wide' ? (
@@ -227,10 +244,15 @@ export function PerGameStatusStrip() {
   // why moves pause. Wide rows lead it with the ROSTER LOCKED tag.
   const lockTag = arrangement === 'wide' && !folded;
   const lock = tiny ? null : locked && folded && !foldedFacts ? (
-    // The narrowest folded row has room for the padlock only; the sentence is
-    // in the row's spoken summary and on Market's and Roster's buttons.
-    <View key="lock" style={styles.lock}>
-      <LockIcon color={colors.goldInk} size={14} />
+    // The narrowest folded rows: "Locked · Nov 1" under the day count, so
+    // the row still says it in words and Settings keeps the first line (the
+    // padlock alone pushed it down a line, walk 3 T3-29). One image to a
+    // screen reader, named in full: "Roster locked until after Nov 1".
+    <View aria-label={lockIconName(lockDate)} key="lock" role="img" style={[styles.lock, styles.lockChip]}>
+      <LockIcon color={colors.goldInk} size={12} />
+      <Text maxFontSizeMultiplier={1.5} style={[styles.fact, styles.lockLine, styles.tight]}>
+        {keepTogether(lockShortText(lockDate))}
+      </Text>
     </View>
   ) : locked ? (
     // With the padlock (phones) the sentence wraps beside it, never under it,
@@ -254,12 +276,16 @@ export function PerGameStatusStrip() {
     </View>
   ) : null;
   const upcoming = progress?.complete ? (
-    // "Season complete · Play another season": the way on, by the name the
-    // result card and the Play again question use (walk 2 T2-17). Compact
-    // has no room for both; its Play again button sits right underneath.
+    // "Season complete · Final score +$209.8K": a finished season states its
+    // result, in the score's colour. The way on is the one Play another
+    // season button beside or under this row; its name here as grey text
+    // read as a second, tappable-looking control (walk 3 T4-04, T2-16).
+    // Compact rows have no room for it; the notice and the Roster card carry
+    // the final score there.
     layout.compact ? null : (
-      <Text key="over" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel, tight && styles.tight]}>
-        {PRACTICE_OVER_TEXT}
+      <Text key="over" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
+        <Text style={styles.factLabel}>{'Final score '}</Text>
+        <LastNightMoney tight={tight} value={bootstrap.account.cumulativePnl} />
       </Text>
     )
   ) : (
@@ -271,12 +297,13 @@ export function PerGameStatusStrip() {
 
   let facts;
   if (folded && !foldedFacts) {
-    // Folded and narrow: the day and its progress, and a padlock when locked.
+    // Folded and narrow: the day and its progress, with "Locked · Nov 1"
+    // under them on a locked night (two tight lines inside the 44px row).
     facts = (
-      <View style={[styles.line, styles.lineFolded]}>
+      <>
         {day}
         {lock}
-      </View>
+      </>
     );
   } else if (arrangement === 'wide') {
     facts = (
@@ -289,7 +316,7 @@ export function PerGameStatusStrip() {
         {upcoming}
         {lock}
         {practiceHint && layout.merged ? (
-          <Text key="hint" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel]}>
+          <Text key="hint" maxFontSizeMultiplier={1.5} nativeID={PRACTICE_HINT_ID} style={[styles.fact, styles.factLabel]}>
             {practiceHint}
           </Text>
         ) : null}
@@ -504,7 +531,10 @@ function RulesSheet({
 }) {
   const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
+  // A phone at 400% zoom (98px wide): Done takes a full-width row under the
+  // title (it showed as "Do"), and the gutters narrow (walk 3 T3-31).
+  const narrow = sheetNarrow(width);
   // Back closes the sheet; the app behind it is inert while it is open.
   useSheetHistory(visible, onClose);
   const presentation = perGameRulesPresentation(rules);
@@ -541,13 +571,13 @@ function RulesSheet({
       {/* Framed like Settings: a sheet from the bottom, 64px below the top
           (less in a short window), scrolling inside. */}
       <View style={[styles.sheet, chromeFolded(height) && styles.sheetShort]}>
-        <View style={styles.sheetHead}>
+        <View style={[styles.sheetHead, narrow && styles.sheetHeadNarrow]}>
           <Text accessibilityRole="header" {...headingLevel(2)} style={styles.sheetTitle}>Game rules</Text>
           <Pressable
             accessibilityLabel="Done, close the game rules"
             accessibilityRole="button"
             onPress={onClose}
-            style={({ pressed }) => [styles.done, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.done, narrow && styles.doneNarrow, pressed && styles.pressed]}
           >
             <Text style={styles.doneText}>Done</Text>
           </Pressable>
@@ -558,7 +588,7 @@ function RulesSheet({
             browser's thin default (walk 2 T3-14). */}
         <ScrollView
           aria-label="Rules text"
-          contentContainerStyle={[styles.sheetContent, { paddingBottom: space.xl + insets.bottom }]}
+          contentContainerStyle={[styles.sheetContent, narrow && styles.sheetContentNarrow, { paddingBottom: space.xl + insets.bottom }]}
           role="region"
           style={styles.sheetBody}
           tabIndex={0}
@@ -571,8 +601,10 @@ function RulesSheet({
           <View style={styles.factList}>
             {facts.map((fact) => (
               <View key={fact.label} style={styles.factRow}>
-                <Text style={styles.factName}>{fact.label}</Text>
-                <Text style={styles.factValue}>{fact.value}</Text>
+                <Text style={[styles.factName, narrow && styles.factNameNarrow]}>{fact.label}</Text>
+                {/* Narrow, a phrase held together ("$40,000 for each net point")
+                    is wider than the sheet, so it may wrap between its words. */}
+                <Text style={styles.factValue}>{narrow ? fact.value.replace(/\u00a0/g, ' ') : fact.value}</Text>
               </View>
             ))}
           </View>
@@ -719,9 +751,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     columnGap: space.md,
   },
-  lineFolded: {
-    columnGap: 6,
-  },
   // One line of mixed sizes (the 13px clock, 12px facts) sits on a baseline.
   lineWide: {
     alignItems: 'baseline',
@@ -774,6 +803,11 @@ const styles = StyleSheet.create({
   lockBeside: {
     flexWrap: 'nowrap',
     alignItems: 'flex-start',
+  },
+  // "Locked · Nov 1" beside a 12px padlock, one line.
+  lockChip: {
+    flexWrap: 'nowrap',
+    columnGap: 4,
   },
   lockText: {
     flexShrink: 1,
@@ -839,11 +873,27 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
   },
+  // Narrow (400% zoom): the title, then Done on its own full-width row.
+  sheetHeadNarrow: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    rowGap: space.xs,
+    paddingLeft: space.sm,
+    paddingRight: space.sm,
+    paddingVertical: space.xs,
+  },
   sheetTitle: {
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: type.title,
     fontWeight: weight.heavy,
+  },
+  // Done with a row to itself reads as a button: a 3:1 edge, words centred.
+  doneNarrow: {
+    borderWidth: 1,
+    borderColor: colors.controlBorder,
+    borderRadius: radius.sm,
   },
   done: {
     minHeight: control.height,
@@ -864,6 +914,9 @@ const styles = StyleSheet.create({
   sheetContent: {
     padding: space.lg,
     gap: space.lg,
+  },
+  sheetContentNarrow: {
+    paddingHorizontal: space.sm,
   },
   explanation: {
     gap: space.sm,
@@ -891,6 +944,10 @@ const styles = StyleSheet.create({
   factName: {
     ...labelStyle,
     width: 96,
+  },
+  // Narrow, the name takes its own width and the value wraps under it.
+  factNameNarrow: {
+    width: 'auto',
   },
   glossary: {
     gap: space.sm,

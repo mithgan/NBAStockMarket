@@ -286,3 +286,96 @@ test('the hint under the advance buttons keeps its line once the first player is
   assert.equal(readyHint('2025-10-21'), 'Ready. +1 night plays the Oct 21 games.');
   assert.equal(readyHint(null), "Ready. +1 night plays the next night's games.");
 });
+
+test('a narrow locked night names its padlock and says "Locked · Nov 1" (walk 3 T3-29)', async () => {
+  const { lockIconName, lockShortText } = await import('./chromeView');
+  assert.equal(lockIconName('2025-11-01'), 'Roster locked until after Nov 1');
+  assert.equal(lockIconName(null), 'Roster locked until after these games');
+  // The date never breaks inside ("Nov / 1"); the words may wrap after the dot.
+  assert.equal(lockShortText('2025-11-01'), 'Locked · Nov 1');
+  assert.equal(lockShortText(null), 'Locked');
+});
+
+test('sheets at 400% zoom give Done its own row below ~160px (walk 3 T3-31)', async () => {
+  const { sheetNarrow, SHEET_NARROW_MAX_WIDTH } = await import('./chromeView');
+  assert.equal(SHEET_NARROW_MAX_WIDTH, 160);
+  // 390x844 at 400% is 98 wide; at 200% (195) and up, title and Done share a line.
+  assert.equal(sheetNarrow(98), true);
+  assert.equal(sheetNarrow(159), true);
+  assert.equal(sheetNarrow(160), false);
+  assert.equal(sheetNarrow(195), false);
+});
+
+test('the empty-roster question is asked once a season; then the hint line says it (walk 3 T1-19, T2-14)', async () => {
+  const { asksBeforeEmptyNight, EMPTY_ROSTER_HINT, EMPTY_ROSTER_PLAYING_HINT, practiceHint } = await import('./chromeView');
+  assert.equal(asksBeforeEmptyNight(true, false), true);
+  assert.equal(asksBeforeEmptyNight(true, true), false);
+  assert.equal(asksBeforeEmptyNight(false, false), false);
+  const base = { complete: false, emptyRoster: true, playedWithoutRoster: false, justFilled: true, nextGameDate: '2025-10-21' };
+  assert.equal(practiceHint(base), EMPTY_ROSTER_HINT);
+  assert.equal(practiceHint({ ...base, playedWithoutRoster: true }), 'Nobody on your roster: nights play without you');
+  assert.equal(EMPTY_ROSTER_PLAYING_HINT, 'Nobody on your roster: nights play without you');
+  // The first add swaps in Ready until the next advance, whichever way the empty nights went.
+  assert.equal(practiceHint({ ...base, emptyRoster: false, playedWithoutRoster: true }), 'Ready. +1 night plays the Oct 21 games.');
+  assert.equal(practiceHint({ ...base, emptyRoster: false, justFilled: false }), null);
+  assert.equal(practiceHint({ ...base, complete: true }), null);
+});
+
+test('after +1 week the status row names the week it played until the next advance (walk 3 T1-20)', async () => {
+  const { dateSpanText, playedBetween, resultSpan } = await import('./chromeView');
+  assert.equal(dateSpanText('2025-10-21', '2025-10-27'), 'Oct 21–27');
+  assert.equal(dateSpanText('2025-10-28', '2025-11-03'), 'Oct 28–Nov 3');
+  assert.equal(dateSpanText('2025-12-29', '2026-01-04'), 'Dec 29–Jan 4');
+  assert.equal(dateSpanText('2025-10-27', '2025-10-27'), 'Oct 27');
+  // Day 0 (Oct 20) + 1 week: the span Oct 21-27, games after Oct 20 through Oct 27.
+  const week = { step: 'week' as const, from: OPENING_EVE };
+  assert.deepEqual(resultSpan([week], '2025-10-27'), { after: OPENING_EVE, through: '2025-10-27', label: 'Oct 21–27' });
+  // +1 night pressed next: while it plays the row keeps the week...
+  const night = { step: 'night' as const, from: '2025-10-27' };
+  assert.equal(resultSpan([week, night], '2025-10-27')?.label, 'Oct 21–27');
+  // ...and once it lands, the one night: "Oct 28 games".
+  assert.deepEqual(resultSpan([week, night], '2025-10-28'), { after: '2025-10-27', through: '2025-10-28', label: 'Oct 28' });
+  // No advance yet, a +1 night, or a final week cut to one day: the last night alone.
+  assert.equal(resultSpan([], '2025-10-21')?.label, 'Oct 21');
+  assert.equal(resultSpan([{ step: 'night', from: '2025-10-22' }], '2025-10-24')?.after, '2025-10-23');
+  assert.equal(resultSpan([{ step: 'week', from: '2026-04-11' }], '2026-04-12')?.label, 'Apr 12');
+  assert.equal(resultSpan([{ step: 'week', from: '2026-04-08' }], '2026-04-12')?.label, 'Apr 9–12');
+  assert.equal(resultSpan([week], null), null);
+  const ledger = [{ gameId: 'g1', gameDate: '2025-10-23' }, { gameId: null, gameDate: '2025-10-25' }];
+  assert.equal(playedBetween(ledger, OPENING_EVE, '2025-10-27'), true);
+  assert.equal(playedBetween(ledger, '2025-10-23', '2025-10-27'), false);
+  // Spoken the same way: the span's figure, and "none of your players played" for the span.
+  assert.equal(
+    statusSummary({
+      mode: 'practice', lastSettledDate: '2025-10-27', nextGameDate: '2025-10-28', lastNight: -32_500,
+      progress: practiceProgress(OPENING_EVE, '2025-10-27'), resultLabel: 'Oct 21–27',
+    }),
+    'Practice, day 7 of 174. Oct 21–27 games -$32,500. Next games Tue, Oct 28.',
+  );
+  assert.equal(
+    statusSummary({
+      mode: 'practice', lastSettledDate: '2025-10-27', nextGameDate: '2025-10-28', lastNight: 0, noGames: true,
+      progress: practiceProgress(OPENING_EVE, '2025-10-27'), resultLabel: 'Oct 21–27',
+    }),
+    'Practice, day 7 of 174. Oct 21–27: none of your players played. Next games Tue, Oct 28.',
+  );
+});
+
+test('a finished season states its final score; only the button names the way on (walk 3 T4-04)', () => {
+  assert.equal(
+    statusSummary({
+      mode: 'practice',
+      lastSettledDate: '2026-04-12',
+      nextGameDate: null,
+      lastNight: 0,
+      noGames: true,
+      progress: practiceProgress(OPENING_EVE, '2026-04-12'),
+      finalScore: 209_800,
+    }),
+    'Practice, season complete. Apr 12: none of your players played. Final score +$209,800.',
+  );
+  const strip = readFileSync(resolve(import.meta.dirname, '../components/PerGameStatusStrip.tsx'), 'utf8');
+  assert.doesNotMatch(strip, /PRACTICE_OVER_TEXT|PLAY AGAIN|'Play again'/);
+  const bar = readFileSync(resolve(import.meta.dirname, '../components/SimBar.tsx'), 'utf8');
+  assert.doesNotMatch(bar, /label="Play again"|'PLAY AGAIN'|label=\{'Play again'\}/);
+});

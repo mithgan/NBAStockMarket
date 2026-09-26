@@ -61,21 +61,28 @@ export function humanDate(value: string | null | undefined): string {
 }
 
 /**
- * The nights after `since` up to `through`: "Oct 21–27", or "Oct 28–Nov 3"
- * across a month. One night reads as that night alone ("Oct 21"). Used when
- * several nights play at once (+1 week), so the result names its days
- * instead of "Games through Oct 27" (walk 3 T1-20).
+ * A run of days: "Oct 21–27", or "Oct 28–Nov 3" across a month; one day
+ * reads as itself ("Oct 27"). The one spelling for several nights played at
+ * once, in the status row and in the notice (walk 3 T1-20).
+ */
+export function humanDaySpan(firstDay: string, lastDay: string): string {
+  if (firstDay >= lastDay) return humanDate(lastDay);
+  const [firstMonth, firstDate] = humanDate(firstDay).split(/\s+/);
+  const [lastMonth, lastDate] = humanDate(lastDay).split(/\s+/);
+  return firstMonth === lastMonth
+    ? `${firstMonth} ${firstDate}–${lastDate}`
+    : `${humanDate(firstDay)}–${humanDate(lastDay)}`;
+}
+
+/**
+ * The nights after `since` up to `through` ("Oct 21–27" for a week played at
+ * once), so the result names its days instead of "Games through Oct 27".
  */
 export function humanNightsSince(since: string | null, through: string): string {
   const end = asUtcDate(through);
   const start = since ? asUtcDate(since) : null;
   if (!end || !start) return humanDate(through);
-  const first = new Date(start.getTime() + 86_400_000);
-  if (first.getTime() >= end.getTime()) return humanDate(through);
-  const firstDay = first.toISOString().slice(0, 10);
-  return first.getUTCMonth() === end.getUTCMonth() && first.getUTCFullYear() === end.getUTCFullYear()
-    ? `${humanDate(firstDay)}–${end.getUTCDate()}`
-    : `${humanDate(firstDay)}–${humanDate(through)}`;
+  return humanDaySpan(new Date(start.getTime() + 86_400_000).toISOString().slice(0, 10), through);
 }
 
 /** "Wed, Nov 6". */
@@ -264,7 +271,10 @@ export function confirmCloseMessage({
   feeDollars: number;
   /** What the position has made so far; it stays in the score. */
   total: number;
-  /** A short's end date when the next games are its last. */
+  /**
+   * A short's last day: the question says that, left alone, it ends by itself
+   * then at no cost, so closing early is a choice (walk 3 T1-N3).
+   */
   endsFreeAfter?: string | null;
   /** His price a game in the market today: what re-opening would lock. */
   priceNow?: number | null;

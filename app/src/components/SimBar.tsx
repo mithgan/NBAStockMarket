@@ -8,11 +8,14 @@ import {
   mockSeasonStart,
 } from '../api/mockPerGameClient';
 import {
+  asksBeforeEmptyNight,
   CHROME_FOLDED_ONE_LINE_MIN_WIDTH,
   chromeFolded,
   chromeLayout,
-  EMPTY_ROSTER_HINT,
-  readyHint,
+  lockIconName,
+  lockShortText,
+  type PracticeAdvance,
+  practiceHint,
   practiceProgress,
   practiceQuestion,
   practiceSeasonEnd,
@@ -21,12 +24,12 @@ import {
 import { humanDate } from '../copy/terms';
 import { usePerGame } from '../state/PerGameContext';
 import { openTab } from '../state/uiActions';
-import { colors, fonts, radius, space, type } from '../theme';
+import { colors, fonts, radius, space, type, weight } from '../theme';
 import { Button, ConfirmDialog } from '../ui/kit';
 import { useSheetHistory } from '../web/appHistory';
 import { leavePractice, restartPractice } from '../web/practiceSession';
 import { ChromeButton } from './chrome/ChromeButton';
-import { MoreIcon } from './chrome/ChromeIcons';
+import { LockIcon, MoreIcon } from './chrome/ChromeIcons';
 
 /**
  * After a night or week has played, the advance buttons rest this long before
@@ -41,22 +44,97 @@ const ADVANCE_COOLDOWN_MS = 450;
 let rosterEmptyOn: string | null = null;
 
 /**
+ * "Play anyway" to the empty-roster question, once this practice season:
+ * after that +1 night / +1 week just play, and the hint line says "Nobody on
+ * your roster: nights play without you" (walk 3 T1-19, T2-14). A new season
+ * is a new page (Restart reloads it), so each season starts unanswered.
+ */
+let playedWithoutRoster = false;
+const playedListeners = new Set<() => void>();
+
+function setPlayedWithoutRoster(): void {
+  if (playedWithoutRoster) return;
+  playedWithoutRoster = true;
+  playedListeners.forEach((listener) => listener());
+}
+
+function subscribePlayed(listener: () => void): () => void {
+  playedListeners.add(listener);
+  return () => {
+    playedListeners.delete(listener);
+  };
+}
+
+function usePlayedWithoutRoster(): boolean {
+  return useSyncExternalStore(subscribePlayed, () => playedWithoutRoster, () => false);
+}
+
+/**
  * The practice hint beside +1 night / +1 week: "Add a player first…" while
- * the roster is empty, then "Ready. +1 night plays the Oct 21 games." from
- * the moment a player lands until the next night is played. The line keeps
- * its place through the first add (a line vanishing mid-tap would move the
- * list under the finger) and goes once the player advances.
+ * the roster is empty (or the nights-without-you line once the player chose
+ * to play anyway), then "Ready. +1 night plays the Oct 21 games." from the
+ * moment a player lands until the next night is played. The line keeps its
+ * place through the first add (a line vanishing mid-tap would move the list
+ * under the finger) and goes once the player advances.
  */
 export function usePracticeHint(): string | null {
   const { bootstrap } = usePerGame();
+  const played = usePlayedWithoutRoster();
   if (!bootstrap || !isMockActive()) return null;
   const settledOn = bootstrap.game.lastSettledDate ?? '';
-  if (practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete) return null;
-  if (!bootstrap.positions.some((position) => position.status === 'active')) {
-    rosterEmptyOn = settledOn;
-    return EMPTY_ROSTER_HINT;
-  }
-  return rosterEmptyOn === settledOn ? readyHint(bootstrap.game.nextGameDate) : null;
+  const emptyRoster = !bootstrap.positions.some((position) => position.status === 'active');
+  if (emptyRoster) rosterEmptyOn = settledOn;
+  return practiceHint({
+    complete: practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete,
+    emptyRoster,
+    playedWithoutRoster: played,
+    justFilled: rosterEmptyOn === settledOn,
+    nextGameDate: bootstrap.game.nextGameDate,
+  });
+}
+
+/**
+ * The latest presses of the practice clock (step, and the settled date each
+ * started from), oldest first, so the status row can name the span a +1 week
+ * played ("Oct 21–27 games -$32.5K") until the next advance lands (walk 3
+ * T1-20; chromeView.resultSpan). Two are kept: the one on screen and the one
+ * playing now.
+ */
+let recentAdvances: readonly PracticeAdvance[] = [];
+const NO_ADVANCES: readonly PracticeAdvance[] = [];
+const advanceListeners = new Set<() => void>();
+
+function recordAdvance(advance: PracticeAdvance): void {
+  recentAdvances = [...recentAdvances.slice(-1), advance];
+  advanceListeners.forEach((listener) => listener());
+}
+
+function subscribeAdvances(listener: () => void): () => void {
+  advanceListeners.add(listener);
+  return () => {
+    advanceListeners.delete(listener);
+  };
+}
+
+export function useRecentAdvances(): readonly PracticeAdvance[] {
+  return useSyncExternalStore(subscribeAdvances, () => recentAdvances, () => NO_ADVANCES);
+}
+
+/** The hint line's DOM id: +1 night and +1 week point at it (aria-describedby). */
+export const PRACTICE_HINT_ID = 'practice-hint';
+
+/**
+ * Point a control at the hint line while one shows, so a screen reader says
+ * it after the button's name (walk 3 T3-21). react-native-web has no
+ * describedby prop, so it is written on the element. No-op off the web.
+ */
+function useDescribedBy(ref: { current: unknown }, id: string | null): void {
+  useEffect(() => {
+    const node = ref.current as { setAttribute?: (name: string, value: string) => void; removeAttribute?: (name: string) => void } | null;
+    if (!node?.setAttribute || !node.removeAttribute) return;
+    if (id) node.setAttribute('aria-describedby', id);
+    else node.removeAttribute('aria-describedby');
+  });
 }
 
 type Question = 'restart' | 'play-again' | 'exit' | 'empty-night' | 'empty-week';
@@ -166,6 +244,8 @@ function PracticeQuestionHost() {
     const { kind } = asked;
     setAskedQuestion(null);
     if (kind === 'empty-night' || kind === 'empty-week') {
+      // Asked once a season: from now on the hint line says it (walk 3 T1-19).
+      setPlayedWithoutRoster();
       focusAsker({ kind, fromMenu: false });
       advanceFromQuestion?.(kind === 'empty-night' ? 'night' : 'week');
       return;
@@ -415,6 +495,12 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   }, []);
   const complete = practiceProgress(mockSeasonStart(), bootstrap?.game.lastSettledDate ?? null).complete;
   const hintText = usePracticeHint();
+  const playedAnyway = usePlayedWithoutRoster();
+  // The hint shows under the buttons (phones) or at the end of the status
+  // row (desktop, where these controls are inline); folded rows have none.
+  const hintId = hintText && !folded ? PRACTICE_HINT_ID : null;
+  useDescribedBy(nightRef, hintId);
+  useDescribedBy(weekRef, hintId);
 
   // Restart or Exit asks first (SimBar draws the question). An item in More
   // closes the menu and lets its history entry go before the question adds
@@ -456,10 +542,13 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
 
   const open = bootstrap.positions.filter((position) => position.status === 'active');
   // Nothing to play for yet: +1 night / +1 week stay quiet (the first move is
-  // adding a player) and a line under them says what they do.
+  // adding a player), ask before playing, and a line under them says what
+  // they do. Once the player has said "Play anyway" this season they just
+  // play, and look it (walk 3 T1-19, T2-14).
   const emptyRoster = open.length === 0 && !progress.complete;
+  const asksFirst = asksBeforeEmptyNight(emptyRoster, playedAnyway);
   const hint = hintText && !inline && !folded ? (
-    <Text maxFontSizeMultiplier={1.5} style={styles.hint}>{hintText}</Text>
+    <Text maxFontSizeMultiplier={1.5} nativeID={PRACTICE_HINT_ID} style={styles.hint}>{hintText}</Text>
   ) : null;
 
   // One night (or week) per tap, and never a second one before the screen has
@@ -468,6 +557,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     if (advancingRef.current || Date.now() < readyAtRef.current) return;
     advancingRef.current = true;
     advancedRef.current = true;
+    recordAdvance({ step, from: bootstrap.game.lastSettledDate ?? null });
     setPlaying({ step, date: step === 'night' ? nightDate : null });
     try {
       if (step === 'week') playPracticeWeek();
@@ -515,11 +605,11 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         focusableWhenDisabled={!progress.complete}
         label={nightLabel}
         onPress={() => {
-          if (emptyRoster) askQuestion('empty-night');
+          if (asksFirst) askQuestion('empty-night');
           else void advance('night');
         }}
-        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, emptyRoster && styles.advanceQuiet, playingNight && styles.advancePlaying]}
-        textStyle={emptyRoster ? styles.advanceTextQuiet : styles.advanceText}
+        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, asksFirst && styles.advanceQuiet, playingNight && styles.advancePlaying]}
+        textStyle={asksFirst ? styles.advanceTextQuiet : styles.advanceText}
         variant="secondary"
       />
       <Button
@@ -529,11 +619,11 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         focusableWhenDisabled={!progress.complete}
         label={playingWeek ? 'Playing…' : stackLabels ? '+1\nweek' : '+1 week'}
         onPress={() => {
-          if (emptyRoster) askQuestion('empty-week');
+          if (asksFirst) askQuestion('empty-week');
           else void advance('week');
         }}
-        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, emptyRoster && styles.advanceQuiet, playingWeek && styles.advancePlaying]}
-        textStyle={emptyRoster ? styles.advanceTextQuiet : styles.advanceText}
+        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, asksFirst && styles.advanceQuiet, playingWeek && styles.advancePlaying]}
+        textStyle={asksFirst ? styles.advanceTextQuiet : styles.advanceText}
         variant="secondary"
       />
     </>
@@ -622,9 +712,22 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         variant="quiet"
       />
     ) : null;
+    // The row has room for a named padlock only, so More opens on the lock's
+    // words: "Locked · Nov 1" (walk 3 T3-29). Not a menu item: arrows and
+    // the first focus pass over it.
+    const lockDate = bootstrap.ruleset.rosterLockGameDate;
+    const lockNote = bootstrap.ruleset.rosterMutationsLocked && !progress.complete ? (
+      <View aria-label={lockIconName(lockDate)} role="img" style={styles.moreNote}>
+        <View style={styles.moreNoteIcon}>
+          <LockIcon color={colors.goldInk} size={12} />
+        </View>
+        <Text maxFontSizeMultiplier={1.5} style={styles.moreNoteText}>{lockShortText(lockDate)}</Text>
+      </View>
+    ) : null;
     return (
       <View style={styles.foldedControls}>
         <MoreMenu buttonRef={moreRef} open={moreOpen} setOpen={setMoreOpen}>
+          {lockNote}
           {progress.complete ? null : advanceButtons}
           {rulesItem}
           {secondaryButtons}
@@ -773,6 +876,26 @@ const styles = StyleSheet.create({
     gap: 2,
     alignItems: 'stretch',
   },
+  // The lock's words at the top of More in the tiniest row: not an item.
+  // The words wrap beside the padlock ("Locked ·" over "Nov 1"), never under it.
+  moreNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    columnGap: 4,
+    paddingHorizontal: space.xs,
+    paddingVertical: space.xs,
+  },
+  moreNoteIcon: {
+    paddingTop: 2,
+  },
+  moreNoteText: {
+    flexShrink: 1,
+    color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
+    lineHeight: 15,
+  },
   morePanelFallback: {
     top: 48,
     right: space.xs,
@@ -802,12 +925,14 @@ const styles = StyleSheet.create({
     marginLeft: 0,
   },
   // A tonal gold: the practice clock is the bar's point, but it is not a trade,
-  // so it does not take the solid gold the money actions use.
+  // so it does not take the solid gold the money actions use. Its edge is the
+  // gold ink, 3:1 or more against the bar in every theme (the gold line was
+  // 2.4-2.85:1, walk 3 T3-26).
   advance: {
     minWidth: 76,
     paddingHorizontal: space.md,
     backgroundColor: colors.goldSoft,
-    borderColor: colors.goldLine,
+    borderColor: colors.goldInk,
   },
   // The button that is playing keeps its ink while it ignores taps.
   advancePlaying: {
@@ -826,10 +951,14 @@ const styles = StyleSheet.create({
     color: colors.goldInk,
     textAlign: 'center',
   },
-  // Empty roster: neutral outline, no gold, until there is a player to play.
+  // Empty roster, until the player adds someone or says "Play anyway": no
+  // gold, and a dashed 3:1 edge (the kit's "press to hear why" look) beside
+  // the line that says what to do first. The plain border was 1.2-1.3:1,
+  // close to invisible (walk 3 T3-26).
   advanceQuiet: {
     backgroundColor: 'transparent',
-    borderColor: colors.border,
+    borderColor: colors.controlBorder,
+    borderStyle: 'dashed',
   },
   advanceTextQuiet: {
     color: colors.muted,

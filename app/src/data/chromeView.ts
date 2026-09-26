@@ -10,6 +10,7 @@ import {
   exactSignedMoney,
   humanDate,
   humanDay,
+  humanDaySpan,
   rosterReopensLine,
   signedMoney,
   signedMoneyFine,
@@ -251,8 +252,10 @@ export function nextGamesText(nextGameDate: string | null | undefined): string |
 }
 
 /**
- * What the status row says in place of the next games once practice is over:
- * the name the result card's button and the Play again question use too.
+ * The one name for the way on once practice is over: the practice bar's
+ * button, the result card's button and the Play again question all use it.
+ * The status row states the final score instead (walk 3 T4-04); this stands
+ * in for it in the spoken summary only when no score is given.
  */
 export const PRACTICE_OVER_TEXT = 'Play another season';
 
@@ -273,6 +276,13 @@ export interface StatusSummaryInput {
   progress?: PracticeProgress;
   /** A sentence about the roster lock, when it is on. */
   lockSentence?: string | null;
+  /**
+   * The days `lastNight` covers when it is more than the last night
+   * ("Oct 21–27" after +1 week, resultSpan); the settled date otherwise.
+   */
+  resultLabel?: string | null;
+  /** Practice, once the season is complete: the final score. */
+  finalScore?: number | null;
 }
 
 /**
@@ -293,6 +303,67 @@ export function noGamesText(date: string | null | undefined): string {
   return `${date ? humanDate(date) : 'Latest games'}: ${NO_PLAYERS_PLAYED}`;
 }
 
+function shiftDay(iso: string, days: number): string {
+  return new Date(utcDay(iso) + days * DAY_MS).toISOString().slice(0, 10);
+}
+
+/** "Oct 21–27", "Oct 28–Nov 3", or just "Oct 27" when the span is one day. */
+export function dateSpanText(firstDay: string, lastDay: string): string {
+  // One spelling with the notice after +1 week (copy/terms).
+  return humanDaySpan(firstDay, lastDay);
+}
+
+/** One press of the practice clock: its step and the settled date it started from. */
+export interface PracticeAdvance {
+  step: 'night' | 'week';
+  from: string | null;
+}
+
+/** The games the status row's figure covers: after `after`, through `through`. */
+export interface ResultSpan {
+  after: string;
+  through: string;
+  /** "Oct 21–27" after +1 week; "Oct 28" for one night. */
+  label: string;
+}
+
+/**
+ * Which games the status row reports. After +1 week, the whole span it
+ * played ("Oct 21–27 games -$32.5K", the games-only figure the notice gives),
+ * until the next advance lands; otherwise the last settled night alone
+ * ("Oct 28 games +$X"). After a week the last night alone read "+$130.5K",
+ * in green, for a week that lost $32.5K (walk 3 T1-20). `advances` are the
+ * latest presses, oldest first; one still playing (it started from the date
+ * on screen) is passed over, so the row never names a span it has not shown.
+ */
+export function resultSpan(
+  advances: readonly PracticeAdvance[],
+  lastSettled: string | null | undefined,
+): ResultSpan | null {
+  if (!lastSettled) return null;
+  const landed = [...advances].reverse().find((advance) => advance.from !== null && advance.from < lastSettled);
+  if (landed?.from && landed.step === 'week' && daysBetween(landed.from, lastSettled) > 1) {
+    return {
+      after: landed.from,
+      through: lastSettled,
+      label: dateSpanText(shiftDay(landed.from, 1), lastSettled),
+    };
+  }
+  return { after: shiftDay(lastSettled, -1), through: lastSettled, label: humanDate(lastSettled) };
+}
+
+/** Whether any of your players played after `after`, through `through` (games, not fees). */
+export function playedBetween(
+  ledger: readonly { gameId: string | null; gameDate: string | null }[] | undefined,
+  after: string,
+  through: string,
+): boolean {
+  if (!ledger) return false;
+  return ledger.some((entry) => (
+    entry.gameId !== null && entry.gameDate !== null && entry.gameDate > after && entry.gameDate <= through
+  ));
+}
+
 /**
  * The status row as one sentence for screen readers, e.g.
  * "Practice, day 16 of 174. Nov 5 games +$323,000. Next games Thu, Nov 6."
@@ -306,9 +377,12 @@ export function statusSummary({
   noGames = false,
   progress,
   lockSentence,
+  resultLabel = null,
+  finalScore = null,
 }: StatusSummaryInput): string {
   const parts: string[] = [];
   const named = lastNight !== null;
+  const label = resultLabel ?? (lastSettledDate ? humanDate(lastSettledDate) : null);
   if (mode === 'practice') {
     const clock = progress
       ? (progress.complete ? 'season complete' : `day ${progress.day} of ${progress.total}`)
@@ -320,12 +394,16 @@ export function statusSummary({
   }
   if (named) {
     parts.push(noGames
-      ? `${noGamesText(lastSettledDate)}.`
-      : `${nightGamesLabel(lastSettledDate)} ${exactSignedMoney(lastNight)}.`);
+      ? `${label ?? 'Latest games'}: ${NO_PLAYERS_PLAYED}.`
+      : `${label ? `${label} games` : 'Latest games'} ${exactSignedMoney(lastNight)}.`);
   }
   const next = nextGamesText(nextGameDate);
   const opener = mode === 'practice' && progress?.day === 0;
-  if (mode === 'practice' && progress?.complete) parts.push(`${PRACTICE_OVER_TEXT}.`);
+  // A finished season states its result; the way on is the Play another
+  // season button beside or under this row (walk 3 T4-04).
+  if (mode === 'practice' && progress?.complete) {
+    parts.push(finalScore !== null ? `Final score ${exactSignedMoney(finalScore)}.` : `${PRACTICE_OVER_TEXT}.`);
+  }
   else if (next) parts.push(opener ? `Season opens ${next}.` : `Next games ${next}.`);
   else parts.push('Next games not scheduled yet.');
   if (lockSentence) parts.push(lockSentence);
@@ -390,6 +468,19 @@ export function chromeTiny(width: number, height: number): boolean {
   return chromeFolded(height) && height < CHROME_TINY_MAX_HEIGHT && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
 }
 
+/**
+ * Below this width a sheet's title and its Done no longer share a line (a
+ * 390px phone at 400% zoom is 98px wide, where Done showed as "Do" or not at
+ * all). The Rules and Settings sheets then put Done on a full-width row under
+ * the title, narrow their gutters so headings wrap between words, and put
+ * each theme's swatch under its name (walk 3 T3-31).
+ */
+export const SHEET_NARROW_MAX_WIDTH = 160;
+
+export function sheetNarrow(width: number): boolean {
+  return width < SHEET_NARROW_MAX_WIDTH;
+}
+
 /** The day count in a tiny row, in two short lines: "Day 16" over "of 174". */
 export function practiceDayTiny(progress: PracticeProgress): string {
   return progress.complete ? 'Season\nover' : `Day ${progress.day}\nof ${progress.total}`;
@@ -405,6 +496,23 @@ export const LOCK_REASON = 'moves pause for those games';
 /** "Roster reopens after Oct 30 · moves pause for those games". */
 export function lockLine(lockGameDate: string | null | undefined): string {
   return `${rosterReopensLine(lockGameDate)} · ${LOCK_REASON}`;
+}
+
+/**
+ * The lock in a row too narrow for its sentence (a folded row at 200% zoom):
+ * "Locked · Nov 1" beside the padlock, under the day count, so the row keeps
+ * its words and Settings keeps its place on the first line (walk 3 T3-29).
+ */
+export function lockShortText(lockGameDate: string | null | undefined): string {
+  return lockGameDate ? `Locked · ${keepTogether(humanDate(lockGameDate))}` : 'Locked';
+}
+
+/**
+ * The padlock's name wherever it stands for the sentence (the short lock
+ * words, the padlock alone at 400% zoom): "Roster locked until after Nov 1".
+ */
+export function lockIconName(lockGameDate: string | null | undefined): string {
+  return lockGameDate ? `Roster locked until after ${humanDate(lockGameDate)}` : 'Roster locked until after these games';
 }
 
 /** Whether any of your players played on `date` (games, not fees). */
@@ -426,6 +534,45 @@ export const EMPTY_ROSTER_HINT = "Add a player first. +1 night plays the next ni
  */
 export function readyHint(nextGameDate: string | null | undefined): string {
   return nextGameDate ? `Ready. +1 night plays the ${humanDate(nextGameDate)} games.` : "Ready. +1 night plays the next night's games.";
+}
+
+/**
+ * Once the player has answered "Play anyway" to the empty-roster question,
+ * it is not asked again that practice season (it came back on every press,
+ * 22 times in one run: walk 3 T1-19, T2-14); this line says it instead.
+ */
+export const EMPTY_ROSTER_PLAYING_HINT = 'Nobody on your roster: nights play without you';
+
+/**
+ * The line beside +1 night / +1 week, or null for none: "Add a player
+ * first…" while the roster is empty (the nights-without-you line once the
+ * player chose to play anyway), then "Ready…" from the first add until the
+ * next advance (`justFilled`: the roster was empty at this same settled date).
+ */
+export function practiceHint({
+  complete,
+  emptyRoster,
+  playedWithoutRoster,
+  justFilled,
+  nextGameDate,
+}: {
+  complete: boolean;
+  emptyRoster: boolean;
+  playedWithoutRoster: boolean;
+  justFilled: boolean;
+  nextGameDate: string | null | undefined;
+}): string | null {
+  if (complete) return null;
+  if (emptyRoster) return playedWithoutRoster ? EMPTY_ROSTER_PLAYING_HINT : EMPTY_ROSTER_HINT;
+  return justFilled ? readyHint(nextGameDate) : null;
+}
+
+/**
+ * Whether +1 night / +1 week asks before playing with nobody on the roster:
+ * only until the player has once said "Play anyway" this season.
+ */
+export function asksBeforeEmptyNight(emptyRoster: boolean, playedWithoutRoster: boolean): boolean {
+  return emptyRoster && !playedWithoutRoster;
 }
 
 /** How long a short stays open, in words. */

@@ -3,6 +3,7 @@
  * round-capped stroke as the Settings icon so the frame reads as one set.
  * Colours are passed in from `colors.*`; nothing here hard-codes a colour.
  */
+import { View } from 'react-native';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 
 type IconProps = { color: string; size?: number };
@@ -69,12 +70,18 @@ export function SettingsIcon({ color, size = 18 }: IconProps) {
   );
 }
 
-/** A padlock: roster moves are paused for the next games. */
-export function LockIcon({ color, size = 12 }: IconProps) {
-  return (
+/**
+ * A padlock: roster moves are paused for the next games. Standing alone it
+ * is an image named by `label` ("Roster locked until after Nov 1"); beside
+ * words that already say it, it is hidden from screen readers rather than
+ * read as an unnamed "image" (walk 3 T3-29).
+ */
+export function LockIcon({ color, size = 12, label }: IconProps & { label?: string }) {
+  const icon = (
     <Svg height={size} viewBox="0 0 24 24" width={size}>
       <Rect fill="none" height={10} rx={2} stroke={color} strokeWidth={2.5} width={15} x={4.5} y={10.5} />
       <Path d="M8 10.5 V7.5 a4 4 0 0 1 8 0 V10.5" fill="none" stroke={color} strokeLinecap="round" strokeWidth={2.5} />
     </Svg>
   );
+  return label ? <View aria-label={label} role="img">{icon}</View> : <View aria-hidden>{icon}</View>;
 }
