@@ -66,12 +66,14 @@ export function useSheetHistory(visible: boolean, onClose: () => void): void {
     const active = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
       ? document.activeElement
       : null;
-    // A sheet opened from the page remembers its opener; one that opens
-    // with focus nowhere (Settings coming back after Rules it opened) falls
-    // back to the last opener on the page, so closing it returns focus there
-    // instead of dropping it to the top (walk 4 T2-15, T4-06).
-    if (active && appRoot()?.contains(active)) lastPageOpener = active;
-    const opener = active ?? (lastPageOpener?.isConnected ? lastPageOpener : null);
+    // A sheet opened from the page remembers its opener. One that opens with
+    // focus nowhere, or inside another sheet (Settings coming back after the
+    // Rules it opened; react-native-web's modal may already have taken focus
+    // inside itself), falls back to the last opener on the page, so closing
+    // it returns focus there instead of to the top (walk 4 T2-15, T4-06).
+    const onPage = active !== null && appRoot()?.contains(active) === true;
+    if (onPage) lastPageOpener = active;
+    const opener = onPage ? active : (lastPageOpener?.isConnected ? lastPageOpener : null);
     openSheets += 1;
     setBackgroundInert(true);
     sheetsChanged();
@@ -98,11 +100,19 @@ export function useSheetHistory(visible: boolean, onClose: () => void): void {
       }
       // After the sheet has left the page, and only if nothing else has
       // taken focus (a dialog may move it on purpose).
-      setTimeout(() => {
+      // A sheet that animates out keeps focus for a moment, then drops it to
+      // the page when it goes: look again until it has gone (about half a
+      // second), and stop if focus has moved on to something else.
+      const restore = (attempt: number) => {
         const current = document.activeElement;
         const lost = !current || current === document.body || !current.isConnected;
-        if (lost && opener?.isConnected) opener.focus({ preventScroll: true });
-      }, 60);
+        if (lost) {
+          if (opener?.isConnected) opener.focus({ preventScroll: true });
+          return;
+        }
+        if (!appRoot()?.contains(current) && attempt < 6) setTimeout(() => restore(attempt + 1), 80);
+      };
+      setTimeout(() => restore(0), 60);
     };
   }, [visible]);
 }
