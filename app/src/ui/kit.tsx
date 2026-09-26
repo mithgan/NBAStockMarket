@@ -212,9 +212,6 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
   textStyle,
 }, ref) {
   const name = accessibilityLabel ?? label;
-  // A focusable disabled button stays enabled for the browser (so it keeps its
-  // Tab stop) but ignores presses and says it is disabled.
-  const hardDisabled = disabled && !focusableWhenDisabled;
   return (
     <Pressable
       ref={ref}
@@ -224,8 +221,12 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
       accessibilityLabel={disabled && accessibilityHint ? `${name}. ${accessibilityHint}` : name}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
-      aria-disabled={disabled}
-      disabled={hardDisabled}
+      disabled={disabled}
+      // react-native-web takes a disabled Pressable out of the Tab order and
+      // writes aria-disabled from its own disabled prop. An explicit tabIndex
+      // keeps a focusable disabled button's Tab stop, and it still reports
+      // aria-disabled, so its reason can be reached and heard.
+      tabIndex={focusableWhenDisabled ? 0 : undefined}
       onPress={() => {
         if (!disabled) onPress();
       }}

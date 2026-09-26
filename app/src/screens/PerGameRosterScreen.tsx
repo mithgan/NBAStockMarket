@@ -226,9 +226,9 @@ function PositionRow({
       // A locked button stays in the Tab order (aria-disabled only), so a
       // keyboard or screen-reader user reaches it and hears why.
       accessibilityState={{ disabled }}
-      aria-disabled={disabled}
       aria-expanded={confirming}
-      disabled={pending}
+      disabled={disabled}
+      tabIndex={0}
       onPress={onActionPress}
       style={({ pressed }) => [
         styles.action,
