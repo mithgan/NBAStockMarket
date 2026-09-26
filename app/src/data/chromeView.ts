@@ -312,6 +312,15 @@ export const CHROME_ROOMY_DOTS_MIN_WIDTH = 344;
  */
 export const CHROME_ICON_ONLY_MAX_WIDTH = 374;
 export const CHROME_ICON_ONLY_MIN_WIDTH = 340;
+/**
+ * Portrait phones (below CHROME_WIDE_MIN_WIDTH, not folded) keep +1 night,
+ * +1 week and More in one row; Play to the end and Restart live in More, and
+ * from this width the row's free slot beside +1 week carries the hint, the
+ * lock or Cancel queued, so no line of its own comes and goes under the
+ * buttons (walk 9 T1-13, T4-08). Narrower rows keep the line under them.
+ */
+export const PHONE_SLOT_MIN_WIDTH = 300;
+
 /** Text enlarged past this scale stacks the controls under the facts. */
 export const CHROME_LARGE_TEXT_SCALE = 1.3;
 
@@ -823,6 +832,8 @@ export function practiceHint({
   justFilled,
   nextGameDate,
   heldBefore = false,
+  locked = false,
+  lockGameDate = null,
 }: {
   complete: boolean;
   emptyRoster: boolean;
@@ -831,10 +842,32 @@ export function practiceHint({
   nextGameDate: string | null | undefined;
   /** A player or short has been held this season (a position of any status). */
   heldBefore?: boolean;
+  /** Moves are locked for the next games (`lockGameDate`: their date). */
+  locked?: boolean;
+  lockGameDate?: string | null;
 }): string | null {
   if (complete) return null;
-  if (emptyRoster) return playedWithoutRoster ? EMPTY_ROSTER_PLAYING_HINT : heldBefore ? NOBODY_HELD_HINT : EMPTY_ROSTER_HINT;
+  if (emptyRoster) {
+    if (playedWithoutRoster) return EMPTY_ROSTER_PLAYING_HINT;
+    // Nobody can be added before locked games: say what can be done, not
+    // "add someone first", which the lock forbids (walk 9 T4-03).
+    if (locked) return lockedEmptyHint(lockGameDate, heldBefore);
+    return heldBefore ? NOBODY_HELD_HINT : EMPTY_ROSTER_HINT;
+  }
   return justFilled ? readyHint(nextGameDate) : null;
+}
+
+/**
+ * The hint on a locked night with nobody held: "Nobody on your roster or
+ * shorts. Moves reopen after Oct 28." (walk 9 T4-03).
+ */
+export function lockedEmptyHint(lockGameDate: string | null | undefined, heldBefore = false): string {
+  return `${heldBefore ? 'Nobody on your roster or shorts' : 'Nobody on your roster yet'}. ${rosterReopensLine(lockGameDate)}.`;
+}
+
+/** Whether a hint is the locked night's (lockedEmptyHint). */
+function isLockedEmptyHint(hint: string): boolean {
+  return /^Nobody on your roster (or shorts|yet)\. Moves reopen /.test(hint);
 }
 
 /**
@@ -856,6 +889,7 @@ export const READY_HINT_SHORT = 'Ready for +1 night';
  */
 export function practiceWeekHint(hint: string | null, weekSpan: string | null): string | null {
   if (hint === null) return null;
+  if (isLockedEmptyHint(hint)) return hint;
   const plays = weekSpan ? `+1 week plays the ${weekSpan} games.` : '+1 week plays the next seven days.';
   if (hint === EMPTY_ROSTER_HINT) return `Add a player first. ${plays}`;
   if (hint === NOBODY_HELD_HINT) return 'Nobody on your roster or shorts now: add or short someone before the next week.';
@@ -878,6 +912,7 @@ export function statusRowResult<T>(progress: Pick<PracticeProgress, 'day' | 'com
 export function practiceHintShort(input: Parameters<typeof practiceHint>[0]): string | null {
   const full = practiceHint(input);
   if (full === null) return null;
+  if (isLockedEmptyHint(full)) return lockShortText(input.lockGameDate);
   if (full === EMPTY_ROSTER_HINT) return EMPTY_ROSTER_HINT_SHORT;
   if (full === NOBODY_HELD_HINT) return NOBODY_HELD_HINT_SHORT;
   if (full === EMPTY_ROSTER_PLAYING_HINT) return EMPTY_ROSTER_PLAYING_HINT_SHORT;
@@ -986,6 +1021,79 @@ export function queuedCancelledNotice(queued: readonly QueuedStep[], playing: st
   return `${what} cancelled.${playing ? ` ${playing} still plays.` : ''}`;
 }
 
+/**
+ * Cancel's visible words, with the count (walk 9 T4-N3): "Cancel queued
+ * week", "Cancel 2 queued weeks", "Cancel 3 queued" for a mix.
+ */
+export function queuedCancelLabel(queued: readonly QueuedStep[]): string {
+  if (queued.length === 0) return QUEUED_CANCEL_LABEL;
+  const nights = queued.filter((step) => step === 'night').length;
+  const kind = nights === queued.length ? 'night' : nights === 0 ? 'week' : null;
+  if (queued.length === 1) return `Cancel queued ${queued[0]}`;
+  return kind ? `Cancel ${queued.length} queued ${kind}s` : `Cancel ${queued.length} queued`;
+}
+
+/** Its name starts with the visible words (voice control), then what it drops for a mix. */
+export function queuedCancelControlName(queued: readonly QueuedStep[]): string {
+  const label = queuedCancelLabel(queued);
+  const mixed = queued.some((step) => step === 'night') && queued.some((step) => step === 'week');
+  return mixed ? `${label}: ${queuedPhrase(queued)}` : label;
+}
+
+/** Said once a run, after the first press that queues: the way back (walk 9 T3-12). */
+export function queuedCancelHint(count: number): string {
+  return `Press Cancel beside +1 week to drop ${count === 1 ? 'it' : 'them'}.`;
+}
+
+/**
+ * A cancel that lands while a step still plays is said with that step's
+ * result, at its end: "Oct 21–27 games: your score rose $454K. Queued week
+ * cancelled." (walk 9 T1-15: its own notice was replaced 80 ms later).
+ */
+export function withCancelledNote(result: string, note: string | null): string {
+  if (!note || result.endsWith(note)) return result;
+  return `${result.replace(/\s+$/, '')}${/[.!?…]$/.test(result.trim()) ? '' : '.'} ${note}`;
+}
+
+/**
+ * Taps on +1 night / +1 week (walk 9 T4-11): a second tap on the same button
+ * within ADVANCE_DOUBLE_TAP_MS of an isolated tap is held, not played: alone
+ * it was a double tap's second click and is dropped; a third tap inside the
+ * window proves a steady run, so the held tap and this one both count. A
+ * quick tap in the middle of a steady rhythm (the tap before it came within
+ * ADVANCE_RHYTHM_MS of its own) is a press of its own: five deliberate taps
+ * at uneven gaps (370, 380, 420, then 290 ms) played four nights. A repeat
+ * sooner than ADVANCE_BOUNCE_MS is a finger bouncing and never counts.
+ * `plays`: how many presses this tap makes.
+ */
+export interface AdvanceTapState {
+  lastAt: number | null;
+  held: boolean;
+  /** The last tap came within ADVANCE_RHYTHM_MS of the one before it. */
+  steady: boolean;
+}
+
+export const ADVANCE_DOUBLE_TAP_MS = 350;
+export const ADVANCE_RHYTHM_MS = 700;
+export const ADVANCE_BOUNCE_MS = 100;
+
+export const NO_ADVANCE_TAPS: AdvanceTapState = { lastAt: null, held: false, steady: false };
+
+export function advanceTap(
+  state: AdvanceTapState,
+  now: number,
+  windowMs = ADVANCE_DOUBLE_TAP_MS,
+): { plays: number; state: AdvanceTapState } {
+  const gap = state.lastAt === null ? Number.POSITIVE_INFINITY : now - state.lastAt;
+  if (gap < ADVANCE_BOUNCE_MS) return { plays: 0, state };
+  if (gap < windowMs) {
+    if (state.held) return { plays: 2, state: { lastAt: now, held: false, steady: true } };
+    if (state.steady) return { plays: 1, state: { lastAt: now, held: false, steady: true } };
+    return { plays: 0, state: { lastAt: now, held: true, steady: false } };
+  }
+  return { plays: 1, state: { lastAt: now, held: false, steady: gap < ADVANCE_RHYTHM_MS } };
+}
+
 /** At most this many presses wait behind the one playing (a steady run of presses still counts each). */
 export const MAX_QUEUED_PRESSES = 5;
 
@@ -1033,8 +1141,59 @@ export function queuedLabel(step: 'night' | 'week', stacked: boolean, count = 1)
  * Whether +1 night / +1 week asks before playing with nobody on the roster:
  * only until the player has once said "Play anyway" this season.
  */
-export function asksBeforeEmptyNight(emptyRoster: boolean, playedWithoutRoster: boolean): boolean {
+export function asksBeforeEmptyNight(emptyRoster: boolean, playedWithoutRoster: boolean, lockedNight = false): boolean {
+  // +1 night on a locked night with nobody held: nothing can be done before
+  // those games, so it just plays them (the hint says moves reopen after;
+  // walk 9 T4-03). +1 week still asks, and offers the night instead.
+  if (lockedNight) return false;
   return emptyRoster && !playedWithoutRoster;
+}
+
+/**
+ * "Play a week with nobody on your roster?" on a locked night: Open market
+ * was a dead end (every Add was LOCKED), so the default is the one night the
+ * lock covers, after which players can be added (walk 9 T4-03).
+ */
+export function lockedWeekQuestion(lockGameDate: string | null | undefined): {
+  title: string;
+  lines: string[];
+  primaryLabel: string;
+  secondLabel: string;
+} {
+  const games = lockGameDate ? `the ${humanDate(lockGameDate)} games` : 'the next games';
+  return {
+    title: 'Play a week with nobody on your roster?',
+    lines: [
+      `Moves are locked for ${games} and reopen after them.`,
+      '+1 night plays just those games, so you can add players for the rest of the week.',
+    ],
+    primaryLabel: '+1 night instead',
+    secondLabel: 'Play the week',
+  };
+}
+
+/**
+ * Play to the end with nobody on the roster: the question offers the Market
+ * first (walk 9 T4-12), unless moves are locked for the next games.
+ */
+export function playToEndOffersMarket(rosterPlayers: number, locked: boolean): boolean {
+  return rosterPlayers === 0 && !locked;
+}
+
+/**
+ * The Play to the end lines when only shorts are held: after the last one
+ * ends nobody plays for you, which "Your roster stays as it is" hid (walk 9
+ * T4-12). null when players are on the roster or no short has an end date.
+ */
+export function playToEndShortsOnlyLines(shortEnds: readonly (string | null)[]): string[] | null {
+  const dated = shortEnds.filter((end): end is string => Boolean(end)).sort();
+  if (dated.length === 0 || dated.length < shortEnds.length) return null;
+  const last = humanDate(dated[dated.length - 1]);
+  const n = shortEnds.length;
+  return [
+    `Nobody is on your roster, so after ${last} nobody plays for you.`,
+    n === 1 ? `Your short ends by itself after ${last}.` : `Your ${n} shorts end by themselves by the ${last} games.`,
+  ];
 }
 
 /** How long a short stays open, in words. */

@@ -61,14 +61,16 @@ export const ChromeButton = forwardRef<View, ChromeButtonProps>(function ChromeB
         if (tapsSettling(true)) return;
         if (!disabled) onPress();
       }}
-      style={({ pressed }) => [
+      style={(state) => [
         styles.base,
         placement === 'inline' ? styles.inline : styles.stacked,
         gold && styles.gold,
         gold && placement === 'inline' && styles.goldInline,
         expanded && styles.expanded,
         disabled && styles.disabled,
-        pressed && !disabled && styles.pressed,
+        // Answers the pointer as the kit's buttons do (walk 9 T2-09).
+        (state as { hovered?: boolean }).hovered === true && !disabled && !expanded && styles.hover,
+        state.pressed && !disabled && styles.pressed,
       ]}
     >
       {icon(color)}
@@ -128,6 +130,9 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.55,
+  },
+  hover: {
+    backgroundColor: colors.surfaceHigh,
   },
   pressed: {
     opacity: 0.65,

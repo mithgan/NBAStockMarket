@@ -47,17 +47,11 @@ function SettingsIcon({ color }: { color: string }) {
 }
 
 export function SettingsButton({ onPress }: { onPress: () => void }) {
-  // The icon's name on hover, for a mouse user who cannot tell the sliders
-  // mean Settings (walk 5 T2-21). react-native-web has no title prop.
-  const ref = useRef<View | null>(null);
-  useEffect(() => {
-    (ref.current as unknown as { setAttribute?: (name: string, value: string) => void } | null)?.setAttribute?.('title', 'Settings');
-  }, []);
+  // Named in words under the icon, as Rules is (walk 9 T1-05): the sliders
+  // alone did not say Settings. The word is the button's name (voice
+  // control users say what they see), so no aria-label repeats it.
   return (
     <Pressable
-      ref={ref}
-      // On the web the hover title names the button; an aria-label as well
-      // made screen readers say "Settings, button, Settings" (walk 7 T3-03).
       accessibilityLabel={Platform.OS === 'web' ? undefined : 'Settings'}
       accessibilityRole="button"
       onPress={() => {
@@ -65,9 +59,15 @@ export function SettingsButton({ onPress }: { onPress: () => void }) {
         if (tapsSettling(true)) return;
         onPress();
       }}
-      style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+      // Answers the pointer like the other buttons (walk 9 T2-09).
+      style={(state) => [
+        styles.iconButton,
+        (state as { hovered?: boolean }).hovered === true && styles.iconButtonHover,
+        state.pressed && styles.pressed,
+      ]}
     >
       <SettingsIcon color={colors.muted} />
+      <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.iconButtonLabel}>Settings</Text>
     </Pressable>
   );
 }
@@ -325,6 +325,10 @@ export function SettingsSheet({
                     Notices stay on screen until you close them, instead of clearing after a few seconds.
                   </Text>
                 </View>
+                {/* The state in a word too: forced colours drop the track's
+                    fill, and a pill alone can be read either way (walk 9
+                    T3-07, T3-N4). The switch itself says checked. */}
+                <Text aria-hidden style={[styles.switchWord, keepNotices && styles.switchWordOn]}>{keepNotices ? 'On' : 'Off'}</Text>
                 <View style={[styles.switchTrack, keepNotices && styles.switchTrackOn]}>
                   <View style={[styles.switchKnob, keepNotices && styles.switchKnobOn]} />
                 </View>
@@ -371,6 +375,10 @@ export function SettingsSheet({
                     Sheets and figures appear at once, without fades or counting up. Your device's own setting still applies.
                   </Text>
                 </View>
+                {/* The state in a word too: forced colours drop the track's
+                    fill, and a pill alone can be read either way (walk 9
+                    T3-07, T3-N4). The switch itself says checked. */}
+                <Text aria-hidden style={[styles.switchWord, motionReduced && styles.switchWordOn]}>{motionReduced ? 'On' : 'Off'}</Text>
                 <View style={[styles.switchTrack, motionReduced && styles.switchTrackOn]}>
                   <View style={[styles.switchKnob, motionReduced && styles.switchKnobOn]} />
                 </View>
@@ -477,8 +485,10 @@ export function SettingsSheet({
 const styles = StyleSheet.create({
   // A full 44px target: the gear is the only way into settings on a phone.
   iconButton: {
-    width: 44,
-    height: 44,
+    minWidth: 44,
+    minHeight: 44,
+    paddingHorizontal: 4,
+    gap: 1,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -486,6 +496,17 @@ const styles = StyleSheet.create({
     borderColor: colors.controlBorder,
     borderWidth: 1,
     backgroundColor: colors.surfaceRaised,
+  },
+  iconButtonHover: {
+    backgroundColor: colors.surfaceHigh,
+  },
+  // The caption under the sliders, in the Rules control's type.
+  iconButtonLabel: {
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.bold,
+    lineHeight: 13,
   },
   pressed: { opacity: 0.65 },
   scrim: {
@@ -545,10 +566,15 @@ const styles = StyleSheet.create({
     fontSize: type.title,
     fontWeight: weight.heavy,
   },
+  // Sized to its word with room each side, so the focus ring frames it
+  // (the word ran past a 50px box; walk 9 T3-03), as Rules' Done is.
   close: {
     minHeight: 44,
+    minWidth: 44,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingLeft: space.md,
+    paddingHorizontal: space.sm,
+    marginRight: -space.sm,
   },
   // Done with a row to itself reads as a button: a 3:1 edge, words centred.
   closeNarrow: {
@@ -680,14 +706,28 @@ const styles = StyleSheet.create({
     borderColor: colors.goldInk,
     backgroundColor: colors.gold,
   },
+  // The knob is a border, not a fill, so forced colours still draw it and
+  // its side shows off (left) or on (right) there too (walk 9 T3-07).
   switchKnob: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: colors.muted,
+    borderWidth: 10,
+    borderColor: colors.muted,
   },
   switchKnobOn: {
-    backgroundColor: colors.onGold,
+    borderColor: colors.onGold,
+  },
+  switchWord: {
+    minWidth: 26,
+    textAlign: 'right',
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.bold,
+  },
+  switchWordOn: {
+    color: colors.goldInk,
   },
   check: {
     ...numeric,

@@ -28,6 +28,7 @@ import {
   lockLine,
   lockShortText,
   nextGamesText,
+  PHONE_SLOT_MIN_WIDTH,
   noGamesWords,
   playedBetween,
   practiceDateDay,
@@ -280,7 +281,10 @@ export function PerGameStatusStrip() {
   // line: the sentence Roster and Market use (terms.rosterReopensLine) plus
   // why moves pause. Wide rows lead it with the ROSTER LOCKED tag.
   const lockTag = arrangement === 'wide' && !folded;
-  const lock = tiny ? null : locked && folded && !foldedFacts ? (
+  // A portrait phone's practice row carries the lock beside +1 week, so a
+  // week landing on a lock adds no line here (walk 9 T4-08).
+  const lockInControls = practice && !layout.wide && !folded && width >= PHONE_SLOT_MIN_WIDTH && !progress?.complete;
+  const lock = tiny || lockInControls ? null : locked && folded && !foldedFacts ? (
     // The narrowest folded rows: "Locked · Nov 1" under the day count, so
     // the row still says it in words and Settings keeps the first line (the
     // padlock alone pushed it down a line, walk 3 T3-29). One image to a
@@ -787,9 +791,12 @@ const styles = StyleSheet.create({
   },
   // Gold ink: the bright gold on the dark themes, a deep gold in Light,
   // where the bright one barely parts from the track.
+  // Drawn as a border, not a fill: forced colours (Windows contrast themes)
+  // drop background colours, and the rail read as 0% played (walk 9 T3-08).
   meterFill: {
-    height: '100%',
-    backgroundColor: colors.goldInk,
+    height: 0,
+    borderTopWidth: 4,
+    borderTopColor: colors.goldInk,
   },
   // Folded and narrow: the facts are just the day, sized to it.
   factsFolded: {

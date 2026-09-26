@@ -713,3 +713,66 @@ test('Settings lists recent notices with their age, and Match device says what i
   assert.equal(deviceChoiceName('Light'), 'Match device · Light now');
   assert.equal(deviceChoiceName(null), 'Match device');
 });
+
+test('walk 9: a steady run of taps plays every press; an isolated pair is a double tap', async () => {
+  const { advanceTap, NO_ADVANCE_TAPS } = await import('./chromeView');
+  const run = (gaps: number[]) => {
+    let state = NO_ADVANCE_TAPS;
+    let at = 1000;
+    let plays = 0;
+    for (const gap of [0, ...gaps]) {
+      at += gap;
+      const tap = advanceTap(state, at);
+      state = tap.state;
+      plays += tap.plays;
+    }
+    return plays;
+  };
+  assert.equal(run([250, 250, 250, 250]), 5);
+  assert.equal(run([330, 330, 330, 330]), 5);
+  assert.equal(run([420, 420, 420, 420]), 5);
+  assert.equal(run([200]), 1);
+  assert.equal(run([150, 900, 150]), 2);
+  // Deliberate taps at uneven gaps each count, a quick one mid-rhythm too.
+  assert.equal(run([366, 383, 419, 292]), 5);
+  // A finger bouncing (21 ms) never counts, even mid-run.
+  assert.equal(run([371, 373, 21, 403]), 4);
+  // An isolated double tap after a pause still plays once.
+  assert.equal(run([1200, 180]), 2);
+});
+
+test('walk 9: locked night with nobody held says what can be done', async () => {
+  const { asksBeforeEmptyNight, lockedEmptyHint, lockedWeekQuestion, practiceHint, practiceHintShort, practiceWeekHint } = await import('./chromeView');
+  const base = { complete: false, emptyRoster: true, playedWithoutRoster: false, justFilled: true, nextGameDate: '2025-10-28', heldBefore: true, locked: true, lockGameDate: '2025-10-28' };
+  assert.equal(practiceHint(base), 'Nobody on your roster or shorts. Moves reopen after Oct 28.');
+  assert.equal(lockedEmptyHint('2025-10-28', false), 'Nobody on your roster yet. Moves reopen after Oct 28.');
+  assert.equal(practiceHintShort(base), 'Locked · Oct 28');
+  assert.equal(practiceWeekHint(practiceHint(base), 'Oct 28–Nov 3'), 'Nobody on your roster or shorts. Moves reopen after Oct 28.');
+  assert.equal(asksBeforeEmptyNight(true, false, true), false);
+  assert.equal(asksBeforeEmptyNight(true, false), true);
+  const week = lockedWeekQuestion('2025-10-28');
+  assert.equal(week.primaryLabel, '+1 night instead');
+  assert.ok(week.lines[0].includes('locked for the Oct 28 games'));
+});
+
+test('walk 9: queue count, cancel words, and a cancel said with the result', async () => {
+  const { queuedCancelControlName, queuedCancelLabel, withCancelledNote } = await import('./chromeView');
+  assert.equal(queuedCancelLabel(['week']), 'Cancel queued week');
+  assert.equal(queuedCancelLabel(['week', 'week']), 'Cancel 2 queued weeks');
+  assert.equal(queuedCancelLabel(['night', 'week', 'week']), 'Cancel 3 queued');
+  assert.equal(queuedCancelControlName(['night', 'week']), 'Cancel 2 queued: 1 night and 1 week');
+  assert.equal(withCancelledNote('Oct 21–27 games: your score rose $454K.', 'Queued week cancelled.'), 'Oct 21–27 games: your score rose $454K. Queued week cancelled.');
+  assert.equal(withCancelledNote('x. Queued week cancelled.', 'Queued week cancelled.'), 'x. Queued week cancelled.');
+});
+
+test('walk 9: Play to the end with only shorts says nobody plays after they end, and offers the Market', async () => {
+  const { playToEndOffersMarket, playToEndShortsOnlyLines } = await import('./chromeView');
+  assert.deepEqual(playToEndShortsOnlyLines(['2025-10-27']), [
+    'Nobody is on your roster, so after Oct 27 nobody plays for you.',
+    'Your short ends by itself after Oct 27.',
+  ]);
+  assert.equal(playToEndShortsOnlyLines([null]), null);
+  assert.equal(playToEndOffersMarket(0, false), true);
+  assert.equal(playToEndOffersMarket(0, true), false);
+  assert.equal(playToEndOffersMarket(2, false), false);
+});

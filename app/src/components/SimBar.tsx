@@ -10,7 +10,18 @@ import {
   mockSeasonStart,
 } from '../api/mockPerGameClient';
 import {
+  ADVANCE_DOUBLE_TAP_MS,
+  advanceTap,
+  type AdvanceTapState,
   asksBeforeEmptyNight,
+  lockedWeekQuestion,
+  NO_ADVANCE_TAPS,
+  playToEndOffersMarket,
+  playToEndShortsOnlyLines,
+  queuedCancelControlName,
+  queuedCancelHint,
+  queuedCancelLabel,
+  withCancelledNote,
   CHROME_FOLDED_ONE_LINE_MIN_WIDTH,
   chromeFolded,
   chromeLayout,
@@ -22,6 +33,7 @@ import {
   lockIconName,
   lockShortText,
   MAX_QUEUED_PRESSES,
+  PHONE_SLOT_MIN_WIDTH,
   NIGHT_DATE_STACKED_MIN_WIDTH,
   PLAY_TO_END_LABEL,
   playToEndQuestion,
@@ -49,7 +61,7 @@ import {
   weekSpanLabel,
 } from '../data/chromeView';
 import type { PracticeRulesContext } from '../data/perGameRules';
-import { humanDate, seasonResultLine } from '../copy/terms';
+import { humanDate, rosterReopensLine, seasonResultLine } from '../copy/terms';
 import { rankLine } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
 import { refreshNotice } from '../state/perGameNotices';
@@ -59,6 +71,7 @@ import { colors, fonts, headingStyle, radius, space, type, weight } from '../the
 import { Button, ConfirmDialog, headingLevel, settleTaps, visuallyHidden } from '../ui/kit';
 import { useSheetHistory } from '../web/appHistory';
 import { pressedByPointer, unlessSettling } from '../web/tapSettle';
+import { usePracticeHover } from './chrome/practiceHover';
 import { leavePractice, restartPractice } from '../web/practiceSession';
 import { ChromeButton } from './chrome/ChromeButton';
 import { LockIcon, MoreIcon } from './chrome/ChromeIcons';
@@ -78,10 +91,25 @@ const PAINT_FALLBACK_MS = 500;
  * (walk 5 T3-11, T4-06; walk 6 T2-09, T4-01). Keyboard presses have no spot
  * and always count.
  */
-const ADVANCE_DOUBLE_TAP_MS = 350;
-const pressAdvance = (run: () => void) => () => {
-  settleTaps(0, ADVANCE_DOUBLE_TAP_MS);
-  run();
+// A steady run of taps plays every press; only an isolated pair is a double
+// tap (walk 9 T4-11, chromeView.advanceTap). Near the season's end (or when
+// the press asks first) something else takes the button's spot, so the old
+// same-spot guard keeps a double tap's second click off it.
+const advanceTaps: Record<'night' | 'week', AdvanceTapState> = { night: NO_ADVANCE_TAPS, week: NO_ADVANCE_TAPS };
+const pressAdvance = (step: 'night' | 'week', run: () => void, guardSpot = false) => () => {
+  if (guardSpot) {
+    settleTaps(0, ADVANCE_DOUBLE_TAP_MS);
+    run();
+    return;
+  }
+  // Keyboard presses have no spot and always count.
+  if (!pressedByPointer()) {
+    run();
+    return;
+  }
+  const tap = advanceTap(advanceTaps[step], Date.now());
+  advanceTaps[step] = tap.state;
+  for (let press = 0; press < tap.plays; press += 1) run();
 };
 
 function afterPaint(): Promise<void> {
@@ -156,6 +184,9 @@ export function usePracticeHint(short = false): string | null {
     // Someone was held before (a closed player, an ended short): "Add a
     // player first" read as if a week of shorts never happened (walk 8 T4-10).
     heldBefore: bootstrap.positions.length > 0,
+    // A locked next night: say when moves reopen (walk 9 T4-03).
+    locked: bootstrap.ruleset.rosterMutationsLocked,
+    lockGameDate: bootstrap.ruleset.rosterLockGameDate,
   };
   return short ? practiceHintShort(input) : practiceHint(input);
 }
@@ -440,8 +471,8 @@ export function QueuedCancelButton() {
   if (queued.length === 0) return null;
   return (
     <Button
-      accessibilityLabel={queuedCancelName(queued)}
-      label={QUEUED_CANCEL_LABEL}
+      accessibilityLabel={queuedCancelControlName(queued)}
+      label={queuedCancelLabel(queued)}
       onPress={() => cancelQueuedFromRow?.()}
       // No taller than the facts' first line, so the row keeps its height.
       style={[styles.quiet, styles.quietEdge, styles.cancelLine, styles.cancelInFacts]}
@@ -465,12 +496,15 @@ const QUESTION_AIMED_GUARD_MS = 150;
  * its three the same way: stacked on a phone, the default on top, and in a
  * row on a wide screen, the default on the right.
  */
-function EmptyRosterQuestion({ title, lines, onMarket, onPlay, onNotNow }: {
+function EmptyRosterQuestion({ title, lines, onMarket, onPlay, onNotNow, primaryLabel = 'Open market', playLabel = 'Play anyway' }: {
   title: string;
   lines: string[];
   onMarket: () => void;
   onPlay: () => void;
   onNotNow: () => void;
+  /** The default answer (focused first): Open market, or "+1 night instead" on a locked night. */
+  primaryLabel?: string;
+  playLabel?: string;
 }) {
   const { width } = useWindowDimensions();
   const openedAt = useRef(Date.now());
@@ -493,11 +527,23 @@ function EmptyRosterQuestion({ title, lines, onMarket, onPlay, onNotNow }: {
           {lines.map((line) => (
             <Text key={line} accessibilityElementsHidden aria-hidden importantForAccessibility="no" style={styles.questionLine}>{line}</Text>
           ))}
-          {/* In Tab order from the default: Open market, Play anyway, Not now. */}
+          {/* Tab follows the eye (walk 9 T2-06): top to bottom when stacked
+              (the default on top), left to right in a row (the default on
+              the right); focus starts on the default either way. */}
           <View style={[styles.questionButtons, stacked ? styles.questionButtonsStacked : styles.questionButtonsRow]}>
-            <Button ref={marketRef} label="Open market" onPress={guard(onMarket)} steady variant="primary" />
-            <Button label="Play anyway" onPress={guard(onPlay, QUESTION_AIMED_GUARD_MS)} steady variant="secondary" />
-            <Button label="Not now" onPress={guard(onNotNow)} steady style={styles.questionNotNow} variant="quiet" />
+            {stacked ? (
+              <>
+                <Button ref={marketRef} label={primaryLabel} onPress={guard(onMarket)} steady variant="primary" />
+                <Button label={playLabel} onPress={guard(onPlay, QUESTION_AIMED_GUARD_MS)} steady variant="secondary" />
+                <Button label="Not now" onPress={guard(onNotNow)} steady style={styles.questionNotNow} variant="quiet" />
+              </>
+            ) : (
+              <>
+                <Button label="Not now" onPress={guard(onNotNow)} steady style={styles.questionNotNow} variant="quiet" />
+                <Button label={playLabel} onPress={guard(onPlay, QUESTION_AIMED_GUARD_MS)} steady variant="secondary" />
+                <Button ref={marketRef} label={primaryLabel} onPress={guard(onMarket)} steady variant="primary" />
+              </>
+            )}
           </View>
         </View>
       </View>
@@ -532,14 +578,18 @@ function PracticeQuestionHost() {
     score: bootstrap.account.cumulativePnl,
   });
   // "Play to the end" says what it plays and what stays (walk 6 T2-N1, T4-N3).
-  const prompt = asked.kind === 'play-to-end'
-    ? playToEndQuestion(
-      SEASON_TOTAL_DAYS - progress.day,
-      open.length === 0,
-      open.filter((position) => position.side === 'short').map((position) => position.expiresOn),
-    )
+  const rosterPlayers = open.filter((position) => position.side === 'long').length;
+  const shortEnds = open.filter((position) => position.side === 'short').map((position) => position.expiresOn);
+  const lockedNow = bootstrap.ruleset.rosterMutationsLocked;
+  const endPrompt = asked.kind === 'play-to-end'
+    ? playToEndQuestion(SEASON_TOTAL_DAYS - progress.day, open.length === 0, shortEnds)
+    : null;
+  // Only shorts: after the last one ends nobody plays for you (walk 9 T4-12).
+  const shortsOnly = endPrompt && rosterPlayers === 0 && shortEnds.length > 0 ? playToEndShortsOnlyLines(shortEnds) : null;
+  const prompt = endPrompt
+    ? (shortsOnly ? { ...endPrompt, lines: shortsOnly } : endPrompt)
     : practiceQuestion(
-      asked.kind,
+      asked.kind === 'play-to-end' ? 'restart' : asked.kind,
       stakes,
       bootstrap.game.nextGameDate ? humanDate(bootstrap.game.nextGameDate) : null,
     );
@@ -572,8 +622,42 @@ function PracticeQuestionHost() {
     setAskedQuestion(null);
     afterDialogCloses(() => openTab('market', { focusScreen }));
   };
+  if (empty && lockedNow && asked.kind === 'empty-week') {
+    // Nothing can be added before the locked games: the default plays just
+    // them, then moves reopen (walk 9 T4-03).
+    const locked = lockedWeekQuestion(bootstrap.ruleset.rosterLockGameDate);
+    const nightInstead = () => {
+      setAskedQuestion(null);
+      focusAsker({ kind: 'empty-night', fromMenu: false });
+      advanceFromQuestion?.('night');
+    };
+    return (
+      <EmptyRosterQuestion
+        lines={locked.lines}
+        onMarket={nightInstead}
+        onNotNow={close}
+        onPlay={confirm}
+        playLabel={locked.secondLabel}
+        primaryLabel={locked.primaryLabel}
+        title={locked.title}
+      />
+    );
+  }
   if (empty) {
     return <EmptyRosterQuestion lines={prompt.lines} onMarket={openMarket} onNotNow={close} onPlay={confirm} title={prompt.title} />;
+  }
+  if (asked.kind === 'play-to-end' && playToEndOffersMarket(rosterPlayers, lockedNow)) {
+    // Nobody on the roster: the Market first, then playing on (walk 9 T4-12).
+    return (
+      <EmptyRosterQuestion
+        lines={prompt.lines}
+        onMarket={openMarket}
+        onNotNow={close}
+        onPlay={confirm}
+        playLabel={PLAY_TO_END_LABEL}
+        title={prompt.title}
+      />
+    );
   }
   // Presses queued before the question wait for its answer (the controls
   // hold them while it is open), and it says so (walk 8 T4-06).
@@ -777,6 +861,8 @@ interface PracticeRun {
   steps: Array<'night' | 'week'>;
   /** The settled date the run's last step started from. */
   lastFrom: string | null;
+  /** Queued presses cancelled while it played, said at the end of its notice (walk 9 T1-15). */
+  note?: string | null;
 }
 
 /** The practice season is over (its last day has settled), as the notices judge it. */
@@ -902,8 +988,20 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     const settled = bootstrap.game.lastSettledDate;
     if (!settled || (runOver.lastFrom !== null && settled <= runOver.lastFrom)) return;
     // Shown now, heard once the run settles (see speakRun).
-    notify(runNotice(runOver.steps, refreshNotice(runOver.start, bootstrap, false, { seasonComplete: seasonOver })), { spoken: '' });
+    notify(withCancelledNote(
+      runNotice(runOver.steps, refreshNotice(runOver.start, bootstrap, false, { seasonComplete: seasonOver })),
+      runOver.note ?? null,
+    ), { spoken: '' });
   }, [runOver, bootstrap, notify]);
+  // A cancel that landed while a single step played: its words join the
+  // step's result, which replaced them at once (walk 9 T1-15).
+  const cancelNote = useRef<string | null>(null);
+  const [appendNote, setAppendNote] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    if (!appendNote) return;
+    setAppendNote(null);
+    if (message && !message.startsWith(appendNote)) notify(withCancelledNote(message, appendNote), { spoken: '' });
+  }, [appendNote, message, notify]);
   // A run is heard once, when it settles: each step's notice shows at once
   // but stays silent, and the run's line is spoken when no press has
   // continued it for RUN_CONTINUE_MS (walk 8 T3-10: three quick presses were
@@ -970,7 +1068,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     // button was swallowed without a word (walk 7 T2-06).
     setQueue(queuedSteps.current.length < MAX_QUEUED_PRESSES ? [...queuedSteps.current, pressed] : queuedSteps.current);
     const step = queuedSteps.current.includes(pressed) ? pressed : queuedSteps.current[0];
-    sayBusy(queuedLine(step, playingDate, queuedSteps.current.filter((entry) => entry === step).length));
+    const line = queuedLine(step, playingDate, queuedSteps.current.filter((entry) => entry === step).length);
+    // The first press that queues says how to drop it (walk 9 T3-12).
+    sayBusy(queuedSteps.current.length === 1 ? `${line} ${queuedCancelHint(1)}` : line);
   };
   const pressWhileBusy = (pressed: 'night' | 'week') => {
     // Busy with nothing that will finish (the game is still loading), or
@@ -989,6 +1089,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   const nightRef = useRef<View>(null);
   const weekRef = useRef<View>(null);
   const moreRef = useRef<View>(null);
+  usePracticeHover(nightRef, weekRef);
   // "Play anyway" in the shared question plays through this set of controls.
   const advanceRef = useRef<((step: 'night' | 'week') => void) | null>(null);
   // A queued press goes through the buttons' own press (it asks first with
@@ -1064,6 +1165,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     if (dropped.length === 0) return;
     const byKeyboard = !pressedByPointer();
     setQueue([]);
+    // Said now, and again at the end of the playing step's result, which
+    // takes the notice moments later (walk 9 T1-15).
+    if (advancingRef.current) cancelNote.current = queuedCancelledNotice(dropped, null);
     notify(queuedCancelledNotice(dropped, playingDateRef.current));
     // Keyboard focus goes back to the button the presses were made on (the
     // Cancel control leaves with the queue).
@@ -1176,17 +1280,23 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // play, and look it (walk 3 T1-19, T2-14).
   const emptyRoster = open.length === 0 && !progress.complete;
   const asksFirst = asksBeforeEmptyNight(emptyRoster, playedAnyway);
+  // +1 night on a locked night with nobody held just plays (walk 9 T4-03).
+  const lockedNight = bootstrap.ruleset.rosterMutationsLocked && !progress.complete;
+  const asksNight = asksBeforeEmptyNight(emptyRoster, playedAnyway, lockedNight);
+  // Near the end something else takes the buttons' spot (Play another
+  // season), so a double tap's second click is kept off it there.
+  const nearEnd = SEASON_TOTAL_DAYS - progress.day <= 7;
   const lineText = hintText ?? heldText;
   // Cancel queued: where the queue shows (walk 8 T4-N1). Under the buttons
   // on a phone, in More in a folded row; a wide screen's status row draws it
   // after its facts (QueuedCancelButton).
-  const cancelButton = (placement: 'line' | 'menu') => (queued.length === 0 ? null : (
+  const cancelButton = (placement: 'line' | 'menu' | 'slot') => (queued.length === 0 ? null : (
     <Button
-      accessibilityLabel={queuedCancelName(queued)}
-      label={QUEUED_CANCEL_LABEL}
+      accessibilityLabel={queuedCancelControlName(queued)}
+      label={queuedCancelLabel(queued)}
       onPress={cancelQueued}
-      style={[styles.quiet, placement !== 'menu' && styles.quietEdge, placement === 'line' && styles.cancelLine]}
-      textStyle={placement === 'line' ? styles.cancelLineText : undefined}
+      style={[styles.quiet, placement !== 'menu' && styles.quietEdge, placement === 'line' && styles.cancelLine, placement === 'slot' && styles.cancelSlot]}
+      textStyle={placement !== 'menu' ? styles.cancelLineText : undefined}
       variant="quiet"
     />
   ));
@@ -1284,7 +1394,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         // shows it). A press in the next moment picks it up again.
         runRef.current = null;
         landedRun.current = stepIn ? { run, at: Date.now() } : null;
-        if (run.steps.length > 1) setRunOver(run);
+        const note = cancelNote.current;
+        cancelNote.current = null;
+        if (run.steps.length > 1) setRunOver({ ...run, note });
+        else if (note && stepIn) setAppendNote(note);
         if (stepIn) {
           speakRun.current = setTimeout(() => {
             speakRun.current = null;
@@ -1346,7 +1459,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     void playToEnd();
   };
   pressRef.current = (step, queuedPress = false) => {
-    if (asksFirst) {
+    if (step === 'night' ? asksNight : asksFirst) {
       runRef.current = null;
       landedRun.current = null;
       setQueue([]);
@@ -1355,6 +1468,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   };
 
   const stackLabels = (compact || folded) && width < STACKED_LABEL_MAX_WIDTH;
+  // Portrait phones: +1 night, +1 week, a slot, More (walk 9 T1-13).
+  const phoneRow = !inline && !folded && !layout.wide;
+  const slotRow = phoneRow && width >= PHONE_SLOT_MIN_WIDTH;
   // +1 night names the game night it plays ("Oct 25"), so a day without
   // games that it skips is no surprise.
   const nightDate = !progress.complete && bootstrap.game.nextGameDate
@@ -1400,11 +1516,11 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         disabled={advanceBusy || progress.complete}
         focusableWhenDisabled={!progress.complete}
         label={nightLabel}
-        onDisabledPress={pressAdvance(() => pressWhileBusy('night'))}
+        onDisabledPress={pressAdvance('night', () => pressWhileBusy('night'), nearEnd)}
         steady
-        onPress={pressAdvance(() => pressRef.current?.('night'))}
-        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, stackedDate && styles.advanceDated, asksFirst && styles.advanceQuiet, inkNight && styles.advancePlaying]}
-        textStyle={[asksFirst ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkNight && styles.advanceTextBusyStacked]}
+        onPress={pressAdvance('night', () => pressRef.current?.('night'), nearEnd || asksNight)}
+        style={[styles.advance, narrow && styles.advanceNarrow, compact && !slotRow && styles.advanceCompact, slotRow && styles.advancePhone, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, stackedDate && styles.advanceDated, asksNight && styles.advanceQuiet, inkNight && styles.advancePlaying]}
+        textStyle={[asksNight ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkNight && styles.advanceTextBusyStacked]}
         variant="secondary"
       />
       <Button
@@ -1414,10 +1530,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         disabled={advanceBusy || progress.complete}
         focusableWhenDisabled={!progress.complete}
         label={weeksQueued > 0 ? queuedLabel('week', stackLabels, weeksQueued) : playingWeek ? busyLabel(false) : stackLabels ? '+1\nweek' : '+1 week'}
-        onDisabledPress={pressAdvance(() => pressWhileBusy('week'))}
+        onDisabledPress={pressAdvance('week', () => pressWhileBusy('week'), nearEnd)}
         steady
-        onPress={pressAdvance(() => pressRef.current?.('week'))}
-        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, asksFirst && styles.advanceQuiet, inkWeek && styles.advancePlaying]}
+        onPress={pressAdvance('week', () => pressRef.current?.('week'), nearEnd || asksFirst)}
+        style={[styles.advance, narrow && styles.advanceNarrow, compact && !slotRow && styles.advanceCompact, slotRow && styles.advancePhone, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, asksFirst && styles.advanceQuiet, inkWeek && styles.advancePlaying]}
         textStyle={[asksFirst ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkWeek && styles.advanceTextBusyStacked]}
         variant="secondary"
       />
@@ -1480,7 +1596,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
 
   // At the end of the season there is nothing left to advance (the status
   // row says "Season complete"), so Restart and Exit take the row themselves.
-  if (compact && progress.complete && !(folded && tiny)) {
+  if ((compact || phoneRow) && progress.complete && !(folded && tiny)) {
     return (
       <View style={[styles.controls, styles.controlsNarrow]}>
         <View style={[styles.group, styles.moreRow]}>
@@ -1595,7 +1711,37 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     );
   }
 
-  if (compact) {
+  if (slotRow) {
+    // The slot beside +1 week: Cancel queued while presses wait (beside the
+    // button they were made on, next in Tab order; walk 9 T3-12), else the
+    // lock, else the short hint. It never adds a line, so nothing under the
+    // buttons moves when a week lands on a lock (walk 9 T4-08).
+    const lockDate = bootstrap.ruleset.rosterLockGameDate;
+    const slot = queued.length > 0 ? cancelButton('slot') : lockedNight ? (
+      <View aria-hidden style={styles.slotLock}>
+        <View style={styles.moreNoteIcon}>
+          <LockIcon color={colors.goldInk} size={12} />
+        </View>
+        <Text maxFontSizeMultiplier={1.3} numberOfLines={2} style={styles.slotLockText}>
+          {width < 360 ? lockShortText(lockDate) : rosterReopensLine(lockDate)}
+        </Text>
+      </View>
+    ) : hintShort ? (
+      <Text aria-hidden maxFontSizeMultiplier={1.3} numberOfLines={2} style={styles.slotHint}>{hintShort}</Text>
+    ) : null;
+    return (
+      <View style={[styles.controls, narrow && styles.controlsNarrow, styles.phoneControls]}>
+        {advanceButtons}
+        <View style={styles.slot}>{slot}</View>
+        {menu(<>{playToEndButton(false, true)}{secondaryButtons(true)}</>)}
+        {/* +1 night's whole hint, for its description (aria-describedby). */}
+        {hintText ? <Text nativeID={PRACTICE_HINT_ID} style={visuallyHidden}>{hintText}</Text> : null}
+        {busyAnnouncer}
+      </View>
+    );
+  }
+
+  if (compact || phoneRow) {
     return (
       <View style={[styles.controls, styles.controlsNarrow]}>
         <View style={[styles.group, styles.groupFill]}>
@@ -1811,6 +1957,53 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     backgroundColor: colors.goldSoft,
     borderColor: colors.goldInk,
+    // Never dashed: dashed means locked, and these are how a lock ends. A
+    // night playing shows in the words ("PLAYING…"; walk 9 T4-02).
+    borderStyle: 'solid',
+  },
+  // A phone's row: each keeps the width its words at rest and "PLAYING…"
+  // need, so the row never reflows while a week plays (walk 9 T4-08).
+  advancePhone: {
+    flexGrow: 0,
+    flexShrink: 0,
+    minWidth: 80,
+    paddingHorizontal: 6,
+  },
+  phoneControls: {
+    flexWrap: 'nowrap',
+    paddingBottom: space.xs,
+  },
+  slot: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  slotHint: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    lineHeight: 15,
+  },
+  slotLock: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    columnGap: 4,
+  },
+  slotLockText: {
+    flexShrink: 1,
+    color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
+    lineHeight: 15,
+  },
+  cancelSlot: {
+    minWidth: 0,
+    minHeight: 44,
+    paddingHorizontal: 6,
   },
   // The button that is playing keeps its ink while it ignores taps.
   advancePlaying: {
@@ -1918,11 +2111,11 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'stretch',
   },
-  // A row on a wide screen, the default on the right (its first in Tab order).
+  // A row on a wide screen, the default on the right, Tab left to right.
   questionButtonsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'flex-start',
+    justifyContent: 'flex-end',
   },
   // A quiet way out with a 3:1 control edge, so it reads as a button.
   questionNotNow: {
