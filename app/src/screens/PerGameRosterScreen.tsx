@@ -1408,6 +1408,9 @@ const styles = StyleSheet.create({
   tableNameButton: {
     flex: 1,
     minWidth: 0,
+    // A 44px target, whatever its two lines add up to.
+    minHeight: 44,
+    justifyContent: 'center',
   },
   tableActionCell: {
     justifyContent: 'center',

@@ -15,6 +15,7 @@ import {
   chromeFolded,
   chromeLayout,
   continuesRun,
+  RUN_CONTINUE_MS,
   FRESH_SEASON_NOTICE,
   gamesInLine,
   heldLineEnds,
@@ -832,6 +833,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     notify,
     pendingActions,
     refreshData,
+    speakNotice,
   } = usePerGame();
   const [moreOpen, setMoreOpen] = useState(false);
   // At 400% zoom +1 night and +1 week live in More, which stays open for the
@@ -896,8 +898,21 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     setRunOver(null);
     const settled = bootstrap.game.lastSettledDate;
     if (!settled || (runOver.lastFrom !== null && settled <= runOver.lastFrom)) return;
-    notify(runNotice(runOver.steps, refreshNotice(runOver.start, bootstrap, false, { seasonComplete: seasonOver })));
+    // Shown now, heard once the run settles (see speakRun).
+    notify(runNotice(runOver.steps, refreshNotice(runOver.start, bootstrap, false, { seasonComplete: seasonOver })), { spoken: '' });
   }, [runOver, bootstrap, notify]);
+  // A run is heard once, when it settles: each step's notice shows at once
+  // but stays silent, and the run's line is spoken when no press has
+  // continued it for RUN_CONTINUE_MS (walk 8 T3-10: three quick presses were
+  // spoken three times in 0.6 s). A single press is heard then too.
+  const speakRun = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopSpeakRun = () => {
+    if (speakRun.current) clearTimeout(speakRun.current);
+    speakRun.current = null;
+  };
+  useEffect(() => () => {
+    if (speakRun.current) clearTimeout(speakRun.current);
+  }, []);
   // What is playing right now, for the busy label: the night's date as it
   // was when the press landed ("Playing Oct 21…"), or the week.
   // "end": Play to the end is playing the rest of the season.
@@ -1211,6 +1226,8 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     }
     advancingRef.current = true;
     advancedRef.current = true;
+    // This press continues the run (or starts one): its line is not heard yet.
+    stopSpeakRun();
     // The player's own press: the held "Oct 21 games in." line goes now,
     // under the button being pressed, not later by itself (walk 7 T1-14).
     if (heldLineEnds(queuedPress ? 'queued-press' : 'press')) setHeld(false);
@@ -1244,7 +1261,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       if (step === 'week') playPracticeWeek();
       else playPracticeNight(from, practiceSeasonEnd(mockSeasonStart()));
       for (let attempt = 0; attempt < ADVANCE_REFRESH_ATTEMPTS; attempt += 1) {
-        if (await refreshData()) {
+        if (await refreshData({ silent: true })) {
           stepIn = true;
           break;
         }
@@ -1265,6 +1282,12 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         runRef.current = null;
         landedRun.current = stepIn ? { run, at: Date.now() } : null;
         if (run.steps.length > 1) setRunOver(run);
+        if (stepIn) {
+          speakRun.current = setTimeout(() => {
+            speakRun.current = null;
+            speakNotice();
+          }, RUN_CONTINUE_MS);
+        }
       } else {
         // Another press waits: this step's own notice never shows, the
         // run's does once it is all in (Play to the end says its own).

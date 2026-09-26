@@ -86,7 +86,7 @@ interface PerGameContextValue {
    * app coming back to the foreground): they only announce newly settled
    * games, so switching tabs does not pop a notice every time.
    */
-  refreshData: (options?: { quietUnlessChanged?: boolean }) => Promise<boolean>;
+  refreshData: (options?: { quietUnlessChanged?: boolean; silent?: boolean }) => Promise<boolean>;
   openPosition: (intent: PerGameOpenPositionIntent) => Promise<boolean>;
   /**
    * `also`: one more sentence for the move's notice, so a screen reader hears
@@ -96,7 +96,14 @@ interface PerGameContextValue {
   closePosition: (position: PerGamePosition, options?: { also?: string }) => Promise<boolean>;
   dismissNotice: () => void;
   /** A short informational notice (clears itself), e.g. why a LOCKED button did nothing. */
-  notify: (text: string) => void;
+  notify: (text: string, options?: { spoken?: string }) => void;
+  /**
+   * Speak the notice on screen, shown silently a moment ago (`silent`, or
+   * `spoken: ''`): a run of quick +1 night presses is heard once, when it
+   * settles, not once per press (walk 8 T3-10). Nothing if another notice
+   * has taken its place.
+   */
+  speakNotice: () => void;
   confirmLocalTransition: () => Promise<false>;
 }
 
@@ -162,6 +169,14 @@ export function PerGameProvider({
   };
   const [recentNotices, setRecentNotices] = useState<readonly PerGameNoticeRecord[]>([]);
   const noticeIds = useRef(0);
+  const silentNotice = useRef<{ text: string; tone: NoticeTone; id: number } | null>(null);
+  // The whole sentence as it was heard; a repeat of the last one (a second
+  // LOCKED press) only moves its time.
+  const remember = useCallback((heard: string, tone: NoticeTone, id: number) => {
+    setRecentNotices((list) => (list[0]?.text === heard
+      ? [{ ...list[0], at: Date.now() }, ...list.slice(1)]
+      : [{ text: heard, tone, at: Date.now(), id }, ...list].slice(0, RECENT_NOTICES_MAX)));
+  }, []);
   /** `spoken`: what screen readers hear instead, when it differs. */
   const say = useCallback((text: string, tone: NoticeTone = 'problem', spoken?: string) => {
     const lock = tone === 'success' ? text.match(LOCK_SENTENCE) : null;
@@ -169,15 +184,22 @@ export function PerGameProvider({
     setMessage(lock && lock.index !== undefined && lock.index > 0 ? text.slice(0, lock.index) + text.slice(lock.index + lock[0].length) : text);
     setNoticeSpoken(spoken ?? (lock ? text : null));
     setNoticeSeq((seq) => seq + 1);
-    // The whole sentence as it was heard; a repeat of the last one (a second
-    // LOCKED press) only moves its time.
-    const heard = spoken ?? text;
     noticeIds.current += 1;
     const id = noticeIds.current;
-    setRecentNotices((list) => (list[0]?.text === heard
-      ? [{ ...list[0], at: Date.now() }, ...list.slice(1)]
-      : [{ text: heard, tone, at: Date.now(), id }, ...list].slice(0, RECENT_NOTICES_MAX)));
-  }, []);
+    // A silent notice is kept to be spoken later (speakNotice), and enters
+    // the list then. A spoken notice that takes its place says it first, so
+    // a night's result is heard even when a waiting move's notice follows at
+    // once ("Oct 21 games: … Scottie Barnes was not added. …").
+    const pending = silentNotice.current;
+    silentNotice.current = spoken === '' ? { text, tone, id } : null;
+    if (spoken === '') return;
+    const heard = spoken ?? text;
+    if (pending) {
+      remember(pending.text, pending.tone, pending.id);
+      setNoticeSpoken(`${pending.text} ${heard}`);
+    }
+    remember(heard, tone, id);
+  }, [remember]);
   const shownMessage = useRef<string | null>(null);
   shownMessage.current = message;
   const [serverError, setServerError] = useState<string | null>(null);
@@ -274,7 +296,7 @@ export function PerGameProvider({
     }
   }, []);
 
-  const refreshData = useCallback(async (options?: { quietUnlessChanged?: boolean }) => {
+  const refreshData = useCallback(async (options?: { quietUnlessChanged?: boolean; silent?: boolean }) => {
     // Press handlers may pass their event object straight through; only an
     // explicit `true` makes a refresh quiet.
     const quietUnlessChanged = options?.quietUnlessChanged === true;
@@ -292,7 +314,11 @@ export function PerGameProvider({
         refreshed && mounted.current
         && (!quietUnlessChanged || refreshHasNews(previous, refreshed) || attempt.reconciliationReason)
       ) {
-        say(refreshNotice(previous, refreshed, Boolean(attempt.reconciliationReason), { seasonComplete }), 'success');
+        say(
+          refreshNotice(previous, refreshed, Boolean(attempt.reconciliationReason), { seasonComplete }),
+          'success',
+          options?.silent === true ? '' : undefined,
+        );
       }
       return succeeded;
     } finally {
@@ -520,7 +546,14 @@ export function PerGameProvider({
   }, [apiClient, queueMove, runPositionAction]);
 
   const dismissNotice = useCallback(() => setMessage(null), []);
-  const notify = useCallback((text: string) => say(text, 'success'), [say]);
+  const notify = useCallback((text: string, options?: { spoken?: string }) => say(text, 'success', options?.spoken), [say]);
+  const speakNotice = useCallback(() => {
+    const silent = silentNotice.current;
+    if (!silent || silent.id !== noticeIds.current) return;
+    silentNotice.current = null;
+    setNoticeSpoken(silent.text);
+    remember(silent.text, silent.tone, silent.id);
+  }, [remember]);
   const confirmLocalTransition = useCallback(async (): Promise<false> => false, []);
   const isGameplayReady = Boolean(bootstrap && !isLoading && !serverError);
 
@@ -551,6 +584,7 @@ export function PerGameProvider({
     closePosition,
     dismissNotice,
     notify,
+    speakNotice,
     confirmLocalTransition,
   }), [
     bootstrap,
@@ -558,6 +592,7 @@ export function PerGameProvider({
     confirmLocalTransition,
     dismissNotice,
     notify,
+    speakNotice,
     isGameplayReady,
     isLoading,
     isRefreshing,
