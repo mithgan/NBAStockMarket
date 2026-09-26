@@ -390,7 +390,7 @@ test('breakdown parts take the precision at which they visibly add up to the her
   assert.equal(breakdownPrecision(rigor, rigor.reduce((sum, part) => sum + part, 0)), 'exact');
   assert.equal(formatAt(-1_052_100, 'fine3', true), '-$1.052M');
   assert.equal(formatAt(552_100, 'fine3', true), '+$552.1K');
-  assert.equal(formatAt(-3_000, 'fine3', true), '-$3,000');
+  assert.equal(formatAt(-3_000, 'fine3', true), '-$3K');
   assert.equal(formatAt(1_050_000, 'fine3', true), '+$1.05M');
   assert.equal(formatAt(0, 'fine3', true), '$0');
   assert.equal(formatAt(-1_052_100, 'exact', true), '-$1,052,100');

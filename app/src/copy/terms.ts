@@ -148,15 +148,22 @@ function trimDecimals(value: string): string {
 
 /**
  * Money with enough digits that figures shown side by side still add up:
- * "$3,500", "$137.5K", "$4.85M". Use it where two amounts are compared or
- * summed on screen (a score breakdown, dividend against price); use the
- * compact `money` for a lone headline figure.
+ * "$250", "$3.5K", "$1.25K", "$137.5K", "$4.85M". Use it where two amounts
+ * are compared or summed on screen (a score breakdown, dividend against
+ * price); use the compact `money` for a lone headline figure.
+ *
+ * Thousands read in K from $1,000, like the figures around them: "-$9,000"
+ * under "-$84K" has more digits and read as the bigger loss (walk 5 T1-08).
+ * Below $10K the K keeps two decimals, so fees ($250 a move: "$1.25K") and
+ * small edges still add up by eye; full dollars stay for amounts under $1,000
+ * and inside the math a Results row opens (`exactMoney`).
  */
 export function moneyFine(amount: number): string {
   const rounded = Math.round(amount);
   const sign = rounded < 0 ? '-' : '';
   const abs = Math.abs(rounded);
-  if (abs < 10_000) return `${sign}$${abs.toLocaleString('en-US')}`;
+  if (abs < 1_000) return `${sign}$${abs}`;
+  if (abs < 9_995) return `${sign}$${trimDecimals((abs / 1_000).toFixed(2))}K`;
   if (abs < 999_950) return `${sign}$${trimDecimals((abs / 1_000).toFixed(1))}K`;
   return `${sign}$${trimDecimals((abs / 1_000_000).toFixed(2))}M`;
 }

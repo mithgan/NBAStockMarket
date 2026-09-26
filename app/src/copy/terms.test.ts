@@ -70,7 +70,12 @@ test('counts pluralise', () => {
 });
 
 test('fine money keeps figures that sit side by side honest', () => {
-  assert.equal(moneyFine(3_500), '$3,500');
+  assert.equal(moneyFine(3_500), '$3.5K');
+  assert.equal(moneyFine(1_250), '$1.25K');
+  assert.equal(moneyFine(9_000), '$9K');
+  assert.equal(moneyFine(9_996), '$10K');
+  assert.equal(moneyFine(250), '$250');
+  assert.equal(moneyFine(7_173), '$7.17K');
   assert.equal(moneyFine(137_500), '$137.5K');
   assert.equal(moneyFine(288_000), '$288K');
   assert.equal(moneyFine(4_850_000), '$4.85M');
@@ -78,7 +83,7 @@ test('fine money keeps figures that sit side by side honest', () => {
   assert.equal(moneyFine(999_960), '$1M');
   assert.equal(moneyFine(-80_250), '-$80.3K');
   assert.equal(signedMoneyFine(150_500), '+$150.5K');
-  assert.equal(signedMoneyFine(-3_500), '-$3,500');
+  assert.equal(signedMoneyFine(-3_500), '-$3.5K');
   assert.equal(signedMoneyFine(0), '$0');
   assert.equal(exactSignedMoney(0), '$0');
 });
@@ -102,7 +107,7 @@ test('one lock sentence and one confirm line everywhere', () => {
 test('one money format everywhere, and shared action wording', () => {
   assert.equal(money(237_500), '$237.5K');
   assert.equal(signedMoney(1_062_500), '+$1.06M');
-  assert.equal(signedMoney(3_500), '+$3,500');
+  assert.equal(signedMoney(3_500), '+$3.5K');
   assert.equal(closeActionName('long', 'Nikola Jokic'), 'Drop Nikola Jokic');
   assert.equal(closeActionName('short', 'Luka Doncic'), 'Close your short on Luka Doncic');
   assert.equal(confirmCloseButton('long', 250), 'Drop for $250');
@@ -113,7 +118,7 @@ test('one money format everywhere, and shared action wording', () => {
 test('a Drop or Close asks once, with the fee, what stays and what coming back costs', () => {
   assert.equal(
     confirmCloseMessage({ side: 'long', playerName: 'Nikola Jokic', feeDollars: 250, total: 4_000, priceNow: 98_800 }),
-    'Drop Nikola Jokic for a $250 fee? His +$4,000 stays in your score. Adding him back later costs his price at that time (today about $98.8K a game), plus another $250 fee.',
+    'Drop Nikola Jokic for a $250 fee? His +$4K stays in your score. Adding him back later costs his price at that time (today about $98.8K a game), plus another $250 fee.',
   );
   assert.equal(
     confirmCloseMessage({ side: 'short', playerName: 'Bam Adebayo', feeDollars: 250, total: -12_500, endsFreeAfter: '2025-10-27' }),

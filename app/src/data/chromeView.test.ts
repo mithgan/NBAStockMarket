@@ -167,7 +167,7 @@ test('the live status sentence names the last settled night and the lock', () =>
 test('last night reads at the Results night precision, and to the dollar for screen readers', () => {
   assert.deepEqual(lastNightFigure(322_500), { text: '+$322.5K', accessibilityLabel: '+$322,500' });
   assert.deepEqual(lastNightFigure(-178_500), { text: '-$178.5K', accessibilityLabel: '-$178,500' });
-  assert.deepEqual(lastNightFigure(-3_500), { text: '-$3,500', accessibilityLabel: '-$3,500' });
+  assert.deepEqual(lastNightFigure(-3_500), { text: '-$3.5K', accessibilityLabel: '-$3,500' });
   assert.deepEqual(lastNightFigure(0), { text: '$0', accessibilityLabel: '$0' });
   // Whatever the size, the bar uses the fine formatter itself, never the compact one.
   for (const amount of [224_000, -96_000, 12_000, 999_949, 1_339_000, -1_756_500]) {

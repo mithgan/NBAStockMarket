@@ -235,9 +235,9 @@ test('a close call in the middle of three says both gaps, and a tie gets no note
     { score: 4_498_000, place: 3 },
     { score: 1_200_000, place: 4 },
   ]), [
-    ['$3,000 ahead of #2'],
-    ['$3,000 behind #1', '$3,000 ahead of #3'],
-    ['$3,000 behind #2'],
+    ['$3K ahead of #2'],
+    ['$3K behind #1', '$3K ahead of #3'],
+    ['$3K behind #2'],
     [],
   ]);
   // An exact tie shares its place; a different score nearby is still told apart.
