@@ -27,7 +27,7 @@ import { Button, visuallyHidden } from './src/ui/kit';
 import { registerSettingsOpener, registerTabOpener, settingsReturnStep } from './src/state/uiActions';
 import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
 import { pressedByPointer, settleTaps, tapsSettling } from './src/web/tapSettle';
-import { consumeArrivedByKeyboard, consumeLastSeasonResult, consumePracticeRestarted, noteFinishedSeason, setPracticeProgress } from './src/web/practiceSession';
+import { consumeArrivedByKeyboard, consumeLastSeasonResult, consumePracticeRestarted, goToPractice, leftPractice, noteFinishedSeason, setPracticeProgress } from './src/web/practiceSession';
 import { practiceProgress } from './src/data/chromeView';
 import { rankLine } from './src/data/rosterView';
 import {
@@ -252,16 +252,21 @@ function NoticeToast({
   // A pointer resting on a notice holds it (a magnifier user reads it where it is).
   const [held, setHeld] = useState(false);
   const keep = useKeepNotices();
-  useEffect(() => {
-    if (tone !== 'success' || held || keep) return undefined;
-    const timer = setTimeout(onDismiss, successNoticeMs(message));
-    return () => clearTimeout(timer);
-  }, [held, keep, message, onDismiss, seq, tone]);
   const noticeRef = useRef<View | null>(null);
   const { height, width } = useWindowDimensions();
   // Under about 260px of height (400% zoom) the strip keeps to one line, so a
   // player row still fits above it; the rest scrolls inside (walk 7 T3-05).
   const tinyDock = placement === 'dock' && height < TINY_DOCK_MAX_HEIGHT;
+  // A one-line strip whose words run on says so ("more ▾") and waits to be
+  // read, closed or replaced: at 400% a keyboard user could not reach it
+  // before it cleared (walk 9 T3-06, T3-N5). Settings keeps it in Recent
+  // notices too.
+  const [overflowing, setOverflowing] = useState(false);
+  useEffect(() => {
+    if (tone !== 'success' || held || keep || (tinyDock && overflowing)) return undefined;
+    const timer = setTimeout(onDismiss, successNoticeMs(message));
+    return () => clearTimeout(timer);
+  }, [held, keep, message, onDismiss, overflowing, seq, tinyDock, tone]);
   // Where the keyboard was when the notice came: closing it with × goes back
   // there instead of dropping focus on the page (walk 6 T2-15).
   const returnFocusTo = useRef<HTMLElement | null>(null);
@@ -343,9 +348,18 @@ function NoticeToast({
     } as object)
     : null;
   const words = placement === 'dock' ? (
-    <ScrollView style={[styles.noticeScroll, { maxHeight: dockText }]} {...readable}>
-      <Text style={styles.noticeText}>{message}</Text>
-    </ScrollView>
+    <View style={styles.noticeWords}>
+      <ScrollView
+        onContentSizeChange={(_contentWidth, contentHeight) => setOverflowing(tinyDock && contentHeight > dockText + 2)}
+        style={[styles.noticeScroll, { maxHeight: dockText }]}
+        {...readable}
+      >
+        <Text style={styles.noticeText}>{message}</Text>
+      </ScrollView>
+      {tinyDock && overflowing ? (
+        <Text aria-hidden maxFontSizeMultiplier={1} style={styles.noticeMore}>more ▾</Text>
+      ) : null}
+    </View>
   ) : (
     <Text style={styles.noticeText}>{message}</Text>
   );
@@ -460,6 +474,8 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
  * readers ("Leade…" at 180px; walk 7 T4-08).
  */
 const TAB_WORDS_MIN_WIDTH = 188;
+/** A start slower than this says so and offers Reload. */
+const SLOW_START_MS = 8000;
 /** Below this width the brand bar keeps the wordmark and drops "STOCK MARKET" whole (never "STOCK MAR…"). */
 const BRAND_PRODUCT_MIN_WIDTH = 330;
 
@@ -663,6 +679,16 @@ function AppBody() {
       : null);
   }, [bootstrap]);
 
+  const [slowStart, setSlowStart] = useState(false);
+  useEffect(() => {
+    if (!isLoading) {
+      setSlowStart(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setSlowStart(true), SLOW_START_MS);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
+
   // The screen on show, kept as one element until the tab or the Market's
   // side changes, so a notice or a sheet opening does not redraw it from the
   // top. (Rendering the next screen in the background let the tab light up
@@ -686,13 +712,27 @@ function AppBody() {
   const body = (() => {
     if (isLoading) {
       // Practice builds its season in this browser; there is no account or
-      // server to load from (walk 7 T4-05).
+      // server to load from (walk 7 T4-05). A start that takes long says so
+      // and offers a way on (walk 9 T4-N4).
+      const reload = slowStart ? () => window.location.reload() : undefined;
       return isMockActive() ? (
-        <CenteredState busy copy="Setting up a practice season in this browser." title="Starting practice" />
+        <CenteredState
+          actionLabel={reload ? 'Reload' : undefined}
+          busy
+          copy={slowStart
+            ? 'Still setting up your practice season. If nothing changes in a moment, reload the page.'
+            : 'Setting up a practice season in this browser.'}
+          onAction={reload}
+          title="Starting practice"
+        />
       ) : (
         <CenteredState
+          actionLabel={reload ? 'Reload' : undefined}
           busy
-          copy="Loading your roster, per-game market, and P&L from the server."
+          copy={slowStart
+            ? 'Still loading your account. Check your connection; you can reload the page.'
+            : 'Loading your roster, per-game market, and P&L from the server.'}
+          onAction={reload}
           title="Loading your account"
         />
       );
@@ -743,6 +783,23 @@ function AppBody() {
     (tabRefs.current[next] as unknown as { focus?: () => void } | null)?.focus?.();
   };
 
+  // Tab words under the icons show only while every one fits its tab: a
+  // reader's text spacing at 200% cut them to "Resul…" and "Lead…" (walk 9
+  // T3-05). A hidden copy of the words, in the heavier active weight,
+  // measures them as the reader's own styles draw them, and re-measures when
+  // those styles change; the tabs keep their full names either way.
+  const [tabWordWidths, setTabWordWidths] = useState<Record<string, number>>({});
+  const [tabWidth, setTabWidth] = useState(0);
+  const measuredWords = Object.values(tabWordWidths);
+  const tabWordsFit = tabWidth === 0 || measuredWords.length < tabs.length
+    || Math.max(...measuredWords) <= tabWidth - 2;
+  const onFirstTabLayout = useCallback((event: LayoutChangeEvent) => {
+    setTabWidth(Math.round(event.nativeEvent.layout.width));
+  }, []);
+  const measureTabWord = (key: string) => (event: LayoutChangeEvent) => {
+    const measured = Math.ceil(event.nativeEvent.layout.width);
+    setTabWordWidths((current) => (current[key] === measured ? current : { ...current, [key]: measured }));
+  };
   const renderTabBar = (position: 'top' | 'bottom') => (
     <View role="navigation">
       <View
@@ -779,6 +836,8 @@ function AppBody() {
                   }
                 },
               } as object)}
+              onLayout={index === 0 ? onFirstTabLayout : undefined}
+              // A pointer over a tab tints it (web/globalStyles, walk 9 T2-09).
               style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
             >
               {/* Gold rule marks the active tab, matching the underline treatment
@@ -793,7 +852,7 @@ function AppBody() {
                 // tab is named in full for screen readers either way.
                 <View style={styles.tabIconStack}>
                   <TabIcon color={active ? colors.goldInk : colors.faint} tab={tab.key} />
-                  {width >= TAB_WORDS_MIN_WIDTH ? (
+                  {width >= TAB_WORDS_MIN_WIDTH && tabWordsFit ? (
                     <Text
                       aria-hidden
                       maxFontSizeMultiplier={1}
@@ -816,6 +875,21 @@ function AppBody() {
             </Pressable>
           );
         })}
+        {iconTabs ? (
+          <View aria-hidden style={styles.tabWordMeasure}>
+            {tabs.map((tab) => (
+              <Text
+                key={tab.key}
+                maxFontSizeMultiplier={1}
+                numberOfLines={1}
+                onLayout={measureTabWord(tab.key)}
+                style={[styles.tabTiny, styles.activeTabText, styles.tabWordMeasured]}
+              >
+                {tab.label}
+              </Text>
+            ))}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -1047,14 +1121,12 @@ export default function App() {
           <ConfiguredApp config={configResult.config} />
         ) : (
           <CenteredState
-            actionLabel="Back to practice"
+            actionLabel={leftPractice() ? 'Back to practice' : 'Try practice'}
             brand
             copy="The live market (real NBA games and a saved account) isn't open on this site yet. Practice is ready anytime: it plays a generated season in this browser."
             details={`For developers: ${configResult.error} Set the public API URL, API prefix, and Supabase auth configuration before starting Expo.`}
-            onAction={() => {
-              window.location.search = '?mock';
-            }}
-            heading="The live market isn't open yet"
+            onAction={goToPractice}
+            heading={"The live market isn't open\u00a0yet"}
             title="App configuration missing"
           />
         )}
@@ -1267,6 +1339,18 @@ const styles = StyleSheet.create({
   },
   // The toast is where "LeBron James added at $105K a game" lands — body size,
   // not fine print: it is the confirmation the player tapped for.
+  noticeWords: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+  },
+  noticeMore: {
+    color: colors.muted,
+    fontSize: type.label,
+    fontWeight: '700',
+  },
   noticeText: {
     flex: 1,
     color: colors.text,
@@ -1281,10 +1365,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // In the brand bar, × and two lines of words fit the bar's 44 px, so a
-  // kept notice does not nudge the screen down.
+  // In the brand bar the × is a full 44px target like every other control
+  // (walk 9 T1-18: it was 44x40 at the screen's top edge).
   noticeDismissBar: {
-    minHeight: 40,
+    minHeight: 44,
   },
   // Under the words at 400% zoom: short, so the screen keeps what it can.
   noticeDismissStacked: {
@@ -1382,6 +1466,18 @@ const styles = StyleSheet.create({
   },
   tabTextNarrow: {
     fontSize: type.label,
+  },
+  // Off screen and unseen: the tab words at their natural width.
+  tabWordMeasure: {
+    pointerEvents: 'none',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    opacity: 0,
+    alignItems: 'flex-start',
+  },
+  tabWordMeasured: {
+    maxWidth: 9999,
   },
   tabIconStack: {
     alignItems: 'center',

@@ -15,17 +15,33 @@ function endedShorts(previous: PerGameBootstrap | null, next: PerGameBootstrap):
   ));
 }
 
+/** "Towns" from "Karl-Anthony Towns", "Jackson" from "Jaren Jackson Jr.". */
+function surname(name: string): string {
+  const words = name.trim().split(/\s+/);
+  const last = words.length > 1 && /^(jr\.?|sr\.?|ii|iii|iv)$/i.test(words[words.length - 1])
+    ? words[words.length - 2]
+    : words[words.length - 1];
+  return last ?? name;
+}
+
 function endedSentence(ended: PerGamePosition[]): string {
   if (ended.length === 0) return '';
   // Short, so a week's notice stays about two lines in a phone's brand bar
   // (walk 6 T1-16, walk 7 T3-18: four lines pushed the page down); the
   // Closed list keeps the detail. A signed figure after a colon reads as a
-  // result either way, never "made -$15.5K" (walk 3 T1-10).
+  // result either way, never "made -$15.5K" (walk 3 T1-10). Each figure is
+  // the short's whole run, said so, and two are told apart by name: one
+  // total beside the week's change read as a second answer to "what did
+  // this week do?" (walk 9 T2-08).
   if (ended.length === 1) {
-    return ` ${ended[0].playerName}'s short ended: ${signedMoneyFine(ended[0].cumulativePnl)}.`;
+    return ` ${ended[0].playerName}'s short ended after 7 days: ${signedMoneyFine(ended[0].cumulativePnl)} in all.`;
+  }
+  if (ended.length === 2) {
+    const [first, second] = ended;
+    return ` 2 shorts ended after 7 days: ${surname(first.playerName)} ${signedMoneyFine(first.cumulativePnl)}, ${surname(second.playerName)} ${signedMoneyFine(second.cumulativePnl)}.`;
   }
   const total = ended.reduce((sum, position) => sum + position.cumulativePnl, 0);
-  return ` ${ended.length} shorts ended: ${signedMoneyFine(total)}.`;
+  return ` ${ended.length} shorts ended after 7 days: ${signedMoneyFine(total)} in all.`;
 }
 
 /** A roster lock that begins with these games, in one sentence. */

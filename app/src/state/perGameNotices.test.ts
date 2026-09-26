@@ -70,14 +70,22 @@ test('a short that ran its term is named with what it made', () => {
   const after = snapshot('2025-11-05', '2025-11-06', 345_000, [short('s1', 'Tyrese Maxey', 'closed', 345_000)], [night('2025-11-05', 145_000)]);
   assert.equal(
     refreshNotice(before, after, false),
-    "Nov 5 games: your score rose $145K. Tyrese Maxey's short ended: +$345K.",
+    "Nov 5 games: your score rose $145K. Tyrese Maxey's short ended after 7 days: +$345K in all.",
   );
   const two = snapshot('2025-11-05', '2025-11-06', 0, [
-    short('s1', 'A', 'closed', 345_000),
-    short('s2', 'B', 'closed', -45_000),
+    short('s1', 'Cade Cunningham', 'closed', 86_500),
+    short('s2', 'Karl-Anthony Towns', 'closed', -310_000),
   ]);
-  const twoBefore = snapshot('2025-11-04', '2025-11-05', 0, [short('s1', 'A', 'active', 0), short('s2', 'B', 'active', 0)]);
-  assert.match(refreshNotice(twoBefore, two, false), /2 shorts ended: \+\$300K\.$/);
+  const twoBefore = snapshot('2025-11-04', '2025-11-05', 0, [short('s1', 'Cade Cunningham', 'active', 0), short('s2', 'Karl-Anthony Towns', 'active', 0)]);
+  // Two are told apart by name, each with its whole run (walk 9 T2-08).
+  assert.match(refreshNotice(twoBefore, two, false), /2 shorts ended after 7 days: Cunningham \+\$86\.5K, Towns -\$310K\.$/);
+  const three = snapshot('2025-11-05', '2025-11-06', 0, [
+    short('s1', 'A B', 'closed', 345_000),
+    short('s2', 'C D', 'closed', -45_000),
+    short('s3', 'Jaren Jackson Jr.', 'closed', 0),
+  ]);
+  const threeBefore = snapshot('2025-11-04', '2025-11-05', 0, [short('s1', 'A B', 'active', 0), short('s2', 'C D', 'active', 0), short('s3', 'Jaren Jackson Jr.', 'active', 0)]);
+  assert.match(refreshNotice(threeBefore, three, false), /3 shorts ended after 7 days: \+\$300K in all\.$/);
 });
 
 test('a score that moved without new games is reported as a change', () => {

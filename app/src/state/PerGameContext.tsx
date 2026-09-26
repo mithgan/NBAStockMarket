@@ -21,7 +21,7 @@ import type {
   PerGamePosition,
 } from '../api/contracts';
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
-import { exactMoney, moneyFine, perGame } from '../copy/terms';
+import { exactMoney, moneyFine, perGame, rosterReopensLine } from '../copy/terms';
 import { practiceProgress } from '../data/chromeView';
 import { isAppResume } from './appResume';
 import { ActionLock } from './actionLock';
@@ -314,11 +314,9 @@ export function PerGameProvider({
         refreshed && mounted.current
         && (!quietUnlessChanged || refreshHasNews(previous, refreshed) || attempt.reconciliationReason)
       ) {
-        say(
-          refreshNotice(previous, refreshed, Boolean(attempt.reconciliationReason), { seasonComplete }),
-          'success',
-          options?.silent === true ? '' : undefined,
-        );
+        const headline = refreshNotice(previous, refreshed, Boolean(attempt.reconciliationReason), { seasonComplete });
+        lastRefreshNotice.current = { text: headline, at: Date.now() };
+        say(headline, 'success', options?.silent === true ? '' : undefined);
       }
       return succeeded;
     } finally {
@@ -374,6 +372,36 @@ export function PerGameProvider({
     return shown;
   }, []);
 
+  // Moves that waited for games which ended on a lock fail at once, in one
+  // notice that keeps the games' result (walk 9 T4-04): "Oct 21–27 games: …
+  // Moves pause for the Oct 28 games, so Scottie Barnes and Devin Booker were
+  // not added." They are said together once the last of them has failed.
+  const lastRefreshNotice = useRef<{ text: string; at: number } | null>(null);
+  const lockedMoves = useRef<{ verb: string; names: string[]; base: string | null } | null>(null);
+  const sayLockedMoves = useCallback((move: { name: string; verb: string }) => {
+    const last = lockedMoves.current;
+    if (last && last.verb === move.verb) {
+      if (!last.names.includes(move.name)) last.names.push(move.name);
+      return;
+    }
+    const recent = lastRefreshNotice.current;
+    const base = recent && Date.now() - recent.at < 6000 && LOCK_SENTENCE.test(` ${recent.text}`) ? recent.text : null;
+    lockedMoves.current = { verb: move.verb, names: [move.name], base };
+    setTimeout(() => {
+      const batch = lockedMoves.current;
+      lockedMoves.current = null;
+      if (!batch) return;
+      const who = `${nameList(batch.names)} ${batch.names.length === 1 ? 'was' : 'were'} not ${batch.verb}`;
+      const date = bootstrapRef.current?.ruleset.rosterLockGameDate;
+      const text = batch.base
+        ? `${batch.base.replace(/\.$/, '')}, so ${who}.`
+        : `${who}. Your roster is locked. ${rosterReopensLine(date)}.`;
+      // The games' own notice is inside this one: it is not said again.
+      silentNotice.current = null;
+      say(text);
+    }, 0);
+  }, [say]);
+
   const runPositionAction = useCallback(async <T extends { accountVersion: number },>(
     key: string,
     action: () => Promise<T>,
@@ -385,6 +413,12 @@ export function PerGameProvider({
   ): Promise<boolean> => {
     const coordinator = reconciliation.current;
     if (!coordinator) return false;
+    // Moves are locked now (it waited for the games that brought the lock;
+    // every button says LOCKED otherwise): no call that must fail.
+    if (failedMove && bootstrapRef.current?.ruleset.rosterMutationsLocked) {
+      sayLockedMoves(failedMove);
+      return false;
+    }
     if (!coordinator.beginMutation()) {
       // Never silence: a move that cannot start says so (walk 8 T4-03).
       if (failedMove) {
@@ -451,7 +485,7 @@ export function PerGameProvider({
       coordinator.finishMutation(reconciliationReason);
       updatePendingActions();
     }
-  }, [burstNotice, failureNotice, loadSnapshot, say, updatePendingActions]);
+  }, [burstNotice, failureNotice, loadSnapshot, say, sayLockedMoves, updatePendingActions]);
 
   // Moves save one at a time (the account has one version), but a move
   // pressed while another saves waits its turn instead of vanishing: a player
@@ -536,7 +570,9 @@ export function PerGameProvider({
         key,
         () => apiClient.closePosition(position.positionId, accountVersion),
         position.side === 'long'
-          ? `${position.playerName} dropped. His next games won't count toward your score.${feeNote()}${also}`
+          // Two lines on a phone, so the brand bar keeps its height: the Drop
+          // question already said what stays in your score (walk 9 T1-10).
+          ? `${position.playerName} dropped.${feeNote()}${also}`
           : `Short on ${position.playerName} closed.${feeNote()}${also}`,
         position.side === 'long'
           // A drop that made room says so itself; it never folds.

@@ -180,7 +180,18 @@ input:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid ${colors.focus} !important;
   outline-offset: 2px !important;
+  /* Scrolled into view with its whole ring showing, clear of the notice strip
+     and the edges (walk 9 T3-04: the strip cut the ring's bottom). */
+  scroll-margin: 8px;
   border-radius: 4px;
+}
+
+/* Tabs answer a pointer like every other button (walk 9 T2-09); a finger has
+   no hover, so a touch never leaves one tinted. */
+@media (hover: hover) {
+  [role="tab"][aria-selected="false"]:hover {
+    background-color: var(--c-surfaceHigh, ${BASE_PALETTE.surfaceHigh});
+  }
 }
 
 /* Tabs sit flush against the screen edge on phones; draw their ring inside

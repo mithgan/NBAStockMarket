@@ -13,6 +13,9 @@ const RESTARTED_KEY = 'nba-stock-market:practice-restarted';
 // travels with it, so the new page moves focus for keyboard users without
 // drawing a focus ring for a finger (walk 3 T1-15, T3-22).
 const BY_KEYBOARD_KEY = 'nba-stock-market:arrived-by-keyboard';
+// Exit was pressed in this tab: the setup screen offers the way back, where a
+// first-time visitor is invited instead (walk 9 T4-06).
+const LEFT_PRACTICE_KEY = 'nba-stock-market:left-practice';
 
 function rememberHowPressed(): void {
   try {
@@ -120,6 +123,11 @@ export function pastSeasonResults(): PastSeason[] {
   return [...pastSeasons];
 }
 
+/** How many seasons this visit finished before the one on screen. */
+export function pastSeasonCount(): number {
+  return pastSeasons.length;
+}
+
 function carryPastSeasons(): void {
   const store = sessionStore();
   if (store) carrySeasons(store, finishedSeason ? [...pastSeasons, finishedSeason] : pastSeasons);
@@ -150,7 +158,29 @@ export function leavePractice(): void {
   if (!isWeb) return;
   leaving = true;
   rememberHowPressed();
+  try {
+    window.sessionStorage.setItem(LEFT_PRACTICE_KEY, '1');
+  } catch {}
   window.location.search = '';
+}
+
+/** True when this tab left practice with Exit (not a first visit). */
+export function leftPractice(): boolean {
+  if (!isWeb) return false;
+  try {
+    return window.sessionStorage.getItem(LEFT_PRACTICE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+let goingToPractice = false;
+
+/** Open practice once: a double tap loaded it twice (walk 9 T4-06). */
+export function goToPractice(): void {
+  if (!isWeb || goingToPractice) return;
+  goingToPractice = true;
+  window.location.search = '?mock';
 }
 
 /** True once, right after a Restart, so the new season can be announced. */

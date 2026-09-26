@@ -21,6 +21,7 @@ import {
 import { PerGameApiError } from './perGameClient';
 import type { TrendPoint } from '../data/trendPresentation';
 import { rosterReopensLine } from '../copy/terms';
+import { pastSeasonCount } from '../web/practiceSession';
 
 /**
  * Practice runs on last season's calendar, so its ledger is stamped in that
@@ -79,12 +80,14 @@ function makeRng(seed: number) {
 /**
  * The seed for a season's nights. Each practice season plays its own games
  * (so "Play another season" is a new season, not a replay); `?mock&seed=42`
- * pins one for a reproducible walk. The market itself is always the same.
+ * pins the first, and each later season this visit plays seed + its number,
+ * so a seed link replays the same run of seasons (walk 9 T2-11: every season
+ * replayed the first). The market itself is always the same.
  */
 function seasonSeed(): number {
   if (typeof window !== 'undefined') {
     const pinned = Number(new URLSearchParams(window.location.search).get('seed'));
-    if (Number.isInteger(pinned) && pinned > 0) return pinned;
+    if (Number.isInteger(pinned) && pinned > 0) return pinned + pastSeasonCount();
     return 1 + Math.floor(Math.random() * 2_147_483_000);
   }
   return 20_262_027;
