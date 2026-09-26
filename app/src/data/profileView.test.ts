@@ -6,14 +6,18 @@ import { moneyFine } from '../copy/terms';
 import { positionValue } from './perGameMetrics';
 import {
   buildProfileNights,
+  chartLegend,
   chartSummary,
+  defaultRange,
   formVerdict,
   gameLog,
   holdingStatus,
   isRecentRange,
   lastSeasonFacts,
+  logCaption,
   logPriceHeader,
   logRows,
+  logStatusNights,
   mixNote,
   nightIndexAt,
   nightReadout,
@@ -88,10 +92,11 @@ test('nights you held him use your locked price; the rest are his market price t
     result({ gameDate: '2025-10-25', lockedGameCost: 100_000, dividendDollars: 328_000 }),
   ];
   const nights = buildProfileNights({ results: mine, trends, dividendRate: RATE, latestSettledDate: '2025-10-25', side: 'long' });
+  // Every night also carries his market price, yours included (walk-1 T2-33).
   assert.deepEqual(nights, [
-    { date: '2025-10-22', dividend: 160_000, price: 101_000, net: 59_000, source: 'market' },
-    { date: '2025-10-23', dividend: 100_000, price: 100_000, net: 0, source: 'yours' },
-    { date: '2025-10-25', dividend: 328_000, price: 100_000, net: 228_000, source: 'yours' },
+    { date: '2025-10-22', dividend: 160_000, price: 101_000, net: 59_000, source: 'market', market: 101_000 },
+    { date: '2025-10-23', dividend: 100_000, price: 100_000, net: 0, source: 'yours', market: 102_000 },
+    { date: '2025-10-25', dividend: 328_000, price: 100_000, net: 228_000, source: 'yours', market: 104_000 },
   ]);
 });
 
@@ -175,7 +180,7 @@ test('a correction counts once; did-not-play, unsettled and unsettled-dated nigh
     latestSettledDate: '2025-11-05',
     side: 'long',
   });
-  assert.deepEqual(nights, [{ date: '2025-11-01', dividend: 90_000, price: 100_000, net: -10_000, source: 'yours' }]);
+  assert.deepEqual(nights, [{ date: '2025-11-01', dividend: 90_000, price: 100_000, net: -10_000, source: 'yours', market: 100_000 }]);
 });
 
 const nights: ProfileNight[] = [
@@ -253,13 +258,14 @@ test('the verdict is one plain sentence per side, with misses as misses and no p
 test('labels follow the side, so a short never reads as a roster spot', () => {
   const roster = sideWords('long');
   const short = sideWords('short');
-  assert.equal(roster.price, 'Price a game');
-  assert.equal(short.price, 'Credit a game');
+  assert.equal(roster.price, 'Price');
+  assert.equal(short.price, 'Credit');
   assert.equal(roster.beat, 'Beat his price');
   assert.equal(short.beat, 'Under his price');
   assert.equal(roster.missedCaption(3), 'missed 3');
   assert.equal(short.missedCaption(1), 'over 1');
-  assert.equal(roster.missedCaption(0), 'every game');
+  assert.equal(roster.missedCaption(0), 'no misses');
+  assert.equal(short.missedCaption(0), 'never over');
   assert.equal(roster.legendBad, 'Missed his price');
   assert.equal(short.legendGood, 'Under his price');
   assert.equal(short.legendBad, 'Over his price');
@@ -268,7 +274,7 @@ test('labels follow the side, so a short never reads as a roster spot', () => {
 test('the price is labelled by where it came from', () => {
   assert.equal(priceSourceCaption({ games: 4, yours: 4 }, 'long'), 'your price');
   assert.equal(priceSourceCaption({ games: 4, yours: 0 }, 'long'), 'his market price');
-  assert.equal(priceSourceCaption({ games: 6, yours: 4 }, 'short'), 'average of both');
+  assert.equal(priceSourceCaption({ games: 6, yours: 4 }, 'short'), 'yours and market');
   assert.equal(logPriceHeader(nights, 'long'), 'Price');
   assert.equal(logPriceHeader(nights.slice(2), 'long'), 'Your price');
   assert.equal(logPriceHeader(nights.slice(2), 'short'), 'Your credit');
@@ -300,7 +306,7 @@ test('after a drop and re-add the price is plainly an average of your two prices
     { date: '2025-10-20', dividend: 120_000, price: 99_000, net: 21_000, source: 'market' },
     ...stints,
   ];
-  assert.equal(priceSourceCaption(summarizeNights(withMarket), 'long'), 'average of both');
+  assert.equal(priceSourceCaption(summarizeNights(withMarket), 'long'), 'yours and market');
   assert.equal(
     mixNote(withMarket, 'long'),
     'These 13 games: 12 with you (11 at $100K, 1 at $104.3K), 1 at his market price.',
@@ -351,10 +357,39 @@ test('did-not-play and unsettled nights keep a line in the log and a note (rigor
   assert.equal(unsettledNote({ dnp: 0, pending: 0 }), null);
 });
 
-test('the Season range reads "All" where four tabs are only 44px wide (rigor S-5)', () => {
-  assert.deepEqual(rangeOptions(false).map((option) => option.label), ['L5', 'L15', 'L30', 'Season']);
-  assert.deepEqual(rangeOptions(true).map((option) => option.label), ['L5', 'L15', 'L30', 'All']);
-  assert.equal(rangeOptions(true)[3].key, 'Season');
+test('ranges are spelled out, only offered when they narrow his games, and fit 44px tabs (rigor S-5, walk-1 T1-28)', () => {
+  const labels = (options: { label: string }[]) => options.map((option) => option.label);
+  assert.deepEqual(labels(rangeOptions({ total: 40, yours: 0, room: 'wide' })), ['Last 5', 'Last 15', 'Last 30', 'Season']);
+  assert.deepEqual(labels(rangeOptions({ total: 40, yours: 0, room: 'phone' })), ['Last 5', 'Last 15', 'Last 30', 'Season']);
+  // One game played: "Last 15" would show that one game, so only Season shows.
+  assert.deepEqual(labels(rangeOptions({ total: 1, yours: 0, room: 'phone' })), ['Season']);
+  assert.deepEqual(labels(rangeOptions({ total: 10, yours: 0, room: 'phone' })), ['Last 5', 'Season']);
+  // Your games get their own tab; the longest recent range makes room for it.
+  assert.deepEqual(labels(rangeOptions({ total: 40, yours: 3, room: 'phone' })), ['With you', 'Last 5', 'Last 15', 'Season']);
+  assert.deepEqual(labels(rangeOptions({ total: 40, yours: 3, room: 'narrow' })), ['Yours', 'L5', 'All']);
+  assert.equal(rangeOptions({ total: 40, yours: 3, room: 'narrow' })[2].key, 'Season');
+  // All of his games were yours: "With you" would repeat Season.
+  assert.deepEqual(labels(rangeOptions({ total: 4, yours: 4, room: 'phone' })), ['Season']);
+});
+
+test('the game log follows the range and says which games it lists (walk-1 T2-36)', () => {
+  assert.equal(logCaption('L15', 15, 'season'), 'His last 15 games, newest first.');
+  assert.equal(logCaption('Yours', 3, 'season'), 'Your games with him, newest first.');
+  assert.equal(logCaption('Season', 32, 'season'), 'Every game this season, newest first.');
+  assert.equal(logCaption('Season', 4, 'yours'), 'Your games with him, newest first.');
+  const status = [{ date: '2025-10-20', kind: 'dnp' as const }, { date: '2025-10-26', kind: 'pending' as const }];
+  const recent = rangeNights(nights, 'L5');
+  assert.deepEqual(logStatusNights(status, 'L5', recent).map((night) => night.date), ['2025-10-26']);
+  assert.equal(logStatusNights(status, 'Season', recent).length, 2);
+});
+
+test('the profile opens on your games when you hold him, else a range that narrows (walk-1 T1-44, T1-28)', () => {
+  assert.equal(defaultRange(rangeOptions({ total: 10, yours: 3, room: 'phone' }), true), 'Yours');
+  assert.equal(defaultRange(rangeOptions({ total: 10, yours: 3, room: 'phone' }), false), 'Season');
+  assert.equal(defaultRange(rangeOptions({ total: 20, yours: 0, room: 'phone' }), false), 'L15');
+  assert.equal(defaultRange(rangeOptions({ total: 1, yours: 0, room: 'phone' }), true), 'Season');
+  assert.deepEqual(rangeNights(nights, 'Yours').map((night) => night.source), ['yours', 'yours', 'yours', 'yours']);
+  assert.equal(isRecentRange('Yours', 4, 6), false);
 });
 
 test('ranges keep the latest games, and only a shortened range counts as recent', () => {
@@ -384,10 +419,12 @@ test('holding status and stake line say where you stand, from the same numbers a
     tag: 'Shorted',
     text: 'Credited $112.5K a game, ends Nov 12',
   });
-  assert.deepEqual(stakeLine({ games: 11, total: 1_632_000 }, true), { lead: '11 games with you ·', total: '+$1.63M total', tone: 'gain' });
-  assert.deepEqual(stakeLine({ games: 3, total: 377_500 }, true)?.total, '+$377.5K total');
+  assert.deepEqual(stakeLine({ games: 11, total: 1_632_000 }, true), { lead: 'Your roster spot:', total: '+$1.63M over 11 games', tone: 'gain' });
+  assert.deepEqual(stakeLine({ games: 3, total: 377_500 }, true)?.total, '+$377.5K over 3 games');
+  // A short leads with its own result (walk-1 T1-44).
+  assert.deepEqual(stakeLine({ games: 3, total: -699_200 }, true, 'short'), { lead: 'Your short:', total: '-$699.2K over 3 games', tone: 'loss' });
   assert.deepEqual(stakeLine({ games: 0, total: 0 }, true), { lead: 'No games yet at this price', total: null, tone: 'none' });
-  assert.deepEqual(stakeLine({ games: 3, total: -60_000 }, false), { lead: 'Before: 3 games with you ·', total: '-$60K total', tone: 'loss' });
+  assert.deepEqual(stakeLine({ games: 3, total: -60_000 }, false), { lead: 'Before, with you:', total: '-$60K over 3 games', tone: 'loss' });
   assert.equal(stakeLine({ games: 0, total: 0 }, false), null);
 });
 
@@ -433,6 +470,36 @@ test('the price view plots his price, and few or flat nights get no HIGH/LOW lab
   const flat = nights.map((night) => ({ ...night, price: 100_000 }));
   assert.equal(profileChartModel(flat, 'price', 316, 180, INSETS).high, null);
   assert.deepEqual(profileChartModel([], 'dividends', 316, 180, INSETS).bars, []);
+});
+
+test('the price view plots his market price against your locked price (walk-1 T2-33, T1-29)', () => {
+  // Held all along at $125K while his market price rose from $120K to $128K.
+  const held: ProfileNight[] = [120_000, 124_000, 128_000].map((market, index) => ({
+    date: `2025-10-2${index + 1}`, dividend: 150_000, price: 125_000, net: 25_000, source: 'yours', market,
+  }));
+  const model = profileChartModel(held, 'price', 316, 180, INSETS);
+  assert.ok(model.anchors[0].y > model.anchors[2].y, 'the market line rises, not a flat line of your own price');
+  assert.match(model.yourPricePath, /^M /);
+  assert.equal(model.high, null, 'three games are too few for HIGH/LOW labels');
+  assert.equal(profileChartModel(held, 'dividends', 316, 180, INSETS).yourPricePath, '');
+  // Every line carries a label with its value.
+  assert.deepEqual(chartLegend(held, 'price'), { line: 'His market price', yours: 'Your price $125K' });
+  assert.deepEqual(chartLegend(held, 'dividends'), { line: 'Your price $125K', yours: null });
+  assert.deepEqual(chartLegend(held, 'dividends', 'short'), { line: 'Your credit $125K', yours: null });
+  assert.equal(nightReadout(held[2], 'price'), 'Market $128K · your price $125K');
+  assert.equal(
+    priceStory(held, 'long', 128_500),
+    'Market now $128.5K a game; you locked $125K. Over these 3 games his market price went from $120K to $128K.',
+  );
+  assert.equal(priceStory(held, 'short'), 'You locked $125K. Over these 3 games his market credit went from $120K to $128K.');
+  assert.equal(priceStory(held.slice(0, 1), 'long', 99_700), 'Market now $99.7K a game; you locked $125K. His market price was $120K in that game.');
+  assert.match(chartSummary(held, 'price'), /^His market price a game over 3 games, against your locked price\. High \$128K/);
+  // Outside practice there is no market line: your price is the one line.
+  const live = held.map(({ market: _market, ...night }) => night);
+  assert.deepEqual(chartLegend(live, 'price'), { line: 'Your price $125K', yours: null });
+  assert.equal(profileChartModel(live, 'price', 316, 180, INSETS).yourPricePath, '');
+  // Equal high and low are not read out (walk-1 T2-33).
+  assert.equal(chartSummary(live, 'price'), 'His price a game over 3 games.');
 });
 
 test('a pointer reads the night under it; arrow keys, Home and End step the slider', () => {

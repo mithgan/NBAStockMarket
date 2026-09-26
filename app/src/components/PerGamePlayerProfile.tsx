@@ -5,7 +5,7 @@
  * that night, from the side you look from: your roster (dividend minus price)
  * or your short (credit minus dividend). Nights you held him are your settled
  * results at your locked price, so they match Roster and Results; other nights
- * are his market price and say so. The range (L5 / L15 / L30 / Season) drives
+ * are his market price and say so. The range (With you / Last 5 / Last 15 / Last 30 / Season) drives
  * the verdict, the stat grid and the chart together, so the three always
  * describe the same games, and the sheet has one "net a game".
  */
@@ -36,7 +36,6 @@ import {
   gamesCount,
   humanDate,
   moneyFine,
-  nightsCount,
   perGame,
   signedMoneyFine,
   unbrokenName,
@@ -47,10 +46,13 @@ import {
   buildProfileNights,
   formVerdict,
   holdingStatus,
+  defaultRange,
   isRecentRange,
   lastSeasonFacts,
   logPriceHeader,
+  logCaption,
   logRows,
+  logStatusNights,
   mixNote,
   priceSourceCaption,
   priceStory,
@@ -62,14 +64,17 @@ import {
   summarizeNights,
   unsettledNote,
   type ProfileMetric,
+  type ProfileRange,
   type StakeTone,
 } from '../data/profileView';
-import type { TrendPoint, TrendRange } from '../data/trendPresentation';
+import type { TrendPoint } from '../data/trendPresentation';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
 import { Button, headingLevel, Label, Money, moneyColor, SectionHeader, Segmented, Tag } from '../ui/kit';
 import { CloseIcon, StarIcon } from './market/icons';
 import { PlayerAvatar } from './PlayerAvatar';
+import { ProfileActionBar } from './profile/ProfileActionBar';
 import { ProfileChart } from './profile/ProfileChart';
+import { ProfileGameLog } from './profile/ProfileGameLog';
 
 const METRIC_OPTIONS: { key: ProfileMetric; label: string; hint: string }[] = [
   { key: 'dividends', label: 'Dividends', hint: 'His dividend each game, against his price' },
@@ -164,7 +169,8 @@ export function PerGamePlayerProfile({
   onClose,
   wide = false,
 }: PerGamePlayerProfileProps) {
-  const [range, setRange] = useState<TrendRange>('L15');
+  // The range you picked; until then, the default for his games (see defaultRange).
+  const [picked, setPicked] = useState<ProfileRange | null>(null);
   const [metric, setMetric] = useState<ProfileMetric>('dividends');
   const [showAllGames, setShowAllGames] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -183,6 +189,9 @@ export function PerGamePlayerProfile({
     () => buildProfileNights({ results, trends, dividendRate, latestSettledDate, side: viewSide }),
     [dividendRate, latestSettledDate, results, trends, viewSide],
   );
+  const yourNights = useMemo(() => nights.filter((night) => night.source === 'yours').length, [nights]);
+  const ranges = rangeOptions({ total: nights.length, yours: yourNights, room: wide ? 'wide' : windowWidth < 240 ? 'narrow' : 'phone' });
+  const range = picked && ranges.some((option) => option.key === picked) ? picked : defaultRange(ranges, held);
   const shown = useMemo(() => rangeNights(nights, range), [nights, range]);
   const summary = useMemo(() => summarizeNights(shown), [shown]);
   const recent = isRecentRange(range, shown.length, nights.length);
@@ -193,16 +202,18 @@ export function PerGamePlayerProfile({
     () => (position ? positionValue(results, position.positionId) : playerValue(results, player.playerId)),
     [player.playerId, position, results],
   );
-  const stake = stakeLine(stakeSummary, held);
+  const stake = stakeLine(stakeSummary, held, viewSide);
   // Nights with no money to show: he did not play, or the game has not settled.
   const quietNote = unsettledNote(stakeSummary);
   const quiet = useMemo(() => statusNights(results, viewSide), [results, viewSide]);
   const mix = mixNote(shown, viewSide);
   const lastSeason = lastSeasonFacts(player, viewSide);
-  const logTotal = nights.length + quiet.length;
+  // The log lists the range's games (the chart's games), plus your no-money nights in that window.
+  const logQuiet = logStatusNights(quiet, range, shown);
+  const logTotal = shown.length + logQuiet.length;
   const logCapped = logTotal > LOG_PREVIEW + LOG_SLACK;
-  const log = logRows(nights, quiet, showAllGames || !logCapped ? undefined : LOG_PREVIEW);
-  const priceHeader = logPriceHeader(nights, viewSide);
+  const log = logRows(shown, logQuiet, showAllGames || !logCapped ? undefined : LOG_PREVIEW);
+  const priceHeader = logPriceHeader(shown, viewSide);
   const mixedLog = priceHeader === 'Price' || priceHeader === 'Credit';
   const title = narrow ? splitPlayerName(player.name).surname : player.name;
 
@@ -244,7 +255,16 @@ export function PerGamePlayerProfile({
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body} onScroll={onScroll} scrollEventThrottle={32} style={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.body}
+        onScroll={onScroll}
+        scrollEventThrottle={32}
+        // The action bar (child 1) sits under his name and your status, then
+        // stays pinned to the top while the rest of the profile scrolls.
+        stickyHeaderIndices={[1]}
+        style={styles.scroll}
+      >
+        <View>
         <View style={[styles.identity, inset]}>
           <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={56} />
           <View style={styles.identityCopy}>
@@ -258,11 +278,23 @@ export function PerGamePlayerProfile({
           </View>
         </View>
         <View style={[styles.status, inset]}>
+          {/* Your result with him leads ("Your short: -$699.2K over 3 games"),
+              then what you hold and at what price. */}
+          {stake && held ? (
+            <View style={styles.statusLine}>
+              <Text maxFontSizeMultiplier={1.4} style={styles.stakeHeadLead}>{stake.lead}</Text>
+              {stake.total ? (
+                <Text maxFontSizeMultiplier={1.4} style={[styles.stakeHeadTotal, { color: TONE_COLOR[stake.tone] }]}>
+                  {stake.total}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
           <View style={styles.statusLine}>
             {status.tag ? <Tag>{status.tag}</Tag> : null}
             <Text maxFontSizeMultiplier={1.4} style={styles.statusText}>{status.text}</Text>
           </View>
-          {stake ? (
+          {stake && !held ? (
             <View style={styles.statusLine}>
               <Text maxFontSizeMultiplier={1.4} style={styles.stakeLead}>{stake.lead}</Text>
               {stake.total ? (
@@ -274,6 +306,8 @@ export function PerGamePlayerProfile({
           ) : null}
           {quietNote ? <Text maxFontSizeMultiplier={1.4} style={styles.stakeLead}>{quietNote}</Text> : null}
         </View>
+        </View>
+        <ProfileActionBar player={player} position={position} side={viewSide} />
 
         <SectionHeader
           level={3}
@@ -284,20 +318,33 @@ export function PerGamePlayerProfile({
         <View style={[styles.section, inset]}>
           {nights.length > 0 ? (
             <>
-              <Segmented
-                accessibilityLabel="Games shown"
-                onChange={setRange}
-                options={rangeOptions(!wide && windowWidth < 240)}
-                style={wide ? styles.rangeWide : undefined}
-                value={range}
-              />
+              {/* One choice is no choice: with a handful of games the tabs go. */}
+              {ranges.length > 1 ? (
+                <Segmented
+                  accessibilityLabel="Games shown"
+                  onChange={setPicked}
+                  options={ranges}
+                  style={wide ? styles.rangeWide : undefined}
+                  value={range}
+                />
+              ) : null}
               <Text maxFontSizeMultiplier={1.4} style={styles.verdict}>
-                {formVerdict(summary, { recent, side: viewSide, held, scope: live ? 'yours' : 'season' })}
+                {formVerdict(summary, {
+                  recent,
+                  side: viewSide,
+                  // "for your short" only when every game shown was yours.
+                  held: held && summary.yours === summary.games,
+                  scope: live || range === 'Yours' ? 'yours' : 'season',
+                })}
               </Text>
               {mix ? <Text maxFontSizeMultiplier={1.4} style={styles.note}>{mix}</Text> : null}
-              <View style={styles.grid}>
+              {/* The first three figures are averages over the games shown, so
+                  his average price never reads as his price now. One-word
+                  labels keep the three values on one line at 360px. */}
+              <Text maxFontSizeMultiplier={1.4} style={styles.gridCaption}>Average a game</Text>
+              <View style={[styles.grid, styles.gridTight]}>
                 <Figure
-                  label="Dividend a game"
+                  label="Dividend"
                   style={styles.cell}
                   value={<FineMoney signed={false} size={type.title} value={summary.avgDividend ?? 0} />}
                 />
@@ -309,17 +356,19 @@ export function PerGamePlayerProfile({
                 />
                 <Figure
                   caption={words.netCaption}
-                  label="Net a game"
+                  label="Profit"
                   style={styles.cell}
                   value={<FineMoney size={type.title} value={summary.avgNet ?? 0} />}
                 />
+              </View>
+              <View style={styles.grid}>
                 <Figure
                   caption={words.missedCaption(summary.games - summary.beat)}
                   label={words.beat}
                   style={styles.cell}
                   value={(
                     <Text maxFontSizeMultiplier={1.4} style={styles.statText}>
-                      {`${summary.beat} of ${summary.games}`}
+                      {`${summary.beat} of ${gamesCount(summary.games)}`}
                     </Text>
                   )}
                 />
@@ -344,7 +393,7 @@ export function PerGamePlayerProfile({
                 value={metric}
               />
               {metric === 'price' ? (
-                <Text maxFontSizeMultiplier={1.4} style={styles.note}>{priceStory(shown, viewSide)}</Text>
+                <Text maxFontSizeMultiplier={1.4} style={styles.note}>{priceStory(shown, viewSide, player.currentGameCost)}</Text>
               ) : null}
               <ProfileChart height={wide ? 200 : 176} metric={metric} nights={shown} side={viewSide} />
             </>
@@ -382,64 +431,23 @@ export function PerGamePlayerProfile({
         {nights.length > 0 ? (
           <>
             <SectionHeader
-              caption="The same games as the chart, newest first."
+              caption={logCaption(range, shown.length, live ? 'yours' : 'season')}
               level={3}
               style={[styles.sectionHeader, inset]}
               title="Game log"
             />
-            <View style={[styles.log, inset]}>
-              <View style={styles.logRow}>
-                <Label style={styles.logDate}>Game</Label>
-                <Label style={styles.logNumber}>Dividend</Label>
-                <Label style={styles.logNumber}>{priceHeader}</Label>
-                <Label style={styles.logNumber}>Net</Label>
-              </View>
-              {log.map((row) => {
-                if (row.kind !== 'game') {
-                  // A night with no money: he did not play, or the game has not settled.
-                  const words = row.kind === 'dnp' ? 'Did not play · nothing charged' : 'Waiting to settle';
-                  return (
-                    <View
-                      accessibilityLabel={`${humanDate(row.date)}: ${words}`}
-                      accessible
-                      key={`${row.kind}-${row.date}`}
-                      style={[styles.logRow, styles.logRowRule]}
-                    >
-                      <View style={styles.logDate}>
-                        <Text maxFontSizeMultiplier={1.4} style={styles.logCell}>{humanDate(row.date)}</Text>
-                      </View>
-                      <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logQuiet, styles.logStatus]}>{words}</Text>
-                    </View>
-                  );
-                }
-                const night = row.night;
-                const market = night.source === 'market';
-                return (
-                  <View
-                    accessibilityLabel={`${humanDate(night.date)}: dividend ${exactMoney(night.dividend)}, ${words.priceShort} ${exactMoney(night.price)}${market ? ' at his market price' : ''}, net ${exactSignedMoney(night.net)}`}
-                    accessible
-                    key={night.date}
-                    style={[styles.logRow, styles.logRowRule]}
-                  >
-                    <View style={styles.logDate}>
-                      <Text maxFontSizeMultiplier={1.4} style={styles.logCell}>{humanDate(night.date)}</Text>
-                      {mixedLog && market ? <Text maxFontSizeMultiplier={1.4} style={styles.logSource}>market price</Text> : null}
-                    </View>
-                    <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logNumber]}>{moneyFine(night.dividend)}</Text>
-                    <Text maxFontSizeMultiplier={1.4} style={[styles.logCell, styles.logNumber, styles.logQuiet]}>{moneyFine(night.price)}</Text>
-                    <FineMoney size={type.body} style={styles.logNumber} value={night.net} />
-                  </View>
-                );
-              })}
-              {logCapped ? (
-                <Button
-                  label={showAllGames ? `Show latest ${LOG_PREVIEW}` : `Show all ${nightsCount(logTotal)}`}
-                  onPress={() => setShowAllGames((current) => !current)}
-                  style={styles.logMore}
-                  variant="quiet"
-                />
-              ) : null}
-            </View>
+            <ProfileGameLog
+              capped={logCapped}
+              mixed={mixedLog}
+              onToggle={() => setShowAllGames((current) => !current)}
+              preview={LOG_PREVIEW}
+              priceHeader={priceHeader}
+              rows={log}
+              showingAll={showAllGames}
+              side={viewSide}
+              style={inset}
+              total={logTotal}
+            />
           </>
         ) : null}
       </ScrollView>
@@ -580,6 +588,17 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     fontVariant: ['tabular-nums'],
   },
+  stakeHeadLead: {
+    color: colors.text,
+    fontSize: type.value,
+    fontWeight: weight.bold,
+  },
+  stakeHeadTotal: {
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.heavy,
+    fontVariant: ['tabular-nums'],
+  },
   stakeTotal: {
     fontFamily: fonts.display,
     fontSize: type.body,
@@ -605,7 +624,7 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   rangeWide: {
-    maxWidth: 360,
+    maxWidth: 440,
   },
   verdict: {
     color: colors.text,
@@ -616,6 +635,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     rowGap: space.md,
+  },
+  // The "Average a game" line sits close above the figures it describes.
+  gridTight: {
+    marginTop: -space.sm,
+  },
+  gridCaption: {
+    color: colors.faint,
+    fontSize: type.caption,
+    lineHeight: 16,
   },
   figure: {
     minWidth: 0,
@@ -669,57 +697,10 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     lineHeight: 19,
   },
-  log: {
-    paddingHorizontal: space.lg,
-  },
-  logRow: {
-    minHeight: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-  },
-  logRowRule: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  logCell: {
-    color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: type.body,
-    fontWeight: weight.bold,
-    fontVariant: ['tabular-nums'],
-  },
-  logSource: {
-    color: colors.faint,
-    fontSize: type.label,
-  },
-  logDate: {
-    flex: 1.1,
-    minWidth: 0,
-    paddingVertical: space.xs,
-  },
-  logNumber: {
-    flex: 1,
-    minWidth: 0,
-    textAlign: 'right',
-  },
-  logQuiet: {
-    color: colors.muted,
-  },
-  logStatus: {
-    flex: 3,
-    textAlign: 'right',
-    fontWeight: weight.medium,
-  },
   fineMoney: {
     fontFamily: fonts.display,
     fontWeight: weight.heavy,
     fontVariant: ['tabular-nums'],
-  },
-  logMore: {
-    alignSelf: 'flex-start',
-    marginTop: space.xs,
-    paddingHorizontal: 0,
   },
   pressed: {
     opacity: 0.72,

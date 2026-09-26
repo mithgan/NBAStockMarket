@@ -328,12 +328,23 @@ export function ConfirmStrip({
     focusNode(keepRef);
   }, []);
   useEffect(() => {
-    if (typeof document === 'undefined') return undefined;
+    if (typeof window === 'undefined') return undefined;
+    // Escape answers this question only. A sheet around the strip (the player
+    // profile) closes on Escape's keyup, so the matching keyup is swallowed
+    // too, by a one-shot listener that outlives the strip it just closed.
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCancel();
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      const swallow = (up: KeyboardEvent) => {
+        if (up.key !== 'Escape') return;
+        up.stopPropagation();
+        window.removeEventListener('keyup', swallow, true);
+      };
+      window.addEventListener('keyup', swallow, true);
+      onCancel();
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [onCancel]);
   return (
     <View accessibilityRole="alert" style={[styles.confirmStrip, style]}>

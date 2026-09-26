@@ -11,6 +11,7 @@ import type { TrendPoint } from '../data/trendPresentation';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useWatchlist } from '../state/watchlist';
 import { colors, radius } from '../theme';
+import { useSheetHistory } from '../web/appHistory';
 import { PerGamePlayerProfile } from './PerGamePlayerProfile';
 
 /** Desktop opens the profile as a panel on the right; below this it is a sheet. */
@@ -62,6 +63,9 @@ export function PlayerProfileSheet({
   const ownWatchlist = useWatchlist();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  // Back (the browser button or a phone's back gesture) closes the profile,
+  // not the app; the screen behind it is inert while it is open.
+  useSheetHistory(visible && player !== null, onClose);
   if (!player) return null;
   const panel = width >= PANEL_MIN_WIDTH;
   const sheetWidth = Math.min(width, SHEET_MAX_WIDTH);
@@ -69,6 +73,8 @@ export function PlayerProfileSheet({
 
   return (
     <Modal
+      // The dialog is named for the player: "Nikola Jokic, dialog".
+      accessibilityLabel={player.name}
       animationType={reducedMotion ? 'none' : 'fade'}
       onRequestClose={onClose}
       transparent

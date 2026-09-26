@@ -4,8 +4,9 @@
  * Dividends view: one bar per game for his dividend, rising from $0, with the
  * price a game as a dashed gold step line. Bars are green when that game was a
  * gain for the side you look from (he beat his price on a roster, stayed
- * under it for a short) and red when it was a loss.
- * Price view: the price a game, game by game.
+ * under it for a short) and a hollow red outline when it was a loss.
+ * Price view: his market price game by game (solid gold), against your locked
+ * price (dashed) on the nights you held him, each labelled with its value.
  *
  * Reading a game: tap or click a bar and the read-out above the chart names
  * that game's date, where its price came from, and the money. A mouse also
@@ -27,6 +28,7 @@ import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from 'react-native-
 import type { PerGamePositionSide } from '../../api/contracts';
 import { humanDate, money } from '../../copy/terms';
 import {
+  chartLegend,
   chartSummary,
   nightIndexAt,
   nightReadout,
@@ -41,6 +43,8 @@ import {
 import { colors, fonts, radius, space, type, weight } from '../../theme';
 
 const INSETS: ChartInsets = { top: 22, right: 6, bottom: 20, left: 6 };
+/** Outline width of a missed game's hollow bar. */
+const MISS_STROKE = 1.5;
 
 /** Green for a game that gained for the reader's side, red for a loss. */
 function barColor(night: ProfileNight): string {
@@ -70,6 +74,7 @@ export function ProfileChart({
     [height, metric, nights, width],
   );
   const words = sideWords(side);
+  const legend = chartLegend(nights, metric, side);
 
   // A new range or metric starts clean, on his latest game. Keyed on what the
   // nights are, not the array's identity, so a re-render keeps the pick.
@@ -226,18 +231,27 @@ export function ProfileChart({
               />
             ) : null}
             {metric === 'dividends'
-              ? model.bars.map((bar, index) => (
-                <Rect
-                  fill={barColor(nights[index])}
-                  height={bar.height}
-                  key={nights[index].date}
-                  opacity={active === null || active === index ? 1 : 0.4}
-                  rx={Math.min(2, bar.width / 3)}
-                  width={bar.width}
-                  x={bar.x}
-                  y={bar.y}
-                />
-              ))
+              ? model.bars.map((bar, index) => {
+                // A miss is a hollow bar, a beat a solid one: the shape says it
+                // too, not only red against green (walk-1 T3-19). The outline
+                // sits inside the bar so both keep the same size.
+                const missed = nights[index].net < 0 && bar.width >= 4 && bar.height >= 4;
+                const inset = missed ? MISS_STROKE / 2 : 0;
+                return (
+                  <Rect
+                    fill={missed ? 'none' : barColor(nights[index])}
+                    height={bar.height - inset * 2}
+                    key={nights[index].date}
+                    opacity={active === null || active === index ? 1 : 0.4}
+                    rx={Math.min(2, bar.width / 3)}
+                    stroke={missed ? barColor(nights[index]) : undefined}
+                    strokeWidth={missed ? MISS_STROKE : 0}
+                    width={bar.width - inset * 2}
+                    x={bar.x + inset}
+                    y={bar.y + inset}
+                  />
+                );
+              })
               : null}
             <Path
               d={metric === 'dividends' ? model.priceStepPath : model.priceLinePath}
@@ -247,12 +261,16 @@ export function ProfileChart({
               strokeLinejoin="round"
               strokeWidth={metric === 'dividends' ? 1.5 : 2.5}
             />
+            {/* Price view: your locked price, dashed, against his market line. */}
+            {metric === 'price' && model.yourPricePath ? (
+              <Path d={model.yourPricePath} fill="none" stroke={colors.text} strokeDasharray="5 4" strokeWidth={1.5} />
+            ) : null}
             {metric === 'price' && anchor ? (
               <Circle cx={anchor.x} cy={anchor.y} fill={colors.gold} r={active === null ? 3.5 : 5} />
             ) : null}
             {labels.map(([label, index]) => {
               const point = model.anchors[index];
-              const value = metric === 'price' ? nights[index].price : nights[index].dividend;
+              const value = metric === 'price' ? nights[index].market ?? nights[index].price : nights[index].dividend;
               const base = metric === 'dividends' && zeroY !== null
                 ? (label === 'HIGH' ? Math.min(point.y, zeroY) : Math.max(point.y, zeroY))
                 : point.y;
@@ -288,15 +306,21 @@ export function ProfileChart({
               <Text style={styles.legendText}>{words.legendGood}</Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.swatch, { backgroundColor: colors.red }]} />
+              <View style={[styles.swatch, styles.swatchHollow]} />
               <Text style={styles.legendText}>{words.legendBad}</Text>
             </View>
           </>
         ) : null}
         <View style={styles.legendItem}>
           <View style={[styles.dash, metric === 'price' && styles.dashSolid]} />
-          <Text style={styles.legendText}>{words.legendLine}</Text>
+          <Text style={styles.legendText}>{legend.line}</Text>
         </View>
+        {metric === 'price' && legend.yours && model.yourPricePath ? (
+          <View style={styles.legendItem}>
+            <View style={[styles.dash, styles.dashYours]} />
+            <Text style={styles.legendText}>{legend.yours}</Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -368,6 +392,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  swatchHollow: {
+    borderWidth: MISS_STROKE,
+    borderColor: colors.red,
+    backgroundColor: 'transparent',
+  },
   swatch: {
     width: 10,
     height: 10,
@@ -379,6 +408,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 2,
     borderTopColor: colors.gold,
     borderStyle: 'dashed',
+  },
+  dashYours: {
+    borderTopColor: colors.text,
   },
   dashSolid: {
     borderStyle: 'solid',
