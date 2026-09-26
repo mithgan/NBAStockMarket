@@ -402,7 +402,7 @@ function MarketRow({
         message={message}
         // The Roster brings the right list forward ("Your roster" or "Your
         // shorts") and says why the player is there.
-        onAction={() => requestRosterPick(rosterPickReason(player.name, side), side)}
+        onAction={() => requestRosterPick(rosterPickReason(player.name, side), side, { playerId: player.playerId, playerName: player.name })}
         onClose={closeNote}
         style={table ? styles.stripTable : undefined}
       />

@@ -66,14 +66,25 @@ export function openSettings(): boolean {
  * brings its list forward (focus on "Your roster") and says why the player
  * is there. One shot: taken by the Roster when it mounts.
  */
-let rosterPick: { reason: string; side: 'long' | 'short' } | null = null;
-
-/** `side` picks the list: "Your roster" (long) or "Your shorts" (short). */
-export function requestRosterPick(reason: string, side: 'long' | 'short' = 'long'): void {
-  rosterPick = { reason, side };
+export interface RosterPick {
+  reason: string;
+  side: 'long' | 'short';
+  /** The player the room is for, so the Roster can offer him once there is room. */
+  target?: { playerId: string; playerName: string };
 }
 
-export function takeRosterPick(): { reason: string; side: 'long' | 'short' } | null {
+let rosterPick: RosterPick | null = null;
+
+/** `side` picks the list: "Your roster" (long) or "Your shorts" (short). */
+export function requestRosterPick(
+  reason: string,
+  side: 'long' | 'short' = 'long',
+  target?: { playerId: string; playerName: string },
+): void {
+  rosterPick = { reason, side, target };
+}
+
+export function takeRosterPick(): RosterPick | null {
   const pick = rosterPick;
   rosterPick = null;
   return pick;

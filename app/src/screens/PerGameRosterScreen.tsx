@@ -386,8 +386,11 @@ export function PerGameRosterScreen({
 }: {
   onOpenMarket: (side: PerGamePosition['side']) => void;
 }) {
-  const { bootstrap, closePosition, notify } = usePerGame();
+  const { bootstrap, closePosition, notify, openPosition, pendingActions } = usePerGame();
   const { width, fontScale } = useWindowDimensions();
+  // Sent from a full Market to make room for a player: a slim banner keeps
+  // the errand in view and offers him the moment there is room (walk 3 T2-07).
+  const [making, setMaking] = useState<{ side: PerGamePosition['side']; playerId: string; playerName: string } | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [listWidth, setListWidth] = useState<number | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -454,6 +457,7 @@ export function PerGameRosterScreen({
   useEffect(() => {
     const pick = takeRosterPick();
     if (!pick) return undefined;
+    if (pick.target) setMaking({ side: pick.side, ...pick.target });
     const timer = setTimeout(() => {
       const target = pick.side === 'short' ? shortsHeading.current : rosterHeading.current;
       const heading = target as unknown as { scrollIntoView?: (options?: object) => void } | null;
@@ -593,6 +597,50 @@ export function PerGameRosterScreen({
   };
 
   const fee = bootstrap.ruleset.transactionFeeDollars;
+  // The errand banner: "Making room for Chet Holmgren", then, once a spot is
+  // free, "Add him at $239K" in one tap. Gone once he is added or on Not now.
+  const makingFor = making && !bootstrap.positions.some((row) => row.status === 'active' && row.playerId === making.playerId)
+    ? making
+    : null;
+  const errand = (side: PerGamePosition['side']) => {
+    if (!makingFor || makingFor.side !== side || seasonOver) return null;
+    const slots = side === 'long' ? longSlots : shortSlots;
+    const room = slots.used < slots.limit;
+    const listed = market.get(makingFor.playerId);
+    const verb = side === 'long' ? 'Add' : 'Short';
+    const opening = pendingActions.has(`position:${side}:${makingFor.playerId}`);
+    return (
+      <View accessibilityLiveRegion="polite" style={styles.errand}>
+        <Text style={styles.errandText}>
+          {room
+            ? `Room made for ${makingFor.playerName}.`
+            : `Making room for ${makingFor.playerName}: ${side === 'long' ? 'drop a player' : 'close a short'} below.`}
+        </Text>
+        <View style={styles.errandActions}>
+          {room && listed && !rosterLocked ? (
+            <Button
+              accessibilityLabel={`${verb} ${makingFor.playerName} at ${perGame(listed.currentGameCost)}${fee > 0 ? `, ${exactMoney(fee)} fee` : ''}`}
+              disabled={opening}
+              focusableWhenDisabled
+              label={opening ? 'Wait' : `${verb} at ${moneyCompact(listed.currentGameCost)}`}
+              onPress={() => {
+                void openPosition({
+                  playerId: makingFor.playerId,
+                  playerName: makingFor.playerName,
+                  side,
+                  expectedQuoteVersion: listed.quoteVersion,
+                }).then((ok) => {
+                  if (ok) setMaking(null);
+                });
+              }}
+              variant="primary"
+            />
+          ) : null}
+          <Button label={room ? 'Not now' : 'Cancel'} onPress={() => setMaking(null)} variant="quiet" />
+        </View>
+      </View>
+    );
+  };
   const opening = showWelcome ? (
     <WelcomeCard
       feeDollars={fee}
@@ -654,6 +702,7 @@ export function PerGameRosterScreen({
           totalInset={totalInset}
           totalLabel="Roster total"
         />
+        {errand('long')}
         {longs.length > 0 ? rows(longs) : (
           <EmptyState
             // The welcome above already offers the market on the opening eve.
@@ -692,6 +741,7 @@ export function PerGameRosterScreen({
           totalInset={totalInset}
           totalLabel="Shorts total"
         />
+        {errand('short')}
         {shorts.length > 0 ? rows(shorts) : (
           <EmptyState
             // Once the season is over the market takes no new shorts, so the
@@ -832,6 +882,28 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: space.sm,
     right: space.lg,
+  },
+  errand: {
+    marginHorizontal: space.lg,
+    marginVertical: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    gap: space.sm,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: radius.sm,
+    backgroundColor: colors.goldSoft,
+  },
+  errandText: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
+  },
+  errandActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.sm,
   },
   strip: {
     marginHorizontal: space.lg,

@@ -235,7 +235,7 @@ export function ProfileActionBar({ player, position, side: openedSide, onLeave }
         <Button
           accessibilityLabel={`${action} to ${side === 'long' ? 'add' : 'short'} ${player.name}`}
           label={action}
-          onPress={() => leaveForRoster(why, side, onLeave, notify)}
+          onPress={() => leaveForRoster(why, side, onLeave, notify, { playerId: player.playerId, playerName: player.name })}
           style={styles.action}
           variant="secondary"
         />
@@ -285,6 +285,7 @@ function leaveForRoster(
   side: 'long' | 'short',
   close: (() => void) | undefined,
   say: (text: string) => void,
+  target?: { playerId: string; playerName: string },
 ) {
   const web = typeof window !== 'undefined';
   const onRoster = web && (window.history?.state as { tab?: string } | null)?.tab === 'portfolio';
@@ -294,7 +295,7 @@ function leaveForRoster(
     return;
   }
   // The Roster brings the matching list forward: "Your roster" or "Your shorts".
-  requestRosterPick(why, side);
+  requestRosterPick(why, side, target);
   if (!close || !web || !sheetIsOpen()) {
     close?.();
     openTab('portfolio');
