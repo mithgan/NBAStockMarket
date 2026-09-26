@@ -5,6 +5,9 @@ import type { SeasonSummary } from '../../data/perGameMetrics';
 import { colors, control, fonts, headingStyle, radius, space, type, weight } from '../../theme';
 import { Button, headingLevel, Label, Money } from '../../ui/kit';
 
+/** The welcome's heading: a new practice season moves keyboard focus here. */
+export const PRACTICE_WELCOME_TITLE_ID = 'practice-welcome-title';
+
 /**
  * The first thing a new player reads in a practice season: what to do, what
  * +1 night does, that nothing is saved, and where the rules are. Once a
@@ -42,7 +45,15 @@ export function WelcomeCard({
       <View style={[styles.headRow, tiny && styles.headRowTiny]}>
         <View style={styles.headText}>
           <Label tone="gold">Practice</Label>
-          <Text accessibilityRole="header" {...headingLevel(2)} style={styles.title}>{title}</Text>
+          <Text
+            accessibilityRole="header"
+            nativeID={PRACTICE_WELCOME_TITLE_ID}
+            {...headingLevel(2)}
+            {...({ tabIndex: -1 } as object)}
+            style={styles.title}
+          >
+            {title}
+          </Text>
         </View>
         <Pressable
           accessibilityLabel="Hide this welcome"

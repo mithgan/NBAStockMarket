@@ -54,3 +54,8 @@ export function tapsSettling(): boolean {
   const at = currentPointer();
   return at !== null && Math.hypot(at.x - spot.x, at.y - spot.y) <= SPOT_RADIUS;
 }
+
+/** True when the press being handled came from a finger or mouse, not a key. */
+export function pressedByPointer(): boolean {
+  return currentPointer() !== null;
+}

@@ -149,7 +149,7 @@ export function practiceQuestion(
       cancelLabel: 'Keep playing',
     }
     : {
-      title: 'Leave practice?',
+      title: 'Leave practice for the live market?',
       lines: [`You'd lose this season: ${stakes}.`, "Practice isn't saved anywhere, so it can't be picked up later."],
       confirmLabel: 'Leave practice',
       cancelLabel: 'Keep playing',

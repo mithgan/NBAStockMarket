@@ -5,8 +5,21 @@
  * app's own Restart and Exit (which confirm first) skip that second question.
  */
 
+import { pressedByPointer } from './tapSettle';
+
 const isWeb = typeof window !== 'undefined';
 const RESTARTED_KEY = 'nba-stock-market:practice-restarted';
+// Restart and Exit load a new page. Whether the press came from the keyboard
+// travels with it, so the new page moves focus for keyboard users without
+// drawing a focus ring for a finger (walk 3 T1-15, T3-22).
+const BY_KEYBOARD_KEY = 'nba-stock-market:arrived-by-keyboard';
+
+function rememberHowPressed(): void {
+  try {
+    if (pressedByPointer()) window.sessionStorage.removeItem(BY_KEYBOARD_KEY);
+    else window.sessionStorage.setItem(BY_KEYBOARD_KEY, '1');
+  } catch {}
+}
 
 let hasProgress = false;
 let leaving = false;
@@ -33,6 +46,7 @@ export function setPracticeProgress(progress: boolean): void {
 export function restartPractice(): void {
   if (!isWeb) return;
   leaving = true;
+  rememberHowPressed();
   try {
     window.sessionStorage.setItem(RESTARTED_KEY, '1');
   } catch {}
@@ -43,6 +57,7 @@ export function restartPractice(): void {
 export function leavePractice(): void {
   if (!isWeb) return;
   leaving = true;
+  rememberHowPressed();
   window.location.search = '';
 }
 
@@ -52,6 +67,18 @@ export function consumePracticeRestarted(): boolean {
   try {
     const flag = window.sessionStorage.getItem(RESTARTED_KEY) === '1';
     window.sessionStorage.removeItem(RESTARTED_KEY);
+    return flag;
+  } catch {
+    return false;
+  }
+}
+
+/** True once, on the page a keyboard press on Restart or Exit loaded. */
+export function consumeArrivedByKeyboard(): boolean {
+  if (!isWeb) return false;
+  try {
+    const flag = window.sessionStorage.getItem(BY_KEYBOARD_KEY) === '1';
+    window.sessionStorage.removeItem(BY_KEYBOARD_KEY);
     return flag;
   } catch {
     return false;

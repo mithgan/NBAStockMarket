@@ -10,6 +10,7 @@ import { resolvePublicAppConfig, type PublicAppConfig } from './src/api/config';
 import { AuthProvider, useAuth, useOptionalAuth } from './src/auth/AuthContext';
 import { AuthScreen } from './src/auth/AuthScreen';
 import { seasonLabelFor } from './src/data/calendar';
+import { PRACTICE_WELCOME_TITLE_ID } from './src/components/roster/SeasonCards';
 import { PerGameStatusStrip as SeasonControl } from './src/components/PerGameStatusStrip';
 import { SimBar } from './src/components/SimBar';
 import { SettingsButton, SettingsSheet } from './src/components/SettingsSheet';
@@ -25,7 +26,7 @@ import { Button, visuallyHidden } from './src/ui/kit';
 import { registerSettingsOpener, registerTabOpener, settingsReturnStep } from './src/state/uiActions';
 import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
 import { settleTaps } from './src/web/tapSettle';
-import { consumePracticeRestarted, setPracticeProgress } from './src/web/practiceSession';
+import { consumeArrivedByKeyboard, consumePracticeRestarted, setPracticeProgress } from './src/web/practiceSession';
 import {
   PerGameProvider as PortfolioProvider,
   usePerGame as usePortfolio,
@@ -136,10 +137,13 @@ function CenteredState({
     // The second tap of a double tap on "Leave practice" lands here, where
     // Back to practice now sits: let it pass (walk 3 T4-06).
     settleTaps(700);
+    // A keyboard press on Leave practice lands on Back to practice; a tap
+    // leaves focus alone, so no focus ring is drawn for a finger (T1-15).
+    if (!consumeArrivedByKeyboard()) return;
     (actionRef.current as unknown as { focus?: () => void } | null)?.focus?.();
   }, [brand]);
   useEffect(() => {
-    if (typeof document !== 'undefined') document.title = heading ?? title;
+    if (typeof document !== 'undefined') document.title = `${heading ?? title} · NBA Stock Market`;
   }, [heading, title]);
   return (
     <View role={brand ? 'main' : undefined} accessibilityRole={brand ? undefined : 'alert'} style={styles.centeredState}>
@@ -273,6 +277,9 @@ function NoticeToast({
       if (!node?.getBoundingClientRect || !target?.getBoundingClientRect || node.contains(target)) return;
       const a = node.getBoundingClientRect();
       const b = target.getBoundingClientRect();
+      // Focus on the whole screen or a big region (a skip-link target) is not
+      // a control the notice hides: the notice stays to be read.
+      if (b.height > window.innerHeight * 0.5) return;
       if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) onDismiss();
     };
     document.addEventListener('keydown', onKey);
@@ -455,14 +462,21 @@ function AppBody() {
   useEffect(() => subscribeSheets(() => {
     if (settingsReturnStep(sheetIsOpen())) setTimeout(() => setSettingsOpen(true), 80);
   }), []);
-  // After Restart, say that a fresh season has begun and put focus on the
-  // screen, so nobody is left wondering what just happened.
+  // After Restart, say that a fresh season has begun, so nobody is left
+  // wondering what just happened. The words wait until the page's live
+  // region exists (text that arrives with a brand-new region is skipped by
+  // screen readers), and a keyboard press also moves focus to the new
+  // season's welcome (walk 3 T3-22).
   useEffect(() => {
-    if (!consumePracticeRestarted()) return;
-    setAppNotice('New practice season. Build a roster in the Market, then press +1 night to play the first games.');
-    if (typeof document !== 'undefined') {
-      setTimeout(() => (document.getElementById('app-screen') as HTMLElement | null)?.focus?.(), 300);
-    }
+    if (!consumePracticeRestarted()) return undefined;
+    const byKeyboard = consumeArrivedByKeyboard();
+    const timer = setTimeout(() => {
+      setAppNotice('New practice season: Day 0, empty roster, score $0. Add players in the Market, then press +1 night to play the first games.');
+      if (!byKeyboard || typeof document === 'undefined') return;
+      const target = document.getElementById(PRACTICE_WELCOME_TITLE_ID) ?? document.getElementById('app-screen');
+      (target as HTMLElement | null)?.focus?.({ preventScroll: true });
+    }, 600);
+    return () => clearTimeout(timer);
   }, []);
   // Under ~300 CSS px (a phone at 200% zoom) the four tab labels and the
   // brand line only fit at the smallest type size, without side padding.
@@ -657,7 +671,13 @@ function AppBody() {
       </View>
       )}
       {ready && wide ? renderTabBar('top') : null}
-      <View accessibilityLabel="Season and practice controls" role="region">
+      {/* With the brand bar folded away this row is the top of the screen: it
+          keeps clear of a notch and off the very edge (walk 3 T1-16). */}
+      <View
+        accessibilityLabel="Season and practice controls"
+        role="region"
+        style={short ? { paddingTop: insets.top + 4, backgroundColor: colors.chromeSoft } : undefined}
+      >
         {ready ? <SeasonControl /> : null}
         {ready ? <SimBar /> : null}
       </View>
@@ -825,12 +845,12 @@ export default function App() {
           <CenteredState
             actionLabel="Back to practice"
             brand
-            copy="The live market (real NBA games and a saved account) isn't set up on this device yet. Practice works anywhere: it plays a generated season in this browser."
+            copy="The live market (real NBA games and a saved account) isn't open on this site yet. Practice is ready anytime: it plays a generated season in this browser."
             details={`For developers: ${configResult.error} Set the public API URL, API prefix, and Supabase auth configuration before starting Expo.`}
             onAction={() => {
               window.location.search = '?mock';
             }}
-            heading="The live market isn't available here yet"
+            heading="The live market isn't open yet"
             title="App configuration missing"
           />
         )}
