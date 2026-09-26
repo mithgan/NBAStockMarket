@@ -9,7 +9,7 @@ import { useDesignVariant } from '../theme/ThemeProvider';
 import { APPEARANCE_CHOICES, VARIANTS } from '../theme/variants';
 import { rowMarker } from '../ui/domMarkers';
 import { headingLevel } from '../ui/kit';
-import { openRules } from '../state/uiActions';
+import { cancelSettingsReturn, openRules, returnToSettingsAfterRules } from '../state/uiActions';
 import { useSheetHistory } from '../web/appHistory';
 import { colors, fonts, numeric, radius, space, type, weight } from '../theme';
 
@@ -190,7 +190,10 @@ export function SettingsSheet({
               onPress={() => {
                 onClose();
                 // Let this sheet close first; two sheets never stack.
-                setTimeout(() => openRules(), 50);
+                returnToSettingsAfterRules();
+                setTimeout(() => {
+                  if (!openRules()) cancelSettingsReturn();
+                }, 50);
               }}
               style={({ pressed }) => [styles.choice, pressed && styles.pressed]}
             >

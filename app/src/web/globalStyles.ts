@@ -180,6 +180,20 @@ input:focus-visible,
   outline-offset: -3px !important;
 }
 
+/* Windows High Contrast (forced colours) strips tints and coloured text,
+   which is how the current tab, side, sort and theme were marked; give them
+   a system-coloured edge that forced colours keep. */
+@media (forced-colors: active) {
+  [role="tab"][aria-selected="true"] {
+    border-bottom: 3px solid Highlight !important;
+  }
+  [role="radio"][aria-checked="true"],
+  [role="switch"][aria-checked="true"] {
+    outline: 2px solid Highlight !important;
+    outline-offset: -2px !important;
+  }
+}
+
 /* The screen container is a skip-link target, not a control: no ring. */
 #app-screen:focus { outline: none; }
 

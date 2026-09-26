@@ -21,7 +21,7 @@ import { DesignPreviewScreen } from './src/screens/DesignPreviewScreen';
 import { PerGameRosterScreen as PortfolioScreen } from './src/screens/PerGameRosterScreen';
 import { humanDateWithYear, spoken } from './src/copy/terms';
 import { Button, visuallyHidden } from './src/ui/kit';
-import { registerSettingsOpener, registerTabOpener } from './src/state/uiActions';
+import { registerSettingsOpener, registerTabOpener, settingsReturnStep } from './src/state/uiActions';
 import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
 import { consumePracticeRestarted, setPracticeProgress } from './src/web/practiceSession';
 import {
@@ -127,15 +127,21 @@ function CenteredState({
   // reduced-motion setting has to silence.
   const reducedMotion = useReducedMotion();
   const [showDetails, setShowDetails] = useState(false);
+  // A page a player lands on starts with its way forward in focus.
+  const actionRef = useRef<View | null>(null);
+  useEffect(() => {
+    if (!brand) return;
+    (actionRef.current as unknown as { focus?: () => void } | null)?.focus?.();
+  }, [brand]);
   useEffect(() => {
     if (typeof document !== 'undefined') document.title = heading ?? title;
   }, [heading, title]);
   return (
-    <View accessibilityRole="alert" style={styles.centeredState}>
+    <View role={brand ? 'main' : undefined} accessibilityRole={brand ? undefined : 'alert'} style={styles.centeredState}>
       {brand ? (
         <View style={styles.stateBrand}>
           <View style={styles.mark}>
-            <Text maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text>
+            <Text accessibilityElementsHidden aria-hidden importantForAccessibility="no" maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text>
           </View>
           <Text maxFontSizeMultiplier={1.3} style={styles.brand}>databallr</Text>
           <View style={styles.brandDivider} />
@@ -152,7 +158,7 @@ function CenteredState({
       {actionLabel && onAction ? (
         // The app's own button, so this screen looks like the rest of it.
         <View style={styles.stateAction}>
-          <Button disabled={actionDisabled} label={actionLabel} onPress={onAction} variant="primary" />
+          <Button ref={actionRef} disabled={actionDisabled} label={actionLabel} onPress={onAction} variant="primary" />
         </View>
       ) : null}
       {details ? (
@@ -333,6 +339,12 @@ const BRAND_PRODUCT_MIN_WIDTH = 330;
 
 function AppBody() {
   const [activeTab, setActiveTab] = useState<Tab>('portfolio');
+  // The browser tab names the screen, so switching windows says where you are.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const label = tabs.find((entry) => entry.key === activeTab)?.label;
+    document.title = label ? `${label} · NBA Stock Market` : 'NBA Stock Market';
+  }, [activeTab]);
   const [marketSide, setMarketSide] = useState<PerGamePositionSide>('long');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const insets = useSafeAreaInsets();
@@ -383,6 +395,10 @@ function AppBody() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
   useEffect(() => registerSettingsOpener(() => setSettingsOpen(true)), []);
+  // Rules opened from Settings hands back to Settings when it closes.
+  useEffect(() => subscribeSheets(() => {
+    if (settingsReturnStep(sheetIsOpen())) setTimeout(() => setSettingsOpen(true), 80);
+  }), []);
   // After Restart, say that a fresh season has begun and put focus on the
   // screen, so nobody is left wondering what just happened.
   useEffect(() => {
@@ -559,7 +575,7 @@ function AppBody() {
       {short ? null : (
       <View role="banner" style={[styles.header, { paddingTop: insets.top + 4 }]}>
         <View style={styles.mark}>
-          <Text maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text>
+          <Text accessibilityElementsHidden aria-hidden importantForAccessibility="no" maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text>
         </View>
         <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.brand}>databallr</Text>
         {/* On a very narrow screen the wordmark keeps the room; the product

@@ -77,3 +77,29 @@ export function takeRosterPick(): string | null {
   rosterPick = null;
   return reason;
 }
+
+/**
+ * Rules opened from Settings: when Rules closes, Settings comes back (Back
+ * and Done return to where the player was, walk 2 T3-28/T4-20). 'asked' until
+ * Rules has opened, then 'open' until it closes.
+ */
+let settingsReturn: 'none' | 'asked' | 'open' = 'none';
+
+export function returnToSettingsAfterRules(): void {
+  settingsReturn = 'asked';
+}
+
+/** Rules could not open: nothing to hand back from. */
+export function cancelSettingsReturn(): void {
+  settingsReturn = 'none';
+}
+
+/** Called by the frame as sheets open and close; true when Settings should come back. */
+export function settingsReturnStep(sheetsOpen: boolean): boolean {
+  if (settingsReturn === 'asked' && sheetsOpen) settingsReturn = 'open';
+  else if (settingsReturn === 'open' && !sheetsOpen) {
+    settingsReturn = 'none';
+    return true;
+  }
+  return false;
+}
