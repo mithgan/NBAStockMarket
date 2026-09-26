@@ -418,8 +418,10 @@ function LastNightMoney({ tight, value }: { tight: boolean; value: number }) {
 }
 
 /**
- * The season's progress, right after the day count that labels it: a short
- * bar, gold as far as the season has gone.
+ * The season's progress, right after the day count that labels it: an
+ * outlined track, gold as far as the season has gone. Long enough and edged
+ * so it reads as a progress bar, not as a stray dash beside the words (walk 2
+ * T1-03); empty on the opening eve.
  */
 function ProgressMeter({ progress }: { progress: PracticeProgress }) {
   return (
@@ -431,7 +433,7 @@ function ProgressMeter({ progress }: { progress: PracticeProgress }) {
       aria-valuenow={progress.day}
       style={styles.meter}
     >
-      <View style={[styles.meterFill, { width: `${Math.max(progress.fraction * 100, 3)}%` }]} />
+      <View style={[styles.meterFill, { width: progress.day === 0 ? 0 : `${Math.max(progress.fraction * 100, 4)}%` }]} />
     </View>
   );
 }
@@ -558,9 +560,11 @@ const styles = StyleSheet.create({
     columnGap: 6,
   },
   meter: {
-    width: 24,
-    height: 4,
-    borderRadius: 2,
+    width: 44,
+    height: 6,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
     backgroundColor: colors.surfaceRaised,
     overflow: 'hidden',
   },
