@@ -6,6 +6,10 @@ import { formatMoney } from '../format';
 export const NET_POINTS_EXPLAINER =
   'Net points boil his box score down to one number: points, rebounds, assists, steals and blocks add to it; turnovers, missed shots and minutes played take away, so a player has to produce for the minutes he gets.';
 
+/** What you are playing for, before how it works (walk 3 T1-04). */
+export const GOAL_EXPLAINER =
+  'Finish the season with the highest score on the Leaders board. Your score comes from the NBA players you add to your roster.';
+
 /** Where a dividend comes from, for each dividend basis. */
 const DIVIDEND_RAW = "A player's dividend comes from his net points each game.";
 const DIVIDEND_PROJECTION = "A player's dividend comes from how far his net points beat his pregame projection.";
@@ -45,13 +49,19 @@ export function perGameRulesPresentation(rules: PerGameRuleset) {
     ],
     // The loop first (what you do and how you profit), one worked night,
     // then where dividends come from, then the rest.
-    explanation: `${ROSTER_EXPLAINER} ${workedExample(rules.dividendDollarsPerNetPoint, raw)} ${raw ? DIVIDEND_RAW : DIVIDEND_PROJECTION} ${NET_POINTS_EXPLAINER} ${SHORT_EXPLAINER} Your score adds up those games, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${NEGATIVE_DIVIDEND_EXPLAINER} ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
+    explanation: `${GOAL_EXPLAINER} ${ROSTER_EXPLAINER} ${workedExample(rules.dividendDollarsPerNetPoint, raw)} ${raw ? DIVIDEND_RAW : DIVIDEND_PROJECTION} ${NET_POINTS_EXPLAINER} ${SHORT_EXPLAINER} Your score adds up those games, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${NEGATIVE_DIVIDEND_EXPLAINER} ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
     /** Plain definitions of the words the screens use. */
     glossary: [
       { term: 'Price', meaning: 'What one game of a player costs. The price you add him at stays locked while you hold him.' },
       { term: 'Dividend', meaning: 'What he pays out for one game: his net points times the dividend rate. It can be below zero.' },
       { term: 'Profit', meaning: 'Dividend minus price for a roster spot; price minus dividend for a short.' },
-      { term: 'Short', meaning: 'A bet that he comes in under his price. It lasts a set number of days.' },
+      {
+        term: 'Short',
+        meaning: rules.shortTermDays === null
+          ? 'A bet that he comes in under his price. It lasts until you close it.'
+          : `A bet that he comes in under his price. It lasts ${rules.shortTermDays} ${rules.shortTermDays === 1 ? 'day' : 'days'}, then ends by itself.`,
+      },
+      { term: 'Tier', meaning: 'Star, starter or role: how good the market thinks he is. Pricier tiers are not always better value.' },
       { term: 'Dividend last season', meaning: 'What he paid out a game last season: the market\'s best guide to what he is worth.' },
       { term: 'Value', meaning: "Last season's dividend minus his price today. Green means he paid out more than he costs now." },
       { term: 'Net points', meaning: 'His box score in one number. Scoring and hustle add; turnovers, misses and minutes take away.' },

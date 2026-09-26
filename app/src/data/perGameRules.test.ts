@@ -14,7 +14,9 @@ test('rules explain the actual basis, fees, expiry and zero starting score', () 
   assert.equal(facts['Starting score'], '$0');
   assert.equal(facts['Dividend rate'], '$12,500 for each net point');
   // The loop and one worked night come first, with the real rate.
-  assert.match(view.explanation, /^Each game he plays, you pay his price and collect his dividend\./);
+  // The goal first, then the loop and one worked night, with the real rate.
+  assert.match(view.explanation, /^Finish the season with the highest score on the Leaders board\./);
+  assert.match(view.explanation, /Each game he plays, you pay his price and collect his dividend\./);
   assert.match(view.explanation, /For example, a game of 3\.5 net points pays a \$43,750 dividend; at a \$37,000 price, you made \$6,750\./);
   assert.equal(facts['Open fee'], '$750');
   assert.equal(facts['Drop fee'], '$750');
@@ -46,7 +48,7 @@ test('the rules read as short paragraphs without losing a word', () => {
   assert.match(paragraphs[paragraphs.length - 1], /moves pause/);
   assert.match(explanation, /minus a \$\d[\d,]* fee each time you add or drop a player, or open or close a short/);
   const glossary = perGameRulesPresentation(rules).glossary;
-  assert.equal(glossary.length, 8);
+  assert.equal(glossary.length, 9);
   // The market's two value words are defined where the rules define the rest.
   assert.ok(glossary.some((entry) => entry.term === 'Value'));
   assert.ok(glossary.some((entry) => entry.term === 'Dividend last season'));
