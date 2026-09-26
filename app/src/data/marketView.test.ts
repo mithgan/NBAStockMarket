@@ -299,6 +299,9 @@ test('below 380px the kicker drops the tier so the given name and price share a 
   assert.equal(rowKicker('Nikola', 'star', 1440), 'Nikola\u00A0· Star');
   // The tier in words, never a bare "ROLE" beside a name (walk 4 T1-21).
   assert.equal(rowKicker('Kon', 'role', 390), 'Kon\u00A0· Role\u00A0player');
+  // A long given name with a long tier would push the price down at 390.
+  assert.equal(rowKicker('Donovan', 'role', 390), 'Donovan');
+  assert.equal(rowKicker('Donovan', 'role', 412), 'Donovan\u00A0· Role\u00A0player');
   assert.equal(tierLabel('role'), 'Role\u00A0player');
   assert.equal(tierLabel('starter'), 'Starter');
   assert.equal(tierLabel(null), '');
@@ -587,4 +590,18 @@ test('the slot line never breaks mid-phrase (walk 4 T1-11)', () => {
   assert.equal(feeLine('long', 250), '$250 to\u00A0add\u00A0or\u00A0drop');
   assert.equal(feeLine('short', 250), '$250 to\u00A0short\u00A0or\u00A0close');
   assert.equal(feeLine('long', 0), '');
+});
+
+test('a move never reorders the list under the finger', async () => {
+  const { keepListOrder } = await import('./marketView');
+  const row = (id: string) => ({ player: { playerId: id } });
+  // After an Add, Barnes's value dropped below Booker's: the sort swaps them.
+  const resorted = [row('doncic'), row('booker'), row('barnes'), row('duren')];
+  assert.deepEqual(
+    keepListOrder(resorted, ['doncic', 'barnes', 'booker', 'duren']).map((r) => r.player.playerId),
+    ['doncic', 'barnes', 'booker', 'duren'],
+  );
+  // A player new to the view goes at the end; no earlier order sorts afresh.
+  assert.deepEqual(keepListOrder([row('a'), row('new'), row('b')], ['b', 'a']).map((r) => r.player.playerId), ['b', 'a', 'new']);
+  assert.deepEqual(keepListOrder(resorted, null).map((r) => r.player.playerId), ['doncic', 'booker', 'barnes', 'duren']);
 });

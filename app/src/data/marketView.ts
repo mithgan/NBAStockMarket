@@ -568,7 +568,19 @@ export const KICKER_TIER_MIN_WIDTH = 380;
  * with "·" (walk 3 T2-12).
  */
 export function rowKicker(given: string, tier: string | null | undefined, width: number): string {
-  return [given, width >= KICKER_TIER_MIN_WIDTH ? tierLabel(tier) : null].filter(Boolean).join('\u00A0· ');
+  const label = width >= KICKER_TIER_MIN_WIDTH ? tierLabel(tier) : '';
+  if (!label) return given;
+  // The tier only where the whole kicker fits beside the price: "DONOVAN ·
+  // ROLE PLAYER" at 390 pushed the price onto its own line, so the row was
+  // taller than it is once held (first name only) and the rows below moved
+  // when he was added.
+  const full = `${given}\u00A0· ${label}`;
+  return full.length <= kickerRoom(width) ? full : given;
+}
+
+/** About how many kicker characters fit beside the price on a row this wide. */
+function kickerRoom(width: number): number {
+  return Math.floor((width - 245) / 7);
 }
 
 /**
@@ -858,4 +870,22 @@ export function sameMarketRowProps(prev: Readonly<Record<string, unknown>>, next
     if (FLAT_ROW_PROPS.has(key)) return sameFlat(prev[key] as object | undefined, next[key] as object | undefined);
     return Object.is(prev[key], next[key]);
   });
+}
+
+/**
+ * The list in the order it was shown (`previousIds`), with rows new to it at
+ * the end in their sorted order; the sorted list itself when there is no
+ * earlier order for this view. Keeps rows from trading places under the
+ * finger when a move changes a player's price.
+ */
+export function keepListOrder<T extends { player: { playerId: string } }>(
+  sorted: readonly T[],
+  previousIds: readonly string[] | null,
+): T[] {
+  if (!previousIds) return [...sorted];
+  const place = new Map(previousIds.map((id, index) => [id, index]));
+  const known = sorted.filter((row) => place.has(row.player.playerId));
+  const added = sorted.filter((row) => !place.has(row.player.playerId));
+  known.sort((a, b) => (place.get(a.player.playerId) as number) - (place.get(b.player.playerId) as number));
+  return [...known, ...added];
 }

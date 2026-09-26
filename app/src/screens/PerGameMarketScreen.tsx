@@ -82,6 +82,7 @@ import {
   flippedSortNote,
   sortedLine,
   sortMarketRows,
+  keepListOrder,
   valueByPosition,
   valueSignal,
   type MarketColumnSet,
@@ -332,18 +333,26 @@ function MarketRow({
       </Text>
     </View>
   );
-  const unheldLine = (
+  const unheldLineFor = (shown: typeof signal) => (
     <View style={styles.detailLine}>
-      {signal.lead ? <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>{signal.lead}</Text> : null}
-      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[signal.tone] }]}>
-        {priorSeasonValuePerGame === null ? 'No last season' : signal.text}
+      {shown.lead ? <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>{shown.lead}</Text> : null}
+      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[shown.tone] }]}>
+        {priorSeasonValuePerGame === null ? 'No last season' : shown.text}
       </Text>
     </View>
   );
+  const unheldLine = unheldLineFor(signal);
+  // The held row's invisible copy of its unheld line uses the price it was
+  // added at, i.e. the words the row showed a moment before the Add, so the
+  // copy wraps exactly as they did (the Add nudges today's price, and a line
+  // that then fit on one line made the row shrink).
+  const unheldGhost = position
+    ? unheldLineFor(valueSignal({ ...player, currentGameCost: position.lockedGameCost }, side))
+    : unheldLine;
   // What this row says now, over invisible copies of what it would say after
   // an Add (or a Drop), so its height never changes with the tap.
   const valueLine = position && held ? (
-    <SameHeight ghosts={[unheldLine]}>{heldLine(held.text, held.tone)}</SameHeight>
+    <SameHeight ghosts={[unheldGhost]}>{heldLine(held.text, held.tone)}</SameHeight>
   ) : blocked ? (
     <SameHeight ghosts={[unheldLine]}>
       <View style={styles.detailLine}>
@@ -358,19 +367,36 @@ function MarketRow({
   // today's market price, which moved when you added him (walk 4 T1-19).
   // Today's price is in his profile; a second line here would make the row
   // taller than its unheld self and move the rows below.
-  const lockedPrice = position ? perGameShort(position.lockedGameCost).split('/')[0] : null;
-  const priceBox = position && lockedPrice ? (
+  const heldPriceBox = (amount: string) => (
     <View style={styles.priceBox}>
       <Text maxFontSizeMultiplier={1.6} style={styles.priceUnit}>{'yours '}</Text>
-      <Text maxFontSizeMultiplier={1.6} style={styles.price}>{lockedPrice}</Text>
+      <Text maxFontSizeMultiplier={1.6} style={styles.price}>{amount}</Text>
       <Text maxFontSizeMultiplier={1.6} style={styles.priceUnit}>{`/${priceUnit}`}</Text>
     </View>
-  ) : (
+  );
+  const marketPriceBox = (
     <View style={styles.priceBox}>
       <Text maxFontSizeMultiplier={1.6} style={styles.price}>{priceAmount}</Text>
       <Text maxFontSizeMultiplier={1.6} style={styles.priceUnit}>{`/${priceUnit}`}</Text>
     </View>
   );
+  const priceBox = position ? heldPriceBox(perGameShort(position.lockedGameCost).split('/')[0]) : marketPriceBox;
+  // The phone row's top line in both states: held (first name, "yours $X")
+  // and not held (first name and tier, today's price). Each is drawn over an
+  // invisible copy of the other, so adding or dropping him never changes the
+  // row's height, whichever one wraps (a tier and price that did not fit
+  // beside each other moved every row below).
+  const kickerLine = (kickerText: string, box: ReactNode) => (
+    <View style={styles.kickerPriceLine}>
+      <Text maxFontSizeMultiplier={1.6} style={[styles.kicker, styles.kickerShrink]}>{kickerText}</Text>
+      <View style={styles.priceEnd}>{box}</View>
+    </View>
+  );
+  const heldTop = kickerLine(whole(rowKicker(given, null, width)), heldPriceBox(position ? perGameShort(position.lockedGameCost).split('/')[0] : priceAmount));
+  const unheldTop = kickerLine(kicker, marketPriceBox);
+  const topLine = position
+    ? <SameHeight ghosts={[unheldTop]}>{heldTop}</SameHeight>
+    : <SameHeight ghosts={[heldTop]}>{unheldTop}</SameHeight>;
 
   const label = rowProfileLabel({
     name: player.name,
@@ -674,10 +700,10 @@ function MarketRow({
             // line; if a very long given name leaves no room on a very narrow
             // phone, the price wraps under it rather than overlapping it.
             <View style={[styles.topBand, { paddingRight: action ? actionWidth + space.sm : 0 }]}>
-              <View style={styles.kickerPriceLine}>
-                <Text maxFontSizeMultiplier={1.6} style={[styles.kicker, styles.kickerShrink]}>{kicker}</Text>
-                <View style={styles.priceEnd}>{priceBox}</View>
-              </View>
+              {/* A held row leads with "yours $176K/game" and keeps only the
+                  first name (the tier is in the unheld row, the profile and
+                  the spoken name). */}
+              {topLine}
               <Text maxFontSizeMultiplier={1.6} style={styles.surname}>{nameLine}</Text>
             </View>
           )}
@@ -792,15 +818,24 @@ export function PerGameMarketScreen({
     () => (bootstrap ? buildPerGameMarketRows(bootstrap, side) : []),
     [bootstrap, side],
   );
-  const rows = useMemo(
-    () => actionableFirst(sortMarketRows(
+  // The list keeps its order while the player works through it: an Add
+  // nudges that player's price (and so his value), and a re-sort swapped
+  // rows under the finger (Barnes and Booker traded places after an Add).
+  // A new sort, side, search, filter or night sorts afresh; so does coming
+  // back to the Market.
+  const orderKey = `${sort}|${reversed}|${side}|${query}|${watchedOnly}|${bootstrap?.game.lastSettledDate ?? ''}`;
+  const orderRef = useRef<{ key: string; ids: readonly string[] } | null>(null);
+  const rows = useMemo(() => {
+    const fresh = actionableFirst(sortMarketRows(
       filterMarketRows(allRows, { query, watchedOnly, watched: kept.length > 0 ? [...watchlist.watched, ...kept] : watchlist.watched }),
       sort,
       side,
       reversed,
-    )),
-    [allRows, query, side, sort, reversed, watchedOnly, watchlist.watched, kept],
-  );
+    ));
+    const ordered = keepListOrder(fresh, orderRef.current?.key === orderKey ? orderRef.current.ids : null);
+    orderRef.current = { key: orderKey, ids: ordered.map((row) => row.player.playerId) };
+    return ordered;
+  }, [allRows, query, side, sort, reversed, watchedOnly, watchlist.watched, kept, orderKey]);
   const positionValues = useMemo(
     () => valueByPosition(bootstrap?.settledResults ?? []),
     [bootstrap?.settledResults],
