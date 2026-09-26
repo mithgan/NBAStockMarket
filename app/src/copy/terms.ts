@@ -330,5 +330,30 @@ export const LOCK_EXPLAINER =
 
 /** Text for screen readers: separators a speech engine reads aloud become pauses. */
 export function spoken(text: string): string {
-  return text.replace(/\s·\s/g, ', ').replace(/\s+·/g, ',');
+  return spokenRanks(text.replace(/\s·\s/g, ', ').replace(/\s+·/g, ','));
+}
+
+const ORDINAL_WORDS = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];
+
+/**
+ * A place in words for screen readers, which read "#1" as "number sign 1"
+ * or "hash 1": 1 → "first" (in words to tenth), then "11th", "22nd", "103rd".
+ */
+export function ordinalWords(rank: number): string {
+  const n = Math.abs(Math.round(rank));
+  if (n >= 1 && n <= ORDINAL_WORDS.length) return ORDINAL_WORDS[n - 1];
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : n % 10 === 1 ? 'st' : n % 10 === 2 ? 'nd' : n % 10 === 3 ? 'rd' : 'th';
+  return `${n}${suffix}`;
+}
+
+/**
+ * Text the eye reads with "#" places, said in words: "#1 of 5" → "first of
+ * 5", "$12K behind #2" → "$12K behind second place". The places may be held
+ * together by non-breaking spaces ("#2\u00a0of\u00a05"), which it reads too.
+ */
+export function spokenRanks(text: string): string {
+  return text
+    .replace(/#(\d+)[\s\u00a0]+of[\s\u00a0]+(\d+)/g, (_match, rank: string, of: string) => `${ordinalWords(Number(rank))} of ${of}`)
+    .replace(/#(\d+)/g, (_match, rank: string) => `${ordinalWords(Number(rank))} place`);
 }

@@ -15,7 +15,9 @@
  * next score down takes the place after everyone above it ("1, 2, 2, 4").
  */
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { money, signedMoney } from '../copy/terms';
+import { money, ordinalWords, signedMoney, spokenRanks } from '../copy/terms';
+
+export { ordinalWords, spokenRanks };
 
 export interface BoardGap {
   rank: number;
@@ -316,32 +318,9 @@ export function pastSeasonLines(seasons: readonly PastSeason[]): PastSeasonLine[
 // ---------------------------------------------------------------------------
 // Places read aloud (walk 6 T3-09, T3-07)
 
-const ORDINAL_WORDS = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];
-
-/**
- * A place in words for screen readers, which read "#1" as "number sign 1"
- * or "hash 1": 1 → "first" (in words to tenth), then "11th", "22nd", "103rd".
- */
-export function ordinalWords(rank: number): string {
-  const n = Math.abs(Math.round(rank));
-  if (n >= 1 && n <= ORDINAL_WORDS.length) return ORDINAL_WORDS[n - 1];
-  const tens = n % 100;
-  const suffix = tens >= 11 && tens <= 13 ? 'th' : n % 10 === 1 ? 'st' : n % 10 === 2 ? 'nd' : n % 10 === 3 ? 'rd' : 'th';
-  return `${n}${suffix}`;
-}
-
 /** Your place, said: "First of 5", "Tied for second of 5". */
 export function spokenPlace(rank: number, of: number, tied = false): string {
   const place = `${ordinalWords(rank)} of ${of}`;
   return tied ? `Tied for ${place}` : `${place.charAt(0).toUpperCase()}${place.slice(1)}`;
 }
 
-/**
- * Text the eye reads with "#" places, said in words: "#1 of 5" → "first of
- * 5", "$12K behind #2" → "$12K behind second place".
- */
-export function spokenRanks(text: string): string {
-  return text
-    .replace(/#(\d+) of (\d+)/g, (_match, rank: string, of: string) => `${ordinalWords(Number(rank))} of ${of}`)
-    .replace(/#(\d+)/g, (_match, rank: string) => `${ordinalWords(Number(rank))} place`);
-}

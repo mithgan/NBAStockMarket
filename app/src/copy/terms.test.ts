@@ -8,6 +8,7 @@ import {
   CONFIRM_LABEL,
   closeActionName,
   confirmCloseButton,
+  ordinalWords,
   spoken,
   closeVerb,
   confirmCloseLine,
@@ -151,4 +152,11 @@ test('several nights at once name their days (walk 3 T1-20)', async () => {
   assert.equal(humanNightsSince('2025-10-27', '2025-11-03'), 'Oct 28–Nov 3');
   assert.equal(humanNightsSince('2025-10-20', '2025-10-21'), 'Oct 21');
   assert.equal(humanNightsSince(null, '2025-10-21'), 'Oct 21');
+});
+
+test('notices read places in words, even when "#2 of 5" is held together (walk 6 T3-07)', () => {
+  assert.equal(spoken('Season complete. Final score +$4.13M, #2\u00a0of\u00a05.'), 'Season complete. Final score +$4.13M, second of 5.');
+  assert.equal(spoken('New practice season. Your last one finished +$5.5M, #1 of 5.'), 'New practice season. Your last one finished +$5.5M, first of 5.');
+  assert.equal(spoken('$12K behind #2'), '$12K behind second place');
+  assert.equal(ordinalWords(22), '22nd');
 });
