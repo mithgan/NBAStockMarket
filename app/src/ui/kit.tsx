@@ -413,6 +413,12 @@ export function ConfirmStrip({
   // reads the fee, what stays and what it would cost, not just "Keep,
   // button" (walk 5 T3-02).
   const questionId = `question-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  // The group is named by the question's first sentence ("Drop Luka Doncic
+  // for a $250 fee?"), the answers described by all of it (walk 6 T3-13).
+  const titleId = `${questionId}-title`;
+  const firstBreak = message.search(/[?.!](\s|$)/);
+  const title = firstBreak >= 0 ? message.slice(0, firstBreak + 1) : message;
+  const rest = firstBreak >= 0 ? message.slice(firstBreak + 1) : '';
   const stripRef = useRef<View>(null);
   const keepRef = useRef<View>(null);
   useEffect(() => {
@@ -464,8 +470,16 @@ export function ConfirmStrip({
   }, [onCancel]);
   return (
     // data-question marks an open question for browser checks.
-    <View ref={stripRef} role="group" {...({ dataSet: { question: 'confirm' } } as object)} style={[styles.confirmStrip, style]}>
-      <Text nativeID={questionId} style={styles.confirmText}>{message}</Text>
+    <View
+      ref={stripRef}
+      role="group"
+      {...({ dataSet: { question: 'confirm' }, 'aria-labelledby': titleId } as object)}
+      style={[styles.confirmStrip, style]}
+    >
+      <Text nativeID={questionId} style={styles.confirmText}>
+        <Text nativeID={titleId}>{title}</Text>
+        {rest}
+      </Text>
       <View style={styles.confirmButtons}>
         <Button
           accessibilityLabel={confirmAccessibilityLabel}

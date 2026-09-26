@@ -202,6 +202,15 @@ input:focus-visible,
   outline-offset: -3px !important;
 }
 
+/* Inside a sheet (Rules, Settings, a player) the scroll area clips a ring
+   drawn outside a full-width item, so only its top line showed (walk 6
+   T3-14): draw every ring there inside the item. */
+[aria-modal="true"] [tabindex]:focus-visible,
+[aria-modal="true"] [role="button"]:focus-visible,
+[aria-modal="true"] [role="link"]:focus-visible {
+  outline-offset: -3px !important;
+}
+
 /* The screen container is a skip-link target, not a control: no ring. */
 #app-screen:focus { outline: none; }
 
