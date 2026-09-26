@@ -6,6 +6,7 @@ import type { PerGameRuleset } from '../api/contracts';
 import { chromeFolded, sheetFloats, sheetNarrow } from '../data/chromeView';
 import { perGameRulesPresentation, rulesSummary } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { tapsSettling } from '../web/tapSettle';
 import { useDesignVariant } from '../theme/ThemeProvider';
 import { APPEARANCE_CHOICES, VARIANTS } from '../theme/variants';
 import { rowMarker } from '../ui/domMarkers';
@@ -50,7 +51,11 @@ export function SettingsButton({ onPress }: { onPress: () => void }) {
       ref={ref}
       accessibilityLabel="Settings"
       accessibilityRole="button"
-      onPress={onPress}
+      onPress={() => {
+        // A double tap on a sheet's Done must not reopen Settings (walk 6 T4-12).
+        if (tapsSettling(true)) return;
+        onPress();
+      }}
       style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
     >
       <SettingsIcon color={colors.muted} />

@@ -11,6 +11,7 @@ import { forwardRef, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, type View } from 'react-native';
 
 import { colors, control, fonts, radius, space, type, weight } from '../../theme';
+import { tapsSettling } from '../../web/tapSettle';
 
 export type ChromeButtonPlacement = 'stacked' | 'inline' | 'icon';
 
@@ -55,6 +56,9 @@ export const ChromeButton = forwardRef<View, ChromeButtonProps>(function ChromeB
       aria-expanded={expanded}
       disabled={disabled}
       onPress={() => {
+        // The second tap of a double tap on a sheet's Done, landing where
+        // this button sits once the sheet folds (walk 6 T4-12).
+        if (tapsSettling(true)) return;
         if (!disabled) onPress();
       }}
       style={({ pressed }) => [

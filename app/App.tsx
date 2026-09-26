@@ -26,7 +26,7 @@ import { humanDateWithYear, spoken } from './src/copy/terms';
 import { Button, visuallyHidden } from './src/ui/kit';
 import { registerSettingsOpener, registerTabOpener, settingsReturnStep } from './src/state/uiActions';
 import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
-import { settleTaps } from './src/web/tapSettle';
+import { settleTaps, tapsSettling } from './src/web/tapSettle';
 import { consumeArrivedByKeyboard, consumeLastSeasonResult, consumePracticeRestarted, noteFinishedSeason, setPracticeProgress } from './src/web/practiceSession';
 import { practiceProgress } from './src/data/chromeView';
 import { rankLine } from './src/data/rosterView';
@@ -257,6 +257,23 @@ function NoticeToast({
   }, [held, keep, message, onDismiss, seq, tone]);
   const noticeRef = useRef<View | null>(null);
   const { height, width } = useWindowDimensions();
+  // Where the keyboard was when the notice came: closing it with × goes back
+  // there instead of dropping focus on the page (walk 6 T2-15).
+  const returnFocusTo = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const active = document.activeElement as HTMLElement | null;
+    if (active && active !== document.body) returnFocusTo.current = active;
+  }, [message, seq]);
+  const dismissByButton = () => {
+    const back = returnFocusTo.current;
+    onDismiss();
+    if (typeof document === 'undefined') return;
+    setTimeout(() => {
+      const target = back && back.isConnected ? back : document.getElementById('app-screen');
+      (target as HTMLElement | null)?.focus?.({ preventScroll: true });
+    }, 0);
+  };
   // The second tap of a double tap that produced the notice never dismisses
   // it before it could be read (walk 3 T4-02).
   const shownAt = useMemo(() => Date.now(), [message, seq]);
@@ -341,7 +358,7 @@ function NoticeToast({
       <Pressable
         accessibilityLabel={`Dismiss: ${message}`}
         accessibilityRole="button"
-        onPress={onDismiss}
+        onPress={dismissByButton}
         style={({ pressed }) => [
           styles.noticeDismiss,
           placement !== 'dock' && styles.noticeDismissBar,
@@ -660,7 +677,12 @@ function AppBody() {
               accessibilityState={{ selected: active }}
               aria-controls="app-screen"
               aria-selected={active}
-              onPress={() => changeTab(tab.key)}
+              // The second tap of a double tap on the Rules sheet's "Got it"
+              // lands on the tab bar once the sheet folds (walk 6 T4-12).
+              onPress={() => {
+                if (tapsSettling(true)) return;
+                changeTab(tab.key);
+              }}
               {...({
                 tabIndex: active ? 0 : -1,
                 onKeyDown: (event: { key: string; preventDefault: () => void }) => {
