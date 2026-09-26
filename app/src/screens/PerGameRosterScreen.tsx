@@ -665,7 +665,7 @@ export function PerGameRosterScreen({
               />
             ) : (
               <Button
-                accessibilityLabel="Open the player market"
+                accessibilityLabel="Open market: browse players to add"
                 label="Open market"
                 onPress={() => onOpenMarket('long')}
                 variant="primary"

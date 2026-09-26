@@ -67,7 +67,8 @@ test('roster score starts from cumulative P&L and every position shows locked ec
   assert.match(roster, /cumulativeGameCost/);
   assert.match(roster, /cumulativeDividend/);
   assert.match(roster, /cumulativePnl/);
-  assert.match(roster, /accessibilityLabel="Open the player market"/);
+  // The name starts with the visible words (WCAG 2.5.3, walk 3 T3-01).
+  assert.match(roster, /accessibilityLabel="Open market: browse players to add"/);
   assert.match(roster, /open market/i);
 });
 

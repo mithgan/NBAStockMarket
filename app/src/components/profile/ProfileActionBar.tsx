@@ -32,7 +32,7 @@ import { colors, control, fonts, space, type, weight } from '../../theme';
 import { Button, ConfirmStrip, useCooldown } from '../../ui/kit';
 import { sheetIsOpen } from '../../web/appHistory';
 
-export function ProfileActionBar({ player, position, side, onLeave }: {
+export function ProfileActionBar({ player, position, side: openedSide, onLeave }: {
   player: PerGameMarketPlayer;
   /** The position you hold on him now, on either side. */
   position: PerGamePosition | null;
@@ -42,6 +42,12 @@ export function ProfileActionBar({ player, position, side, onLeave }: {
   onLeave?: () => void;
 }) {
   const { bootstrap, closePosition, notify, openPosition, pendingActions } = usePerGame();
+  // "Short instead" / "Add instead" switch the bar to the other side's terms;
+  // only the main button makes the move (walk 3 T2-06: it used to short at once).
+  const [side, setSide] = useState<PerGamePositionSide>(openedSide);
+  useEffect(() => {
+    setSide(openedSide);
+  }, [openedSide, player.playerId]);
   // A brief tick after a move lands ("Added ✓"), in the button's place.
   const [done, showDone] = useCooldown();
   const [doneWords, setDoneWords] = useState({ tick: '', note: '' });
@@ -201,12 +207,16 @@ export function ProfileActionBar({ player, position, side, onLeave }: {
   const otherBlocked = otherPending || pending || locked;
   const instead = otherRow && !rosterLocked && (otherPending || (otherRow.canSubmit && !otherRow.isFull)) ? (
     <Button
-      accessibilityHint={`${actionName('open', otherSide, player.name, player.currentGameCost)}${fee > 0 ? ` · ${exactMoney(fee)} fee` : ''}`}
+      accessibilityLabel={`${openVerb(otherSide)} instead: show the ${otherSide === 'short' ? 'short' : 'roster'} terms`}
       disabled={otherBlocked}
       focusableWhenDisabled
       label={otherPending ? 'Wait' : `${openVerb(otherSide)} instead`}
       onPress={() => {
-        if (!otherBlocked) open(otherSide);
+        if (otherBlocked) return;
+        // Switch the bar, don't trade: the terms and the main button change,
+        // and focus moves to that button.
+        setSide(otherSide);
+        setTimeout(() => focusView(openRef.current), 0);
       }}
       style={styles.instead}
       variant="quiet"

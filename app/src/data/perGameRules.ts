@@ -63,7 +63,10 @@ export function perGameRulesPresentation(rules: PerGameRuleset) {
       },
       { term: 'Tier', meaning: 'Star, starter or role: how good the market thinks he is. Pricier tiers are not always better value.' },
       { term: 'Dividend last season', meaning: 'What he paid out a game last season: the market\'s best guide to what he is worth.' },
-      { term: 'Value', meaning: "Last season's dividend minus his price today. Green means he paid out more than he costs now." },
+      {
+        term: 'Value',
+        meaning: "Last season's dividend against his price today. On the Roster side it is dividend minus price; on the Short side, price minus dividend. Green is good for the side you are on.",
+      },
       { term: 'Net points', meaning: 'His box score in one number. Scoring and hustle add; turnovers, misses and minutes take away.' },
       { term: 'Roster lock', meaning: "Some nights, moves pause while that night's games are played." },
     ],

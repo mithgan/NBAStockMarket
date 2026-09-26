@@ -196,9 +196,16 @@ if (typeof document !== 'undefined') {
   }, { capture: true, passive: true });
 }
 
-/** A notice right after a tap in the lower part of the screen shows at the top instead. */
+/**
+ * Where a success notice goes. On a phone it always sits at the top of the
+ * content, clear of the list's buttons: at the bottom it covered the next
+ * row's Add, so the next tap only dismissed it and the player was silently
+ * not added (walk 3 T1-07). Wider screens keep it at the bottom unless the
+ * last tap was down there.
+ */
 function noticeAtTop(): boolean {
   if (typeof window === 'undefined') return false;
+  if (window.innerWidth < 720) return true;
   return Date.now() - lastTap.at < 3000 && lastTap.y > window.innerHeight * 0.5;
 }
 
@@ -232,7 +239,7 @@ function NoticeToast({
   }, [message, onDismiss, tone]);
   const noticeRef = useRef<View | null>(null);
   // Chosen once per notice: away from where the player just tapped.
-  const atTop = useMemo(() => noticeAtTop(), [message]);
+  const atTop = useMemo(() => tone === 'success' && noticeAtTop(), [message, tone]);
   // A sheet over the app shows its own result (the profile's tick and note);
   // a success notice would only sit dimmed under its scrim.
   const sheetOpen = useSyncExternalStore(subscribeSheets, sheetIsOpen, () => false);

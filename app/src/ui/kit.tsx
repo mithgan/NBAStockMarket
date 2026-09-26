@@ -829,7 +829,8 @@ const styles = StyleSheet.create({
     // A 3px bar marks the chosen segment in any colour vision and in every
     // theme (High contrast's gold-on-olive tint alone read backwards).
     borderBottomWidth: 3,
-    borderBottomColor: colors.gold,
+    // goldInk: bright gold on dark themes, deep ochre on Light (3:1+ in all).
+    borderBottomColor: colors.goldInk,
   },
   segmentText: {
     color: colors.muted,

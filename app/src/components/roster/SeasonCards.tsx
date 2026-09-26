@@ -54,7 +54,7 @@ export function WelcomeCard({
       <Text style={styles.copy}>{copy}</Text>
       <View style={styles.actions}>
         {hasPlayers ? null : (
-          <Button accessibilityLabel="Open the player market" label="Open market" onPress={onOpenMarket} variant="primary" />
+          <Button accessibilityLabel="Open market: browse players to add" label="Open market" onPress={onOpenMarket} variant="primary" />
         )}
         {onOpenRules ? <Button label="How scoring works" onPress={onOpenRules} /> : null}
       </View>
