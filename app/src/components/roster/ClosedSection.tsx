@@ -57,7 +57,7 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
                 <Text style={styles.name}>{unbrokenName(row.name)}</Text>
                 <Text style={styles.detail}>{bindDates(row.how)} · {keepTogether(gamesCount(row.games))}</Text>
               </View>
-              <View style={{ marginRight: totalInset }}>
+              <View style={[styles.money, { marginRight: totalInset }]}>
                 <FineMoney precision={precision} value={row.total} />
               </View>
             </View>
@@ -124,9 +124,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
   },
+  // Too narrow for the words, the figure and Short again on one line (200%
+  // zoom): the button takes the next line, then the figure goes under the
+  // words, instead of squeezing the words to one letter a line.
   row: {
     minHeight: 48,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: space.md,
     paddingHorizontal: space.lg,
@@ -138,18 +142,27 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
   },
   facts: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 160,
     minWidth: 0,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: space.md,
   },
   rowAction: {
     flexShrink: 0,
+    marginLeft: 'auto',
   },
   copy: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 110,
     minWidth: 0,
+  },
+  money: {
+    marginLeft: 'auto',
   },
   name: {
     color: colors.muted,

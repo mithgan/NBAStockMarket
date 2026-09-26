@@ -366,51 +366,50 @@ function SortHeader({
   const [focused, setFocused] = useState(false);
   const [explainId] = useState(() => `market-column-explain-${(explainIds += 1)}`);
   const ascending = sortAscending(columnKey, reversed);
-  const mark = on ? (
-    <Pressable
-      accessibilityLabel={`${words} order: ${sortDirection(columnKey, reversed)}`}
-      accessibilityRole="button"
-      onPress={onFlip}
-      {...spaceToggles(onFlip)}
-      style={(state) => [styles.markButton, (state as { hovered?: boolean }).hovered === true && styles.hover, state.pressed && styles.pressed]}
-    >
-      <Text style={[styles.mark, styles.markOn]}>{ascending ? '↑' : '↓'}</Text>
-    </Pressable>
-  ) : (
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.markSlot}>
-      <Text style={styles.mark}>↕</Text>
+  // The arrow is part of the header's one target: the column in use flips its
+  // order when pressed, as a table header does; another column is chosen at
+  // its natural order. One target per column is also a full-size one (the
+  // arrow alone was 24px wide, the label 40px).
+  const mark = (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.markSlot} {...({ 'aria-hidden': true } as object)}>
+      <Text style={[styles.mark, on && styles.markOn]}>{on ? (ascending ? '↑' : '↓') : '↕'}</Text>
     </View>
   );
+  const press = on ? onFlip : () => onChoose(columnKey);
   return (
     <View
       role="columnheader"
       {...({ 'aria-sort': on ? (ascending ? 'ascending' : 'descending') : 'none' } as object)}
       style={[styles.headerCell, number ? { width } : styles.columnPlayer]}
     >
-      <View style={[styles.headerInner, number && styles.headerInnerNumber]}>
+      <Pressable
+        accessibilityLabel={on ? `${words}, sorted ${sortDirection(columnKey, reversed)}` : `${words}, sort by ${words.toLowerCase()}`}
+        accessibilityRole="button"
+        onBlur={() => setFocused(false)}
+        // Keyboard focus shows the explanation; a click's focus does not
+        // leave it open over the first row.
+        onFocus={(event) => {
+          const target = event.target as unknown as { matches?: (selector: string) => boolean };
+          setFocused(target.matches?.(':focus-visible') ?? true);
+        }}
+        onHoverIn={() => setHovered(true)}
+        onHoverOut={() => setHovered(false)}
+        onPress={press}
+        style={(state) => [
+          styles.headerInner,
+          styles.sorter,
+          number && styles.headerInnerNumber,
+          (state as { hovered?: boolean }).hovered === true && styles.hover,
+          state.pressed && styles.pressed,
+        ]}
+        {...(explain ? ({ 'aria-describedby': explainId } as object) : {})}
+      >
         {number ? mark : null}
-        <Pressable
-          accessibilityLabel={on ? `${words}, sorted ${sortDirection(columnKey, reversed)}` : `${words}, sort by ${words.toLowerCase()}`}
-          accessibilityRole="button"
-          onBlur={() => setFocused(false)}
-          // Keyboard focus shows the explanation; a click's focus does not
-          // leave it open over the first row.
-          onFocus={(event) => {
-            const target = event.target as unknown as { matches?: (selector: string) => boolean };
-            setFocused(target.matches?.(':focus-visible') ?? true);
-          }}
-          onHoverIn={() => setHovered(true)}
-          onHoverOut={() => setHovered(false)}
-          onPress={() => onChoose(columnKey)}
-          style={(state) => [styles.sorter, number && styles.sorterNumber, state.pressed && styles.pressed]}
-          {...(explain ? ({ 'aria-describedby': explainId } as object) : {})}
-        >
-          <Text maxFontSizeMultiplier={1.4} style={[styles.headerText, number && styles.headerTextNumber, on && styles.headerTextOn]}>
-            {label}
-          </Text>
-        </Pressable>
+        <Text maxFontSizeMultiplier={1.4} style={[styles.headerText, number && styles.headerTextNumber, on && styles.headerTextOn, number && styles.headerTextShrink]}>
+          {label}
+        </Text>
         {number ? null : mark}
-      </View>
+      </Pressable>
       {explain ? (
         <View pointerEvents="none" style={[styles.explain, !(hovered || focused) && styles.explainHidden]}>
           <Text nativeID={explainId} style={styles.explainText}>{explain}</Text>
@@ -635,9 +634,8 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingBottom: 8,
   },
-  sorterNumber: {
+  headerTextShrink: {
     flexShrink: 1,
-    alignItems: 'flex-end',
   },
   markSlot: {
     width: 24,
@@ -645,14 +643,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingBottom: 8,
-  },
-  markButton: {
-    width: 24,
-    minHeight: control.height,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 8,
-    borderRadius: radius.sm,
   },
   mark: {
     color: colors.faint,
