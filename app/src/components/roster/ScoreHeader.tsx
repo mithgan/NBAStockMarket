@@ -46,6 +46,7 @@ export function ScoreHeader({
   precision,
   slots,
   variant,
+  valueLine = null,
 }: {
   title: string;
   score: number;
@@ -60,6 +61,11 @@ export function ScoreHeader({
   precision: PartPrecision;
   slots: string | null;
   variant: 'compact' | 'narrow' | 'panel';
+  /**
+   * Value against results from `pickValue`, in words: what your picks are
+   * worth by last season beside what they have made so far. Null hides it.
+   */
+  valueLine?: string | null;
 }) {
   const { width } = useWindowDimensions();
   // Before the first game only fees can have moved the score.
@@ -120,6 +126,8 @@ export function ScoreHeader({
         </View>
         {facts}
       </View>
+      {/* Why a cold start is not a broken signal, in words (signs, not colour). */}
+      {started && valueLine ? <Text style={styles.valueLine}>{valueLine}</Text> : null}
       {parts ? (
         <View
           accessibilityLabel={`${title} by source: ${parts.map((part) => `${part.label} ${formatAt(part.value, precision, true)}`).join(', ')}`}
@@ -232,6 +240,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: type.caption,
     fontWeight: weight.bold,
+  },
+  valueLine: {
+    marginTop: space.xs,
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    lineHeight: 17,
   },
   feesOnly: {
     marginTop: -4,

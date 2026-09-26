@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-na
 import { exactMoney, humanDate, signedMoney, signedMoneyFine } from '../../copy/terms';
 import type { SeasonSummary } from '../../data/perGameMetrics';
 import { colors, control, fonts, headingStyle, radius, space, type, weight } from '../../theme';
-import { Button, headingLevel, Label, Money } from '../../ui/kit';
+import { Button, headingLevel, Label, Money, tapsSettling } from '../../ui/kit';
 
 /** The welcome's heading: a new practice season moves keyboard focus here. */
 export const PRACTICE_WELCOME_TITLE_ID = 'practice-welcome-title';
@@ -85,29 +85,45 @@ export function SeasonCompleteCard({
   summary,
   fees,
   onPlayAgain,
+  onOpenPlayer,
 }: {
   summary: SeasonSummary;
   /** What the moves cost in all (the Fees part of the score). */
   fees: number;
   /** Practice only: start a fresh season. */
   onPlayAgain?: () => void;
+  /**
+   * Opens a player's profile by name, so Best and Worst answer "why?" in one
+   * tap (walk 3 T1-N2). Without it they are plain text.
+   */
+  onOpenPlayer?: (name: string) => void;
 }) {
   const place = summary.rank !== null && summary.of !== null ? `#${summary.rank} of ${summary.of}` : null;
-  const lines = [
-    summary.best ? { label: 'Best', text: `${summary.best.name} ${signedMoneyFine(summary.best.total)}` } : null,
-    summary.worst ? { label: 'Worst', text: `${summary.worst.name} ${signedMoneyFine(summary.worst.total)}` } : null,
-    {
-      // Read the way Season so far read it all season: moves, then fees.
-      label: 'Moves',
-      text: `${summary.moves} · fees ${signedMoneyFine(fees)}`
-        + (summary.shortsMade > 0 ? ` · ${summary.shortsMade} ${summary.shortsMade === 1 ? 'short' : 'shorts'}` : ''),
-    },
-  ].filter((line): line is { label: string; text: string } => line !== null);
+  const players = [
+    summary.best ? { label: 'Best', name: summary.best.name, total: signedMoneyFine(summary.best.total) } : null,
+    summary.worst ? { label: 'Worst', name: summary.worst.name, total: signedMoneyFine(summary.worst.total) } : null,
+  ].filter((line): line is { label: string; name: string; total: string } => line !== null);
+  // Read the way Season so far read it all season: moves, then fees.
+  const moves = `${summary.moves} · fees ${signedMoneyFine(fees)}`
+    + (summary.shortsMade > 0 ? ` · ${summary.shortsMade} ${summary.shortsMade === 1 ? 'short' : 'shorts'}` : '');
+  const spokenMoves = `Moves ${moves.replace(/ · /g, ', ')}`;
   const spoken = [
     `Final score ${signedMoney(summary.finalScore)}`,
     place ? `finished ${place.replace('#', 'number ')}` : null,
-    ...lines.map((line) => `${line.label} ${line.text.replace(/ · /g, ', ')}`),
+    // With profiles to open, Best and Worst are their own buttons and Moves
+    // is read after them, in the order they are shown.
+    ...(onOpenPlayer ? [] : [...players.map((line) => `${line.label} ${line.name} ${line.total}`), spokenMoves]),
   ].filter(Boolean).join(', ');
+  const movesLine = (
+    <View
+      accessibilityLabel={onOpenPlayer ? spokenMoves : undefined}
+      accessible={onOpenPlayer ? true : undefined}
+      style={styles.finalLine}
+    >
+      <Text style={styles.finalLabel}>Moves</Text>
+      <Text style={styles.finalText}>{moves}</Text>
+    </View>
+  );
   return (
     <View style={[styles.band, styles.finalBand]}>
       <Label tone="gold">Season complete</Label>
@@ -117,13 +133,40 @@ export function SeasonCompleteCard({
           <Money size="display" value={summary.finalScore} />
           {place ? <Text style={styles.place}>{place}</Text> : null}
         </View>
-        {lines.map((line) => (
-          <View key={line.label} style={styles.finalLine}>
-            <Text style={styles.finalLabel}>{line.label}</Text>
-            <Text style={styles.finalText}>{line.text}</Text>
-          </View>
-        ))}
+        {onOpenPlayer ? null : (
+          <>
+            {players.map((line) => (
+              <View key={line.label} style={styles.finalLine}>
+                <Text style={styles.finalLabel}>{line.label}</Text>
+                <Text style={styles.finalText}>{line.name} {line.total}</Text>
+              </View>
+            ))}
+            {movesLine}
+          </>
+        )}
       </View>
+      {onOpenPlayer ? (
+        <>
+          {players.map((line) => (
+            <Pressable
+              key={line.label}
+              accessibilityLabel={`${line.label}: ${line.name} ${line.total}. View profile`}
+              accessibilityRole="button"
+              onPress={() => {
+                if (tapsSettling()) return;
+                onOpenPlayer(line.name);
+              }}
+              style={({ pressed }) => [styles.finalLine, styles.playerLine, pressed && styles.pressed]}
+            >
+              <Text style={styles.finalLabel}>{line.label}</Text>
+              <Text style={[styles.finalText, styles.playerName]}>{line.name}</Text>
+              <Text style={styles.finalText}>{line.total}</Text>
+              <Text style={styles.playerOpen}>›</Text>
+            </Pressable>
+          ))}
+          <View style={styles.finalFacts}>{movesLine}</View>
+        </>
+      ) : null}
       {onPlayAgain ? (
         <View style={styles.actions}>
           <Button label="Play another season" onPress={onPlayAgain} variant="primary" />
@@ -273,6 +316,28 @@ const styles = StyleSheet.create({
     fontSize: type.caption,
     fontWeight: weight.heavy,
     fontVariant: ['tabular-nums'],
+  },
+  // Best / Worst as a row button: full touch height, the chevron at its end.
+  playerLine: {
+    minHeight: control.height,
+    flexWrap: 'nowrap',
+    alignItems: 'center',
+    // Padded inside and pulled out by as much: the words stay in line with
+    // Moves while the focus ring clears them.
+    marginHorizontal: -space.sm,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.sm,
+  },
+  playerName: {
+    textDecorationLine: 'underline',
+  },
+  playerOpen: {
+    marginLeft: 'auto',
+    paddingLeft: space.sm,
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.heavy,
   },
   soFar: {
     paddingHorizontal: space.lg,

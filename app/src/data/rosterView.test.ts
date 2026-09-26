@@ -445,3 +445,63 @@ test('the hero score shrinks to fit a 200% zoom phone and stays full size elsewh
   // Never smaller than the floor, even for a long figure in a sliver.
   assert.equal(heroFontSize('-$12.34M', 60, 46), 26);
 });
+
+test('value against results: last season beside what your picks have made, over the same players (walk 3 T1-N1)', async () => {
+  const { pickValue } = await import('./rosterView');
+  const positions = [
+    // A roster spot at $100K whose last season paid $130K: +$30K a game by last season.
+    position({ positionId: 'a', playerId: 'a', lockedGameCost: 100_000 }),
+    // A short credited $200K on a player whose last season paid $180K: +$20K a game (flipped).
+    position({ positionId: 'b', playerId: 'b', side: 'short', lockedGameCost: 200_000 }),
+    // A rookie who has played, and a player who has not: left out of both sums.
+    position({ positionId: 'c', playerId: 'c', lockedGameCost: 90_000 }),
+    position({ positionId: 'd', playerId: 'd', lockedGameCost: 120_000 }),
+    // Closed: no longer one of your picks.
+    position({ positionId: 'e', playerId: 'e', lockedGameCost: 50_000, status: 'closed' }),
+  ];
+  const prior: Record<string, number | null> = { a: 130_000, b: 180_000, c: null, d: 150_000, e: 90_000 };
+  const results = [
+    result({ positionId: 'a', playerId: 'a', gameId: 'a1', eventCursor: 1, dividendDollars: 80_000, netPnl: -20_000 }),
+    result({ positionId: 'a', playerId: 'a', gameId: 'a2', eventCursor: 2, gameDate: '2025-10-23', dividendDollars: 100_000, netPnl: 0 }),
+    result({ positionId: 'b', playerId: 'b', gameId: 'b1', eventCursor: 3, side: 'short', lockedGameCost: 200_000, dividendDollars: 195_000, netPnl: 5_000 }),
+    result({ positionId: 'c', playerId: 'c', gameId: 'c1', eventCursor: 4, lockedGameCost: 90_000, dividendDollars: 190_000, netPnl: 100_000 }),
+    result({ positionId: 'e', playerId: 'e', gameId: 'e1', eventCursor: 5, lockedGameCost: 50_000, dividendDollars: 150_000, netPnl: 100_000 }),
+  ];
+  const value = pickValue(positions, (id) => prior[id] ?? null, results);
+  assert.ok(value);
+  assert.equal(value.byLastSeason, 50_000);
+  // Each row's "Profit a game", summed: a averages -$10K over two games, b made $5K.
+  assert.equal(value.soFar, -5_000);
+  assert.equal(value.players, 2);
+  assert.equal(value.gamesEach, 1.5);
+  assert.equal(value.text, "Value of your picks: +$50K a game. So far they've made -$5K a game. A few weeks is mostly luck.");
+});
+
+test('value against results is hidden with nothing to compare: before games, or no last season for anyone', async () => {
+  const { pickValue } = await import('./rosterView');
+  const held = [position({ positionId: 'a', playerId: 'a' })];
+  const played = [result({ positionId: 'a', playerId: 'a' })];
+  assert.equal(pickValue(held, () => 120_000, []), null);
+  assert.equal(pickValue(held, () => null, played), null);
+  assert.equal(pickValue([], () => 120_000, played), null);
+  // A night he did not play is no game to compare.
+  assert.equal(pickValue(held, () => 120_000, [result({ positionId: 'a', playerId: 'a', status: 'verified_dnp', netPnl: null, dividendDollars: null })]), null);
+});
+
+test('value against results uses the price you locked, and calls the gap luck only while the games are few', async () => {
+  const { EARLY_GAMES_EACH, pickValue } = await import('./rosterView');
+  const held = [position({ positionId: 'a', playerId: 'a', lockedGameCost: 100_000 })];
+  const games = (count: number) => Array.from({ length: count }, (_, index) => result({
+    positionId: 'a',
+    playerId: 'a',
+    gameId: `a${index}`,
+    eventCursor: index + 1,
+    dividendDollars: 110_000,
+    netPnl: 10_000,
+  }));
+  // Last season paid $90K against the $100K locked (today's market price plays no part).
+  const early = pickValue(held, () => 90_000, games(EARLY_GAMES_EACH - 1));
+  assert.equal(early?.text, "Value of your picks: -$10K a game. So far they've made +$10K a game. A few weeks is mostly luck.");
+  const later = pickValue(held, () => 90_000, games(EARLY_GAMES_EACH));
+  assert.equal(later?.text, "Value of your picks: -$10K a game. So far they've made +$10K a game. Last season is a guide, not a promise.");
+});

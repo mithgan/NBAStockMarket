@@ -1,4 +1,4 @@
-import { useState, type ReactNode, type Ref } from 'react';
+import { useEffect, useState, type ReactNode, type Ref } from 'react';
 import { Platform, StyleSheet, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 
 import { formatAt, type PartPrecision } from '../../data/rosterView';
@@ -32,6 +32,7 @@ export function SectionHead({
   note,
   legend,
   headingRef,
+  onPinnedHeight,
 }: {
   title: string;
   /** "10 of 10", "2 closed". */
@@ -57,12 +58,26 @@ export function SectionHead({
   legend?: ReactNode;
   /** The title, so a screen can move keyboard focus to it. */
   headingRef?: Ref<Text>;
+  /**
+   * How tall the pinned pieces are (title row plus legend; 0 when nothing is
+   * pinned), so the list can keep a focused row clear of them.
+   */
+  onPinnedHeight?: (height: number) => void;
 }) {
   const [titleHeight, setTitleHeight] = useState(TITLE_ESTIMATE);
+  const [legendHeight, setLegendHeight] = useState(0);
   const onTitleLayout = (event: LayoutChangeEvent) => {
     const next = Math.round(event.nativeEvent.layout.height);
     setTitleHeight((current) => (current === next ? current : next));
   };
+  const onLegendLayout = (event: LayoutChangeEvent) => {
+    const next = Math.round(event.nativeEvent.layout.height);
+    setLegendHeight((current) => (current === next ? current : next));
+  };
+  const pinnedHeight = sticky ? titleHeight + (legend ? legendHeight : 0) : 0;
+  useEffect(() => {
+    onPinnedHeight?.(pinnedHeight);
+  }, [onPinnedHeight, pinnedHeight]);
   return (
     <>
       <View onLayout={sticky ? onTitleLayout : undefined} style={[styles.head, sticky && pinned(0, 3)]}>
@@ -89,7 +104,10 @@ export function SectionHead({
         </View>
       ) : null}
       {legend ? (
-        <View style={[styles.legend, sticky && pinned(titleHeight, 2), sticky && styles.legendPinned]}>
+        <View
+          onLayout={sticky ? onLegendLayout : undefined}
+          style={[styles.legend, sticky && pinned(titleHeight, 2), sticky && styles.legendPinned]}
+        >
           {legend}
         </View>
       ) : null}

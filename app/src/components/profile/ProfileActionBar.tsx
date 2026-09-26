@@ -24,7 +24,6 @@ import {
 } from '../../copy/terms';
 import { practiceProgress } from '../../data/chromeView';
 import { actionName, fullNote, isSeasonOver } from '../../data/marketView';
-import { shortEndsNext } from '../../data/rosterView';
 import { usePerGame } from '../../state/PerGameContext';
 import { buildPerGameMarketRows } from '../../state/perGameState';
 import { openTab, requestRosterPick } from '../../state/uiActions';
@@ -147,7 +146,7 @@ export function ProfileActionBar({ player, position, side: openedSide, onLeave }
             playerName: player.name,
             feeDollars: fee,
             total: position.cumulativePnl,
-            endsFreeAfter: shortEndsNext(position, bootstrap.game.nextGameDate) ? position.expiresOn : null,
+            endsFreeAfter: position.expiresOn,
             priceNow: player.currentGameCost,
           })}
           onCancel={cancel}

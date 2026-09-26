@@ -239,6 +239,38 @@ export function visibleFeed(
   return items.filter((item) => item.type !== 'fee' || openDays.has(item.date));
 }
 
+export type FeeFeedItem = Extract<ResultsFeedItem, { type: 'fee' }>;
+
+/**
+ * The feed as the list shows it: each day's moves live inside their fold,
+ * as one list, rather than as loose rows between the days (walk 3 T3-32).
+ */
+export function foldedFeed(items: readonly ResultsFeedItem[]): ResultsFeedItem[] {
+  return items.filter((item) => item.type !== 'fee');
+}
+
+/** Each day's moves, in feed order (newest first), for the list under its fold. */
+export function movesByDay(items: readonly ResultsFeedItem[]): Map<string, FeeFeedItem[]> {
+  const days = new Map<string, FeeFeedItem[]>();
+  for (const item of items) {
+    if (item.type !== 'fee') continue;
+    const day = days.get(item.date) ?? [];
+    day.push(item);
+    days.set(item.date, day);
+  }
+  return days;
+}
+
+/**
+ * One move as a list item reads it: the player named once, what happened,
+ * then the fee: "Dyson Daniels, short opened, fee $250".
+ */
+export function moveWords(playerName: string, what: string, amountDollars: number, noun = 'fee'): string {
+  const amount = Math.round(amountDollars);
+  const money = amount < 0 ? `${noun} ${exactMoney(-amount)}` : amount > 0 ? `${noun} refunded, ${exactMoney(amount)}` : `no ${noun}`;
+  return `${playerName}, ${what.charAt(0).toLowerCase()}${what.slice(1)}, ${money}`;
+}
+
 /** A month in the feed, and where its newest day starts in the list. */
 export interface MonthAnchor {
   /** "2025-11". */

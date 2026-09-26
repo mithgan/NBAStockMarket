@@ -43,9 +43,11 @@ export function PlayerAvatar({ player, size = 38 }: { player: AvatarPlayer; size
   return (
     // Every caller renders the player's name in text right next to the tile,
     // so the whole subtree is hidden from assistive tech to avoid announcing
-    // each face twice.
+    // each face twice. aria-hidden is what react-native-web honours; the
+    // native props do nothing on the web (walk 3 T3-32).
     <View
       accessibilityElementsHidden
+      aria-hidden
       importantForAccessibility="no-hide-descendants"
       style={[styles.avatar, { width: size, height: size }]}
     >

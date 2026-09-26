@@ -32,8 +32,8 @@ import {
   chartSummary,
   nightIndexAt,
   nightReadout,
-  nightSourceLabel,
   profileChartModel,
+  readoutCaption,
   sideWords,
   steppedIndex,
   type ChartInsets,
@@ -179,7 +179,8 @@ export function ProfileChart({
   const shown = nights[shownIndex];
   const anchor = model.anchors[shownIndex];
   const reading = nightReadout(shown, metric, side);
-  const source = nightSourceLabel(shown, side);
+  // "Latest game, Oct 27, against your price": a sentence, not three labels.
+  const caption = readoutCaption(shown, metric, side, active === null);
   const labelAnchor = (x: number) => (x < 60 ? 'start' : x > width - 60 ? 'end' : 'middle');
   const labels = ([['HIGH', model.high], ['LOW', model.low]] as const).filter(
     (entry): entry is readonly ['HIGH' | 'LOW', number] => entry[1] !== null && active === null,
@@ -189,9 +190,7 @@ export function ProfileChart({
   return (
     <View>
       <View style={styles.readout}>
-        <Text maxFontSizeMultiplier={1.4} style={styles.readoutDate}>
-          {`${active === null ? 'Latest game · ' : ''}${humanDate(shown.date)} · ${source}`}
-        </Text>
+        <Text maxFontSizeMultiplier={1.4} style={styles.readoutDate}>{caption}</Text>
         <Text maxFontSizeMultiplier={1.4} style={styles.readoutValue}>{reading}</Text>
       </View>
       <View
@@ -204,7 +203,7 @@ export function ProfileChart({
         aria-valuemax={nights.length - 1}
         aria-valuemin={0}
         aria-valuenow={shownIndex}
-        aria-valuetext={`${humanDate(shown.date)}, ${source}. ${reading}`}
+        aria-valuetext={`${caption}. ${reading}`}
         onAccessibilityAction={(event) => {
           step(event.nativeEvent.actionName === 'increment' ? 'ArrowRight' : 'ArrowLeft');
         }}
@@ -332,13 +331,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: space.xs,
   },
+  // Sentence case: in capitals the parts read as separate headings.
   readoutDate: {
-    color: colors.faint,
+    color: colors.muted,
     fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.heavy,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    fontSize: type.caption,
+    fontWeight: weight.bold,
   },
   readoutValue: {
     marginTop: 2,

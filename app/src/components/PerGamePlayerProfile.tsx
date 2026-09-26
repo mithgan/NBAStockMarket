@@ -308,7 +308,11 @@ export function PerGamePlayerProfile({
       >
         <View>
         <View style={[styles.identity, inset]}>
-          <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={56} />
+          {/* His name is the heading beside it: the headshot is not read too
+              (walk 3 T3-32). */}
+          <View aria-hidden>
+            <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={56} />
+          </View>
           <View style={styles.identityCopy}>
             <Text accessibilityRole="header" {...headingLevel(2)} maxFontSizeMultiplier={1.4} style={styles.name}>
               {windowWidth >= 320 ? unbrokenName(player.name) : player.name}

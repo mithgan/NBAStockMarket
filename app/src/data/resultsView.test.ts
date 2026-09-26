@@ -730,3 +730,25 @@ test('a long feed offers one jump per month, newest first, at that month\'s newe
   ])));
   assert.deepEqual(twoSeasons.map((anchor) => anchor.label), ['Oct 26', 'Oct 25']);
 });
+
+test('a day\'s moves live inside their fold as one list, each read with the player named once (walk 3 T3-32)', async () => {
+  const { foldedFeed, movesByDay, moveWords } = await import('./resultsView');
+  cursor = 900;
+  const game = result({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-02' });
+  const fees = [
+    fee({ entryId: 'a', createdAt: '2025-11-02T23:45:00.000Z' }),
+    fee({ entryId: 'b', createdAt: '2025-11-01T23:45:00.000Z' }),
+    fee({ entryId: 'c', createdAt: '2025-11-01T23:40:00.000Z' }),
+  ];
+  const feed = buildResultsFeed(source([game], fees));
+  assert.deepEqual(shape(foldedFeed(feed)), ['night:2025-11-02', 'result:pos-1:g1', 'fees:2025-11-02', 'night:2025-11-01', 'fees:2025-11-01']);
+  const days = movesByDay(feed);
+  assert.deepEqual([...days.keys()], ['2025-11-02', '2025-11-01']);
+  // In the feed's own order, which the fold keeps.
+  assert.deepEqual(days.get('2025-11-01')?.map((item) => item.key), feed.filter((item) => item.type === 'fee' && item.date === '2025-11-01').map((item) => item.key));
+  assert.equal(days.get('2025-11-01')?.length, 2);
+  assert.equal(moveWords('Dyson Daniels', 'Short opened', -250), 'Dyson Daniels, short opened, fee $250');
+  assert.equal(moveWords('OG Anunoby', 'Dropped from your roster', -250), 'OG Anunoby, dropped from your roster, fee $250');
+  assert.equal(moveWords('OG Anunoby', 'Rules penalty', -1_000, 'penalty'), 'OG Anunoby, rules penalty, penalty $1,000');
+  assert.equal(moveWords('OG Anunoby', 'Account fee', 250), 'OG Anunoby, account fee, fee refunded, $250');
+});

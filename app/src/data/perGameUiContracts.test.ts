@@ -168,7 +168,8 @@ test('active rules and lifecycle fees are visible account activity', () => {
   assert.match(status, /DROP FEE/);
   assert.match(status, /SHORT TERM/);
   assert.match(results, /FeeActivityRow/);
-  assert.match(results, /Score change/);
+  // Each fee row says who, what and the fee: "Dyson Daniels, short opened, fee $250" (walk 3 T3-32).
+  assert.match(results, /moveWords\(playerName, feeExplanation\(entry, side\), entry\.amountDollars/);
 });
 
 test('server roster locks are visible and disable every mutation control accessibly', () => {

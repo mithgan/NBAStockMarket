@@ -181,6 +181,70 @@ export function rankLine(leaderboard: readonly PerGameLeaderboardRow[] | undefin
   return you.rank <= leaderboard.length ? `#${you.rank} of ${leaderboard.length}` : `#${you.rank}`;
 }
 
+/**
+ * Below this many games a player, on average, the gap between what your picks
+ * are worth by last season and what they have made is mostly luck (about the
+ * first six weeks: a team plays three or four games a week).
+ */
+export const EARLY_GAMES_EACH = 20;
+
+export interface PickValue {
+  /** Sum over the compared picks of last season's dividend minus the locked price, a game (flipped for a short). */
+  byLastSeason: number;
+  /** Sum over the same picks of their profit a game so far (each row's "Profit a game"). */
+  soFar: number;
+  /** Picks compared: held now, with a last season and at least one game for you. */
+  players: number;
+  /** Their games so far, on average. */
+  gamesEach: number;
+  /** "Value of your picks: +$41K a game. So far they've made -$12K a game. A few weeks is mostly luck." */
+  text: string;
+}
+
+/**
+ * Value against results, so a cold first month reads as luck and not as a
+ * broken signal (walk 3 T1-N1): what your picks are worth by last season's
+ * dividends against the prices you locked, beside what they have made a game
+ * while you held them. Both sums cover the same players: those on your roster
+ * or shorts now, with a last season, who have played for you. Null when there
+ * is nothing to compare (no games yet, or no last season for anyone).
+ */
+export function pickValue(
+  positions: readonly PerGamePosition[],
+  lastSeasonDividend: (playerId: string) => number | null,
+  results: readonly PerGameSettledResult[],
+): PickValue | null {
+  let byLastSeason = 0;
+  let soFar = 0;
+  let players = 0;
+  let games = 0;
+  for (const position of positions) {
+    if (position.status !== 'active') continue;
+    const prior = lastSeasonDividend(position.playerId);
+    if (prior === null) continue;
+    const value = positionValue(results, position.positionId);
+    if (value.avgNet === null || value.games === 0) continue;
+    const edge = prior - position.lockedGameCost;
+    byLastSeason += position.side === 'long' ? edge : -edge;
+    soFar += value.avgNet;
+    players += 1;
+    games += value.games;
+  }
+  if (players === 0) return null;
+  const gamesEach = games / players;
+  const lesson = gamesEach < EARLY_GAMES_EACH ? 'A few weeks is mostly luck.' : 'Last season is a guide, not a promise.';
+  return {
+    byLastSeason,
+    soFar,
+    players,
+    gamesEach,
+    // "Value" is the market's word for last season's dividend against the
+    // price (defined in the rules), so the line speaks it, not a new term.
+    text: `Value of your picks: ${signedMoneyCompact(byLastSeason)} a game. `
+      + `So far they've made ${signedMoneyCompact(soFar)} a game. ${lesson}`,
+  };
+}
+
 export interface BreakdownPart {
   key: 'roster' | 'shorts' | 'closed' | 'fees' | 'other';
   label: string;

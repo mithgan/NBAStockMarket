@@ -415,6 +415,26 @@ export function nightSourceLabel(night: Pick<ProfileNight, 'source'>, side: PerG
 }
 
 /**
+ * The line above the chart's read-out, as a sentence rather than three
+ * labels (walk 3 T1-18): "Latest game, Oct 27, against your price" before a
+ * game is picked, "Oct 24 game, against your price" after. The Price view
+ * of a game at his market price has nothing to set against it.
+ */
+export function readoutCaption(
+  night: Pick<ProfileNight, 'date' | 'source'>,
+  metric: ProfileMetric,
+  side: PerGamePositionSide,
+  latest: boolean,
+): string {
+  const game = latest ? `Latest game, ${humanDate(night.date)}` : `${humanDate(night.date)} game`;
+  if (night.source === 'market') {
+    const noun = side === 'long' ? 'price' : 'credit';
+    return metric === 'price' ? `${game}, his market ${noun}` : `${game}, against his market ${noun}`;
+  }
+  return `${game}, against ${nightSourceLabel(night, side)}`;
+}
+
+/**
  * The games the profile reads: his latest few, his whole season, or only the
  * games he played for you ("With you"), so a short's numbers can be yours.
  */
@@ -515,11 +535,24 @@ export function priceStory(nights: readonly ProfileNight[], side: PerGamePositio
       if (nights.length === 1) return `${lead} His market ${word} was ${moneyFine(to)} in that game.`;
       return `${lead} Over these ${gamesCount(nights.length)} his market ${word} ${move}.`;
     }
-    // "Today" for the price in the header, "in these games" for the chart's
-    // points: his price can move after his latest game (walk-2 T2-19).
-    const lead = `Today his market ${word} is ${moneyFine(now)} a game; ${locked}.`;
-    if (nights.length === 1) return `${lead} In that game it was ${moneyFine(to)}.`;
-    return `${lead} In these ${gamesCount(nights.length)} it ${move}.`;
+    // Today's price (the header's) and his price after his latest game (the
+    // chart's last point) can differ: each is named for when it was, so the
+    // view never shows two "now" prices (walk-2 T2-19, walk 3 T1-18).
+    const lead = `${locked.charAt(0).toUpperCase()}${locked.slice(1)}.`;
+    const after = moneyFine(to);
+    const today = moneyFine(now);
+    const lastGame = `his ${humanDate(nights[nights.length - 1].date)} game`;
+    const held = Math.round(from / 1000) === Math.round(to / 1000);
+    if (today === after) {
+      if (nights.length === 1) return `${lead} After ${lastGame} his market ${word} was ${after}, where it still is today.`;
+      return `${lead} In these ${gamesCount(nights.length)} his market ${word} ${move}, where it still is today.`;
+    }
+    if (nights.length === 1) return `${lead} After ${lastGame} his market ${word} was ${after}; today it is ${today} a game.`;
+    if (held) {
+      return `${lead} In these ${gamesCount(nights.length)} his market ${word} held near ${after} through ${lastGame}; today it is ${today} a game.`;
+    }
+    return `${lead} In these ${gamesCount(nights.length)} his market ${word} ${to > from ? 'rose' : 'fell'} from ${moneyFine(from)}; `
+      + `after ${lastGame} it was ${after}, and today it is ${today} a game.`;
   }
   const first = nights[0].price;
   const last = nights[nights.length - 1].price;

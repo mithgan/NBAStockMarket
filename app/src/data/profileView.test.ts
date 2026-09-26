@@ -524,11 +524,21 @@ test('the price view plots his market price against your locked price (walk-1 T2
   assert.equal(nightReadout(held[2], 'price'), 'Market $128K · your price $125K');
   assert.equal(
     priceStory(held, 'long', 128_500),
-    // "Today" for the header's price, "in these games" for the chart's points (walk-2 T2-19).
-    'Today his market price is $128.5K a game; you locked $125K. In these 3 games it went from $120K to $128K.',
+    // Today's price (the header's) and the price after his latest game (the
+    // chart's last point) are each named for when they were (walk-2 T2-19, walk 3 T1-18).
+    'You locked $125K. In these 3 games his market price rose from $120K; after his Oct 23 game it was $128K, and today it is $128.5K a game.',
+  );
+  assert.equal(
+    priceStory(held, 'long', 128_000),
+    'You locked $125K. In these 3 games his market price went from $120K to $128K, where it still is today.',
+  );
+  const steady = held.map((night, index) => ({ ...night, market: 128_000 + index * 150 }));
+  assert.equal(
+    priceStory(steady, 'long', 131_000),
+    'You locked $125K. In these 3 games his market price held near $128.3K through his Oct 23 game; today it is $131K a game.',
   );
   assert.equal(priceStory(held, 'short'), 'You locked $125K. Over these 3 games his market credit went from $120K to $128K.');
-  assert.equal(priceStory(held.slice(0, 1), 'long', 99_700), 'Today his market price is $99.7K a game; you locked $125K. In that game it was $120K.');
+  assert.equal(priceStory(held.slice(0, 1), 'long', 99_700), 'You locked $125K. After his Oct 21 game his market price was $120K; today it is $99.7K a game.');
   assert.equal(priceStory(held.slice(0, 1), 'short'), 'You locked $125K. His market credit was $120K in that game.');
   assert.match(chartSummary(held, 'price'), /^His market price a game over 3 games, against your locked price\. High \$128K/);
   // Outside practice there is no market line: your price is the one line.
@@ -568,4 +578,16 @@ test('read-outs and summaries say Dividend, use human dates, and read naturally 
   const shortNights = nights.map((night) => ({ ...night, net: sideNet('short', night.dividend, night.price) }));
   assert.match(chartSummary(shortNights, 'dividends', 'short'), /stayed under his price in 2 of them, which is what a short wants/);
   assert.equal(chartSummary([], 'price'), 'No games yet.');
+});
+
+test('the chart read-out is captioned as a sentence, not three labels (walk 3 T1-18)', async () => {
+  const { readoutCaption } = await import('./profileView');
+  const yours = { date: '2025-10-27', source: 'yours' as const };
+  const market = { date: '2025-10-24', source: 'market' as const };
+  assert.equal(readoutCaption(yours, 'dividends', 'long', true), 'Latest game, Oct 27, against your price');
+  assert.equal(readoutCaption(yours, 'dividends', 'short', false), 'Oct 27 game, against your credit');
+  assert.equal(readoutCaption(market, 'dividends', 'long', false), 'Oct 24 game, against his market price');
+  assert.equal(readoutCaption(yours, 'price', 'long', true), 'Latest game, Oct 27, against your price');
+  // A game at his market price in the Price view has nothing to set against it.
+  assert.equal(readoutCaption(market, 'price', 'long', true), 'Latest game, Oct 24, his market price');
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Children, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   FlatList,
   Pressable,
@@ -31,30 +31,34 @@ import { Disclosure, DisclosureSpace, DISCLOSURE_WIDTH } from '../components/res
 import { NetMoney } from '../components/results/NetMoney';
 import { SettlementBreakdown } from '../components/results/SettlementBreakdown';
 import { practiceProgress } from '../data/chromeView';
+import { isSeasonOver } from '../data/marketView';
 import {
   buildResultsFeed,
   dividendBasisLine,
   feedNights,
   feesLineName,
+  foldedFeed,
   monthAnchors,
+  movesByDay,
+  moveWords,
   nightSummaryLine,
   nightSummaryWrapped,
   nightTotalPending,
   resultRowModel,
-  visibleFeed,
   type MonthAnchor,
   type NightSummary,
   type ResultRowModel,
   type ResultsFeedItem,
 } from '../data/resultsView';
 import { usePerGame } from '../state/PerGameContext';
+import { openTab } from '../state/uiActions';
 import {
   perGamePlayerName,
   settlementEquation,
   type SettlementEquation,
 } from '../state/perGameState';
 import { colors, fonts, headingStyle, labelStyle, space, type, weight } from '../theme';
-import { Button, EmptyState, headingLevel, Tag } from '../ui/kit';
+import { Button, EmptyState, headingLevel, Tag, visuallyHidden } from '../ui/kit';
 
 /**
  * At this width the screen fills the frame like Roster and Market: a side
@@ -69,6 +73,8 @@ const SIDE_WIDTH = 280;
  * longer fit side by side: rows stack, and the headshot steps aside.
  */
 const STACK_MAX_WIDTH = 330;
+/** Narrower than this (a phone at 200% zoom), the dock leaves out the month. */
+const DOCK_MONTH_MIN_WIDTH = 260;
 /** Scrolled this many screens down, "Back to newest" appears. */
 const FAR_SCREENS = 1.5;
 const AVATAR = 32;
@@ -336,14 +342,22 @@ function FeeActivityRow({
   side: PerGamePositionSide | null;
 }) {
   const { columns, compact, tight } = layout;
+  // Heard as one line that names him once, "Dyson Daniels, short opened, fee
+  // $250"; the headshot and the words drawn beside it are not read again
+  // (walk 3 T3-32).
+  const spoken = moveWords(playerName, feeExplanation(entry, side), entry.amountDollars, entry.kind === 'penalty' ? 'penalty' : 'fee');
   return (
     <View
-      accessibilityLabel={`${feeTitle(entry)} for ${playerName}. ${feeExplanation(entry, side)}. Score change ${netWords(entry.amountDollars)}.`}
-      accessible
+      role="listitem"
       style={[styles.row, { paddingLeft: edges(layout).left, paddingRight: ROW_END }, styles.rowLine, columns && styles.rowColumns]}
     >
-      {tight ? null : <PlayerAvatar player={{ id: entry.playerId, name: playerName }} size={AVATAR} />}
-      <View style={styles.rowBody}>
+      <Text style={visuallyHidden}>{spoken}</Text>
+      {tight ? null : (
+        <View aria-hidden>
+          <PlayerAvatar player={{ id: entry.playerId, name: playerName }} size={AVATAR} />
+        </View>
+      )}
+      <View aria-hidden style={styles.rowBody}>
         <View style={[styles.rowHeader, columns && styles.rowHeaderColumns, compact && styles.rowHeaderCompact]}>
           <View style={[styles.identity, compact && styles.identityCompact]}>
             <Text style={styles.playerName}>{unbrokenName(playerName)}</Text>
@@ -435,6 +449,7 @@ function FeesFold({
   open,
   shorts,
   total,
+  children,
 }: {
   count: number;
   layout: Layout;
@@ -443,10 +458,18 @@ function FeesFold({
   open: boolean;
   shorts: boolean;
   total: number;
+  /** The day's moves, shown while open: read as one list under the fold. */
+  children?: ReactNode;
 }) {
   const name = feesLineName(moves, shorts);
   const noun = moves ? (count === 1 ? 'move' : 'moves') : (count === 1 ? 'fee' : 'fees');
+  const list = open && Children.count(children) > 0 ? (
+    <View aria-label={name} role="list">
+      {children}
+    </View>
+  ) : null;
   return (
+    <View>
     <Pressable
       accessibilityHint={open ? `Hides the ${noun}.` : `Lists each ${moves ? 'move' : 'fee'}.`}
       accessibilityLabel={`${name}, ${count} ${noun}, ${netWords(total)}`}
@@ -464,6 +487,8 @@ function FeesFold({
       <NetMoney size="body" value={total} />
       <Disclosure height={20} open={open} />
     </Pressable>
+    {list}
+    </View>
   );
 }
 
@@ -554,7 +579,9 @@ export function PerGameResultsScreen() {
     () => (bootstrap ? buildResultsFeed(bootstrap, { lastSettledDate: bootstrap.game.lastSettledDate }) : []),
     [bootstrap],
   );
-  const visible = useMemo(() => visibleFeed(feed, openFees), [feed, openFees]);
+  // A day's moves render inside their fold, as one list (walk 3 T3-32).
+  const visible = useMemo(() => foldedFeed(feed), [feed]);
+  const moves = useMemo(() => movesByDay(feed), [feed]);
   const anchors = useMemo(() => monthAnchors(visible), [visible]);
   const extraData = useMemo(() => ({ expanded, openFees }), [expanded, openFees]);
   const toggle = useCallback((key: string) => setExpanded((previous) => toggled(previous, key)), []);
@@ -624,28 +651,30 @@ export function PerGameResultsScreen() {
   const renderItem: ListRenderItem<ResultsFeedItem> = ({ item }) => {
     if (item.type === 'night') return <NightHeader layout={layout} night={item.night} />;
     if (item.type === 'fees') {
+      const open = openFees.has(item.date);
       return (
         <FeesFold
           count={item.count}
           layout={layout}
           moves={item.moves}
           onToggle={() => toggleFees(item.date)}
-          open={openFees.has(item.date)}
+          open={open}
           shorts={item.shorts}
           total={item.total}
-        />
+        >
+          {open ? (moves.get(item.date) ?? []).map((fee) => (
+            <FeeActivityRow
+              key={fee.key}
+              entry={fee.entry}
+              layout={layout}
+              playerName={perGamePlayerName(bootstrap, fee.entry.playerId, fee.entry.positionId)}
+              side={fee.side}
+            />
+          )) : null}
+        </FeesFold>
       );
     }
-    if (item.type === 'fee') {
-      return (
-        <FeeActivityRow
-          entry={item.entry}
-          layout={layout}
-          playerName={perGamePlayerName(bootstrap, item.entry.playerId, item.entry.positionId)}
-          side={item.side}
-        />
-      );
-    }
+    if (item.type === 'fee') return null;
     return (
       <ResultRow
         equation={settlementEquation(
@@ -701,8 +730,25 @@ export function PerGameResultsScreen() {
       {wide && far ? <View style={styles.sideBack}>{back}</View> : null}
     </View>
   );
+  // One rule with the Roster and Market: practice ends on its last day, a live
+  // season when games have settled and none are left.
+  const seasonOver = isSeasonOver({
+    practiceComplete: isMockActive() && practiceProgress(mockSeasonStart(), lastSettled).complete,
+    lastSettledDate: lastSettled,
+    nextGameDate: bootstrap.game.nextGameDate,
+  });
   const empty = (
     <EmptyState
+      // Nothing to show until you pick players: the way there, in one tap
+      // (walk 3 T1-N4). Gone once the season is over and the market is closed.
+      action={seasonOver ? undefined : (
+        <Button
+          accessibilityLabel="Open market: browse players to add"
+          label="Open market"
+          onPress={() => openTab('market')}
+          variant="primary"
+        />
+      )}
       copy="Each night your players have games, the results land here, newest night first."
       level={2}
       style={styles.empty}
@@ -746,14 +792,19 @@ export function PerGameResultsScreen() {
   // Phones: once far down, the way back docks under the list with the month
   // you are reading, instead of floating over the rows' figures (walk 3
   // T1-13). It takes the list's bottom edge, so nothing on screen moves.
-  const here = anchors.find((anchor) => anchor.key === currentMonth)?.name ?? null;
+  // At 200% zoom (a 195px phone) the month and the button cannot share a line
+  // and the button ran off the edge: the month steps aside there, and at any
+  // width the button takes its own line (never cut) when both do not fit.
+  const here = width >= DOCK_MONTH_MIN_WIDTH
+    ? anchors.find((anchor) => anchor.key === currentMonth)?.name ?? null
+    : null;
   return (
     <View style={styles.screen}>
       {list}
       {far ? (
         <View style={[styles.dock, { paddingHorizontal: edges(layout).left }]}>
-          <Text style={styles.dockWhere}>{here ?? ''}</Text>
-          {back}
+          {here ? <Text style={styles.dockWhere}>{here}</Text> : null}
+          <View style={styles.dockBack}>{back}</View>
         </View>
       ) : null}
     </View>
@@ -835,9 +886,11 @@ const styles = StyleSheet.create({
   // Phone: over the list's bottom padding, clear of the last row.
   dock: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     columnGap: space.md,
+    rowGap: space.xs,
     paddingVertical: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
@@ -848,6 +901,13 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontFamily: fonts.body,
     fontSize: type.caption,
+  },
+  // Right-aligned on the month's line or its own; narrower than its words
+  // (very large text) the label wraps inside the button instead of being cut.
+  dockBack: {
+    flexShrink: 1,
+    maxWidth: '100%',
+    marginLeft: 'auto',
   },
   title: {
     ...headingStyle,

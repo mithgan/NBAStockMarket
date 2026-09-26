@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,6 +9,7 @@ import {
   useWindowDimensions,
   View,
   type LayoutChangeEvent,
+  type ViewStyle,
 } from 'react-native';
 
 import type { PerGamePosition } from '../api/contracts';
@@ -32,7 +34,6 @@ import {
   confirmCloseButton,
   confirmCloseMessage,
   exactMoney,
-  money,
   moneyCompact,
   perGame,
   ROSTER_EXPLAINER,
@@ -51,6 +52,7 @@ import {
   breakdownPrecision,
   closedRows,
   feeMoves,
+  pickValue,
   rankLine,
   rosterRowView,
   rowLayout,
@@ -99,6 +101,18 @@ function focusElement(node: unknown, options?: { preventScroll?: boolean }) {
     element.setAttribute('tabindex', '-1');
   }
   element.focus(options);
+}
+
+/**
+ * Web: the browser brings a focused control into view below this much of the
+ * list's top, so a row reached by Shift+Tab lands under the pinned title and
+ * legend instead of behind them (walk 3 T3-27). The Drop button sits `space.sm`
+ * below its row's top edge, so that much more keeps the whole row, name
+ * included, in view.
+ */
+function keepFocusClear(pinnedHeight: number): ViewStyle | null {
+  if (Platform.OS !== 'web' || pinnedHeight <= 0) return null;
+  return { scrollPaddingTop: pinnedHeight + space.sm } as unknown as ViewStyle;
 }
 
 type ConfirmOutcome = 'kept' | 'closed';
@@ -169,30 +183,32 @@ function PositionRow({
   const priceMoved = marketPrice !== null && Math.round(marketPrice) !== Math.round(position.lockedGameCost);
 
   // Screen readers hear the whole row in one breath, lifetime totals included.
+  // What a listener needs to compare rows, in the order they decide: who, how
+  // he is doing, then the row's figures, and the season's sums last (a row
+  // used to read ~40 words, with the sums in the middle; walk 3 lead check).
   const profileLabel = [
     position.playerName,
     view.tag.label,
-    short
-      ? `credited ${moneyCompact(position.lockedGameCost)} a game, set when you shorted him`
-      : `price ${moneyCompact(position.lockedGameCost)} a game, set when you added him`,
-    priceMoved ? `market price now ${moneyCompact(marketPrice as number)} a game` : null,
     // The tag already says "No games yet" when he has none.
     view.games || null,
-    view.summary.avgDividend === null ? null : `dividend ${moneyCompact(view.summary.avgDividend)} a game`,
-    view.summary.avgNet === null ? null : `profit ${signedMoneyCompact(view.summary.avgNet)} a game`,
     `total ${signedMoney(position.cumulativePnl)}`,
-    view.summary.games === 0 ? null : short
-      ? `${money(position.cumulativeGameCost)} credited and ${money(position.cumulativeDividend)} in his dividends`
-      : `${money(position.cumulativeDividend)} in dividends against ${money(position.cumulativeGameCost)} in prices`,
+    view.summary.avgNet === null ? null : `profit ${signedMoneyCompact(view.summary.avgNet)} a game`,
+    `${short ? 'credited' : 'price'} ${moneyCompact(position.lockedGameCost)} a game${priceMoved ? `, now ${moneyCompact(marketPrice as number)}` : ''}`,
+    view.summary.avgDividend === null ? null : `dividend ${moneyCompact(view.summary.avgDividend)} a game`,
     view.expiry ? view.expiry.replace(/ · /g, ', ') : null,
+    // The season's sums, last and short: what the total is made of.
+    view.summary.games === 0 ? null : short
+      ? `season ${moneyCompact(position.cumulativeGameCost)} credited, ${moneyCompact(position.cumulativeDividend)} paid out`
+      : `season ${moneyCompact(position.cumulativeDividend)} in dividends, ${moneyCompact(position.cumulativeGameCost)} in prices`,
     'View profile',
   ].filter(Boolean).join(', ');
 
   const identity = (
     <View style={styles.identity}>
-      {/* A table row keeps one line; a long name ends in an ellipsis (its
-          full name is in the row's spoken label). */}
-      <Text numberOfLines={layout === 'table' ? 1 : undefined} style={styles.name}>
+      {/* A table row gives a long name a second line rather than an
+          ellipsis, so "Shai Gilgeous-Alexander" reads in full at 1024px
+          (walk 3 T2-15); it breaks at a space, never at the hyphen. */}
+      <Text numberOfLines={layout === 'table' ? 2 : undefined} style={styles.name}>
         {unbrokenName(position.playerName)}
       </Text>
       <View style={styles.meta}>
@@ -276,7 +292,9 @@ function PositionRow({
         playerName: position.playerName,
         feeDollars: fee,
         total: position.cumulativePnl,
-        endsFreeAfter: endsNext ? position.expiresOn : null,
+        // Left alone a short ends by itself on its last day, at no cost: the
+        // question says so whenever it is asked (walk 3 T1-N3).
+        endsFreeAfter: position.expiresOn,
         priceNow: marketPrice,
       })}
       onCancel={() => onConfirmClose(position, 'kept')}
@@ -398,6 +416,9 @@ export function PerGameRosterScreen({
   const [listWidth, setListWidth] = useState<number | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [welcomeClosed, setWelcomeClosed] = useState(welcomeHidden);
+  // How tall each list's pinned title and legend are (0 when not pinned).
+  const [pinnedLong, setPinnedLong] = useState(0);
+  const [pinnedShort, setPinnedShort] = useState(0);
   const actionRefs = useRef(new Map<string, View>());
   const rosterHeading = useRef<Text>(null);
   const shortsHeading = useRef<Text>(null);
@@ -432,6 +453,16 @@ export function PerGameRosterScreen({
   const market = useMemo(
     () => new Map((bootstrap?.market ?? []).map((row) => [row.playerId, row])),
     [bootstrap?.market],
+  );
+  // Value against results: last season's worth of your picks beside what they
+  // have made so far (walk 3 T1-N1).
+  const picks = useMemo(
+    () => pickValue(
+      bootstrap?.positions ?? [],
+      (playerId) => market.get(playerId)?.priorSeasonValuePerGame ?? null,
+      bootstrap?.settledResults ?? [],
+    ),
+    [bootstrap?.positions, bootstrap?.settledResults, market],
   );
 
   const onConfirmOpen = useCallback((position: PerGamePosition) => {
@@ -490,15 +521,20 @@ export function PerGameRosterScreen({
       (row) => row.playerId === profileId && row.status === 'active',
     ) ?? null
     : null;
+  // Not listed in the market (the season card can open a player you dropped):
+  // his latest stint with you names him.
+  const profileStint = profileId
+    ? profilePosition ?? [...bootstrap.positions].reverse().find((row) => row.playerId === profileId) ?? null
+    : null;
   const profilePlayer = profileId
     ? bootstrap.market.find((row) => row.playerId === profileId)
-      ?? (profilePosition
+      ?? (profileStint
         ? {
-            playerId: profilePosition.playerId,
-            name: profilePosition.playerName,
+            playerId: profileStint.playerId,
+            name: profileStint.playerName,
             tier: '',
             quoteVersion: 0,
-            currentGameCost: profilePosition.lockedGameCost,
+            currentGameCost: profileStint.lockedGameCost,
             priorSeasonValuePerGame: null,
           }
         : null)
@@ -547,6 +583,8 @@ export function PerGameRosterScreen({
   const precision = parts ? breakdownPrecision(parts.map((part) => part.value), score) : 'fine';
   const unplayed = closed.filter((row) => row.unplayed).length;
   const sticky = layout === 'stacked';
+  // One list is pinned at a time; the taller one's height clears both.
+  const focusClear = keepFocusClear(Math.max(pinnedLong, pinnedShort));
   const legend = (side: PerGamePosition['side']) => (
     layout === 'table' ? <TableHeader actionWidth={ACTION_WIDTH} side={side} />
       : layout === 'stacked' ? <FigureLegend narrow={narrow} side={side} /> : null
@@ -656,7 +694,16 @@ export function PerGameRosterScreen({
       }}
     />
   ) : seasonOver ? (
-    <SeasonCompleteCard fees={breakdown.fees} onPlayAgain={practice ? restartPractice : undefined} summary={season} />
+    <SeasonCompleteCard
+      fees={breakdown.fees}
+      // Best and Worst open that player's profile: "why did he lose so much?"
+      onOpenPlayer={(name) => {
+        const player = bootstrap.positions.find((row) => row.playerName === name);
+        if (player) setProfileId(player.playerId);
+      }}
+      onPlayAgain={practice ? restartPractice : undefined}
+      summary={season}
+    />
   ) : null;
 
   // The welcome and the season's result lead the screen: on a phone above the
@@ -674,6 +721,7 @@ export function PerGameRosterScreen({
         slots={wide ? slotLine(bootstrap.account) : null}
         started={started}
         title="Your score"
+        valueLine={picks?.text ?? null}
         variant={wide ? 'panel' : layout === 'compact' ? 'narrow' : 'compact'}
         week={recent ? recent.week : null}
       />
@@ -698,6 +746,7 @@ export function PerGameRosterScreen({
           headingRef={rosterHeading}
           legend={longs.length > 0 ? legend('long') : undefined}
           note={actionNote}
+          onPinnedHeight={setPinnedLong}
           precision={precision}
           sticky={sticky && longs.length > 0}
           title={sideHeading('long')}
@@ -737,6 +786,7 @@ export function PerGameRosterScreen({
           count={`${shortSlots.used} of ${shortSlots.limit}`}
           headingRef={shortsHeading}
           legend={shorts.length > 0 ? legend('short') : undefined}
+          onPinnedHeight={setPinnedShort}
           precision={precision}
           sticky={sticky && shorts.length > 0}
           title={sideHeading('short')}
@@ -796,12 +846,12 @@ export function PerGameRosterScreen({
           <ScrollView contentContainerStyle={styles.summaryContent} style={[styles.summaryColumn, { width: summaryWidth(width) }]}>
             {summary}
           </ScrollView>
-          <ScrollView contentContainerStyle={styles.listContent} onLayout={onListLayout} style={styles.listColumn}>
+          <ScrollView contentContainerStyle={styles.listContent} onLayout={onListLayout} style={[styles.listColumn, focusClear]}>
             {lists}
           </ScrollView>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.listContent} onLayout={onListLayout} style={styles.scroll}>
+        <ScrollView contentContainerStyle={styles.listContent} onLayout={onListLayout} style={[styles.scroll, focusClear]}>
           {summary}
           {lists}
         </ScrollView>
