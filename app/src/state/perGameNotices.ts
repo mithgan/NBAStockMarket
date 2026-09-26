@@ -1,5 +1,5 @@
 import type { PerGameBootstrap, PerGamePosition } from '../api/contracts';
-import { humanDate, humanDay, moneyFine, signedMoneyFine } from '../copy/terms';
+import { humanDate, humanDay, humanNightsSince, moneyFine, signedMoneyFine } from '../copy/terms';
 import { earningsBetween } from '../data/perGameMetrics';
 
 /** Shorts that were open before this refresh and have now run their term. */
@@ -89,7 +89,8 @@ export function refreshNotice(
   if (after && after !== before) {
     const change = earningsBetween(next.ledger?.items, before, after, { gamesOnly: true });
     const span = before ? daysBetween(before, after) : 1;
-    const when = span > 1 ? `Games through ${humanDate(after)}` : `${humanDate(after)} games`;
+    // Several nights at once (+1 week) name their days: "Nov 5–11 games".
+    const when = `${span > 1 ? humanNightsSince(before, after) : humanDate(after)} games`;
     const played = (next.ledger?.items ?? []).some((entry) => (
       entry.gameDate !== null && entry.gameDate <= after && (before === null || entry.gameDate > before)
     ));

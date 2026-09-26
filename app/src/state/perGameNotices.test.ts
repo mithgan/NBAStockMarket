@@ -48,7 +48,7 @@ test('newly settled games lead with what your players made over exactly those da
   ];
   assert.equal(
     refreshNotice(before, snapshot('2025-11-11', '2025-11-12', 30_000, [], week), false),
-    'Games through Nov 11: your score fell $70K.',
+    'Nov 5–11 games: your score fell $70K.',
   );
   assert.equal(
     refreshNotice(before, snapshot('2025-11-05', '2025-11-06', 100_000, [], [night('2025-11-04', 100_000)]), false),

@@ -35,9 +35,11 @@ import {
 import { ThemeProvider, useDesignVariant } from './src/theme/ThemeProvider';
 import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
 import { installGlobalWebStyles } from './src/web/globalStyles';
+import { ignoreHeldKeys } from './src/web/keyRepeat';
 import { treatmentNavigation } from './src/web/treatmentNavigation';
 
 installGlobalWebStyles();
+ignoreHeldKeys();
 
 /** Circular databallr mark; radius is derived so it is never a card corner. */
 const BRAND_MARK_SIZE = 24;
@@ -275,11 +277,14 @@ function NoticeToast({
       const node = noticeRef.current as unknown as HTMLElement | null;
       const target = event.target as HTMLElement | null;
       if (!node?.getBoundingClientRect || !target?.getBoundingClientRect || node.contains(target)) return;
-      const a = node.getBoundingClientRect();
-      const b = target.getBoundingClientRect();
       // Focus on the whole screen or a big region (a skip-link target) is not
       // a control the notice hides: the notice stays to be read.
-      if (b.height > window.innerHeight * 0.5) return;
+      if (target.getBoundingClientRect().height > window.innerHeight * 0.5) return;
+      const a = node.getBoundingClientRect();
+      // Focus on Keep in a Drop question: the notice steps aside if it covers
+      // any of the question, which is what has to be read (walk 3 T3-24).
+      const region = (target.closest?.('[data-question]') as HTMLElement | null) ?? target;
+      const b = region.getBoundingClientRect();
       if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) onDismiss();
     };
     document.addEventListener('keydown', onKey);

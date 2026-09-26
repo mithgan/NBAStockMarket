@@ -36,10 +36,11 @@ export const BASE_PALETTE = {
   border: '#212936',
   borderStrong: '#323c4e',
   /**
-   * The edge of a control (buttons, toggles, inputs): 3:1 against the page
-   * and card colours (WCAG 1.4.11), so a field never reads as floating text.
+   * The edge of a control (buttons, toggles, inputs): 3:1 against the page,
+   * card and raised-card colours (WCAG 1.4.11), so a field never reads as
+   * floating text, even on a raised band like the practice welcome.
    */
-  controlBorder: '#5e6a84',
+  controlBorder: '#66738e',
   text: '#f7f8fa',
   muted: '#aab2c0',
   faint: '#8d97a8',

@@ -380,9 +380,17 @@ export function ConfirmStrip({
   style?: StyleProp<ViewStyle>;
 }) {
   const guard = useTapGuard();
+  const stripRef = useRef<View>(null);
   const keepRef = useRef<View>(null);
   useEffect(() => {
-    focusNode(keepRef);
+    // Bring the question into view before focus lands on Keep. Focusing Keep
+    // alone scrolled just far enough to show the buttons, so at 200% zoom the
+    // fee and what you keep scrolled out of sight above (walk 3 T3-24). A
+    // question taller than the view shows from its first line.
+    const strip = stripRef.current as unknown as HTMLElement | null;
+    strip?.scrollIntoView?.({ block: 'nearest' });
+    const keep = keepRef.current as unknown as { focus?: (options?: object) => void } | null;
+    keep?.focus?.({ preventScroll: true });
   }, []);
   useBackFolds(true, onCancel);
   useEffect(() => {
@@ -392,6 +400,10 @@ export function ConfirmStrip({
     // too, by a one-shot listener that outlives the strip it just closed.
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      // A sheet open over the page (Settings, Rules) takes Escape first: this
+      // question sits behind it, under the inert page (walk 3 T4-17).
+      const strip = stripRef.current as unknown as HTMLElement | null;
+      if (strip?.closest?.('[inert]')) return;
       event.stopPropagation();
       const swallow = (up: KeyboardEvent) => {
         if (up.key !== 'Escape') return;
@@ -405,7 +417,9 @@ export function ConfirmStrip({
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onCancel]);
   return (
-    <View style={[styles.confirmStrip, style]}>
+    // data-question: a notice that covers any part of this question steps
+    // aside when focus lands in it, not only when it covers Keep itself.
+    <View ref={stripRef} {...({ dataSet: { question: 'confirm' } } as object)} style={[styles.confirmStrip, style]}>
       {/* The question alone is announced; the buttons are read as focus reaches them. */}
       <Text accessibilityRole="alert" style={styles.confirmText}>{message}</Text>
       <View style={styles.confirmButtons}>

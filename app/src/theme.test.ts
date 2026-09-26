@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { colors, radius, type } from './theme';
-import { VARIANTS } from './theme/variants';
+import { APPEARANCE_CHOICES, VARIANTS } from './theme/variants';
 
 function relativeLuminance(hex: string): number {
   const value = hex.replace('#', '');
@@ -81,5 +81,15 @@ test('radii stay flat and no type role drops below 11px', () => {
   assert.equal(radius.lg, 8);
   for (const [role, size] of Object.entries(type)) {
     assert.ok(size >= 11, `type.${role} is ${size}px`);
+  }
+});
+
+test('control edges reach 3:1 on every surface a control sits on, in every Settings theme (walk 3 T3-26)', () => {
+  for (const id of APPEARANCE_CHOICES) {
+    const palette = VARIANTS[id].palette;
+    for (const surface of ['background', 'surface', 'surfaceRaised', 'chrome', 'chromeSoft'] as const) {
+      const ratio = contrast(palette.controlBorder, palette[surface]);
+      assert.ok(ratio >= 3, `${id} controlBorder on ${surface}: ${ratio.toFixed(2)}`);
+    }
   }
 });

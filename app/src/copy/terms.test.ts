@@ -134,3 +134,11 @@ test('per-game columns read one style: K from $1,000, dollars below', () => {
   assert.equal(signedMoneyCompact(-4_000), '-$4K');
   assert.equal(signedMoneyCompact(0), '$0');
 });
+
+test('several nights at once name their days (walk 3 T1-20)', async () => {
+  const { humanNightsSince } = await import('./terms');
+  assert.equal(humanNightsSince('2025-10-20', '2025-10-27'), 'Oct 21–27');
+  assert.equal(humanNightsSince('2025-10-27', '2025-11-03'), 'Oct 28–Nov 3');
+  assert.equal(humanNightsSince('2025-10-20', '2025-10-21'), 'Oct 21');
+  assert.equal(humanNightsSince(null, '2025-10-21'), 'Oct 21');
+});

@@ -60,6 +60,24 @@ export function humanDate(value: string | null | undefined): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(date);
 }
 
+/**
+ * The nights after `since` up to `through`: "Oct 21–27", or "Oct 28–Nov 3"
+ * across a month. One night reads as that night alone ("Oct 21"). Used when
+ * several nights play at once (+1 week), so the result names its days
+ * instead of "Games through Oct 27" (walk 3 T1-20).
+ */
+export function humanNightsSince(since: string | null, through: string): string {
+  const end = asUtcDate(through);
+  const start = since ? asUtcDate(since) : null;
+  if (!end || !start) return humanDate(through);
+  const first = new Date(start.getTime() + 86_400_000);
+  if (first.getTime() >= end.getTime()) return humanDate(through);
+  const firstDay = first.toISOString().slice(0, 10);
+  return first.getUTCMonth() === end.getUTCMonth() && first.getUTCFullYear() === end.getUTCFullYear()
+    ? `${humanDate(firstDay)}–${end.getUTCDate()}`
+    : `${humanDate(firstDay)}–${humanDate(through)}`;
+}
+
 /** "Wed, Nov 6". */
 export function humanDay(value: string | null | undefined): string {
   if (!value) return '';
