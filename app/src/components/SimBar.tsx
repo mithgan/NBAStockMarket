@@ -20,6 +20,7 @@ import {
 } from '../data/chromeView';
 import { humanDate } from '../copy/terms';
 import { usePerGame } from '../state/PerGameContext';
+import { openTab } from '../state/uiActions';
 import { colors, fonts, radius, space, type } from '../theme';
 import { Button, ConfirmDialog } from '../ui/kit';
 import { useSheetHistory } from '../web/appHistory';
@@ -146,13 +147,21 @@ function PracticeQuestionHost() {
     }
     afterDialogCloses(kind === 'exit' ? leavePractice : restartPractice);
   };
+  const empty = asked.kind === 'empty-night' || asked.kind === 'empty-week';
+  // "Open market": close the question, then take the player to the Market.
+  const openMarket = () => {
+    setAskedQuestion(null);
+    afterDialogCloses(() => openTab('market'));
+  };
   return (
     <ConfirmDialog
       cancelLabel={prompt.cancelLabel}
       confirmLabel={prompt.confirmLabel}
+      confirmTone={empty ? 'neutral' : 'danger'}
       lines={prompt.lines}
-      onCancel={close}
+      onCancel={empty ? openMarket : close}
       onConfirm={confirm}
+      onDismiss={close}
       title={prompt.title}
       visible
     />

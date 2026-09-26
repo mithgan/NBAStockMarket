@@ -428,6 +428,8 @@ export function ConfirmDialog({
   cancelLabel,
   onConfirm,
   onCancel,
+  onDismiss,
+  confirmTone = 'danger',
 }: {
   visible: boolean;
   title: string;
@@ -435,19 +437,27 @@ export function ConfirmDialog({
   confirmLabel: string;
   cancelLabel: string;
   onConfirm: () => void;
+  /** The focused, safe button. */
   onCancel: () => void;
+  /** Escape, Back or a tap outside; defaults to `onCancel`. */
+  onDismiss?: () => void;
+  /** 'neutral' when the other choice loses nothing (e.g. "Play anyway"). */
+  confirmTone?: 'danger' | 'neutral';
 }) {
   if (!visible) return null;
+  const dismiss = onDismiss ?? onCancel;
   return (
     // Named with its consequence, so a screen reader hears what would be lost
     // before the choice ("Start over? You'd lose this season: Day 16 …").
-    <Modal accessibilityLabel={[title, ...lines].join(' ')} animationType="none" onRequestClose={onCancel} transparent visible>
+    <Modal accessibilityLabel={[title, ...lines].join(' ')} animationType="none" onRequestClose={dismiss} transparent visible>
       <ConfirmDialogBody
         cancelLabel={cancelLabel}
         confirmLabel={confirmLabel}
+        confirmTone={confirmTone}
         lines={lines}
         onCancel={onCancel}
         onConfirm={onConfirm}
+        onDismiss={dismiss}
         title={title}
       />
     </Modal>
@@ -461,6 +471,8 @@ function ConfirmDialogBody({
   cancelLabel,
   onConfirm,
   onCancel,
+  onDismiss,
+  confirmTone,
 }: {
   title: string;
   lines: string[];
@@ -468,6 +480,8 @@ function ConfirmDialogBody({
   cancelLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  onDismiss: () => void;
+  confirmTone: 'danger' | 'neutral';
 }) {
   const guard = useTapGuard();
   const cancelRef = useRef<View>(null);
@@ -481,7 +495,7 @@ function ConfirmDialogBody({
       <View
         // The second click of a double click on the button that opened the
         // dialog lands here: the same guard as the buttons keeps it open.
-        onResponderRelease={guard(onCancel)}
+        onResponderRelease={guard(onDismiss)}
         onStartShouldSetResponder={() => true}
         style={styles.dialogScrim}
       />
@@ -491,7 +505,7 @@ function ConfirmDialogBody({
           <Text key={line} style={styles.dialogLine}>{line}</Text>
         ))}
         <View style={styles.dialogButtons}>
-          <Button label={confirmLabel} onPress={guard(onConfirm)} variant="danger" />
+          <Button label={confirmLabel} onPress={guard(onConfirm)} variant={confirmTone === 'danger' ? 'danger' : 'secondary'} />
           <Button ref={cancelRef} label={cancelLabel} onPress={guard(onCancel)} variant="primary" />
         </View>
       </View>

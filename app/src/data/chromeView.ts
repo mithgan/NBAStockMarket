@@ -127,8 +127,10 @@ export function practiceQuestion(
           : "Nobody plays for you all week, so your score won't move.",
         'Add a player from the Market first to start earning.',
       ],
+      // The way on is the Market (focused); playing an empty night loses
+      // nothing, so it is a plain button, not a red one.
       confirmLabel: 'Play anyway',
-      cancelLabel: 'Not yet',
+      cancelLabel: 'Open market',
     };
   }
   if (kind === 'play-again') {
