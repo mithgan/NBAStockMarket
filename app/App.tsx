@@ -328,6 +328,8 @@ function treatmentsRequested(): boolean {
   return new URLSearchParams(window.location.search).has('treatments');
 }
 const NARROW_LAYOUT_MAX_WIDTH = 300;
+/** Below this width the brand bar keeps the wordmark and drops "STOCK MARKET" whole (never "STOCK MAR…"). */
+const BRAND_PRODUCT_MIN_WIDTH = 330;
 
 function AppBody() {
   const [activeTab, setActiveTab] = useState<Tab>('portfolio');
@@ -393,6 +395,7 @@ function AppBody() {
   // Under ~300 CSS px (a phone at 200% zoom) the four tab labels and the
   // brand line only fit at the smallest type size, without side padding.
   const narrow = width < NARROW_LAYOUT_MAX_WIDTH;
+  const brandOnly = width < BRAND_PRODUCT_MIN_WIDTH;
   const auth = useOptionalAuth();
   const authError = auth?.error ?? null;
   const authSubmitting = auth?.isSubmitting ?? false;
@@ -561,7 +564,7 @@ function AppBody() {
         <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.brand}>databallr</Text>
         {/* On a very narrow screen the wordmark keeps the room; the product
             name is also the page title, so nothing is lost. */}
-        {narrow ? <View style={styles.brandCopy} /> : (
+        {brandOnly ? <View style={styles.brandCopy} /> : (
           <>
             <View style={styles.brandDivider} />
             <View style={styles.brandCopy}>
