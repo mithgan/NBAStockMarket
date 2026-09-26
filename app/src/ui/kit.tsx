@@ -501,8 +501,10 @@ function ConfirmDialogBody({
       />
       <View style={styles.dialogPanel}>
         <Text accessibilityRole="header" {...headingLevel(2)} style={styles.dialogTitle}>{title}</Text>
+        {/* Spoken once, as part of the dialog's name, so a screen reader does
+            not read the loss sentence twice (walk 3 T3-09). */}
         {lines.map((line) => (
-          <Text key={line} style={styles.dialogLine}>{line}</Text>
+          <Text key={line} accessibilityElementsHidden aria-hidden importantForAccessibility="no" style={styles.dialogLine}>{line}</Text>
         ))}
         <View style={styles.dialogButtons}>
           <Button label={confirmLabel} onPress={guard(onConfirm)} variant={confirmTone === 'danger' ? 'danger' : 'secondary'} />

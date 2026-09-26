@@ -194,6 +194,13 @@ input:focus-visible,
   }
 }
 
+/* A focus ring drawn inside where the box would clip it: the More menu's
+   items and rows that span the screen (their 2px ring fell off the edges). */
+#practice-more [role="button"]:focus-visible,
+[role="button"][aria-label$="View profile"]:focus-visible {
+  outline-offset: -3px !important;
+}
+
 /* The screen container is a skip-link target, not a control: no ring. */
 #app-screen:focus { outline: none; }
 

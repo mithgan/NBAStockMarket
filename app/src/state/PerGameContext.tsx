@@ -32,6 +32,7 @@ import {
   MutationReconciliationCoordinator,
   type ReconciliationReason,
 } from './reconciliationCoordinator';
+import { settleTaps } from '../web/tapSettle';
 
 /**
  * How a notice should behave: a success confirms what the player just did and
@@ -249,6 +250,10 @@ export function PerGameProvider({
     }
     updatePendingActions();
     setMessage(null);
+    // The second tap of a double tap on a money button must not land on the
+    // next row's button when this move reflows the list (walk 3 T4-01: a
+    // double tap on "Short again" re-shorted the next player).
+    settleTaps(500);
     let reconciliationReason: ReconciliationReason | null = null;
     const actionSnapshot = bootstrapRef.current;
     try {
@@ -272,6 +277,8 @@ export function PerGameProvider({
           return false;
         }
         say(typeof successMessage === 'function' ? successMessage(outcome.result) : successMessage, 'success');
+        // The lists change now: quiet taps once more while they settle.
+        settleTaps(450);
         return true;
       }
       const suffix = outcome.reconciliationReason === 'ambiguous'

@@ -240,6 +240,13 @@ function NoticeToast({
   const noticeRef = useRef<View | null>(null);
   // Chosen once per notice: away from where the player just tapped.
   const atTop = useMemo(() => tone === 'success' && noticeAtTop(), [message, tone]);
+  // A notice that has just appeared (often where a confirm button was) lets
+  // the second tap of a double tap pass without dismissing it (walk 3 T4-02).
+  const shownAt = useMemo(() => Date.now(), [message]);
+  const dismissByTap = () => {
+    if (Date.now() - shownAt < 500) return;
+    onDismiss();
+  };
   // A sheet over the app shows its own result (the profile's tick and note);
   // a success notice would only sit dimmed under its scrim.
   const sheetOpen = useSyncExternalStore(subscribeSheets, sheetIsOpen, () => false);
@@ -279,7 +286,7 @@ function NoticeToast({
           ref={noticeRef}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
-          onPress={onDismiss}
+          onPress={dismissByTap}
           style={styles.notice}
           {...({ tabIndex: -1 } as object)}
         >
