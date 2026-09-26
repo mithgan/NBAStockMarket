@@ -204,8 +204,9 @@ const SUCCESS_NOTICE_MAX_MS = 14000;
  * - Phones: over the brand bar and status line at the very top. They hold
  *   the logo and yesterday's facts, which the notice is about anyway; the
  *   +1 night buttons, the screen's toolbar and its content stay clear.
- * - Wider screens: the bottom-left corner of the screen, away from the
- *   toolbar at the top and the row buttons on the right.
+ * - Wider screens, and short windows whose brand bar is folded away: the
+ *   bottom-left corner, away from the toolbar and the controls at the top
+ *   and the row buttons on the right.
  */
 const NOTICE_FRAME_MAX_WIDTH = 720;
 
@@ -411,8 +412,11 @@ function AppBody() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const wide = width >= WIDE_LAYOUT_MIN_WIDTH;
-  const noticePlacement: 'frame' | 'corner' = width < NOTICE_FRAME_MAX_WIDTH ? 'frame' : 'corner';
   const short = height < SHORT_LAYOUT_MAX_HEIGHT;
+  // Over the frame only while the brand bar is there to be covered: in a
+  // short window (landscape, 200% zoom) the frame's first row holds +1 night
+  // and +1 week, so the notice goes to the bottom instead.
+  const noticePlacement: 'frame' | 'corner' = width < NOTICE_FRAME_MAX_WIDTH && !short ? 'frame' : 'corner';
   const tabRefs = useRef<Array<View | null>>([]);
   const [appNotice, setAppNotice] = useState<string | null>(null);
 

@@ -431,7 +431,7 @@ test('the opened math lists each line by its effect on you, and the lines add up
     },
     {
       input: { side: 'long', dividend: -200_000, price: 100_000, corrected: false },
-      lines: [['Price charged', -100_000], ['His dividend was -$200,000, which a roster spot pays', -200_000]],
+      lines: [['Price charged', -100_000], ['Bad game: his dividend was below zero, so you also paid $200,000', -200_000]],
     },
     {
       input: { side: 'short', dividend: 328_000, price: 112_500, corrected: false },
@@ -439,7 +439,7 @@ test('the opened math lists each line by its effect on you, and the lines add up
     },
     {
       input: { side: 'short', dividend: -320_000, price: 112_500, corrected: false },
-      lines: [['Price credited', 112_500], ['His dividend was -$320,000, which a short collects', 320_000]],
+      lines: [['Price credited', 112_500], ['Bad game: his dividend was below zero, so your short also collected $320,000', 320_000]],
     },
     {
       input: { side: 'long', dividend: 0, price: 90_000, corrected: false },
@@ -447,7 +447,7 @@ test('the opened math lists each line by its effect on you, and the lines add up
     },
     {
       input: { side: 'short', dividend: -40_000, price: 90_000, corrected: true },
-      lines: [['Price credited', 90_000], ['His corrected dividend was -$40,000, which a short collects', 40_000]],
+      lines: [['Price credited', 90_000], ['Bad game: his corrected dividend was below zero, so your short also collected $40,000', 40_000]],
     },
   ] as const;
   for (const { input, lines } of cases) {
@@ -456,10 +456,24 @@ test('the opened math lists each line by its effect on you, and the lines add up
     const net = input.side === 'long' ? input.dividend - input.price : input.price - input.dividend;
     assert.equal(got.reduce((sum, line) => sum + line.amount, 0), net, 'the lines sum to the net');
     for (const line of got) {
-      assert.doesNotMatch(line.label, /paid/i, `"paid" never names a dividend: ${line.label}`);
+      // "paid" never names a dividend on its own (it ran backwards for
+      // shorts); it only ever says who paid: "you also paid" (walk 4 T2-09).
+      assert.doesNotMatch(line.label.replace(/\byou also paid\b/, ''), /paid/i, `"paid" never names a dividend: ${line.label}`);
       assert.doesNotMatch(line.label, /^[−-]/, `no minus sign in front of a line: ${line.label}`);
+      assert.doesNotMatch(line.label, /[−-]\$/, `no negative amount inside a line's words: ${line.label}`);
     }
   }
+});
+
+test('a dividend below zero reads as a plain cost on a roster spot, never a double negative (walk 4 T2-09)', () => {
+  // Dec 1, Jalen Duren at $176K: his dividend was -$128K.
+  const lines = settlementLines({ side: 'long', dividend: -128_000, price: 176_000, corrected: false });
+  assert.deepEqual(lines, [
+    { label: 'Price charged', amount: -176_000 },
+    { label: 'Bad game: his dividend was below zero, so you also paid $128,000', amount: -128_000 },
+  ]);
+  assert.equal(lines.reduce((sum, line) => sum + line.amount, 0), -304_000, 'still adds up to the row');
+  assert.doesNotMatch(lines[1].label, /which a roster spot pays|-\$/);
 });
 
 // ---------------------------------------------------------------------------
@@ -501,7 +515,7 @@ test('a settled short with a negative dividend opens with no double negative', (
   });
   assert.deepEqual(model.math.lines, [
     { label: 'Price credited', amount: 112_500 },
-    { label: 'His dividend was -$320,000, which a short collects', amount: 320_000 },
+    { label: 'Bad game: his dividend was below zero, so your short also collected $320,000', amount: 320_000 },
   ]);
   assert.equal(model.math.net, 432_500);
   assert.equal(model.mismatch, false);

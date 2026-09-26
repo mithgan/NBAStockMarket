@@ -31,22 +31,26 @@ import { colors, control, fonts, space, type, weight } from '../../theme';
 import { Button, ConfirmStrip, useCooldown } from '../../ui/kit';
 import { sheetIsOpen } from '../../web/appHistory';
 
-export function ProfileActionBar({ player, position, side: openedSide, onLeave }: {
+export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave }: {
   player: PerGameMarketPlayer;
   /** The position you hold on him now, on either side. */
   position: PerGamePosition | null;
-  /** The side the profile reads from: his position's side, else the market tab. */
+  /**
+   * The side the bar offers, which the whole profile reads from: his
+   * position's side, else the market tab he was opened from, or the side
+   * "Short instead" / "Add instead" switched to (profileView's profileSide).
+   */
   side: PerGamePositionSide;
+  /**
+   * "Short instead" / "Add instead": the profile switches to the other side's
+   * terms, figures and all (walk 4 T1-03); only the main button makes the move
+   * (walk 3 T2-06: it used to short at once).
+   */
+  onSwitchSide: (side: PerGamePositionSide) => void;
   /** Closes the profile (for "Choose who to drop", which leaves for the Roster). */
   onLeave?: () => void;
 }) {
   const { bootstrap, closePosition, notify, openPosition, pendingActions } = usePerGame();
-  // "Short instead" / "Add instead" switch the bar to the other side's terms;
-  // only the main button makes the move (walk 3 T2-06: it used to short at once).
-  const [side, setSide] = useState<PerGamePositionSide>(openedSide);
-  useEffect(() => {
-    setSide(openedSide);
-  }, [openedSide, player.playerId]);
   // A brief tick after a move lands ("Added ✓"), in the button's place.
   const [done, showDone] = useCooldown();
   const [doneWords, setDoneWords] = useState({ tick: '', note: '' });
@@ -212,9 +216,9 @@ export function ProfileActionBar({ player, position, side: openedSide, onLeave }
       label={otherPending ? 'Wait' : `${openVerb(otherSide)} instead`}
       onPress={() => {
         if (otherBlocked) return;
-        // Switch the bar, don't trade: the terms and the main button change,
-        // and focus moves to that button.
-        setSide(otherSide);
+        // Switch the bar, don't trade: the terms, the main button and the
+        // profile's figures change, and focus moves to that button.
+        onSwitchSide(otherSide);
         setTimeout(() => focusView(openRef.current), 0);
       }}
       style={styles.instead}

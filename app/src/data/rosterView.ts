@@ -197,7 +197,10 @@ export interface PickValue {
   players: number;
   /** Their games so far, on average. */
   gamesEach: number;
-  /** "Value of your picks: +$41K a game. So far they've made -$12K a game. A few weeks is mostly luck." */
+  /**
+   * "Value of your 3 picks combined: +$92K a game. So far they've made -$24.5K
+   * a game combined. A few weeks is mostly luck."
+   */
   text: string;
 }
 
@@ -208,18 +211,26 @@ export interface PickValue {
  * while you held them. Both sums cover the same players: those on your roster
  * or shorts now, with a last season, who have played for you. Null when there
  * is nothing to compare (no games yet, or no last season for anyone).
+ *
+ * The words say what is added up (walk 4 T1-06): how many picks, "combined"
+ * when there are several, and "2 of your 3 picks" when some are left out (not
+ * played yet, or no last season), so the figure never silently changes base.
+ * `over`: the season has ended, so "this season" rather than "so far".
  */
 export function pickValue(
   positions: readonly PerGamePosition[],
   lastSeasonDividend: (playerId: string) => number | null,
   results: readonly PerGameSettledResult[],
+  { over = false }: { over?: boolean } = {},
 ): PickValue | null {
   let byLastSeason = 0;
   let soFar = 0;
   let players = 0;
   let games = 0;
+  let held = 0;
   for (const position of positions) {
     if (position.status !== 'active') continue;
+    held += 1;
     const prior = lastSeasonDividend(position.playerId);
     if (prior === null) continue;
     const value = positionValue(results, position.positionId);
@@ -233,6 +244,12 @@ export function pickValue(
   if (players === 0) return null;
   const gamesEach = games / players;
   const lesson = gamesEach < EARLY_GAMES_EACH ? 'A few weeks is mostly luck.' : 'Last season is a guide, not a promise.';
+  const one = players === 1;
+  const combined = one ? '' : ' combined';
+  const picks = players === held
+    ? one ? 'your pick' : `your ${players} picks`
+    : `${players} of your ${held} picks`;
+  const made = over ? `This season ${one ? 'he' : 'they'} made` : `So far ${one ? "he's" : "they've"} made`;
   return {
     byLastSeason,
     soFar,
@@ -240,8 +257,8 @@ export function pickValue(
     gamesEach,
     // "Value" is the market's word for last season's dividend against the
     // price (defined in the rules), so the line speaks it, not a new term.
-    text: `Value of your picks: ${signedMoneyCompact(byLastSeason)} a game. `
-      + `So far they've made ${signedMoneyCompact(soFar)} a game. ${lesson}`,
+    text: `Value of ${picks}${combined}: ${signedMoneyCompact(byLastSeason)} a game. `
+      + `${made} ${signedMoneyCompact(soFar)} a game${combined}. ${lesson}`,
   };
 }
 
@@ -590,8 +607,13 @@ export function placeAxisLabels(
 
 export interface ValueTick {
   value: number;
-  /** Plot y of the value. */
+  /** Plot y of the value: where its line is drawn. */
   y: number;
+  /**
+   * Where its words are centred: at its line, or stepped just clear of a mark
+   * too close to it, inside the plot (walk 4 T4-09).
+   */
+  labelY: number;
   kind: 'high' | 'zero' | 'low';
 }
 
@@ -613,25 +635,61 @@ export function axisMoney(value: number): string {
   return `${sign}${body}`;
 }
 
+/** Half a value mark's height: its words are about 14px tall. */
+const MARK_HALF = 7;
+
 /**
  * The y-axis marks: $0 always, the season's high when it is above $0 and its
- * low when it is below. A mark that would crowd one already placed (less than
- * `minGap` px apart) is dropped; $0 is placed first, so it always stays.
+ * low when it is below, so a score that ran both ways names both (walk 4
+ * T4-09: a +$22.8K peak and a -$8,000 low; a -$1.56M season with a short
+ * stretch above $0). Each line is drawn at its value. When marks come closer
+ * than `minGap` px, $0's words stay on its line and the high's step up, the
+ * low's down, just far enough to read, inside the plot (`height`). Only a
+ * plot too short for three marks leaves out the extreme nearest $0.
  */
 export function valueTicks(
   values: readonly number[],
   yOf: (value: number) => number,
   // Marks are about 14px tall: 18px between centres leaves clear air.
-  minGap = 18,
+  { height = Number.POSITIVE_INFINITY, minGap = 18 }: { height?: number; minGap?: number } = {},
 ): ValueTick[] {
   const high = Math.max(0, ...values);
   const low = Math.min(0, ...values);
-  const candidates: ValueTick[] = [{ value: 0, y: yOf(0), kind: 'zero' }];
-  if (high > 0) candidates.push({ value: high, y: yOf(high), kind: 'high' });
-  if (low < 0) candidates.push({ value: low, y: yOf(low), kind: 'low' });
-  const kept: ValueTick[] = [];
-  for (const tick of candidates) {
-    if (kept.every((other) => Math.abs(other.y - tick.y) >= minGap)) kept.push(tick);
-  }
-  return kept.sort((left, right) => left.y - right.y);
+  const zero: ValueTick = { value: 0, y: yOf(0), labelY: yOf(0), kind: 'zero' };
+  // An extreme that would also read "$0" is no second mark.
+  const extremes: ValueTick[] = [];
+  if (Math.round(high) > 0) extremes.push({ value: high, y: yOf(high), labelY: yOf(high), kind: 'high' });
+  if (Math.round(low) < 0) extremes.push({ value: low, y: yOf(low), labelY: yOf(low), kind: 'low' });
+  const top = MARK_HALF;
+  const bottom = height - MARK_HALF;
+  const clamp = (y: number) => Math.min(Math.max(y, top), Math.max(top, bottom));
+  const place = (marks: ValueTick[]): ValueTick[] | null => {
+    const above = marks.find((tick) => tick.kind === 'high');
+    const below = marks.find((tick) => tick.kind === 'low');
+    let at = clamp(zero.y);
+    let up = above ? Math.min(clamp(above.y), at - minGap) : null;
+    let down = below ? Math.max(clamp(below.y), at + minGap) : null;
+    // Out of room at an edge: $0's words give way too.
+    if (up !== null && up < top) {
+      at += top - up;
+      up = top;
+      if (down !== null) down = Math.max(down, at + minGap);
+    }
+    if (down !== null && down > bottom) {
+      at -= down - bottom;
+      down = bottom;
+      if (up !== null) up = Math.min(up, at - minGap);
+    }
+    if ((up !== null && up < top - 0.5) || at < top - 0.5 || at > bottom + 0.5) return null;
+    return [
+      ...(above && up !== null ? [{ ...above, labelY: up }] : []),
+      { ...zero, labelY: at },
+      ...(below && down !== null ? [{ ...below, labelY: down }] : []),
+    ];
+  };
+  const all = place(extremes);
+  if (all) return all;
+  // Too short for every mark: keep the extreme farther from $0.
+  const farther = [...extremes].sort((left, right) => Math.abs(right.y - zero.y) - Math.abs(left.y - zero.y));
+  return place(farther.slice(0, 1)) ?? [{ ...zero, labelY: clamp(zero.y) }];
 }

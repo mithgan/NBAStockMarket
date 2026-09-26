@@ -2,8 +2,10 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-na
 
 import { exactMoney, humanDate, signedMoney, signedMoneyFine } from '../../copy/terms';
 import type { SeasonSummary } from '../../data/perGameMetrics';
+import type { BreakdownPart, PartPrecision } from '../../data/rosterView';
 import { colors, control, fonts, headingStyle, radius, space, type, weight } from '../../theme';
 import { Button, headingLevel, Label, Money, tapsSettling } from '../../ui/kit';
+import { ScoreParts } from './ScoreHeader';
 
 /** The welcome's heading: a new practice season moves keyboard focus here. */
 export const PRACTICE_WELCOME_TITLE_ID = 'practice-welcome-title';
@@ -77,19 +79,33 @@ export function WelcomeCard({
 }
 
 /**
- * The season's closing moment on the Roster: the final score and place, the
- * best and worst player, how many moves it took, and (in practice) one way to
- * go again.
+ * The season's closing moment on the Roster: the final score and place, where
+ * it came from (Roster, Shorts, Closed, Fees: the score block's split, which
+ * the card carries once the season is over, so the score and rank are not
+ * shown twice; walk 4 T2-07, T1-17), the best and worst player, how many
+ * moves it took, and (in practice) one way to go again.
  */
 export function SeasonCompleteCard({
   summary,
   fees,
+  parts = null,
+  precision = 'fine',
+  variant = 'compact',
+  valueLine = null,
   onPlayAgain,
   onOpenPlayer,
 }: {
   summary: SeasonSummary;
   /** What the moves cost in all (the Fees part of the score). */
   fees: number;
+  /** The final score by source, from `breakdownParts`; null with nothing on record. */
+  parts?: readonly BreakdownPart[] | null;
+  /** The precision at which the parts visibly add up to the final score. */
+  precision?: PartPrecision;
+  /** The split's layout, as in the score block: two a line on a phone, a statement on desktop. */
+  variant?: 'compact' | 'narrow' | 'panel';
+  /** The score block's value line (`pickValue`): last season's value of your picks beside what they made. */
+  valueLine?: string | null;
   /** Practice only: start a fresh season. */
   onPlayAgain?: () => void;
   /**
@@ -99,20 +115,19 @@ export function SeasonCompleteCard({
   onOpenPlayer?: (name: string) => void;
 }) {
   const place = summary.rank !== null && summary.of !== null ? `#${summary.rank} of ${summary.of}` : null;
+  const split = parts && parts.length > 0 ? parts : null;
   const players = [
     summary.best ? { label: 'Best', name: summary.best.name, total: signedMoneyFine(summary.best.total) } : null,
     summary.worst ? { label: 'Worst', name: summary.worst.name, total: signedMoneyFine(summary.worst.total) } : null,
   ].filter((line): line is { label: string; name: string; total: string } => line !== null);
-  // Read the way Season so far read it all season: moves, then fees.
-  const moves = `${summary.moves} · fees ${signedMoneyFine(fees)}`
+  // Read the way Season so far read it all season: moves, then fees (unless
+  // the split above already names the fees).
+  const moves = `${summary.moves}${split ? '' : ` · fees ${signedMoneyFine(fees)}`}`
     + (summary.shortsMade > 0 ? ` · ${summary.shortsMade} ${summary.shortsMade === 1 ? 'short' : 'shorts'}` : '');
   const spokenMoves = `Moves ${moves.replace(/ · /g, ', ')}`;
   const spoken = [
     `Final score ${signedMoney(summary.finalScore)}`,
     place ? `finished ${place.replace('#', 'number ')}` : null,
-    // With profiles to open, Best and Worst are their own buttons and Moves
-    // is read after them, in the order they are shown.
-    ...(onOpenPlayer ? [] : [...players.map((line) => `${line.label} ${line.name} ${line.total}`), spokenMoves]),
   ].filter(Boolean).join(', ');
   const movesLine = (
     <View
@@ -133,18 +148,29 @@ export function SeasonCompleteCard({
           <Money size="display" value={summary.finalScore} />
           {place ? <Text style={styles.place}>{place}</Text> : null}
         </View>
-        {onOpenPlayer ? null : (
-          <>
-            {players.map((line) => (
-              <View key={line.label} style={styles.finalLine}>
-                <Text style={styles.finalLabel}>{line.label}</Text>
-                <Text style={styles.finalText}>{line.name} {line.total}</Text>
-              </View>
-            ))}
-            {movesLine}
-          </>
-        )}
       </View>
+      {split || valueLine ? (
+        <View style={styles.split}>
+          {split ? <ScoreParts parts={split} precision={precision} title="Final score" variant={variant} /> : null}
+          {valueLine ? <Text style={styles.valueLine}>{valueLine}</Text> : null}
+        </View>
+      ) : null}
+      {onOpenPlayer ? null : (
+        // Without profiles to open, Best, Worst and Moves are read as one group.
+        <View
+          accessible
+          accessibilityLabel={[...players.map((line) => `${line.label} ${line.name} ${line.total}`), spokenMoves].join(', ')}
+          style={styles.finalFacts}
+        >
+          {players.map((line) => (
+            <View key={line.label} style={styles.finalLine}>
+              <Text style={styles.finalLabel}>{line.label}</Text>
+              <Text style={styles.finalText}>{line.name} {line.total}</Text>
+            </View>
+          ))}
+          {movesLine}
+        </View>
+      )}
       {onOpenPlayer ? (
         <>
           {players.map((line) => (
@@ -159,8 +185,12 @@ export function SeasonCompleteCard({
               style={({ pressed }) => [styles.finalLine, styles.playerLine, pressed && styles.pressed]}
             >
               <Text style={styles.finalLabel}>{line.label}</Text>
-              <Text style={[styles.finalText, styles.playerName]}>{line.name}</Text>
-              <Text style={styles.finalText}>{line.total}</Text>
+              {/* Name and total share the middle and wrap there, so the
+                  chevron keeps the row's end on a 195px screen too. */}
+              <View style={styles.playerFacts}>
+                <Text style={[styles.finalText, styles.playerName]}>{line.name}</Text>
+                <Text style={styles.finalText}>{line.total}</Text>
+              </View>
               <Text style={styles.playerOpen}>›</Text>
             </Pressable>
           ))}
@@ -289,6 +319,17 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     columnGap: space.md,
   },
+  // The score's split sits between the score and the players, ruled off above.
+  split: {
+    marginBottom: space.xs,
+  },
+  valueLine: {
+    marginTop: space.xs,
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    lineHeight: 17,
+  },
   place: {
     color: colors.text,
     fontFamily: fonts.display,
@@ -327,6 +368,14 @@ const styles = StyleSheet.create({
     marginHorizontal: -space.sm,
     paddingHorizontal: space.sm,
     borderRadius: radius.sm,
+  },
+  playerFacts: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    columnGap: space.sm,
   },
   playerName: {
     textDecorationLine: 'underline',

@@ -514,6 +514,42 @@ export function scrollResultsToNewest(): boolean {
 }
 
 /** Move keyboard focus to an element by id, once it has rendered (web only). */
+/**
+ * Web: after a month jump, line that month's first day up with the top of the
+ * feed exactly (walk 4 T2-08). react-native-web measures a row only when its
+ * size changes, so once newer nights are added above a day, or a row above it
+ * is opened, the list's own offset for that day is short, and scrollToIndex
+ * stopped with the month's first day a row or two down, under November's.
+ * Once the day is on the page its real distance from the feed's top is known:
+ * scroll by that, and look again until it holds (the list may still be
+ * walking down to a far month). It stops at the end of the feed, and when
+ * `current()` says a newer jump or "Back to newest" has taken over.
+ */
+function settleOnDay(
+  list: { getScrollableNode?: () => unknown } | null,
+  id: string,
+  current: () => boolean,
+  tries = 30,
+  steady = 0,
+): void {
+  if (typeof document === 'undefined' || tries <= 0 || !current()) return;
+  const scroller = list?.getScrollableNode?.() as HTMLElement | null | undefined;
+  const node = document.getElementById(id);
+  let held = steady;
+  if (scroller && node) {
+    const off = node.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    const below = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
+    if (Math.abs(off) <= 1 || (off > 0 && below <= 1)) {
+      held += 1;
+    } else {
+      scroller.scrollTop += off;
+      held = 0;
+    }
+    if (held >= 2) return;
+  }
+  setTimeout(() => settleOnDay(list, id, current, tries - 1, held), 80);
+}
+
 function focusWhenReady(id: string, tries = 40): void {
   if (typeof document === 'undefined') return;
   const node = document.getElementById(id) as (HTMLElement | null);
@@ -590,7 +626,10 @@ export function PerGameResultsScreen() {
   const toggle = useCallback((key: string) => setExpanded((previous) => toggled(previous, key)), []);
   const toggleFees = useCallback((date: string) => setOpenFees((previous) => toggled(previous, date)), []);
 
+  // Each month jump's number; a later jump (or Back to newest) ends an earlier one's settling.
+  const jumpSeq = useRef(0);
   const backToNewest = useCallback(() => {
+    jumpSeq.current += 1;
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
     setFar(false);
     focusWhenReady(TITLE_ID);
@@ -604,7 +643,10 @@ export function PerGameResultsScreen() {
 
   const jumpTo = useCallback((anchor: MonthAnchor) => {
     jumpRetries.current = 0;
+    const seq = ++jumpSeq.current;
     listRef.current?.scrollToIndex({ index: anchor.index, animated: false, viewPosition: 0 });
+    // The month's first day at the top of the feed, not a row or two below it.
+    settleOnDay(listRef.current, nightAnchorId(anchor.date), () => jumpSeq.current === seq);
     focusWhenReady(nightAnchorId(anchor.date));
   }, []);
   // A far month is not measured yet: walk down to the furthest row measured

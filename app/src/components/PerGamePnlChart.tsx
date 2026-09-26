@@ -154,7 +154,7 @@ export function PerGamePnlChart({
   const shownIndex = readIndex ?? last;
   const end = series[last];
   const endUp = end.cumulativePnl >= 0;
-  const ticks = valueTicks(series.map((night) => night.cumulativePnl), yOf);
+  const ticks = valueTicks(series.map((night) => night.cumulativePnl), yOf, { height: plotHeight });
   const axisLabels = placeAxisLabels(xs, axisLabelIndexes(series, width), width, AXIS_LABEL_WIDTH);
   const revealX = GUTTER + revealed * span + 4;
 
@@ -255,12 +255,13 @@ export function PerGamePnlChart({
             ) : null}
           </Svg>
         ) : null}
-        {/* The value marks name the lines: $0, and the season's high and low. */}
+        {/* The value marks name the lines: $0, and the season's high and low,
+            each beside its line or stepped just clear of a close one. */}
         {ticks.map((tick) => (
           <Text
             key={tick.kind}
             maxFontSizeMultiplier={1.3}
-            style={[styles.tickLabel, { top: Math.min(Math.max(tick.y - 7, 0), plotHeight - 14) }]}
+            style={[styles.tickLabel, { top: Math.min(Math.max(tick.labelY - 7, 0), plotHeight - 14) }]}
           >
             {tick.kind === 'zero' ? '$0' : axisMoney(tick.value)}
           </Text>

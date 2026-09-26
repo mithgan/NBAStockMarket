@@ -435,9 +435,13 @@ export interface EffectLine {
  * The settlement of one game, line by line, each by its effect on you, so no
  * line ever needs a minus sign in front of a negative number. The lines sum to
  * the profit, in the row's column order (price first, then dividend). A
- * short turns his dividend around, and the label says so:
+ * short turns his dividend around, and the label says so. A dividend below
+ * zero is told as plain money that changed hands, never as a minus sign the
+ * reader has to work out (walk 4 T2-09):
  *   roster: Price charged -$137,500 · Dividend collected +$584,000
- *   short:  Price credited +$112,500 · His dividend was -$320,000, which a short collects +$320,000
+ *   roster: Price charged -$176,000 · Bad game: his dividend was below zero, so you also paid $128,000 -$128,000
+ *   short:  Price credited +$112,500 · His dividend was $328,000, which a short pays -$328,000
+ *   short:  Price credited +$112,500 · Bad game: his dividend was below zero, so your short also collected $320,000 +$320,000
  */
 export function settlementLines(input: {
   side: PerGamePositionSide;
@@ -448,18 +452,20 @@ export function settlementLines(input: {
   const noun = input.corrected ? 'corrected dividend' : 'dividend';
   const Noun = input.corrected ? 'Corrected dividend' : 'Dividend';
   const was = `His ${noun} was ${exactMoney(input.dividend)}`;
+  const below = `Bad game: his ${noun} was below zero`;
+  const size = exactMoney(Math.abs(input.dividend));
   if (input.side === 'short') {
     const dividend: EffectLine = input.dividend > 0
       ? { label: `${was}, which a short pays`, amount: -input.dividend }
       : input.dividend < 0
-        ? { label: `${was}, which a short collects`, amount: -input.dividend }
+        ? { label: `${below}, so your short also collected ${size}`, amount: -input.dividend }
         : { label: Noun, amount: 0 };
     return [{ label: 'Price credited', amount: input.price }, dividend];
   }
   const dividend: EffectLine = input.dividend > 0
     ? { label: `${Noun} collected`, amount: input.dividend }
     : input.dividend < 0
-      ? { label: `${was}, which a roster spot pays`, amount: input.dividend }
+      ? { label: `${below}, so you also paid ${size}`, amount: input.dividend }
       : { label: Noun, amount: 0 };
   return [{ label: 'Price charged', amount: -input.price }, dividend];
 }

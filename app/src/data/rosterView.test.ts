@@ -424,14 +424,41 @@ test('value marks fit the gutter: three significant figures at most', () => {
   assert.equal(axisMoney(0), '$0');
 });
 
-test('the y-axis marks $0 and the season high and low, dropping a mark that would crowd another', () => {
+test('the y-axis marks $0 and the season high and low, each at its line when there is room', () => {
   const yOf = (value: number) => 100 - value / 10_000;
-  assert.deepEqual(valueTicks([0, 400_000, -300_000], yOf).map((tick) => [tick.kind, tick.value]), [
-    ['high', 400_000], ['zero', 0], ['low', -300_000],
+  assert.deepEqual(valueTicks([0, 400_000, -300_000], yOf).map((tick) => [tick.kind, tick.value, tick.labelY]), [
+    ['high', 400_000, 60], ['zero', 0, 100], ['low', -300_000, 130],
   ]);
-  // Never below $0: no low mark; a high only 5px above $0 is dropped.
-  assert.deepEqual(valueTicks([0, 50_000], yOf).map((tick) => tick.kind), ['zero']);
+  // Never below $0: no low mark. A high only 5px above $0 keeps its line and
+  // its mark, the words stepped up clear of "$0" (walk 4 T4-09: no longer dropped).
+  assert.deepEqual(valueTicks([0, 50_000], yOf).map((tick) => [tick.kind, tick.y, tick.labelY]), [['high', 95, 82], ['zero', 100, 100]]);
   assert.deepEqual(valueTicks([0, 900_000], yOf).map((tick) => tick.kind), ['high', 'zero']);
+  // A high that would read "$0" is no second mark.
+  assert.deepEqual(valueTicks([0, 0.4], yOf).map((tick) => tick.kind), ['zero']);
+});
+
+test('the score chart marks both its high and its low when they differ, inside a short phone plot (walk 4 T4-09)', () => {
+  // The phone chart: a 68px plot, 8px inset top and bottom.
+  const plot = (low: number, high: number) => (value: number) => 8 + ((high - value) / (high - low)) * 52;
+  const readable = (ticks: ReturnType<typeof valueTicks>) => {
+    for (const tick of ticks) assert.ok(tick.labelY >= 7 && tick.labelY <= 61, `${tick.kind} inside the plot: ${tick.labelY}`);
+    for (let index = 1; index < ticks.length; index += 1) {
+      assert.ok(ticks[index].labelY - ticks[index - 1].labelY >= 17.99, `${ticks[index].kind} clear of ${ticks[index - 1].kind}`);
+    }
+  };
+  // (a) Peaked at +$22.8K, now -$8,000: the low sat 13.5px under $0 and went unlabelled.
+  const peak = valueTicks([0, 22_800, 5_000, -8_000], plot(-8_000, 22_800), { height: 68 });
+  assert.deepEqual(peak.map((tick) => [tick.kind, tick.value]), [['high', 22_800], ['zero', 0], ['low', -8_000]]);
+  readable(peak);
+  assert.equal(peak[0].labelY, peak[0].y, 'the high reads at its line');
+  // (b) A -$1.56M season that went a little above $0 in January: the high is named too.
+  const season = valueTicks([0, -400_000, 40_000, -1_560_000], plot(-1_560_000, 40_000), { height: 68 });
+  assert.deepEqual(season.map((tick) => [tick.kind, tick.value]), [['high', 40_000], ['zero', 0], ['low', -1_560_000]]);
+  readable(season);
+  // Lines stay at their values; only the words step aside.
+  assert.deepEqual(season.map((tick) => Math.round(tick.y)), [8, 9, 60]);
+  // A plot too short for three marks keeps the extreme farther from $0.
+  assert.deepEqual(valueTicks([0, 22_800, -8_000], plot(-8_000, 22_800), { height: 40 }).map((tick) => tick.kind), ['high', 'zero']);
 });
 
 test('the hero score shrinks to fit a 200% zoom phone and stays full size elsewhere (walk 3 T3-28)', async () => {
@@ -474,7 +501,33 @@ test('value against results: last season beside what your picks have made, over 
   assert.equal(value.soFar, -5_000);
   assert.equal(value.players, 2);
   assert.equal(value.gamesEach, 1.5);
-  assert.equal(value.text, "Value of your picks: +$50K a game. So far they've made -$5K a game. A few weeks is mostly luck.");
+  // Two of the four held picks are compared (c has no last season, d no game yet), and the words say so.
+  assert.equal(value.text, "Value of 2 of your 4 picks combined: +$50K a game. So far they've made -$5K a game combined. A few weeks is mostly luck.");
+});
+
+test('the value line says what it adds up: how many picks, combined, and this season once it is over (walk 4 T1-06)', async () => {
+  const { pickValue } = await import('./rosterView');
+  // Duren, Barnes and Anunoby: +$31.5K, +$35K and +$25.5K a game by last season.
+  const positions = [
+    position({ positionId: 'd', playerId: 'd', lockedGameCost: 176_000 }),
+    position({ positionId: 'b', playerId: 'b', lockedGameCost: 259_000 }),
+    position({ positionId: 'a', playerId: 'a', lockedGameCost: 165_500 }),
+  ];
+  const prior: Record<string, number> = { d: 207_500, b: 294_000, a: 191_000 };
+  const played = [
+    result({ positionId: 'd', playerId: 'd', gameId: 'd1', eventCursor: 1, lockedGameCost: 176_000, dividendDollars: 166_000, netPnl: -10_000 }),
+    result({ positionId: 'b', playerId: 'b', gameId: 'b1', eventCursor: 2, lockedGameCost: 259_000, dividendDollars: 249_500, netPnl: -9_500 }),
+    result({ positionId: 'a', playerId: 'a', gameId: 'a1', eventCursor: 3, lockedGameCost: 165_500, dividendDollars: 160_500, netPnl: -5_000 }),
+  ];
+  const all = pickValue(positions, (id) => prior[id] ?? null, played);
+  assert.equal(all?.text, "Value of your 3 picks combined: +$92K a game. So far they've made -$24.5K a game combined. A few weeks is mostly luck.");
+  // After the first night only Barnes had played: the base is named, not silently one pick.
+  const first = pickValue(positions, (id) => prior[id] ?? null, played.slice(1, 2));
+  assert.equal(first?.text, "Value of 1 of your 3 picks: +$35K a game. So far he's made -$9.5K a game. A few weeks is mostly luck.");
+  assert.equal(
+    pickValue(positions, (id) => prior[id] ?? null, played, { over: true })?.text,
+    "Value of your 3 picks combined: +$92K a game. This season they made -$24.5K a game combined. A few weeks is mostly luck.",
+  );
 });
 
 test('value against results is hidden with nothing to compare: before games, or no last season for anyone', async () => {
@@ -501,7 +554,7 @@ test('value against results uses the price you locked, and calls the gap luck on
   }));
   // Last season paid $90K against the $100K locked (today's market price plays no part).
   const early = pickValue(held, () => 90_000, games(EARLY_GAMES_EACH - 1));
-  assert.equal(early?.text, "Value of your picks: -$10K a game. So far they've made +$10K a game. A few weeks is mostly luck.");
+  assert.equal(early?.text, "Value of your pick: -$10K a game. So far he's made +$10K a game. A few weeks is mostly luck.");
   const later = pickValue(held, () => 90_000, games(EARLY_GAMES_EACH));
-  assert.equal(later?.text, "Value of your picks: -$10K a game. So far they've made +$10K a game. Last season is a guide, not a promise.");
+  assert.equal(later?.text, "Value of your pick: -$10K a game. So far he's made +$10K a game. Last season is a guide, not a promise.");
 });

@@ -31,6 +31,9 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
   actionFor?: (row: ClosedRow) => ReactNode;
 }) {
   const [showAll, setShowAll] = useState(false);
+  // The roster table (a wide list) keeps a Total column and an action column
+  // at the right; `totalInset` is the action column plus its gap.
+  const table = totalInset > 0;
   // A player dropped before his first game moved nothing but fees; the Fees
   // line counts him instead of a row of zeros.
   const rows = allRows.filter((row) => !row.unplayed);
@@ -50,18 +53,23 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
         const action = actionFor ? actionFor(row) : null;
         const label = `${row.name}, ${row.how.replace(/ · /g, ', ')}, ${gamesCount(row.games)}, ${formatAt(row.total, precision, true)} stays in your score`;
         return (
-          <View key={row.positionId} style={styles.row}>
+          <View key={row.positionId} style={[styles.row, table && styles.rowTable]}>
             {/* The facts read as one stop; a follow-up button stays its own stop. */}
             <View accessible accessibilityLabel={label} style={styles.facts}>
               <View style={styles.copy}>
                 <Text style={styles.name}>{unbrokenName(row.name)}</Text>
                 <Text style={styles.detail}>{bindDates(row.how)} · {keepTogether(gamesCount(row.games))}</Text>
               </View>
-              <View style={[styles.money, { marginRight: totalInset }]}>
+              <View style={[styles.money, { marginRight: table ? 0 : totalInset }]}>
                 <FineMoney precision={precision} value={row.total} />
               </View>
             </View>
-            {action ? <View style={styles.rowAction}>{action}</View> : null}
+            {/* In the table the figure stays under Total, like the section
+                total and Fees, and Short again sits in the action column,
+                where Drop and Close sit above it (walk 4 T2-20). */}
+            {table ? (
+              <View style={[styles.actionColumn, { width: totalInset - space.sm }]}>{action}</View>
+            ) : action ? <View style={styles.rowAction}>{action}</View> : null}
           </View>
         );
       })}
@@ -137,6 +145,15 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
+  },
+  // The table: one line, figure then action column, spaced like a roster row.
+  rowTable: {
+    flexWrap: 'nowrap',
+    gap: space.sm,
+  },
+  actionColumn: {
+    flexShrink: 0,
+    alignItems: 'flex-end',
   },
   fees: {
     borderTopWidth: 0,

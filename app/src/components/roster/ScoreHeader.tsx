@@ -127,24 +127,40 @@ export function ScoreHeader({
       </View>
       {/* Why a cold start is not a broken signal, in words (signs, not colour). */}
       {started && valueLine ? <Text style={styles.valueLine}>{valueLine}</Text> : null}
-      {parts ? (
-        <View
-          accessibilityLabel={`${title} by source: ${parts.map((part) => `${part.label} ${formatAt(part.value, precision, true)}`).join(', ')}`}
-          accessible
-          style={[styles.parts, variant === 'compact' && styles.partsGrid]}
-        >
-          {parts.map((part) => (
-            <View
-              key={part.key}
-              style={[styles.part, variant === 'compact' && styles.partHalf]}
-            >
-              <Text style={variant === 'panel' ? styles.statementLabel : styles.partLabel}>{part.label}</Text>
-              <FineMoney precision={precision} size="body" value={part.value} />
-            </View>
-          ))}
-        </View>
-      ) : null}
+      {parts ? <ScoreParts parts={parts} precision={precision} title={title} variant={variant} /> : null}
       {slots ? <Text style={styles.slots}>{slots}</Text> : null}
+    </View>
+  );
+}
+
+/**
+ * The score split by where it came from (Roster, Shorts, Closed, Fees), each
+ * part the total of a list further down, at the precision at which the parts
+ * visibly add up to the score above them. The score block shows it while the
+ * season runs; at the season's end the result card carries it (walk 4 T2-07).
+ */
+export function ScoreParts({ title, parts, precision, variant }: {
+  /** Names the split for screen readers: "Your score by source: …". */
+  title: string;
+  parts: readonly BreakdownPart[];
+  precision: PartPrecision;
+  variant: 'compact' | 'narrow' | 'panel';
+}) {
+  return (
+    <View
+      accessibilityLabel={`${title} by source: ${parts.map((part) => `${part.label} ${formatAt(part.value, precision, true)}`).join(', ')}`}
+      accessible
+      style={[styles.parts, variant === 'compact' && styles.partsGrid]}
+    >
+      {parts.map((part) => (
+        <View
+          key={part.key}
+          style={[styles.part, variant === 'compact' && styles.partHalf]}
+        >
+          <Text style={variant === 'panel' ? styles.statementLabel : styles.partLabel}>{part.label}</Text>
+          <FineMoney precision={precision} size="body" value={part.value} />
+        </View>
+      ))}
     </View>
   );
 }

@@ -58,6 +58,7 @@ import {
   positionOpenedDay,
   priceSourceCaption,
   priceStory,
+  profileSide,
   rangeNights,
   rangeOptions,
   sideWords,
@@ -190,7 +191,12 @@ export function PerGamePlayerProfile({
   const inset = !wide && windowWidth < 240 ? styles.insetTight : null;
   const narrow = !wide && windowWidth < 300;
 
-  const viewSide: PerGamePositionSide = position?.side ?? side ?? 'long';
+  // "Short instead" / "Add instead" switch the action bar to the other side,
+  // and the whole profile reads from the side the bar is on (walk 4 T1-03).
+  // Kept for this player opened from this tab, so a new one starts over.
+  const openedKey = `${player.playerId}:${side ?? 'long'}`;
+  const [instead, setInstead] = useState<{ key: string; side: PerGamePositionSide } | null>(null);
+  const viewSide = profileSide(position, side, instead?.key === openedKey ? instead.side : null);
   const held = position !== null;
   const live = trends === undefined;
   const words = sideWords(viewSide);
@@ -353,7 +359,13 @@ export function PerGamePlayerProfile({
           {quietNote ? <Text maxFontSizeMultiplier={1.4} style={styles.stakeLead}>{quietNote}</Text> : null}
         </View>
         </View>
-        <ProfileActionBar onLeave={onClose} player={player} position={position} side={viewSide} />
+        <ProfileActionBar
+          onLeave={onClose}
+          onSwitchSide={(next) => setInstead({ key: openedKey, side: next })}
+          player={player}
+          position={position}
+          side={viewSide}
+        />
 
         <SectionHeader
           level={3}
@@ -441,7 +453,9 @@ export function PerGamePlayerProfile({
                 value={metric}
               />
               {metric === 'price' ? (
-                <Text maxFontSizeMultiplier={1.4} style={styles.note}>{priceStory(shown, viewSide, player.currentGameCost)}</Text>
+                <Text maxFontSizeMultiplier={1.4} style={styles.note}>
+                  {priceStory(shown, viewSide, player.currentGameCost, nights.find((night) => night.source === 'yours')?.date ?? null)}
+                </Text>
               ) : null}
               <ProfileChart height={wide ? 200 : 176} metric={metric} nights={shown} side={viewSide} />
             </>

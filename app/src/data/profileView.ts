@@ -59,6 +59,23 @@ export function sideNet(side: PerGamePositionSide, dividend: number, price: numb
 }
 
 /**
+ * The side the whole profile reads from. A player you hold reads from the
+ * side you hold him on. Otherwise it is the side the action bar offers: the
+ * market tab he was opened from, until "Short instead" or "Add instead"
+ * switches the bar (`switched`). Every side-dependent figure (each game's net,
+ * the verdict, last season's value, the labels) then reads exactly as if he
+ * had been opened from that tab, so a short is never judged by a roster
+ * spot's numbers (walk 4 T1-03).
+ */
+export function profileSide(
+  position: Pick<PerGamePosition, 'side'> | null,
+  opened: PerGamePositionSide | undefined,
+  switched: PerGamePositionSide | null = null,
+): PerGamePositionSide {
+  return position?.side ?? switched ?? opened ?? 'long';
+}
+
+/**
  * Every settled night he played, oldest first, from the side you look from.
  *
  * Your settled results on that side come first (your locked price, your net,
@@ -514,14 +531,45 @@ export function isRecentRange(range: ProfileRange, shown: number, total: number)
 
 /**
  * How his price moved over some nights, in plain words. With his market
- * history and games of yours in view, it leads with the gap you care about
- * (walk-1 T2-33): "Market now $128K a game; you locked $125K. Over these 19
- * games his market price went from $120K to $127.5K."
+ * history and today's price (the header's), it is short lines, one price a
+ * line (walk 4 T2-05, T1-22): the price you locked, then his market price
+ * today, up or down from the first of these games (today against that game,
+ * so a price that ends lower never reads "rose"):
+ *
+ *   Your price: $259K (locked).
+ *   Market price: $252.6K today, down from $259.6K at his first game with you.
+ *
+ * The chart ends at his price after his latest game; when today's differs, a
+ * last line says why a price can change with no game in between: "His market
+ * price moves between games too." `firstWithYou` is the date of your first
+ * game with him (any range), so the first game is named as that when it is.
  */
-export function priceStory(nights: readonly ProfileNight[], side: PerGamePositionSide = 'long', now?: number): string {
+export function priceStory(
+  nights: readonly ProfileNight[],
+  side: PerGamePositionSide = 'long',
+  now?: number,
+  firstWithYou: string | null = null,
+): string {
   if (nights.length === 0) return 'No games yet.';
   const word = side === 'long' ? 'price' : 'credit';
   const mine = nights.filter((night) => night.source === 'yours');
+  if (now !== undefined && nights.every((night) => night.market !== undefined)) {
+    const first = nights[0];
+    const start = first.market as number;
+    const today = moneyFine(now);
+    const since = first.date === firstWithYou ? 'at his first game with you' : `at his ${humanDate(first.date)} game`;
+    const lines: string[] = [];
+    if (mine.length > 0) {
+      const prices = yourPrices(mine);
+      lines.push(prices.kind === 'one' ? `Your ${word}: ${prices.text} (locked).` : `Your ${word}s: ${prices.text} (locked).`);
+    }
+    lines.push(moneyFine(start) === today
+      ? `Market ${word}: ${today} today, the same as ${since}.`
+      : `Market ${word}: ${today} today, ${now > start ? 'up' : 'down'} from ${moneyFine(start)} ${since}.`);
+    if (moneyFine(nights[nights.length - 1].market as number) !== today) lines.push(`His market ${word} moves between games too.`);
+    return lines.join('\n');
+  }
+  // No price today to set against (a caller without the header's price).
   if (mine.length > 0 && nights.every((night) => night.market !== undefined)) {
     const from = nights[0].market as number;
     const to = nights[nights.length - 1].market as number;
@@ -530,29 +578,9 @@ export function priceStory(nights: readonly ProfileNight[], side: PerGamePositio
       : `went from ${moneyFine(from)} to ${moneyFine(to)}`;
     const prices = yourPrices(mine);
     const locked = prices.kind === 'one' ? `you locked ${prices.text}` : `your ${word}s were ${prices.text}`;
-    if (now === undefined) {
-      const lead = `${locked.charAt(0).toUpperCase()}${locked.slice(1)}.`;
-      if (nights.length === 1) return `${lead} His market ${word} was ${moneyFine(to)} in that game.`;
-      return `${lead} Over these ${gamesCount(nights.length)} his market ${word} ${move}.`;
-    }
-    // Today's price (the header's) and his price after his latest game (the
-    // chart's last point) can differ: each is named for when it was, so the
-    // view never shows two "now" prices (walk-2 T2-19, walk 3 T1-18).
     const lead = `${locked.charAt(0).toUpperCase()}${locked.slice(1)}.`;
-    const after = moneyFine(to);
-    const today = moneyFine(now);
-    const lastGame = `his ${humanDate(nights[nights.length - 1].date)} game`;
-    const held = Math.round(from / 1000) === Math.round(to / 1000);
-    if (today === after) {
-      if (nights.length === 1) return `${lead} After ${lastGame} his market ${word} was ${after}, where it still is today.`;
-      return `${lead} In these ${gamesCount(nights.length)} his market ${word} ${move}, where it still is today.`;
-    }
-    if (nights.length === 1) return `${lead} After ${lastGame} his market ${word} was ${after}; today it is ${today} a game.`;
-    if (held) {
-      return `${lead} In these ${gamesCount(nights.length)} his market ${word} held near ${after} through ${lastGame}; today it is ${today} a game.`;
-    }
-    return `${lead} In these ${gamesCount(nights.length)} his market ${word} ${to > from ? 'rose' : 'fell'} from ${moneyFine(from)}; `
-      + `after ${lastGame} it was ${after}, and today it is ${today} a game.`;
+    if (nights.length === 1) return `${lead} His market ${word} was ${moneyFine(to)} in that game.`;
+    return `${lead} Over these ${gamesCount(nights.length)} his market ${word} ${move}.`;
   }
   const first = nights[0].price;
   const last = nights[nights.length - 1].price;

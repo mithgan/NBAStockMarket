@@ -38,6 +38,7 @@ import {
   perGame,
   ROSTER_EXPLAINER,
   rosterReopensLine,
+  seasonResultLine,
   SHORT_EXPLAINER,
   sideHeading,
   signedMoney,
@@ -161,9 +162,10 @@ function PositionRow({
     ownAction.current = node;
     actionRef(node);
   }, [actionRef]);
+  // When this row's question last opened (see onActionPress).
   const openedAt = useRef(0);
   useEffect(() => {
-    if (confirming) openedAt.current = Date.now();
+    if (confirming && Date.now() - openedAt.current >= DOUBLE_TAP_MS) openedAt.current = Date.now();
   }, [confirming]);
   // A lock that begins while the question is open would refuse its answer.
   useEffect(() => {
@@ -238,6 +240,10 @@ function PositionRow({
     }
     if (disabled) return;
     if (!confirming) {
+      // Stamped here, in the press itself: a second tap handled before the
+      // effect above has run would otherwise read the stamp of an older
+      // question and fold this one (walk 4 T1-05).
+      openedAt.current = Date.now();
       onConfirmOpen(position);
       return;
     }
@@ -368,13 +374,19 @@ function PositionRow({
  * price, one tap, as the market's Short button would. Unavailable (with the
  * reason in its name) while roster moves are locked or the shorts are full.
  */
-function ShortAgainButton({ row, price, quoteVersion, reason, onShorted }: {
+function ShortAgainButton({ row, price, quoteVersion, reason, onShorted, column = false }: {
   row: ClosedRow;
   price: number;
   quoteVersion: number;
   /** Why it cannot be pressed right now, or null. */
   reason: string | null;
   onShorted: (playerId: string) => void;
+  /**
+   * The roster table's action column: as wide as Drop and Close above it,
+   * the words on two lines, so the row's figure keeps the Total column
+   * (walk 4 T2-20).
+   */
+  column?: boolean;
 }) {
   const { bootstrap, openPosition, pendingActions } = usePerGame();
   const pending = pendingActions.has(`position:short:${row.playerId}`);
@@ -387,7 +399,10 @@ function ShortAgainButton({ row, price, quoteVersion, reason, onShorted }: {
       accessibilityLabel={pending ? `Shorting ${row.name}` : name}
       disabled={reason !== null || pending || busy}
       focusableWhenDisabled
-      label={pending ? 'Shorting…' : 'Short again'}
+      label={pending ? (column ? 'Wait' : 'Shorting…') : 'Short again'}
+      style={column ? styles.columnButton : undefined}
+      textStyle={column ? styles.columnButtonText : undefined}
+      width={column ? ACTION_WIDTH : undefined}
       onPress={() => {
         void openPosition({
           playerId: row.playerId,
@@ -417,6 +432,8 @@ export function PerGameRosterScreen({
   makingRef.current = making;
   // The banner's "Add at $239K": where focus goes once the drop makes room.
   const errandAddRef = useRef<View>(null);
+  // The banner's sentence: where focus lands on arrival, so it is read once.
+  const errandTextRef = useRef<Text>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [listWidth, setListWidth] = useState<number | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -459,15 +476,23 @@ export function PerGameRosterScreen({
     () => new Map((bootstrap?.market ?? []).map((row) => [row.playerId, row])),
     [bootstrap?.market],
   );
+  // One rule with the Market: practice ends on its last day, a live season
+  // when games have settled and none are left.
+  const seasonOver = bootstrap ? isSeasonOver({
+    practiceComplete: isMockActive() && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete,
+    lastSettledDate: bootstrap.game.lastSettledDate,
+    nextGameDate: bootstrap.game.nextGameDate,
+  }) : false;
   // Value against results: last season's worth of your picks beside what they
-  // have made so far (walk 3 T1-N1).
+  // have made so far (walk 3 T1-N1), or this season once it is over.
   const picks = useMemo(
     () => pickValue(
       bootstrap?.positions ?? [],
       (playerId) => market.get(playerId)?.priorSeasonValuePerGame ?? null,
       bootstrap?.settledResults ?? [],
+      { over: seasonOver },
     ),
-    [bootstrap?.positions, bootstrap?.settledResults, market],
+    [bootstrap?.positions, bootstrap?.settledResults, market, seasonOver],
   );
 
   const onConfirmOpen = useCallback((position: PerGamePosition) => {
@@ -512,6 +537,13 @@ export function PerGameRosterScreen({
       const target = pick.side === 'short' ? shortsHeading.current : rosterHeading.current;
       const heading = target as unknown as { scrollIntoView?: (options?: object) => void } | null;
       heading?.scrollIntoView?.({ block: 'start' });
+      // Making room for a player: the banner under the heading says why, so
+      // it is the one message (no notice repeating it above; walk 4 T1-16),
+      // and focus lands on its sentence so a screen reader reads it too.
+      if (errandTextRef.current) {
+        focusElement(errandTextRef.current, { preventScroll: true });
+        return;
+      }
       focusElement(target, { preventScroll: true });
       notify(pick.reason);
     }, 80);
@@ -566,13 +598,6 @@ export function PerGameRosterScreen({
   const rosterLocked = bootstrap.ruleset.rosterMutationsLocked;
   const rosterLockDate = bootstrap.ruleset.rosterLockGameDate;
   const practice = isMockActive();
-  // One rule with the Market: practice ends on its last day, a live season
-  // when games have settled and none are left.
-  const seasonOver = isSeasonOver({
-    practiceComplete: practice && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete,
-    lastSettledDate: bootstrap.game.lastSettledDate,
-    nextGameDate: bootstrap.game.nextGameDate,
-  });
   // The welcome stays until a player of yours has played a game (not just
   // until a night passes): +1 night with an empty roster must not skip it.
   const openingEve = practice && !seasonOver && !started;
@@ -585,6 +610,8 @@ export function PerGameRosterScreen({
   const wide = width >= WIDE_MIN_WIDTH;
   const layout = rowLayout(listWidth ?? (wide ? width - summaryWidth(width) : width), width, fontScale);
   const narrow = layout === 'stacked' && (listWidth ?? width) < NARROW_LIST_MAX_WIDTH;
+  // The score's split: a statement in the desktop column, one a line when narrow, else two a line.
+  const scoreVariant = wide ? 'panel' : layout === 'compact' ? 'narrow' : 'compact';
   const totalInset = layout === 'table' ? ACTION_WIDTH + space.sm : 0;
   const hadLongs = bootstrap.positions.some((position) => position.side === 'long' && position.status === 'closed');
   const hadShorts = bootstrap.positions.some((position) => position.side === 'short' && position.status === 'closed');
@@ -644,6 +671,7 @@ export function PerGameRosterScreen({
     if (seasonOver || !reshortable.has(row.positionId) || heldNow.has(row.playerId) || !listed) return null;
     return (
       <ShortAgainButton
+        column={layout === 'table'}
         onShorted={onShorted}
         price={listed.currentGameCost}
         quoteVersion={listed.quoteVersion}
@@ -668,36 +696,43 @@ export function PerGameRosterScreen({
     const opening = pendingActions.has(`position:${side}:${makingFor.playerId}`);
     return (
       <View style={styles.errand}>
-        {/* Only the sentence is announced; the buttons are read as focus
-            reaches them (it was "…Add at $239KNot now", walk 4 T3-10). */}
-        <Text accessibilityLiveRegion="polite" style={styles.errandText}>
-          {room
-            ? `Room made for ${makingFor.playerName}.`
-            : `Making room for ${makingFor.playerName}: ${side === 'long' ? 'drop a player' : 'close a short'} below.`}
-        </Text>
-        <View style={styles.errandActions}>
-          {room && listed && !rosterLocked ? (
-            <Button
-              ref={errandAddRef}
-              accessibilityLabel={`${verb} ${makingFor.playerName} at ${perGame(listed.currentGameCost)}${fee > 0 ? `, ${exactMoney(fee)} fee` : ''}`}
-              disabled={opening}
-              focusableWhenDisabled
-              label={opening ? 'Wait' : `${verb} at ${moneyCompact(listed.currentGameCost)}`}
-              onPress={() => {
-                void openPosition({
-                  playerId: makingFor.playerId,
-                  playerName: makingFor.playerName,
-                  side,
-                  expectedQuoteVersion: listed.quoteVersion,
-                }).then((ok) => {
-                  if (ok) setMaking(null);
-                });
-              }}
-              variant="primary"
-            />
-          ) : null}
-          <Button label={room ? 'Not now' : 'Cancel'} onPress={() => setMaking(null)} variant="quiet" />
+        {/* The first line: why you are here, and the way out beside it
+            (walk 4 T1-16). The sentence keeps its place when room is made,
+            so the change is announced; only the sentence is announced, the
+            buttons are read as focus reaches them (walk 4 T3-10). */}
+        <View style={styles.errandHead}>
+          <Text ref={errandTextRef} accessibilityLiveRegion="polite" style={styles.errandText}>
+            {room
+              ? `Room made for ${makingFor.playerName}.`
+              : `Making room for ${makingFor.playerName}: ${side === 'long' ? 'drop a player' : 'close a short'} below.`}
+          </Text>
+          {room ? null : <Button label="Cancel" onPress={() => setMaking(null)} style={styles.errandCancel} variant="quiet" />}
         </View>
+        {room ? (
+          <View style={styles.errandActions}>
+            {listed && !rosterLocked ? (
+              <Button
+                ref={errandAddRef}
+                accessibilityLabel={`${verb} ${makingFor.playerName} at ${perGame(listed.currentGameCost)}${fee > 0 ? `, ${exactMoney(fee)} fee` : ''}`}
+                disabled={opening}
+                focusableWhenDisabled
+                label={opening ? 'Wait' : `${verb} at ${moneyCompact(listed.currentGameCost)}`}
+                onPress={() => {
+                  void openPosition({
+                    playerId: makingFor.playerId,
+                    playerName: makingFor.playerName,
+                    side,
+                    expectedQuoteVersion: listed.quoteVersion,
+                  }).then((ok) => {
+                    if (ok) setMaking(null);
+                  });
+                }}
+                variant="primary"
+              />
+            ) : null}
+            <Button label="Not now" onPress={() => setMaking(null)} variant="quiet" />
+          </View>
+        ) : null}
       </View>
     );
   };
@@ -720,30 +755,41 @@ export function PerGameRosterScreen({
         const player = bootstrap.positions.find((row) => row.playerName === name);
         if (player) setProfileId(player.playerId);
       }}
-      onPlayAgain={practice ? restartPractice : undefined}
+      // The next season's notice says how this one finished.
+      onPlayAgain={practice
+        ? () => restartPractice(seasonResultLine(bootstrap.account.cumulativePnl, rankLine(bootstrap.leaderboard)))
+        : undefined}
+      parts={parts}
+      precision={precision}
       summary={season}
+      valueLine={started ? picks?.text ?? null : null}
+      variant={scoreVariant}
     />
   ) : null;
 
   // The welcome and the season's result lead the screen: on a phone above the
   // score, on a desktop at the top of the score column, which is otherwise
-  // mostly empty before the first games.
+  // mostly empty before the first games. Once the season is over the result
+  // card is the score block (final score, place and the split), so the score
+  // is not shown twice and the season's chart comes up under it (walk 4 T2-07).
   const summary = (
     <>
       {opening}
-      <ScoreHeader
-        nextGameDate={seasonOver ? null : bootstrap.game.nextGameDate}
-        parts={parts}
-        precision={precision}
-        rank={started ? rankLine(bootstrap.leaderboard) : null}
-        score={score}
-        slots={wide ? slotLine(bootstrap.account) : null}
-        started={started}
-        title="Your score"
-        valueLine={picks?.text ?? null}
-        variant={wide ? 'panel' : layout === 'compact' ? 'narrow' : 'compact'}
-        week={recent ? recent.week : null}
-      />
+      {seasonOver ? null : (
+        <ScoreHeader
+          nextGameDate={bootstrap.game.nextGameDate}
+          parts={parts}
+          precision={precision}
+          rank={started ? rankLine(bootstrap.leaderboard) : null}
+          score={score}
+          slots={wide ? slotLine(bootstrap.account) : null}
+          started={started}
+          title="Your score"
+          valueLine={picks?.text ?? null}
+          variant={scoreVariant}
+          week={recent ? recent.week : null}
+        />
+      )}
       {/* On the opening eve the welcome says what the empty chart would. */}
       {showWelcome ? null : (
         <PerGamePnlChart
@@ -967,11 +1013,29 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     backgroundColor: colors.goldSoft,
   },
+  // Sentence and Cancel share a line; too narrow for both (200% zoom), Cancel
+  // takes the next line rather than squeezing the words into a sliver.
+  errandHead: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: space.sm,
+  },
   errandText: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 160,
+    minWidth: 0,
     color: colors.text,
     fontFamily: fonts.display,
     fontSize: type.caption,
     fontWeight: weight.bold,
+  },
+  // A quiet button at the line's end: its words, not its box, line up with the edge.
+  errandCancel: {
+    marginLeft: 'auto',
+    marginVertical: -space.xs,
+    marginRight: -space.sm,
   },
   errandActions: {
     flexDirection: 'row',
@@ -1067,6 +1131,13 @@ const styles = StyleSheet.create({
   },
   actionLocked: {
     borderStyle: 'dashed',
+  },
+  // "Short again" in the table's 72px action column: two short lines.
+  columnButton: {
+    paddingHorizontal: space.xs,
+  },
+  columnButtonText: {
+    textAlign: 'center',
   },
   actionArmed: {
     borderColor: colors.gold,
