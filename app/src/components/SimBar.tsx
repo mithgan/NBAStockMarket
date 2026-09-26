@@ -53,11 +53,12 @@ const PAINT_FALLBACK_MS = 500;
 
 /**
  * A second tap on the same advance button sooner than this is the same press
- * bouncing (a double tap), not a second night: it is ignored. A deliberate
- * second press, a moment later, is queued and plays (walk 5 T3-11, T4-06).
- * Keyboard presses have no spot and always count.
+ * bouncing (a double tap, or a double-click by habit), not a second night: it
+ * is ignored. A deliberate second press, a moment later, is queued and plays
+ * (walk 5 T3-11, T4-06; walk 6 T2-09, T4-01). Keyboard presses have no spot
+ * and always count.
  */
-const ADVANCE_DOUBLE_TAP_MS = 250;
+const ADVANCE_DOUBLE_TAP_MS = 350;
 const pressAdvance = (run: () => void) => () => {
   settleTaps(0, ADVANCE_DOUBLE_TAP_MS);
   run();
