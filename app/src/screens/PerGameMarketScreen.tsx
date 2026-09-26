@@ -35,6 +35,8 @@ import {
   signedMoney,
   signedMoneyFine,
   unbrokenName,
+  moneyCompact,
+  signedMoneyCompact,
 } from '../copy/terms';
 import { practiceProgress } from '../data/chromeView';
 import {
@@ -453,7 +455,7 @@ function MarketRow({
             {priorSeasonValuePerGame === null ? (
               <Text accessibilityLabel="no last season" maxFontSizeMultiplier={1.4} style={[styles.cellValue, styles.cellQuiet]}>—</Text>
             ) : (
-              <Text maxFontSizeMultiplier={1.4} style={styles.cellValue}>{money(priorSeasonValuePerGame)}</Text>
+              <Text maxFontSizeMultiplier={1.4} style={styles.cellValue}>{moneyCompact(priorSeasonValuePerGame)}</Text>
             )}
           </View>
           <View style={[styles.cell, { width: columns.edge }]}>
@@ -461,7 +463,8 @@ function MarketRow({
               <Text accessibilityLabel="no last season" maxFontSizeMultiplier={1.4} style={[styles.cellValue, styles.cellQuiet]}>—</Text>
             ) : (
               <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, { color: TONE_COLOR[signal.tone] }]}>
-                {signal.tone === 'even' ? 'Even' : signedMoney(signal.edge)}
+                {/* One style down the column: "+$8K" beside "+$25.5K" (walk 3 T2-03). */}
+                {signal.tone === 'even' ? 'Even' : signedMoneyCompact(signal.edge)}
               </Text>
             )}
           </View>

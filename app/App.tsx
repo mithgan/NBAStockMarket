@@ -564,6 +564,7 @@ function AppBody() {
               accessibilityLabel={tab.label}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
+              aria-controls="app-screen"
               aria-selected={active}
               onPress={() => changeTab(tab.key)}
               {...({
