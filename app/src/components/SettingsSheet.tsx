@@ -96,7 +96,8 @@ export function SettingsSheet({
     setVariant(APPEARANCE_CHOICES[next]);
     (choiceRefs.current[next] as unknown as { focus?: () => void } | null)?.focus?.();
   };
-  const firstParagraph = rules ? rulesParagraphs(rules.explanation).slice(0, 2).join(' ') : null;
+  // The loop and its worked example; the rest is one tap away in the rules.
+  const firstParagraph = rules ? rulesParagraphs(rules.explanation)[0] ?? null : null;
   return (
     <Modal
       accessibilityLabel="Settings"
@@ -150,8 +151,18 @@ export function SettingsSheet({
                     {...rowMarker}
                     {...({ tabIndex: selected ? 0 : -1 } as object)}
                   >
+                    {/* A small preview of the theme itself: its page, a card with
+                        a line of text, and its gain, loss and accent colours,
+                        so themes can be told apart before trying them. */}
                     <View style={[styles.swatch, { backgroundColor: variant.palette.background }]}>
-                      <View style={[styles.swatchDot, { backgroundColor: variant.palette.gold }]} />
+                      <View style={[styles.swatchCard, { backgroundColor: variant.palette.surface }]}>
+                        <View style={[styles.swatchLine, { backgroundColor: variant.palette.text }]} />
+                        <View style={styles.swatchMarks}>
+                          <View style={[styles.swatchMark, { backgroundColor: variant.palette.green }]} />
+                          <View style={[styles.swatchMark, { backgroundColor: variant.palette.red }]} />
+                          <View style={[styles.swatchMark, { backgroundColor: variant.palette.gold }]} />
+                        </View>
+                      </View>
                     </View>
                     <View style={styles.choiceCopy}>
                       <Text style={[styles.choiceName, selected && styles.choiceNameSelected]}>{variant.name}</Text>
@@ -341,16 +352,25 @@ const styles = StyleSheet.create({
   },
   choiceSelected: { backgroundColor: colors.surface },
   swatch: {
-    width: 34,
-    height: 34,
-    alignItems: 'center',
+    width: 44,
+    height: 36,
+    padding: 5,
     justifyContent: 'center',
     flexShrink: 0,
     borderRadius: radius.sm,
     borderColor: colors.borderStrong,
     borderWidth: 1,
   },
-  swatchDot: { width: 10, height: 10, borderRadius: radius.sm },
+  swatchCard: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    borderRadius: 2,
+  },
+  swatchLine: { width: 16, height: 2, borderRadius: 1 },
+  swatchMarks: { flexDirection: 'row', gap: 3 },
+  swatchMark: { width: 5, height: 5, borderRadius: 1 },
   choiceCopy: { flex: 1, minWidth: 0 },
   choiceName: {
     color: colors.text,
