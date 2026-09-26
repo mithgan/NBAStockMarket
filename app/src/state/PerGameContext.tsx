@@ -252,9 +252,10 @@ export function PerGameProvider({
     setMessage(null);
     // The second tap of a double tap on a money button must not land on the
     // next row's button when this move reflows the list (walk 3 T4-01: a
-    // double tap on "Short again" re-shorted the next player). A hurried
-    // repeat on the same spot is ignored for longer.
-    settleTaps(500, 1200);
+    // double tap on "Short again" re-shorted the next player). A repeat on
+    // the same spot is ignored for 1.2 s; a tap elsewhere (the next row's
+    // Add, for a player adding several in a row) waits only a moment.
+    settleTaps(250, 1200);
     let reconciliationReason: ReconciliationReason | null = null;
     const actionSnapshot = bootstrapRef.current;
     try {
@@ -278,8 +279,6 @@ export function PerGameProvider({
           return false;
         }
         say(typeof successMessage === 'function' ? successMessage(outcome.result) : successMessage, 'success');
-        // The lists change now: quiet taps once more while they settle.
-        settleTaps(450);
         return true;
       }
       const suffix = outcome.reconciliationReason === 'ambiguous'

@@ -346,8 +346,8 @@ function focusNode(ref: { current: unknown }) {
   node?.focus?.();
 }
 
-/** After a confirm strip is answered, taps rest this long (it folds under the finger). */
-const STRIP_SETTLE_MS = 700;
+/** After a confirm strip is answered, taps anywhere rest this long (it folds under the finger). */
+const STRIP_SETTLE_MS = 400;
 /** …and a repeat on the answered button's spot is ignored this long. */
 const STRIP_SPOT_MS = 1400;
 
@@ -359,8 +359,8 @@ const STRIP_SPOT_MS = 1400;
  * Taps in the first 400 ms are ignored, keyboard focus starts on Keep, Escape
  * and Back cancel, and nothing times out while the player reads it. Once
  * answered, the strip folds and the next row slides under the finger, so taps
- * rest for 0.7 s, and a repeat on the same spot for longer: a hurried "keep,
- * keep" never buys the player below.
+ * rest for a moment, and a repeat on the same spot for 1.4 s: a hurried
+ * "keep, keep" never buys the player below.
  */
 export function ConfirmStrip({
   message,
