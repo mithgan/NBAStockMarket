@@ -194,6 +194,12 @@ export type ButtonProps = {
    * did nothing: "Roster reopens after Oct 22."
    */
   onDisabledPress?: () => void;
+  /**
+   * A move that just succeeded ("Added ✓"): drawn as a confirmation in the
+   * success colour, not as an unavailable button. Dashed stays reserved for
+   * "not available now; press to learn why" (LOCKED, FULL; walk 4 T2-03).
+   */
+  done?: boolean;
   accessibilityLabel?: string;
   accessibilityHint?: string;
   width?: number;
@@ -233,6 +239,7 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
   disabled = false,
   focusableWhenDisabled = false,
   onDisabledPress,
+  done = false,
   accessibilityLabel,
   accessibilityHint,
   width,
@@ -281,10 +288,10 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
           // A reachable disabled button (LOCKED, FULL, "Added ✓") is read and
           // pressed for its reason, so it keeps full-contrast words and shows
           // its state by a dashed edge, not by fading (walk 3 T3-16).
-          disabled && (focusableWhenDisabled ? styles.reachableDisabled : styles.disabled),
+          disabled && (done ? styles.doneButton : focusableWhenDisabled ? styles.reachableDisabled : styles.disabled),
           // A gold fill would read as live: a reachable disabled primary
           // takes the outlined look.
-          disabled && focusableWhenDisabled && variant === 'primary' && styles.reachablePrimary,
+          disabled && focusableWhenDisabled && !done && variant === 'primary' && styles.reachablePrimary,
           pressed && !disabled && styles.pressed,
           style,
         ];
@@ -297,7 +304,8 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
           variant === 'primary' && styles.buttonTextPrimary,
           variant === 'quiet' && styles.buttonTextQuiet,
           variant === 'danger' && styles.buttonTextDanger,
-          disabled && focusableWhenDisabled && styles.buttonTextReachable,
+          disabled && focusableWhenDisabled && !done && styles.buttonTextReachable,
+          disabled && done && styles.buttonTextDone,
           textStyle,
         ]}
       >
@@ -960,6 +968,14 @@ const styles = StyleSheet.create({
   },
   emptyAction: {
     marginTop: space.lg,
+  },
+  doneButton: {
+    borderStyle: 'solid',
+    borderColor: colors.green,
+    backgroundColor: colors.greenSoft,
+  },
+  buttonTextDone: {
+    color: colors.green,
   },
   reachableDisabled: {
     borderStyle: 'dashed',
