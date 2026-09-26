@@ -48,6 +48,7 @@ import {
   firstGamePreview,
   formVerdict,
   holdingStatus,
+  moveSaving,
   defaultRange,
   isRecentRange,
   lastSeasonValue,
@@ -75,11 +76,14 @@ import {
 } from '../data/profileView';
 import type { TrendPoint } from '../data/trendPresentation';
 import { usePerGame } from '../state/PerGameContext';
+import { openTab } from '../state/uiActions';
+import { sheetIsOpen } from '../web/appHistory';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
 import { Button, headingLevel, Label, Money, moneyColor, repeatSafe, SectionHeader, Segmented, Tag } from '../ui/kit';
 import { CloseIcon, StarIcon } from './market/icons';
 import { PlayerAvatar } from './PlayerAvatar';
 import { ProfileActionBar } from './profile/ProfileActionBar';
+import { showPlayerGames } from './results/playerGames';
 import { ProfileChart } from './profile/ProfileChart';
 import { ProfileGameLog } from './profile/ProfileGameLog';
 import { unlessSettling } from '../web/tapSettle';
@@ -228,7 +232,6 @@ export function PerGamePlayerProfile({
   const shown = useMemo(() => rangeNights(nights, range), [nights, range]);
   const summary = useMemo(() => summarizeNights(shown), [shown]);
   const recent = isRecentRange(range, shown.length, nights.length);
-  const status = holdingStatus(position, viewSide);
   // Your money with him: the current position when you hold him (the same
   // numbers as its Roster row), otherwise every stint you had.
   const stakeSummary = useMemo(
@@ -237,7 +240,9 @@ export function PerGamePlayerProfile({
   );
   // No games yet: say since when ("No games since you added him (Oct 20)");
   // "at this price" only when he already played for you at another price.
-  const { bootstrap } = usePerGame();
+  const { bootstrap, pendingActions } = usePerGame();
+  // While his move saves the header says so, as the bar does (walk 8 T4-11).
+  const status = holdingStatus(position, viewSide, moveSaving(pendingActions, viewSide, player.playerId));
   const ledger = bootstrap?.ledger.items;
   const opened = useMemo(() => (position ? {
     since: positionOpenedDay(ledger ?? [], position.positionId),
@@ -268,6 +273,12 @@ export function PerGamePlayerProfile({
   const priceHeader = logPriceHeader(shown, viewSide);
   const mixedLog = priceHeader === 'Price';
   const title = narrow ? splitPlayerName(player.name).surname : player.name;
+  // Results lists your games with him (any side): offer them there, his alone.
+  const inResults = results.some((row) => row.playerId === player.playerId);
+  const seeGames = () => {
+    showPlayerGames({ playerId: player.playerId, playerName: player.name });
+    closeThen(onClose, () => openTab('plays'));
+  };
   const preview = firstGamePreview(viewSide, live ? 'yours' : 'season');
 
   // Space toggles a switch (the WAI-ARIA pattern screen readers teach), but
@@ -408,7 +419,8 @@ export function PerGamePlayerProfile({
         <SectionHeader
           level={3}
           right={nights.length > 0 && !tiny ? <Text style={styles.sectionCount}>{gamesCount(nights.length)}</Text> : undefined}
-          style={[styles.sectionHeader, inset]}
+          // The action bar's own rule sits right above: one rule, not two (walk 8 T1-06).
+          style={[styles.sectionHeader, styles.sectionAfterBar, inset]}
           title="Game by game"
         />
         <View style={[styles.section, inset]}>
@@ -510,7 +522,7 @@ export function PerGamePlayerProfile({
               />
               {metric === 'price' ? (
                 <Text maxFontSizeMultiplier={1.4} style={styles.note}>
-                  {priceStory(shown, viewSide, player.currentGameCost, nights.find((night) => night.source === 'yours')?.date ?? null)}
+                  {priceStory(shown, viewSide, player.currentGameCost, nights.find((night) => night.source === 'yours')?.date ?? null, position?.lockedGameCost ?? null)}
                 </Text>
               ) : null}
               <ProfileChart height={wide ? 200 : 176} metric={metric} nights={shown} side={viewSide} />
@@ -580,6 +592,17 @@ export function PerGamePlayerProfile({
               style={inset}
               total={logTotal}
             />
+            {/* The nights' math for him alone, in Results (walk 8 T2-I4). */}
+            {inResults ? (
+              <View style={[styles.seeGames, inset]}>
+                <Button
+                  accessibilityLabel={`See ${player.name}'s games in Results`}
+                  label="See his games in Results"
+                  onPress={seeGames}
+                  variant="secondary"
+                />
+              </View>
+            ) : null}
           </>
         ) : null}
       </ScrollView>
@@ -587,7 +610,36 @@ export function PerGamePlayerProfile({
   );
 }
 
+/**
+ * Close the profile, then go on once its Back step has landed (the sheet has
+ * its own history entry), so one Back from the next screen returns here.
+ */
+function closeThen(close: () => void, next: () => void) {
+  if (typeof window === 'undefined' || !sheetIsOpen()) {
+    close();
+    next();
+    return;
+  }
+  let gone = false;
+  const go = () => {
+    if (gone) return;
+    gone = true;
+    window.removeEventListener('popstate', go);
+    next();
+  };
+  window.addEventListener('popstate', go);
+  close();
+  // No Back step came (the sheet's entry was not on top): go anyway.
+  setTimeout(go, 400);
+}
+
 const styles = StyleSheet.create({
+  seeGames: {
+    alignItems: 'flex-start',
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
+    paddingBottom: space.lg,
+  },
   root: {
     flex: 1,
     minHeight: 0,
@@ -746,6 +798,10 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
+  },
+  sectionAfterBar: {
+    marginTop: 0,
+    borderTopWidth: 0,
   },
   sectionCount: {
     color: colors.muted,

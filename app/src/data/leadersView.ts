@@ -128,6 +128,8 @@ export function closeCallNotes(
 export function boardList(
   rows: readonly PerGameLeaderboardRow[],
   accountScore?: number,
+  /** The fee a move costs: a gap of whole fees is explained by the standing, and the row shows one figure (walk 8 T3-06). */
+  feeDollars?: number,
 ): BoardEntry[] {
   // A level board (before the first games) keeps everyone at $0 together.
   const level = boardIsLevel(rows);
@@ -143,7 +145,9 @@ export function boardList(
       score,
       place: 1 + scores.filter((other) => other > score).length,
       tied: scores.filter((other) => other === score).length > 1,
-      boardScore: row.isCurrentUser && Math.abs(score - row.cumulativePnl) >= 1 ? row.cumulativePnl : null,
+      boardScore: row.isCurrentUser && Math.abs(score - row.cumulativePnl) >= 1 && feesOnly(score - row.cumulativePnl, feeDollars) === null
+        ? row.cumulativePnl
+        : null,
     }));
   const notes = closeCallNotes(entries);
   return entries.map((entry, index) => ({ ...entry, closeCalls: notes[index] }));
@@ -240,6 +244,28 @@ export function boardLag(standing: Standing): number | null {
   if (standing.kind !== 'ranked') return null;
   const lag = standing.score - standing.boardScore;
   return Math.abs(lag) < 1 ? null : lag;
+}
+
+/** How many whole fees a gap below the board is ($250 → 1, $500 → 2), or null when it is anything else. */
+export function feesOnly(lag: number, feeDollars?: number): number | null {
+  if (!feeDollars || feeDollars <= 0 || lag >= 0) return null;
+  const count = Math.round(-lag / feeDollars);
+  return count >= 1 && Math.abs(-lag - count * feeDollars) < 1 ? count : null;
+}
+
+/**
+ * Why the board's figure for you differs from your score, or null when they
+ * agree. The board counts moves once the next games settle, so a gap of
+ * whole fees says so, with the amount (walk 8 T3-06: "-$121.3K" beside
+ * "board -$121K" read like a mistake); anything else keeps the board's figure.
+ */
+export function lagLine(standing: Standing, feeDollars?: number): string | null {
+  const lag = boardLag(standing);
+  if (lag === null || standing.kind !== 'ranked') return null;
+  const fees = feesOnly(lag, feeDollars);
+  if (fees === 1) return `The board adds today's ${money(-lag)} fee after the next games.`;
+  if (fees !== null) return `The board adds today's ${money(-lag)} in fees after the next games.`;
+  return `The board still has you at ${signedMoney(standing.boardScore)} until the next games settle.`;
 }
 
 // ---------------------------------------------------------------------------

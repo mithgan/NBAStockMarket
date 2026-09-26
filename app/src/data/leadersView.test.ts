@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { boardLag, boardList, closeCallNotes, leaderStanding, ordinalWords, sortBoard, spokenPlace, spokenRanks, standingLines, standingPlace, type Standing } from './leadersView';
+import { boardLag, boardList, closeCallNotes, feesOnly, lagLine, leaderStanding, ordinalWords, sortBoard, spokenPlace, spokenRanks, standingLines, standingPlace, type Standing } from './leadersView';
 
 function board(scores: Array<[string, number, boolean?]>): PerGameLeaderboardRow[] {
   return scores.map(([displayName, cumulativePnl, isCurrentUser], index) => ({
@@ -302,4 +302,25 @@ test('places are said in words, never as "#" (walk 6 T3-09, T3-07)', () => {
   assert.equal(spokenRanks('$30K ahead of #2'), '$30K ahead of second place');
   assert.equal(spokenRanks('Level with Ava'), 'Level with Ava');
   assert.doesNotMatch(spokenRanks('$1.2M behind #14'), /#/);
+});
+
+test('a board figure that differs only by fees says why, and the row shows one figure (walk 8 T3-06)', () => {
+  // The tester's case: -$121.3K your score, the board's -$121K before the $250 drop fee.
+  const rows = board([['Ava', 300_000], ['Ben', 100_000], ['Cal', -50_000], ['You', -121_050, true], ['Dee', -400_000]]);
+  const standing = leaderStanding(rows, -121_300);
+  assert.equal(lagLine(standing, 250), "The board adds today's $250 fee after the next games.");
+  assert.equal(lagLine(leaderStanding(rows, -121_550), 250), "The board adds today's $500 in fees after the next games.");
+  // Anything but whole fees keeps the board's own figure.
+  assert.equal(lagLine(leaderStanding(rows, -121_300), 300), 'The board still has you at -$121K until the next games settle.');
+  assert.equal(lagLine(leaderStanding(rows, -121_050), 250), null, 'in step: no line');
+  assert.equal(feesOnly(-250, 250), 1);
+  assert.equal(feesOnly(-750, 250), 3);
+  assert.equal(feesOnly(250, 250), null, 'a gap above the board is not a fee');
+  assert.equal(feesOnly(-250, 0), null);
+  // The You row: one figure when the gap is whole fees; the note stays for anything else.
+  const you = (list: ReturnType<typeof boardList>) => list.find((entry) => entry.row.isCurrentUser);
+  assert.equal(you(boardList(rows, -121_300, 250))?.boardScore, null);
+  assert.equal(you(boardList(rows, -121_300, 250))?.score, -121_300);
+  assert.equal(you(boardList(rows, -121_300))?.boardScore, -121_050, 'no fee given: the note as before');
+  assert.equal(you(boardList(rows, -121_300, 300))?.boardScore, -121_050);
 });

@@ -6,8 +6,8 @@ import { signedMoney } from '../copy/terms';
 import { NetMoney } from '../components/results/NetMoney';
 import { practiceProgress } from '../data/chromeView';
 import {
-  boardLag,
   boardList,
+  lagLine as boardLagLine,
   leaderStanding,
   pastSeasonLines,
   readPastSeasons,
@@ -99,11 +99,14 @@ function SmallCapsHeading({ children }: { children: string }) {
 function StandingBlock({
   accountScore,
   compact,
+  feeDollars,
   final,
   standing,
 }: {
   accountScore: number;
   compact: boolean;
+  /** A move's fee: a gap of whole fees is named as today's fee (walk 8 T3-06). */
+  feeDollars: number;
   final: boolean;
   standing: Standing;
 }) {
@@ -134,10 +137,7 @@ function StandingBlock({
     );
   }
   const tied = standing.tiedWith.length > 0;
-  const lag = boardLag(standing);
-  const lagLine = lag === null
-    ? null
-    : `The board still has you at ${signedMoney(standing.boardScore)} until the next games settle.`;
+  const lagLine = boardLagLine(standing, feeDollars);
   const spoken = [
     placeWords(standing),
     `${final ? 'final score' : 'your score'} ${scoreWords(standing.score)}`,
@@ -203,10 +203,11 @@ function PastSeasons({ lines }: { lines: readonly PastSeasonLine[] }) {
 }
 
 /**
- * One row of the board, read as one list item: "Rank 2, Deep Threes,
- * +$245K". On a level board (before the first games) no one has a rank yet.
- * Every score keeps the app's one format; when two different scores read
- * alike, each says how far apart they are ("$191 ahead of #2").
+ * One row of the board, a table row of three cells a screen reader reads
+ * with their column (walk 8 T3-09): "Rank 2", "Deep Threes", "+$245K". On a
+ * level board (before the first games) no one has a rank yet. Every score
+ * keeps the app's one format; when two different scores read alike, each
+ * says how far apart they are ("$191 ahead of #2").
  */
 function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEntry; level: boolean }) {
   const { row, place, tied, score, boardScore, closeCalls } = entry;
@@ -215,19 +216,28 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
   // Practice names your row "You"; a YOU tag beside it would say it twice.
   const tagged = you && row.displayName.trim().toLowerCase() !== 'you';
   const who = `${row.displayName}${tagged ? ', you' : ''}`;
-  const spoken = level
-    ? `${who}, level at $0`
-    : `${tied ? 'Tied for' : 'Rank'} ${place}, ${who}, ${scoreText}${closeCalls.map((note) => `, ${spokenRanks(note)}`).join('')}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`;
+  const rankSpoken = level ? 'No rank yet' : `${tied ? 'Tied for' : 'Rank'} ${place}`;
+  const scoreSpoken = level
+    ? 'level at $0'
+    : `${scoreText}${closeCalls.map((note) => `, ${spokenRanks(note)}`).join('')}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`;
   return (
-    <View role="listitem" style={[styles.item, you && styles.currentRow]}>
-      <Spoken>{spoken}</Spoken>
-      <Seen style={[styles.row, compact && styles.rowCompact]}>
-        <Text style={[styles.rank, compact && styles.rankCompact]}>{level ? '–' : `#${place}`}</Text>
-        <View style={[styles.nameCell, compact && styles.nameCompact]}>
+    <View role="row" style={[styles.item, you && styles.currentRow, styles.row, compact && styles.rowCompact]}>
+      <View role="cell" style={compact ? styles.rankCellCompact : null}>
+        <Spoken>{rankSpoken}</Spoken>
+        <Seen>
+          <Text style={[styles.rank, compact && styles.rankCompact]}>{level ? '–' : `#${place}`}</Text>
+        </Seen>
+      </View>
+      <View role="cell" style={[styles.nameCell, compact && styles.nameCompact]}>
+        <Spoken>{who}</Spoken>
+        <Seen style={styles.nameSeen}>
           <Text style={styles.name}>{row.displayName}</Text>
           {tagged ? <Tag tone="gold">You</Tag> : null}
-        </View>
-        <View style={[styles.scoreCell, compact && styles.scoreCompact]}>
+        </Seen>
+      </View>
+      <View role="cell" style={[styles.scoreCell, compact && styles.scoreCompact]}>
+        <Spoken>{scoreSpoken}</Spoken>
+        <Seen style={[styles.scoreSeen, compact && styles.scoreSeenCompact]}>
           <NetMoney value={score} />
           {level ? null : closeCalls.map((note) => (
             <Text key={note} style={[styles.boardNote, styles.closeCall, compact && styles.boardNoteCompact]}>{note}</Text>
@@ -235,8 +245,8 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
           {boardScore === null ? null : (
             <Text style={[styles.boardNote, compact && styles.boardNoteCompact]}>board {signedMoney(boardScore)}</Text>
           )}
-        </View>
-      </Seen>
+        </Seen>
+      </View>
     </View>
   );
 }
@@ -255,7 +265,8 @@ export function PerGameLeaderboardScreen() {
   const standing = leaderStanding(rows, bootstrap.account.cumulativePnl);
   const level = standing.kind === 'level';
   // The list places you by the same score, with the board's figure as a note while it lags.
-  const list = boardList(rows, bootstrap.account.cumulativePnl);
+  // A gap of whole fees is said once, in the standing, and the row shows one figure.
+  const list = boardList(rows, bootstrap.account.cumulativePnl, bootstrap.ruleset.transactionFeeDollars);
   // Practice fills the board with computer rivals: say so once, quietly.
   const practiceRivals = isMockActive() && rows.some((row) => !row.isCurrentUser);
   // The Roster's rule: practice ends on its last day, a live season when no games are left.
@@ -284,6 +295,7 @@ export function PerGameLeaderboardScreen() {
     <StandingBlock
       accountScore={bootstrap.account.cumulativePnl}
       compact={compact || wide}
+      feeDollars={bootstrap.ruleset.transactionFeeDollars}
       final={final}
       standing={standing}
     />
@@ -300,14 +312,15 @@ export function PerGameLeaderboardScreen() {
       <View style={visuallyHidden}>
         <Text accessibilityRole="header" {...headingLevel(2)}>The board</Text>
       </View>
-      {!compact ? (
-        <Seen style={styles.tableHead}>
-          <Text style={[styles.headLabel, styles.headRank]}>Rank</Text>
-          <Text style={[styles.headLabel, styles.headName]}>Name</Text>
-          <Text style={[styles.headLabel, styles.headScore]}>Score</Text>
-        </Seen>
-      ) : null}
-      <View accessibilityLabel="The board" role="list">
+      {/* A table to a screen reader (walk 8 T3-09): each figure is read with
+          its column. Phones stack a row's cells and draw no header row, so
+          there the header row is kept for screen readers only. */}
+      <View accessibilityLabel="The board" role="table">
+        <View role="row" style={compact ? visuallyHidden : styles.tableHead}>
+          <Text accessibilityLabel="Rank" role="columnheader" style={[styles.headLabel, styles.headRank]}>Rank</Text>
+          <Text accessibilityLabel="Name" role="columnheader" style={[styles.headLabel, styles.headName]}>Name</Text>
+          <Text accessibilityLabel="Score" role="columnheader" style={[styles.headLabel, styles.headScore]}>Score</Text>
+        </View>
         {list.map((entry) => (
           <BoardRow compact={compact} entry={entry} key={entry.row.entryId} level={level} />
         ))}
@@ -595,6 +608,24 @@ const styles = StyleSheet.create({
   nameCompact: {
     flexBasis: '70%',
     flexGrow: 1,
+  },
+  // The seen name and its tag, laid out as the cell was before it became one.
+  nameSeen: {
+    minWidth: 0,
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: space.sm,
+  },
+  rankCellCompact: {
+    flexShrink: 0,
+  },
+  scoreSeen: {
+    alignItems: 'flex-end',
+  },
+  scoreSeenCompact: {
+    alignItems: 'flex-start',
   },
   name: {
     flexShrink: 1,

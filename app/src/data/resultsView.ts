@@ -32,6 +32,20 @@ import { currentResults, entryDay, nightTotals, summarizeValue } from './perGame
 
 export type ResultsFeedSource = Pick<PerGameBootstrap, 'settledResults' | 'ledger' | 'positions'>;
 
+/**
+ * One player's games (walk 8 T2-I4, from his profile's "See his games"): his
+ * results, his fees and his positions only, so each night's header totals his
+ * games alone. The default feed never passes through here.
+ */
+export function playerFeedSource<T extends ResultsFeedSource>(source: T, playerId: string): T {
+  return {
+    ...source,
+    settledResults: source.settledResults.filter((result) => result.playerId === playerId),
+    ledger: { ...source.ledger, items: source.ledger.items.filter((entry) => entry.playerId === playerId) },
+    positions: source.positions.filter((position) => position.playerId === playerId),
+  };
+}
+
 export interface ResultsFeedOptions {
   /** The last settled game day. A later day can only hold moves for games still to come. */
   lastSettledDate?: string | null;
@@ -547,16 +561,36 @@ export function resultRowModel(
  * bottom into view with a small margin, and never so far that the row's own
  * top leaves the view (a row taller than the view lines its top up instead).
  * Positions are screen pixels (top < bottom).
+ *
+ * `mathTop` is where the opened math starts (the row's headline ends there).
+ * In a view too short to hold the headline and as much again of the math
+ * (400% zoom: an 81px headline fills a 74px feed), the headline gives way and
+ * the math's first line comes to the top of what is visible (walk 8 T3-14:
+ * Enter changed nothing but the chevron, the math sat below the view).
  */
-export function revealScroll({ rowTop, rowBottom, viewTop, viewBottom, margin = 12 }: {
+export function revealScroll({ rowTop, rowBottom, mathTop = rowTop, viewTop, viewBottom, margin = 12 }: {
   rowTop: number;
   rowBottom: number;
+  mathTop?: number;
   viewTop: number;
   viewBottom: number;
   margin?: number;
 }): number {
   const below = rowBottom + margin - viewBottom;
   if (below <= 0) return 0;
+  const headline = Math.max(0, mathTop - rowTop);
+  if (headline + margin > (viewBottom - viewTop) / 2) {
+    return Math.max(0, Math.round(Math.min(below, mathTop - viewTop)));
+  }
   const room = rowTop - viewTop - margin;
   return Math.max(0, Math.round(Math.min(below, room)));
+}
+
+/**
+ * Closing a row whose headline has scrolled above the view (it gave way to
+ * the math at 400% zoom): scroll back up so the headline you just pressed is
+ * at the top again, not the next row. Negative is up; 0 when it shows.
+ */
+export function closeScroll({ rowTop, viewTop }: { rowTop: number; viewTop: number }): number {
+  return rowTop < viewTop - 0.5 ? Math.round(rowTop - viewTop) : 0;
 }

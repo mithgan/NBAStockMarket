@@ -3,8 +3,10 @@
  * about him. Add or Short when you do not hold him, Drop or Close when you do,
  * with the same locks as the row (a pending action, another account change,
  * a locked roster, a full side, the season's end). A dimmed button always has
- * its reason written beside it. After an Add or Short the button turns into a
- * brief "Added ✓", so a second tap cannot land on the Drop that replaces it.
+ * its reason written beside it. While a move saves the button reads "Adding…"
+ * (solid: busy, not locked) with a status line; once it lands it turns into a
+ * brief "Added ✓", named like the Market row's ("Added Devin Booker to your
+ * roster"), so a second tap cannot land on the Drop that replaces it.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -20,12 +22,12 @@ import {
   rosterReopensLine,
 } from '../../copy/terms';
 import { practiceProgress } from '../../data/chromeView';
-import { actionName, fullNote, isSeasonOver } from '../../data/marketView';
-import { openTermsNote, profileCloseName, profileCloseWord } from '../../data/profileView';
+import { actionName, fullNote, isSeasonOver, justClosedName, justOpenedName } from '../../data/marketView';
+import { moveSaving, openTermsNote, profileCloseName, profileCloseWord, savingWords } from '../../data/profileView';
 import { usePerGame } from '../../state/PerGameContext';
 import { buildPerGameMarketRows } from '../../state/perGameState';
 import { openTab, requestRosterPick } from '../../state/uiActions';
-import { colors, control, fonts, space, type, weight } from '../../theme';
+import { colors, space, type } from '../../theme';
 import { Button, ConfirmStrip, repeatSafe, useCooldown } from '../../ui/kit';
 import { sheetIsOpen } from '../../web/appHistory';
 
@@ -51,15 +53,15 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
   const { bootstrap, closePosition, notify, openPosition, pendingActions } = usePerGame();
   // A brief tick after a move lands ("Added ✓"), in the button's place.
   const [done, showDone] = useCooldown();
-  const [doneWords, setDoneWords] = useState({ tick: '', note: '' });
+  const [doneWords, setDoneWords] = useState({ tick: '', note: '', name: '' });
   // Keyboard focus follows the move: onto the tick while it shows, then onto
   // the button that replaces it (Drop after an Add, Add after a Drop), so it
   // never falls out of the sheet to the page (walk-2 T2-24, in the profile).
   const doneRef = useRef<View>(null);
   const openRef = useRef<View>(null);
   const follow = useRef(false);
-  const finish = (tick: string, note: string) => {
-    setDoneWords({ tick, note });
+  const finish = (tick: string, note: string, name: string) => {
+    setDoneWords({ tick, note, name });
     follow.current = true;
     showDone();
   };
@@ -109,11 +111,13 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
       : null),
     [bootstrap, otherSide, player.playerId, position],
   );
-  if (!bootstrap) return null;
+  // Nothing to offer still leaves the bar's rule, the one line between his
+  // status and "Game by game" (walk 8 T1-06).
+  if (!bootstrap) return <View style={styles.rule} />;
 
   // A move waiting its turn counts as pending; another player's move does not
   // rest this bar (a press waits its turn; walk 5 T4-01).
-  const pending = pendingActions.has(`position:${side}:${player.playerId}`) || pendingActions.has(`queued:position:${side}:${player.playerId}`);
+  const pending = moveSaving(pendingActions, side, player.playerId);
   const rosterLocked = bootstrap.ruleset.rosterMutationsLocked;
   const fee = bootstrap.ruleset.transactionFeeDollars;
   const seasonOver = isSeasonOver({
@@ -123,13 +127,22 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
   });
   const lockLine = `Roster changes are locked. ${rosterReopensLine(bootstrap.ruleset.rosterLockGameDate)}.`;
 
-  // Just added, shorted, dropped or closed: a quiet tick where the button was.
+  // Just added, shorted, dropped or closed: a quiet tick where the button
+  // was, a button named for what happened (walk 8 T3-12: an unnamed block
+  // held focus and read "Added check mark").
   if (done) {
     return (
       <Bar note={doneWords.note}>
-        <View ref={doneRef} style={styles.done} {...({ tabIndex: -1 } as object)}>
-          <Text maxFontSizeMultiplier={1.3} style={styles.doneText}>{doneWords.tick}</Text>
-        </View>
+        <Button
+          ref={doneRef}
+          accessibilityLabel={doneWords.name}
+          disabled
+          done
+          focusableWhenDisabled
+          label={doneWords.tick}
+          onPress={() => undefined}
+          style={styles.action}
+        />
       </Bar>
     );
   }
@@ -157,8 +170,8 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
             setConfirming(false);
             void closePosition(position).then((ok) => {
               if (!ok) return;
-              if (held === 'long') finish('Dropped ✓', `${player.name} is off your roster.`);
-              else finish('Closed ✓', `Your short on ${player.name} is closed.`);
+              if (held === 'long') finish('Dropped ✓', `${player.name} is off your roster.`, justClosedName(held, player.name));
+              else finish('Closed ✓', `Your short on ${player.name} is closed.`, justClosedName(held, player.name));
             });
           }}
           style={styles.strip}
@@ -168,30 +181,33 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
     const costs = fee > 0
       ? `${held === 'long' ? 'Dropping him' : 'Closing the short'} costs ${moneyFine(fee)}.`
       : held === 'long' ? 'Dropping him frees a roster spot.' : 'Closing frees a short slot.';
+    const closing = pending ? savingWords('close', held, player.name) : null;
     return (
-      <Bar note={rosterLocked ? lockLine : costs} warn={rosterLocked}>
+      <Bar note={closing ? closing.note : rosterLocked ? lockLine : costs} warn={rosterLocked && !closing}>
         <Button
           ref={closeRef}
-          accessibilityHint={rosterLocked ? lockLine : undefined}
+          accessibilityHint={rosterLocked && !closing ? lockLine : undefined}
           // "Close short" / "Drop player": the sheet's × also closes, so a
           // bare "Close" read like closing the panel (walk 6 T2-04).
-          accessibilityLabel={profileCloseName(held, player.name)}
+          accessibilityLabel={closing ? closing.name : profileCloseName(held, player.name)}
           disabled={disabled}
           focusableWhenDisabled
-          label={pending ? 'Wait' : rosterLocked ? 'Locked' : profileCloseWord(held)}
+          label={closing ? closing.word : rosterLocked ? 'Locked' : profileCloseWord(held)}
           // A tap on LOCKED says why, as well as the line beside it.
           onDisabledPress={rosterLocked ? () => notify(lockLine) : undefined}
           onPress={() => {
             if (!disabled) setConfirming(true);
           }}
-          style={styles.action}
+          // Busy, not locked: a solid edge and full-contrast words.
+          style={[styles.action, closing && styles.busy]}
+          textStyle={closing ? styles.busyText : undefined}
           variant="secondary"
         />
       </Bar>
     );
   }
   // Not in today's market (a roster-only record): nothing to open.
-  if (!row) return null;
+  if (!row) return <View style={styles.rule} />;
   if (row.blockedByOpposingPosition) return <Bar note={row.unavailableReason ?? ''} />;
 
   const open = (which: PerGamePositionSide) => {
@@ -202,12 +218,12 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
       expectedQuoteVersion: player.quoteVersion,
     }).then((ok) => {
       if (!ok) return;
-      if (which === 'long') finish('Added ✓', `${player.name} is on your roster.`);
-      else finish('Shorted ✓', `You're shorting ${player.name}.`);
+      if (which === 'long') finish('Added ✓', `${player.name} is on your roster.`, justOpenedName(which, player.name));
+      else finish('Shorted ✓', `You're shorting ${player.name}.`, justOpenedName(which, player.name));
     });
   };
   // While its own move is pending it stays, dimmed, so focus stays on it.
-  const otherPending = pendingActions.has(`position:${otherSide}:${player.playerId}`) || pendingActions.has(`queued:position:${otherSide}:${player.playerId}`);
+  const otherPending = moveSaving(pendingActions, otherSide, player.playerId);
   const otherBlocked = otherPending || pending;
   const instead = otherRow && !rosterLocked && (otherPending || (otherRow.canSubmit && !otherRow.isFull)) ? (
     <Button
@@ -262,21 +278,27 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
     shortTermDays: bootstrap.ruleset.shortTermDays,
     nextGameDate: bootstrap.game.nextGameDate,
   });
-  const word = pending ? 'Wait' : rosterLocked ? 'Locked' : row.isFull ? 'Full' : openVerb(side);
+  // Saving: "Adding…" with a line saying so (walk 8 T4-11); the other side's
+  // switch steps aside until it lands (an empty slot keeps the button where
+  // it was, so nothing under a finger moves).
+  const saving = pending ? savingWords('open', side, player.name) : null;
+  const word = saving ? saving.word : rosterLocked ? 'Locked' : row.isFull ? 'Full' : openVerb(side);
   return (
-    <Bar below={instead} note={note} warn={reason !== null}>
+    <Bar below={saving && instead ? <View /> : instead} note={saving ? saving.note : note} warn={reason !== null && !saving}>
       <Button
         ref={openRef}
-        accessibilityHint={reason ?? undefined}
-        accessibilityLabel={actionName('open', side, player.name, player.currentGameCost)}
+        accessibilityHint={saving ? undefined : reason ?? undefined}
+        accessibilityLabel={saving ? saving.name : actionName('open', side, player.name, player.currentGameCost)}
         disabled={disabled}
         focusableWhenDisabled
         label={word}
-        onDisabledPress={reason ? () => notify(reason) : undefined}
+        onDisabledPress={reason && !saving ? () => notify(reason) : undefined}
         onPress={() => {
           if (!disabled) open(side);
         }}
-        style={styles.action}
+        // Busy, not locked: a solid gold edge and full-contrast words.
+        style={[styles.action, saving && styles.busy]}
+        textStyle={saving ? styles.busyText : undefined}
         variant="primary"
       />
     </Bar>
@@ -391,6 +413,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
+  rule: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
   action: {
     minWidth: 88,
   },
@@ -414,19 +440,13 @@ const styles = StyleSheet.create({
     columnGap: space.md,
     rowGap: space.sm,
   },
-  done: {
-    minHeight: control.height,
-    minWidth: 88,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: space.md,
+  // A move on its way: the kit draws a reachable disabled button dashed
+  // (LOCKED, FULL); saving is busy, not unavailable (walk 8 T4-11).
+  busy: {
+    borderStyle: 'solid',
+    borderColor: colors.gold,
   },
-  doneText: {
-    color: colors.green,
-    fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.black,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+  busyText: {
+    color: colors.text,
   },
 });

@@ -18,6 +18,8 @@ import {
   nightTotalPending,
   resultRowModel,
   revealScroll,
+  playerFeedSource,
+  closeScroll,
   monthAnchors,
   nightSummaryWrapped,
   settlementLines,
@@ -798,4 +800,45 @@ test('an opened row near the bottom scrolls just enough to show its whole math (
   assert.equal(revealScroll({ ...view, rowTop: 400, rowBottom: 1500 }), 288);
   // The row's top is already at or above the view's top: never scroll it further away.
   assert.equal(revealScroll({ ...view, rowTop: 90, rowBottom: 1200 }), 0);
+  // A tall view keeps an 81px headline in sight with its math.
+  assert.equal(revealScroll({ ...view, rowTop: 700, mathTop: 781, rowBottom: 1100 }), 212);
+  assert.equal(revealScroll({ ...view, rowTop: 400, mathTop: 481, rowBottom: 1500 }), 288);
+});
+
+test('at 400% zoom an opened row brings its math to the top of the view, and closing brings the headline back (walk 8 T3-14)', () => {
+  // The measured case: a 74px feed (49 to 123) above a notice strip, the
+  // 81px headline already filling it (45 to 126), the math 126 to 294.
+  const short = { viewTop: 49, viewBottom: 123 };
+  assert.equal(revealScroll({ ...short, rowTop: 45, mathTop: 126, rowBottom: 294 }), 77);
+  // No strip: a 106px feed, still too short for the headline and its math.
+  assert.equal(revealScroll({ viewTop: 49, viewBottom: 155, rowTop: 45, mathTop: 126, rowBottom: 294 }), 77);
+  // The math's end fits before its first line reaches the top: only as far as needed.
+  assert.equal(revealScroll({ ...short, rowTop: 45, mathTop: 126, rowBottom: 150 }), 39);
+  // The headline was lower in the view: the same landing, math first line at the top.
+  assert.equal(revealScroll({ ...short, rowTop: 100, mathTop: 181, rowBottom: 349 }), 132);
+  // Closing: a headline above the view comes back to its top; one in view stays.
+  assert.equal(closeScroll({ rowTop: -32, viewTop: 49 }), -81);
+  assert.equal(closeScroll({ rowTop: 49, viewTop: 49 }), 0);
+  assert.equal(closeScroll({ rowTop: 300, viewTop: 49 }), 0);
+});
+
+test("Results can show one player's games, his nights totalled alone (walk 8 T2-I4)", () => {
+  const all = source(
+    [
+      result({ positionId: 'pos-1', playerId: 'p1', gameId: 'a1', gameDate: '2025-11-01', netPnl: 10_000 }),
+      result({ positionId: 'pos-2', playerId: 'p2', gameId: 'b1', gameDate: '2025-11-01', netPnl: -40_000 }),
+      result({ positionId: 'pos-2', playerId: 'p2', gameId: 'b2', gameDate: '2025-11-02', netPnl: 5_000 }),
+    ],
+    [fee({ positionId: 'pos-1', playerId: 'p1' }), fee({ positionId: 'pos-2', playerId: 'p2' })],
+    [position('pos-1', 'long'), position('pos-2', 'long')],
+  );
+  const his = buildResultsFeed(playerFeedSource(all, 'p1'));
+  assert.deepEqual(his.filter((item) => item.type === 'result').map((item) => item.key), ['result:pos-1:a1']);
+  // Only his night, and its total is his game alone (not the roster's -$30K).
+  const nights = feedNights(his);
+  assert.deepEqual(nights.map((night) => night.date), ['2025-11-01']);
+  assert.equal(nights[0].total, 10_000);
+  assert.ok(his.every((item) => item.type !== 'fee' || item.entry.playerId === 'p1'), 'only his fees');
+  // The default feed is untouched.
+  assert.equal(buildResultsFeed(all).filter((item) => item.type === 'result').length, 3);
 });

@@ -8,6 +8,7 @@ import type {
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
+import { panelDockRight } from '../data/profileView';
 import type { TrendPoint } from '../data/trendPresentation';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useWatchlist } from '../state/watchlist';
@@ -103,6 +104,8 @@ export function PlayerProfileSheet({
   useReturnFocus(visible && player !== null);
   if (!player) return null;
   const panel = width >= PANEL_MIN_WIDTH;
+  // Docked to the app column's right edge, not the window's (walk 8 T2-03).
+  const dockRight = panel ? panelDockRight(width) : 0;
   const sheetWidth = Math.min(width, SHEET_MAX_WIDTH);
   const playerId = player.playerId;
 
@@ -124,7 +127,7 @@ export function PlayerProfileSheet({
         style={[
           styles.sheet,
           panel
-            ? styles.panel
+            ? [styles.panel, dockRight > 0 && { right: dockRight, borderRightWidth: 1 }]
             : [styles.phoneSheet, { top: insets.top + SHEET_TOP_GAP, width: sheetWidth, left: (width - sheetWidth) / 2 }],
         ]}
       >

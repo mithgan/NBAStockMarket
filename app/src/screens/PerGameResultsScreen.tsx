@@ -29,6 +29,7 @@ import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { Disclosure, DisclosureSpace, DISCLOSURE_WIDTH } from '../components/results/Disclosure';
 import { NetMoney } from '../components/results/NetMoney';
+import { onPlayerGames, takePlayerGames, type PlayerGames } from '../components/results/playerGames';
 import { SettlementBreakdown } from '../components/results/SettlementBreakdown';
 import { practiceProgress } from '../data/chromeView';
 import { isSeasonOver } from '../data/marketView';
@@ -47,6 +48,8 @@ import {
   readingMonth,
   resultRowModel,
   revealScroll,
+  closeScroll,
+  playerFeedSource,
   type MonthAnchor,
   type NightSummary,
   type ResultRowModel,
@@ -195,8 +198,8 @@ function ResultRow({
   equation: SettlementEquation;
   expanded: boolean;
   layout: Layout;
-  /** Called with the row's node once it has opened, so the feed can bring its math into view. */
-  onOpened?: (node: unknown) => void;
+  /** Called with the row's node once it has opened or closed, so the feed can bring its math (or its headline) into view. */
+  onOpened?: (node: unknown, open: boolean) => void;
   onToggle: () => void;
   playerName: string;
   result: PerGameSettledResult;
@@ -204,8 +207,8 @@ function ResultRow({
 }) {
   const wrapRef = useRef<View>(null);
   useEffect(() => {
-    if (expanded) onOpened?.(wrapRef.current);
-    // Only an opening counts; the callback itself changes every render.
+    onOpened?.(wrapRef.current, expanded);
+    // Only a press counts (the feed checks); the callback changes every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded]);
   const { columns, compact, tight } = layout;
@@ -472,8 +475,8 @@ function FeesFold({
   count: number;
   layout: Layout;
   moves: boolean;
-  /** Called with the fold's node once it has opened, so the feed can bring its list into view. */
-  onOpened?: (node: unknown) => void;
+  /** Called with the fold's node once it has opened or closed, so the feed can bring its list (or its line) into view. */
+  onOpened?: (node: unknown, open: boolean) => void;
   onToggle: () => void;
   open: boolean;
   shorts: boolean;
@@ -483,7 +486,7 @@ function FeesFold({
 }) {
   const wrapRef = useRef<View>(null);
   useEffect(() => {
-    if (open) onOpened?.(wrapRef.current);
+    onOpened?.(wrapRef.current, open);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   const name = feesLineName(moves, shorts);
@@ -669,10 +672,29 @@ export function PerGameResultsScreen() {
   const listRef = useRef<FlatList<ResultsFeedItem>>(null);
   const listHeight = useRef(0);
   const jumpRetries = useRef(0);
+  // "See his games" from a profile (walk 8 T2-I4): one player's games until
+  // "Show all players"; the default feed is every player's, as before.
+  const [only, setOnly] = useState<PlayerGames | null>(() => takePlayerGames());
+  useEffect(() => onPlayerGames(() => {
+    const request = takePlayerGames();
+    if (request) setOnly(request);
+  }), []);
+  const onlyId = only?.playerId ?? null;
   const feed = useMemo(
-    () => (bootstrap ? buildResultsFeed(bootstrap, { lastSettledDate: bootstrap.game.lastSettledDate }) : []),
-    [bootstrap],
+    () => (bootstrap
+      ? buildResultsFeed(onlyId ? playerFeedSource(bootstrap, onlyId) : bootstrap, { lastSettledDate: bootstrap.game.lastSettledDate })
+      : []),
+    [bootstrap, onlyId],
   );
+  // A new filter (or none) starts at the newest night.
+  useEffect(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [onlyId]);
+  // Back to every player's games; focus goes to the title, as the button leaves.
+  const showAll = useMemo(() => repeatSafe(() => {
+    setOnly(null);
+    focusWhenReady(TITLE_ID);
+  }), []);
   // A day's moves render inside their fold, as one list (walk 3 T3-32).
   const visible = useMemo(() => foldedFeed(feed), [feed]);
   const moves = useMemo(() => movesByDay(feed), [feed]);
@@ -685,7 +707,7 @@ export function PerGameResultsScreen() {
   expandedNow.current = expanded;
   const revealKey = useRef<string | null>(null);
   const toggle = useMemo(() => repeatSafe((key: string) => {
-    revealKey.current = expandedNow.current.has(key) ? null : key;
+    revealKey.current = expandedNow.current.has(key) ? `close:${key}` : key;
     setExpanded((previous) => toggled(previous, key));
   }), []);
   // Opened near the bottom, the feed scrolls just enough to show the whole
@@ -694,8 +716,10 @@ export function PerGameResultsScreen() {
   const reducedMotion = useReducedMotion();
   const stillMotion = useRef(reducedMotion);
   stillMotion.current = reducedMotion;
-  const revealOpened = useCallback((key: string, node: unknown) => {
-    if (revealKey.current !== key) return;
+  // At 400% zoom the headline gives way so the math's first line is at the
+  // top, and closing it brings the headline back (walk 8 T3-14).
+  const revealOpened = useCallback((key: string, node: unknown, open = true) => {
+    if (revealKey.current !== (open ? key : `close:${key}`)) return;
     revealKey.current = null;
     const scroller = (listRef.current as unknown as { getScrollableNode?: () => unknown } | null)
       ?.getScrollableNode?.() as HTMLElement | null | undefined;
@@ -703,19 +727,29 @@ export function PerGameResultsScreen() {
     if (!scroller || typeof scroller.scrollBy !== 'function' || !row || typeof row.getBoundingClientRect !== 'function') return;
     const view = scroller.getBoundingClientRect();
     const box = row.getBoundingClientRect();
+    const viewTop = Math.max(view.top, 0);
+    const behavior = stillMotion.current ? 'auto' : 'smooth';
+    if (!open) {
+      const back = closeScroll({ rowTop: box.top, viewTop });
+      if (back < 0) scroller.scrollBy({ top: back, behavior });
+      return;
+    }
+    // The headline (the row's button) comes first; the math starts under it.
+    const headline = row.firstElementChild as HTMLElement | null;
     const by = revealScroll({
       rowTop: box.top,
       rowBottom: box.bottom,
-      viewTop: Math.max(view.top, 0),
+      mathTop: headline && headline !== row.lastElementChild ? headline.getBoundingClientRect().bottom : box.top,
+      viewTop,
       viewBottom: Math.min(view.bottom, window.innerHeight),
     });
-    if (by > 0) scroller.scrollBy({ top: by, behavior: stillMotion.current ? 'auto' : 'smooth' });
+    if (by > 0) scroller.scrollBy({ top: by, behavior });
   }, []);
   // A day's moves opened near the bottom come into view the same way.
   const openFeesNow = useRef(openFees);
   openFeesNow.current = openFees;
   const toggleFees = useMemo(() => repeatSafe((date: string) => {
-    revealKey.current = openFeesNow.current.has(date) ? null : `fold:${date}`;
+    revealKey.current = openFeesNow.current.has(date) ? `close:fold:${date}` : `fold:${date}`;
     setOpenFees((previous) => toggled(previous, date));
   }), []);
 
@@ -834,7 +868,7 @@ export function PerGameResultsScreen() {
   const quietLastNight = Boolean(lastSettled && played[0] && lastSettled > played[0].date
     && !nights.some((night) => night.date === lastSettled));
   // Moves made, but no games yet: the moves are the story, not "No results".
-  const movesOnly = played.length === 0 && feed.length > 0;
+  const movesOnly = played.length === 0 && feed.length > 0 && !only;
   // Games have been played, just none by your players: practice is past its opening
   // eve (Day 0 settles no games); a live season has settled a night.
   const nightsWithoutYou = movesOnly && (isMockActive()
@@ -850,7 +884,7 @@ export function PerGameResultsScreen() {
           count={item.count}
           layout={layout}
           moves={item.moves}
-          onOpened={(node) => revealOpened(`fold:${item.date}`, node)}
+          onOpened={(node, open) => revealOpened(`fold:${item.date}`, node, open)}
           onToggle={() => toggleFees(item.date)}
           open={open}
           shorts={item.shorts}
@@ -879,7 +913,7 @@ export function PerGameResultsScreen() {
         )}
         expanded={expanded.has(item.key)}
         layout={layout}
-        onOpened={(node) => revealOpened(item.key, node)}
+        onOpened={(node, open) => revealOpened(item.key, node, open)}
         onToggle={() => toggle(item.key)}
         playerName={perGamePlayerName(bootstrap, item.result.playerId, item.result.positionId)}
         result={item.result}
@@ -916,7 +950,17 @@ export function PerGameResultsScreen() {
             : 'No games yet. Results land here after each night of games. Your moves so far are below.'}
         </Text>
       ) : null}
-      {quietLastNight && lastSettled ? (
+      {only ? (
+        <View style={styles.only}>
+          <Text style={styles.onlyText}>{unbrokenName(only.playerName)}'s games only.</Text>
+          <Button
+            accessibilityLabel={`Show all players' games, not only ${only.playerName}'s`}
+            label="Show all players"
+            onPress={showAll}
+          />
+        </View>
+      ) : null}
+      {quietLastNight && lastSettled && !only ? (
         <Text style={styles.note}>None of your players had a game on {humanDay(lastSettled)}.</Text>
       ) : null}
       {anchors.length > 1 ? (
@@ -1131,6 +1175,21 @@ const styles = StyleSheet.create({
   },
   empty: {
     backgroundColor: colors.background,
+  },
+  only: {
+    marginTop: space.sm,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: space.md,
+    rowGap: space.xs,
+  },
+  onlyText: {
+    flexShrink: 1,
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.bold,
   },
   caption: {
     marginTop: 2,

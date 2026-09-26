@@ -560,27 +560,36 @@ export function isRecentRange(range: ProfileRange, shown: number, total: number)
  */
 export function priceStory(
   nights: readonly ProfileNight[],
-  _side: PerGamePositionSide = 'long',
+  side: PerGamePositionSide = 'long',
   now?: number,
   firstWithYou: string | null = null,
+  /** The price you hold him at now (your position's), or null when you don't. */
+  locked: number | null = null,
 ): string {
   if (nights.length === 0) return 'No games yet.';
   // A short locks his price too (walk 5 T1-11).
   const word = 'price';
   const mine = nights.filter((night) => night.source === 'yours');
   if (now !== undefined && nights.every((night) => night.market !== undefined)) {
+    // Walk 8 T1-07: lead with the comparison you act on, now against the price
+    // you locked; a game night's price is read on the chart's picked point,
+    // and the move since the first game shown is a percent (T2-06), so a 2%
+    // drift reads as small.
     const first = nights[0];
     const start = first.market as number;
     const today = moneyFine(now);
-    const since = first.date === firstWithYou ? 'at his first game with you' : `at his ${humanDate(first.date)} game`;
+    const since = first.date === firstWithYou ? 'his first game with you' : `his ${humanDate(first.date)} game`;
+    const change = priceChange(start, now);
+    const moved = change
+      ? `${change} since ${since} (${moneyFine(start)})`
+      : `the same as at ${since}`;
     const lines: string[] = [];
-    if (mine.length > 0) {
-      const prices = yourPrices(mine);
-      lines.push(prices.kind === 'one' ? `Your ${word}: ${prices.text} (locked).` : `Your ${word}s: ${prices.text} (locked).`);
+    if (locked !== null) {
+      lines.push(`Now ${today} · you locked ${moneyFine(locked)}: ${versusNewMoves(side, now, locked)}.`);
+      lines.push(`${moved.charAt(0).toUpperCase()}${moved.slice(1)}.`);
+    } else {
+      lines.push(`Now ${today} a game, ${moved}.`);
     }
-    lines.push(moneyFine(start) === today
-      ? `Market ${word}: ${today} today, the same as ${since}.`
-      : `Market ${word}: ${today} today, ${now > start ? 'up' : 'down'} from ${moneyFine(start)} ${since}.`);
     if (moneyFine(nights[nights.length - 1].market as number) !== today) lines.push(`His market ${word} moves between games too.`);
     return lines.join('\n');
   }
@@ -607,6 +616,36 @@ export function priceStory(
   return `His ${word} went from ${moneyFine(first)} to ${moneyFine(last)} a game over ${gamesCount(nights.length)}${note}.`;
 }
 
+/**
+ * His price's move as a percent, one decimal: "up 2.5%", "down 0.1%"; null
+ * when it rounds to no change (walk 8 T2-06: "-1.9% since your first game").
+ */
+export function priceChange(from: number, to: number): string | null {
+  if (from <= 0) return null;
+  const percent = Math.round(((to - from) / from) * 1000) / 10;
+  if (percent === 0) return null;
+  return `${percent > 0 ? 'up' : 'down'} ${Math.abs(percent).toFixed(1)}%`;
+}
+
+/**
+ * What today's price means for the price you locked, by side: a long pays
+ * his locked price each game, a short is credited it (walk 8 T1-07).
+ */
+function versusNewMoves(side: PerGamePositionSide, now: number, locked: number): string {
+  if (moneyFine(now) === moneyFine(locked)) return side === 'long' ? 'the same as new buyers pay' : 'the same as a new short gets';
+  // The gap between the two figures as shown ("$418.2K", "$417.5K": $700, not $723).
+  const gap = moneyFine(Math.abs(asShown(now) - asShown(locked)));
+  if (side === 'long') return now > locked ? `you pay ${gap} a game less than new buyers` : `you pay ${gap} a game more than new buyers`;
+  return now > locked ? `${gap} a game less than a new short gets` : `${gap} a game more than a new short gets`;
+}
+
+/** An amount rounded as `moneyFine` shows it: to $100 from $10K, to $10 from $1K. */
+function asShown(amount: number): number {
+  const abs = Math.abs(amount);
+  const step = abs < 1_000 ? 1 : abs < 9_995 ? 10 : abs < 999_950 ? 100 : 10_000;
+  return Math.round(amount / step) * step;
+}
+
 export interface HoldingStatus {
   /** Tag text, or null when you do not hold him. */
   tag: 'On your roster' | 'Shorted' | null;
@@ -622,13 +661,61 @@ export interface HoldingStatus {
 export function holdingStatus(
   position: Pick<PerGamePosition, 'side' | 'lockedGameCost' | 'expiresOn'> | null,
   side: PerGamePositionSide = 'long',
+  /** His move on this side is saving (or waiting its turn): the header says so (walk 8 T4-11). */
+  saving = false,
 ): HoldingStatus {
-  if (!position) return { tag: null, text: side === 'long' ? 'Not on your roster' : "You haven't shorted him" };
+  if (!position) {
+    if (saving) return { tag: null, text: side === 'long' ? 'Adding him to your roster…' : 'Opening your short on him…' };
+    return { tag: null, text: side === 'long' ? 'Not on your roster' : "You haven't shorted him" };
+  }
+  if (saving) {
+    return position.side === 'long'
+      ? { tag: 'On your roster', text: 'Dropping him from your roster…' }
+      : { tag: 'Shorted', text: 'Closing your short on him…' };
+  }
   if (position.side === 'long') {
     return { tag: 'On your roster', text: `Locked in at ${moneyFine(position.lockedGameCost)} a game` };
   }
   const until = position.expiresOn ? `, ends ${humanDate(position.expiresOn)}` : '';
   return { tag: 'Shorted', text: `Credited ${moneyFine(position.lockedGameCost)} a game${until}` };
+}
+
+/** The app's column on a wide screen (App.tsx `styles.app.maxWidth`): the frame never grows past it. */
+export const APP_COLUMN_MAX_WIDTH = 1200;
+
+/**
+ * Where the desktop profile panel docks, from the window's right edge: the
+ * app column's right edge, so on a monitor wider than the column it opens
+ * over the app, not out in the empty margin (walk 8 T2-03).
+ */
+export function panelDockRight(windowWidth: number, column = APP_COLUMN_MAX_WIDTH): number {
+  return Math.max(0, Math.floor((windowWidth - column) / 2));
+}
+
+/** His move on this side is saving, or waiting its turn behind a night or another move. */
+export function moveSaving(pending: ReadonlySet<string>, side: PerGamePositionSide, playerId: string): boolean {
+  return pending.has(`position:${side}:${playerId}`) || pending.has(`queued:position:${side}:${playerId}`);
+}
+
+/**
+ * The action bar while its move saves (walk 8 T4-11: a dashed "WAIT" read as
+ * locked, with no reason): the button's word, its spoken name (which starts
+ * with the word shown, so a voice command naming it still finds it), and one
+ * line of status beside it.
+ */
+export function savingWords(kind: 'open' | 'close', side: PerGamePositionSide, playerName: string): {
+  word: string;
+  name: string;
+  note: string;
+} {
+  if (kind === 'open') {
+    return side === 'long'
+      ? { word: 'Adding…', name: `Adding ${playerName}`, note: `Saving your add of ${playerName}…` }
+      : { word: 'Shorting…', name: `Shorting ${playerName}`, note: `Saving your short on ${playerName}…` };
+  }
+  return side === 'long'
+    ? { word: 'Dropping…', name: `Dropping ${playerName}`, note: `Saving your drop of ${playerName}…` }
+    : { word: 'Closing…', name: `Closing your short on ${playerName}`, note: `Saving the close of your short on ${playerName}…` };
 }
 
 export type StakeTone = 'gain' | 'loss' | 'even' | 'none';
@@ -870,6 +957,12 @@ function spreadMarks(marks: PriceMark[], height: number): PriceMark[] {
 }
 
 /**
+ * The Price chart's least span, a share of his price: 16% (±8%), so a 3% move
+ * fills about a fifth of the plot and a real slide still fills it (walk 8 T2-06).
+ */
+export const PRICE_MIN_SPAN = 0.16;
+
+/**
  * Geometry for the profile chart. The dividends view draws one bar per game
  * from $0 and his price as a dashed step line, so every bar that clears the
  * line is a game he beat his price. The price view draws his price per game.
@@ -906,9 +999,17 @@ export function profileChartModel(
     high = Math.max(...values, ...yourPrices);
     priceHigh = high;
     priceLow = low;
+    const mid = (high + low) / 2;
     const pad = Math.max((high - low) * 0.2, Math.abs(high) * 0.02, 1);
     low -= pad;
     high += pad;
+    // A minimum span around the middle (walk 8 T2-06: a 2.5% drift drew as a
+    // plunge from top to bottom): a few percent reads as a few percent.
+    const span = Math.abs(mid) * PRICE_MIN_SPAN;
+    if (high - low < span) {
+      low = mid - span / 2;
+      high = mid + span / 2;
+    }
   } else {
     low = Math.min(0, ...values, ...prices);
     high = Math.max(0, ...values, ...prices);

@@ -218,6 +218,10 @@ export function ProfileChart({
   const reading = nightReadout(shown, metric, side);
   // "Latest game, Oct 27, against your price": a sentence, not three labels.
   const caption = readoutCaption(shown, metric, side, active === null);
+  // The Price view's words above already set today against your price, so a
+  // game night's price shows only for a game you pick (walk 8 T1-07: three
+  // prices for one day). The slider still reads his latest game, never empty.
+  const idlePrice = metric === 'price' && active === null;
   const labelAnchor = (x: number) => (x < 60 ? 'start' : x > width - 60 ? 'end' : 'middle');
   // The dividends view names its tallest and lowest bar in the plot; the
   // price view has its scale in the gutter instead.
@@ -231,8 +235,10 @@ export function ProfileChart({
   return (
     <View>
       <View style={styles.readout}>
-        <Text maxFontSizeMultiplier={1.4} style={styles.readoutDate}>{caption}</Text>
-        <Text maxFontSizeMultiplier={1.4} style={styles.readoutValue}>{reading}</Text>
+        <Text maxFontSizeMultiplier={1.4} style={styles.readoutDate}>{idlePrice ? 'His price on a game night' : caption}</Text>
+        <Text maxFontSizeMultiplier={1.4} style={[styles.readoutValue, idlePrice && styles.readoutIdle]}>
+          {idlePrice ? 'Pick a game on the chart' : reading}
+        </Text>
       </View>
       <View
         accessible
@@ -438,6 +444,9 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
+  },
+  readoutIdle: {
+    color: colors.muted,
   },
   plot: {
     width: '100%',
