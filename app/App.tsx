@@ -39,12 +39,14 @@ import {
 import { ThemeProvider, useDesignVariant } from './src/theme/ThemeProvider';
 import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
 import { useKeepNotices } from './src/state/noticePreference';
-import { installGlobalWebStyles } from './src/web/globalStyles';
+import { brandFontReady, installGlobalWebStyles } from './src/web/globalStyles';
+import { installFocusInView } from './src/web/focusInView';
 import { ignoreHeldKeys } from './src/web/keyRepeat';
 import { treatmentNavigation } from './src/web/treatmentNavigation';
 
 installGlobalWebStyles();
 ignoreHeldKeys();
+installFocusInView();
 
 /** Circular databallr mark; radius is derived so it is never a card corner. */
 const BRAND_MARK_SIZE = 24;
@@ -263,6 +265,10 @@ function NoticeToast({
   // before it cleared (walk 9 T3-06, T3-N5). Settings keeps it in Recent
   // notices too.
   const [overflowing, setOverflowing] = useState(false);
+  // "more ▾" opens the whole notice in place (and "less ▴" folds it): the cue
+  // alone closed the notice when tapped (walk 10 T3-01).
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => setExpanded(false), [message, seq]);
   useEffect(() => {
     if (tone !== 'success' || held || keep || (tinyDock && overflowing)) return undefined;
     const timer = setTimeout(onDismiss, successNoticeMs(message));
@@ -336,7 +342,9 @@ function NoticeToast({
   // At 400% zoom a notice can be taller than the room the dock may take (it
   // leaves the screen more than half of what is left under the frame): its
   // first words stay at the top and the rest scrolls inside it (walk 5 T3-06).
-  const dockText = tinyDock ? 18 : Math.max(36, Math.round(Math.min(height * 0.3, (height - 150) * 0.45)));
+  const dockText = tinyDock
+    ? (expanded ? Math.max(TINY_NOTICE_LINE, Math.round(height * 0.6)) : TINY_NOTICE_LINE)
+    : Math.max(36, Math.round(Math.min(height * 0.3, (height - 150) * 0.45)));
   // At 400% zoom the one-line strip is a stop on the Tab path: the rest of
   // the notice scrolls with the arrow keys, and it waits while focused
   // (walk 8 T3-01: a keyboard user could never read past the first line).
@@ -351,14 +359,22 @@ function NoticeToast({
   const words = placement === 'dock' ? (
     <View style={styles.noticeWords}>
       <ScrollView
-        onContentSizeChange={(_contentWidth, contentHeight) => setOverflowing(tinyDock && contentHeight > dockText + 2)}
+        onContentSizeChange={(_contentWidth, contentHeight) => setOverflowing(tinyDock && contentHeight > TINY_NOTICE_LINE + 2)}
         style={[styles.noticeScroll, { maxHeight: dockText }]}
         {...readable}
       >
         <Text style={styles.noticeText}>{message}</Text>
       </ScrollView>
       {tinyDock && overflowing ? (
-        <Text aria-hidden maxFontSizeMultiplier={1} style={styles.noticeMore}>more ▾</Text>
+        <Pressable
+          accessibilityLabel={expanded ? 'Show one line of the notice' : 'Show the whole notice'}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          onPress={() => setExpanded((open) => !open)}
+          style={({ pressed }) => [styles.noticeMoreButton, pressed && styles.pressed]}
+        >
+          <Text maxFontSizeMultiplier={1} style={styles.noticeMore}>{expanded ? 'less ▴' : 'more ▾'}</Text>
+        </Pressable>
       ) : null}
     </View>
   ) : (
@@ -475,6 +491,10 @@ function TabIcon({ tab, color }: { tab: Tab; color: string }) {
  * readers ("Leade…" at 180px; walk 7 T4-08).
  */
 const TAB_WORDS_MIN_WIDTH = 188;
+/** One line of the 400% notice strip. */
+const TINY_NOTICE_LINE = 18;
+/** The longest the frame waits for its font. */
+const FONT_WAIT_MS = 1200;
 /** A start slower than this says so and offers Reload. */
 const SLOW_START_MS = 8000;
 /** Below this width the brand bar keeps the wordmark and drops "STOCK MARKET" whole (never "STOCK MAR…"). */
@@ -677,7 +697,19 @@ function AppBody() {
     transitionRequired,
   } = usePortfolio();
   const seasonLabel = seasonLabelFor(latestSettledDate ?? nextGameDate);
-  const ready = Boolean(state && !isLoading && !serverError && !transitionRequired && !isTransitioning);
+  // The frame waits (at most FONT_WAIT_MS) for its font, so its buttons do not
+  // jump when the font lands (walk 10 T2-01).
+  const [fontReady, setFontReady] = useState(typeof document === 'undefined');
+  useEffect(() => {
+    let live = true;
+    void brandFontReady(FONT_WAIT_MS).then(() => {
+      if (live) setFontReady(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  const ready = Boolean(fontReady && state && !isLoading && !serverError && !transitionRequired && !isTransitioning);
   useEffect(() => {
     if (!isMockActive()) return;
     setPracticeProgress(practiceHasProgress(bootstrap));
@@ -720,7 +752,7 @@ function AppBody() {
   ), [marketSide, activeTab, switchScreen]);
 
   const body = (() => {
-    if (isLoading) {
+    if (isLoading || !fontReady) {
       // Practice builds its season in this browser; there is no account or
       // server to load from (walk 7 T4-05). A start that takes long says so
       // and offers a way on (walk 9 T4-N4).
@@ -1356,6 +1388,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.xs,
   },
+  // A 44px target on a one-line strip: it reaches into the space around it.
+  noticeMoreButton: {
+    minHeight: 44,
+    marginVertical: -13,
+    justifyContent: 'center',
+    paddingHorizontal: space.xs,
+  },
   noticeMore: {
     color: colors.muted,
     fontSize: type.label,
@@ -1381,9 +1420,12 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   // Under the words at 400% zoom: short, so the screen keeps what it can.
+  // Under the words at 400% zoom: a 44px target that reaches into the space
+  // around it, so the strip stays short (walk 10 T3-07: it was 44x28).
   noticeDismissStacked: {
     alignSelf: 'flex-end',
-    minHeight: 28,
+    minHeight: 44,
+    marginVertical: -8,
   },
   stage: {
     flex: 1,

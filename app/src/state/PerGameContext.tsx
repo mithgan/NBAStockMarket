@@ -367,7 +367,9 @@ export function PerGameProvider({
     const fees = fee > 0 ? ` ${moneyFine(fee * names.length)}\u00a0in fees.` : '';
     const shown = names.length === 1 ? text
       : names.length <= 3 ? `${nameList(names)} ${move.verb}.${fees}`
-        : `${move.name} ${move.verb}: ${names.length} players in a row.${fees}`;
+        // The count first, then who came last (walk 10 T2-05: "Jalen Brunson
+        // added: 10 players in a row" read as one player added ten times).
+        : `${names.length} players ${move.verb}, the last ${move.name}.${fees}`;
     recentMoves.current = { verb: move.verb, names, shown, at: now };
     return shown;
   }, []);

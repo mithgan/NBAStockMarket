@@ -3,6 +3,36 @@ import { BASE_FONTS, BASE_PALETTE, colors } from '../theme';
 const STYLE_ELEMENT_ID = 'nba-stock-market-global-styles';
 const FONT_LINK_ID = 'nba-stock-market-font';
 
+/** The brand face's weight the frame's buttons use, for a load check. */
+const BRAND_FONT_PROBE = '800 16px "DM Sans"';
+
+/**
+ * Resolve once the brand font can draw (its stylesheet, then the face), or
+ * after `capMs`, whichever is first: the frame waits for it so its buttons do
+ * not jump 28px when the font lands (walk 10 T2-01).
+ */
+export function brandFontReady(capMs: number): Promise<void> {
+  if (typeof document === 'undefined' || !document.fonts) return Promise.resolve();
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    setTimeout(finish, capMs);
+    const loadFace = () => {
+      document.fonts.load(BRAND_FONT_PROBE).then(finish, finish);
+    };
+    const link = document.getElementById(FONT_LINK_ID) as HTMLLinkElement | null;
+    if (!link || link.sheet) loadFace();
+    else {
+      link.addEventListener('load', loadFace, { once: true });
+      link.addEventListener('error', finish, { once: true });
+    }
+  });
+}
+
 /** databallr.com's display face. Falls back to the system stack if it fails. */
 const DM_SANS = 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&display=swap';
 
