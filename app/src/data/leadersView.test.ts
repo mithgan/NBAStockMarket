@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { boardLag, boardList, leaderStanding, sortBoard, standingLines, standingPlace, type Standing } from './leadersView';
+import { boardLag, boardList, distinctPrecision, leaderStanding, sortBoard, standingLines, standingPlace, type Standing } from './leadersView';
 
 function board(scores: Array<[string, number, boolean?]>): PerGameLeaderboardRow[] {
   return scores.map(([displayName, cumulativePnl, isCurrentUser], index) => ({
@@ -207,4 +207,15 @@ test('a score that has moved past or level with a board row takes that place', (
   const leading = ranked(leaderStanding(rows, 150_000));
   assert.equal(standingPlace(leading), '#1');
   assert.deepEqual(standingLines(leading), ['$50K ahead of #2']);
+});
+
+test('scores that would read alike on the board get the digits that tell them apart', () => {
+  // "+$4.5M" twice beside #1 and #2 would look like a tie.
+  assert.equal(distinctPrecision(4_504_000, [4_504_000, 4_496_000, 1_200_000]), 'fine3');
+  assert.equal(distinctPrecision(4_496_000, [4_504_000, 4_496_000, 1_200_000]), 'fine3');
+  // Everyone else keeps the app's usual format.
+  assert.equal(distinctPrecision(1_200_000, [4_504_000, 4_496_000, 1_200_000]), 'fine');
+  // A tie reads the same, and dollars apart need exact dollars.
+  assert.equal(distinctPrecision(245_000, [245_000, 245_000]), 'fine');
+  assert.equal(distinctPrecision(245_000, [245_000, 245_040]), 'exact');
 });

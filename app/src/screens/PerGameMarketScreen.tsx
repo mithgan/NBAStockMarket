@@ -25,6 +25,7 @@ import {
   SHORT_EXPLAINER,
   closeActionName,
   confirmCloseButton,
+  confirmCloseMessage,
   exactMoney,
   money,
   moneyFine,
@@ -41,7 +42,6 @@ import {
   actionName,
   actionWord,
   collapseControls,
-  confirmStripMessage,
   echoQuery,
   feeHint,
   filterMarketRows,
@@ -77,6 +77,7 @@ import { marketMemory, openingSide, rememberMarket } from '../data/marketViewMem
 import type { ValueSummary } from '../data/perGameMetrics';
 import { positionSlotHint } from '../data/perGameRules';
 import { splitPlayerName } from '../data/playerName';
+import { shortEndsNext } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
 import { buildPerGameMarketRows, type PerGameMarketRow } from '../state/perGameState';
 import { useWatchlist } from '../state/watchlist';
@@ -344,7 +345,16 @@ function MarketRow({
     <ConfirmStrip
       confirmAccessibilityLabel={fee > 0 ? `${closeActionName(side, player.name)} for ${exactMoney(fee)}` : closeActionName(side, player.name)}
       confirmLabel={confirmCloseButton(side, fee)}
-      message={confirmStripMessage(side, player.name, fee, position.cumulativePnl)}
+      // One wording on every screen: the fee, what stays, and what coming
+      // back would cost today.
+      message={confirmCloseMessage({
+        side,
+        playerName: player.name,
+        feeDollars: fee,
+        total: position.cumulativePnl,
+        endsFreeAfter: shortEndsNext(position, bootstrap?.game.nextGameDate) ? position.expiresOn : null,
+        priceNow: player.currentGameCost,
+      })}
       onCancel={() => {
         closeStrip();
         onAnnounce(keptAnnouncement(side, player.name));

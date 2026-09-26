@@ -1,10 +1,10 @@
+import { openTab } from '../../state/uiActions';
+
 /**
- * Take the player to the Roster tab from inside the Market.
- *
- * The app keeps its tabs in browser history (`{ tab }` entries) and switches
- * tab on `popstate`, so the Market pushes a Roster entry and announces it the
- * same way Back would. Back from the Roster then returns to the Market.
- * Returns false where there is no browser history (then no button is shown).
+ * Take the player to the Roster tab from inside the Market, the way pressing
+ * the tab would (so Back returns to the Market). Falls back to a history
+ * entry the frame reads on `popstate` when no tab opener is mounted.
+ * Returns false where neither is possible (then no button is shown).
  */
 const ROSTER_TAB = 'portfolio';
 
@@ -15,6 +15,7 @@ export function canOpenRoster(): boolean {
 }
 
 export function openRoster(): boolean {
+  if (openTab(ROSTER_TAB)) return true;
   if (!canOpenRoster()) return false;
   const state = { tab: ROSTER_TAB };
   window.history.pushState(state, '');

@@ -16,6 +16,7 @@
  */
 import type { PerGameLeaderboardRow } from '../api/contracts';
 import { money } from '../copy/terms';
+import { formatAt, type PartPrecision } from './rosterView';
 
 export interface BoardGap {
   rank: number;
@@ -81,6 +82,28 @@ export interface BoardEntry {
   tied: boolean;
   /** Your row only, while the board lags your score: the board's own figure, shown as a note. */
   boardScore: number | null;
+  /** How precisely to write the score so it never reads like a different score on the board. */
+  precision: PartPrecision;
+}
+
+const PRECISIONS: PartPrecision[] = ['fine', 'fine3', 'exact'];
+
+/**
+ * The least precision at which a score reads differently from every other,
+ * different score on the board. The app's money format rounds millions to
+ * $10K, so $4,504,000 and $4,496,000 would both read "+$4.5M" beside ranks
+ * #1 and #2; those two rows read "+$4.504M" and "+$4.496M" instead, and the
+ * rest of the board keeps the lighter format. Equal scores (a tie) read the
+ * same, as they should.
+ */
+export function distinctPrecision(score: number, board: readonly number[]): PartPrecision {
+  const mine = Math.round(score);
+  const rivals = board.map((other) => Math.round(other)).filter((other) => other !== mine);
+  for (const precision of PRECISIONS) {
+    const text = formatAt(mine, precision, true);
+    if (rivals.every((other) => formatAt(other, precision, true) !== text)) return precision;
+  }
+  return 'exact';
 }
 
 /**
@@ -108,6 +131,7 @@ export function boardList(
       place: 1 + scores.filter((other) => other > score).length,
       tied: scores.filter((other) => other === score).length > 1,
       boardScore: row.isCurrentUser && Math.abs(score - row.cumulativePnl) >= 1 ? row.cumulativePnl : null,
+      precision: distinctPrecision(score, scores),
     }));
 }
 

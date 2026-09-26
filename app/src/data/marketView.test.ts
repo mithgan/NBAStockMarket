@@ -13,7 +13,6 @@ import {
   echoQuery,
   feeHint,
   fullNote,
-  confirmStripMessage,
   filterMarketRows,
   headerStatus,
   heldDetail,
@@ -237,20 +236,7 @@ test('right after Add or Short the spot says so and never reads Drop or Close (T
   assert.equal(justClosedName('short', 'Luka Doncic'), 'Closed your short on Luka Doncic');
 });
 
-test('the confirm strip says the fee, what stays and what coming back costs (T2-01, T1-16)', () => {
-  assert.equal(
-    confirmStripMessage('long', 'LeBron James', 250, 764_000),
-    "Drop LeBron James? $250 fee. His +$764K stays in your score. Adding him back costs another $250, at that day's price.",
-  );
-  assert.equal(
-    confirmStripMessage('short', 'LeBron James', 250, -12_500),
-    "Close your short on LeBron James? $250 fee. This short's -$12.5K stays in your score. Shorting him again costs another $250, at that day's price.",
-  );
-  // Before his first game there is nothing to keep, so it does not say "$0 stays".
-  assert.equal(
-    confirmStripMessage('long', 'LeBron James', 0, 0),
-    "Drop LeBron James? He has not changed your score yet. Adding him back is at that day's price.",
-  );
+test('backing out of a Drop or Close is announced by name (T2-01, T1-16)', () => {
   assert.equal(keptAnnouncement('long', 'LeBron James'), 'Kept LeBron James on your roster.');
   assert.equal(keptAnnouncement('short', 'LeBron James'), 'Kept your short on LeBron James.');
 });

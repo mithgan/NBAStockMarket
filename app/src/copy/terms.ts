@@ -237,6 +237,8 @@ export function confirmCloseMessage({
     sentences.push(side === 'long'
       ? `His ${signedMoneyFine(total)} stays in your score.`
       : `This short's ${signedMoneyFine(total)} stays in your score.`);
+  } else {
+    sentences.push(side === 'long' ? 'He has not changed your score yet.' : 'This short has not changed your score yet.');
   }
   if (side === 'short' && endsFreeAfter) {
     sentences.push(`Left alone, it ends by itself after the ${humanDate(endsFreeAfter)} games, at no cost.`);

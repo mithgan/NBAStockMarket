@@ -16,12 +16,12 @@ import { SettingsButton, SettingsSheet } from './src/components/SettingsSheet';
 import { useReducedMotion } from './src/hooks/useReducedMotion';
 import { PerGameLeaderboardScreen as LeaderboardScreen } from './src/screens/PerGameLeaderboardScreen';
 import { PerGameMarketScreen as MarketScreen } from './src/screens/PerGameMarketScreen';
-import { PerGameResultsScreen as PlaysScreen } from './src/screens/PerGameResultsScreen';
+import { PerGameResultsScreen as PlaysScreen, scrollResultsToNewest } from './src/screens/PerGameResultsScreen';
 import { DesignPreviewScreen } from './src/screens/DesignPreviewScreen';
 import { PerGameRosterScreen as PortfolioScreen } from './src/screens/PerGameRosterScreen';
 import { humanDateWithYear, spoken } from './src/copy/terms';
 import { visuallyHidden } from './src/ui/kit';
-import { registerSettingsOpener } from './src/state/uiActions';
+import { registerSettingsOpener, registerTabOpener } from './src/state/uiActions';
 import { sheetIsOpen } from './src/web/appHistory';
 import { consumePracticeRestarted, setPracticeProgress } from './src/web/practiceSession';
 import {
@@ -280,10 +280,19 @@ function AppBody() {
     if (current !== tab) window.history.pushState({ tab }, '');
   }, []);
   const changeTab = (tab: Tab) => {
-    if (tab === activeTab) return;
+    if (tab === activeTab) {
+      // Pressing Results again takes a long season back to its newest night.
+      if (tab === 'plays') scrollResultsToNewest();
+      return;
+    }
     pushTab(tab);
     setActiveTab(tab);
   };
+  // Screens switch tabs through uiActions (the Market's "Choose who to drop").
+  useEffect(() => registerTabOpener((tab) => {
+    pushTab(tab);
+    setActiveTab(tab);
+  }), [pushTab]);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     window.history.replaceState({ ...(window.history.state ?? {}), tab: 'portfolio' }, '');

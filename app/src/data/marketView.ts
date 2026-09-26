@@ -357,26 +357,6 @@ export function actionWord({
   return verb;
 }
 
-/**
- * What the confirm strip under a row says before a Drop or Close: the question,
- * the fee, what stays in the score, and what coming back would cost. Whole
- * sentences, so a screen reader reads it the way it looks.
- * "Drop Nikola Jokic? $250 fee. His +$764K stays in your score. Adding him
- * back costs another $250, at that day's price."
- */
-export function confirmStripMessage(side: PerGamePositionSide, playerName: string, fee: number, total: number): string {
-  const long = side === 'long';
-  const question = long ? `Drop ${playerName}?` : `Close your short on ${playerName}?`;
-  const feeLine = fee > 0 ? ` ${exactMoney(fee)} fee.` : '';
-  const stays = Math.round(total) === 0
-    ? ` ${long ? 'He has' : 'This short has'} not changed your score yet.`
-    : ` ${long ? 'His' : "This short's"} ${signedMoneyFine(total)} stays in your score.`;
-  const back = long ? 'Adding him back' : 'Shorting him again';
-  const again = fee > 0
-    ? ` ${back} costs another ${exactMoney(fee)}, at that day's price.`
-    : ` ${back} is at that day's price.`;
-  return `${question}${feeLine}${stays}${again}`;
-}
 
 /** What the live region says when a player backs out of a Drop or Close. */
 export function keptAnnouncement(side: PerGamePositionSide, playerName: string): string {

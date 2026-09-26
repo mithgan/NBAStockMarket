@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  confirmCloseMessage,
   CONFIRM_LABEL,
   closeActionName,
   confirmCloseButton,
@@ -105,4 +106,19 @@ test('one money format everywhere, and shared action wording', () => {
   assert.equal(confirmCloseButton('long', 250), 'Drop for $250');
   assert.equal(confirmCloseButton('short', 250), 'Close for $250');
   assert.equal(spoken('Paid $584K · price $137.5K'), 'Paid $584K, price $137.5K');
+});
+
+test('a Drop or Close asks once, with the fee, what stays and what coming back costs', () => {
+  assert.equal(
+    confirmCloseMessage({ side: 'long', playerName: 'Nikola Jokic', feeDollars: 250, total: 4_000, priceNow: 98_800 }),
+    'Drop Nikola Jokic for a $250 fee? His +$4,000 stays in your score. Adding him back later costs his price at that time (today $98.8K a game), plus another $250 fee.',
+  );
+  assert.equal(
+    confirmCloseMessage({ side: 'short', playerName: 'Bam Adebayo', feeDollars: 250, total: -12_500, endsFreeAfter: '2025-10-27' }),
+    "Close your short on Bam Adebayo for a $250 fee? This short's -$12.5K stays in your score. Left alone, it ends by itself after the Oct 27 games, at no cost. Shorting him again later sets a new price, plus another $250 fee.",
+  );
+  assert.equal(
+    confirmCloseMessage({ side: 'long', playerName: 'LeBron James', feeDollars: 0, total: 0 }),
+    'Drop LeBron James? He has not changed your score yet. Adding him back later costs his price at that time.',
+  );
 });

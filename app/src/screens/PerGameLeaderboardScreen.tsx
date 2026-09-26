@@ -4,6 +4,8 @@ import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-n
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
 import { signedMoney } from '../copy/terms';
 import { NetMoney } from '../components/results/NetMoney';
+import { FineMoney } from '../components/roster/FineMoney';
+import { formatAt } from '../data/rosterView';
 import { practiceProgress } from '../data/chromeView';
 import {
   boardLag,
@@ -156,14 +158,16 @@ function StandingBlock({
  * +$245K". On a level board (before the first games) no one has a rank yet.
  */
 function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEntry; level: boolean }) {
-  const { row, place, tied, score, boardScore } = entry;
+  const { row, place, tied, score, boardScore, precision } = entry;
+  // A score that would read like a different one on the board gets its digits.
+  const scoreText = precision === 'fine' ? scoreWords(score) : formatAt(score, precision, true);
   const you = row.isCurrentUser;
   // Practice names your row "You"; a YOU tag beside it would say it twice.
   const tagged = you && row.displayName.trim().toLowerCase() !== 'you';
   const who = `${row.displayName}${tagged ? ', you' : ''}`;
   const spoken = level
     ? `${who}, level at $0`
-    : `${tied ? 'Tied for' : 'Rank'} ${place}, ${who}, ${scoreWords(score)}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`;
+    : `${tied ? 'Tied for' : 'Rank'} ${place}, ${who}, ${scoreText}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`;
   return (
     <View role="listitem" style={[styles.item, you && styles.currentRow]}>
       <Spoken>{spoken}</Spoken>
@@ -174,7 +178,7 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
           {tagged ? <Tag tone="gold">You</Tag> : null}
         </View>
         <View style={[styles.scoreCell, compact && styles.scoreCompact]}>
-          <NetMoney value={score} />
+          {precision === 'fine' ? <NetMoney value={score} /> : <FineMoney precision={precision} value={score} />}
           {boardScore === null ? null : (
             <Text style={[styles.boardNote, compact && styles.boardNoteCompact]}>board {signedMoney(boardScore)}</Text>
           )}
