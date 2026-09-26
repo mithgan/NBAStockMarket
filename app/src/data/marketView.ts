@@ -581,6 +581,16 @@ export function sortDirection(sort: MarketSort, reversed = false): string {
   return ascending ? 'lowest first' : 'highest first';
 }
 
+/**
+ * The list in its unusual order says so in words, with the way back
+ * (walk 3 T1-08: a second tap on Value quietly showed the worst value first).
+ */
+export function flippedSortNote(sort: MarketSort): { text: string; restore: string } {
+  if (sort === 'value') return { text: 'Showing the worst value first.', restore: 'Best value first' };
+  if (sort === 'price') return { text: 'Showing the highest price first.', restore: 'Lowest price first' };
+  return { text: 'Showing names Z to A.', restore: 'A to Z' };
+}
+
 /** What a screen reader hears when the sort changes: "Sorted by price, lowest first." */
 export function sortedLine(sort: MarketSort, reversed = false): string {
   return `Sorted by ${sort}, ${sortDirection(sort, reversed)}.`;

@@ -71,6 +71,7 @@ import {
   rosterPickReason,
   SHORT_WINDOW_BELOW,
   slotSummary,
+  flippedSortNote,
   sortedLine,
   sortMarketRows,
   valueByPosition,
@@ -860,6 +861,12 @@ export function PerGameMarketScreen({
           </View>
         </View>
       )}
+      {reversed && (!folded || controlsOpen) ? (
+        <View style={[styles.flipNote, wide && styles.flipNoteWide]}>
+          <Text maxFontSizeMultiplier={1.4} style={styles.flipText}>{flippedSortNote(sort).text}</Text>
+          <Button label={flippedSortNote(sort).restore} onPress={() => changeSort(sort)} variant="quiet" />
+        </View>
+      ) : null}
       {wide && roomy ? <View style={styles.explainerWide}>{sideExplainer}</View> : null}
       {wide ? (
         <MarketColumnHeader
@@ -1086,6 +1093,21 @@ const styles = StyleSheet.create({
     fontSize: type.label,
     fontWeight: weight.bold,
     lineHeight: 15,
+  },
+  flipNote: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: space.sm,
+  },
+  flipNoteWide: {
+    paddingHorizontal: space.lg,
+  },
+  flipText: {
+    color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
   },
   explainer: {
     color: colors.muted,
