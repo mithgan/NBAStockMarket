@@ -223,7 +223,7 @@ export function SettingsSheet({
             accessibilityLabel="Done, close settings"
             accessibilityRole="button"
             onPress={unlessSettling(onClose)}
-            style={({ pressed }) => [styles.close, narrow && styles.closeNarrow, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.close, styles.textButtonEdge, narrow && styles.closeNarrow, pressed && styles.pressed]}
           >
             <Text style={styles.closeText}>Done</Text>
           </Pressable>
@@ -381,7 +381,12 @@ export function SettingsSheet({
                 <View style={[styles.choiceCopy, narrow && styles.choiceCopyNarrow]}>
                   <Text style={styles.choiceName}>Reduce motion</Text>
                   <Text nativeID={REDUCE_MOTION_NOTE_ID} style={styles.choiceBlurb}>
-                    Sheets and figures appear at once, without fades or counting up. Your device's own setting still applies.
+                    {/* A device that already asks for less motion is said
+                        here, so "Off" never reads as motion being on (walk 11
+                        T3-10). */}
+                    {reducedMotion && !motionReduced
+                      ? 'Reduced now by your device\'s own setting: sheets and figures appear at once. Turn this on to keep it so on any device.'
+                      : 'Sheets and figures appear at once, without fades or counting up. Your device\'s own setting still applies.'}
                   </Text>
                 </View>
                 {/* The state in a word too: forced colours drop the track's
@@ -401,6 +406,7 @@ export function SettingsSheet({
             )}
             <Pressable
               ref={rulesLinkRef}
+              accessibilityLabel="Read the full rules"
               accessibilityRole="button"
               onPress={() => {
                 onClose();
@@ -413,9 +419,9 @@ export function SettingsSheet({
                   backFromRules.current = false;
                 }, 50);
               }}
-              style={({ pressed }) => [styles.choice, narrow && styles.gutterNarrow, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.choice, styles.textButtonEdge, narrow && styles.gutterNarrow, pressed && styles.pressed]}
             >
-              <Text style={[styles.choiceName, styles.choiceNameSelected]}>Read the full rules</Text>
+              <Text style={[styles.choiceName, styles.choiceNameSelected]}>Read the full rules ›</Text>
             </Pressable>
           </Section>
 
@@ -592,6 +598,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.controlBorder,
     borderRadius: radius.sm,
+  },
+  // A button drawn as words keeps an edge where colours are forced
+  // (Windows contrast themes paint a transparent border as the button's
+  // edge; walk 11 T3-07: "Done" read as a title and the rules link as a heading).
+  textButtonEdge: {
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   closeText: {
     color: colors.goldInk,

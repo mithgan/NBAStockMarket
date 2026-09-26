@@ -51,8 +51,10 @@ function workedExample(rate: number, raw: boolean): string {
 export const LUCK_EXPLAINER =
   'Single games are noisy: one week is mostly luck, while good picks show over a month or more.';
 
+// One game rarely decides a price: a player's price fell after a +$194.5K
+// night and read as the rules being wrong (walk 11 T2-01).
 export const PRICE_EXPLAINER =
-  "A player's price moves as people add and drop him and as he plays. The price you add him at is locked for as long as you hold him.";
+  "A player's price moves as people add and drop him and as his games add up: one game rarely decides it, so a price can dip after a great night. The price you add him at is locked for as long as you hold him.";
 
 /**
  * Scoring's word on a bad game, beside what the dividend is: a roster-only
