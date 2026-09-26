@@ -12,7 +12,10 @@ test('rules explain the actual basis, fees, expiry and zero starting score', () 
   const view = perGameRulesPresentation({ ...rules, dividendDollarsPerNetPoint: 12500, transactionFeeDollars: 750, longSlotLimit: 4, shortSlotLimit: 2, shortTermDays: null });
   const facts = Object.fromEntries(view.facts.map(({ label, value }) => [label, value]));
   assert.equal(facts['Starting score'], '$0');
-  assert.equal(facts['Dividend rate'], '$12,500 per net point');
+  assert.equal(facts['Dividend rate'], '$12,500 for each net point');
+  // The loop and one worked night come first, with the real rate.
+  assert.match(view.explanation, /^Each game he plays, you pay his price and collect his dividend\./);
+  assert.match(view.explanation, /For example, a game of 3\.5 net points pays a \$43,750 dividend; at a \$37,000 price, you made \$6,750\./);
   assert.equal(facts['Open fee'], '$750');
   assert.equal(facts['Drop fee'], '$750');
   assert.equal(facts['Roster slots'], '4');

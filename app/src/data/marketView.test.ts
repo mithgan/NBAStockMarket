@@ -110,14 +110,14 @@ test('the watching filter keeps only watched players and combines with search', 
 test('the value line states last season, then compares it with his price (grader M5)', () => {
   assert.deepEqual(valueSignal(rows[0].player, 'long'), {
     edge: 15_000,
-    lead: 'Paid $120K a game last season ·',
+    lead: 'Dividend last season $120K a game ·',
     text: '$15K over his price',
     tone: 'gain',
   });
   // The Short tab says what a short would have made: the same fact, flipped.
   assert.deepEqual(valueSignal(rows[0].player, 'short'), {
     edge: -15_000,
-    lead: 'Paid $120K a game last season ·',
+    lead: 'Dividend last season $120K a game ·',
     text: '-$15K for a short',
     tone: 'loss',
   });

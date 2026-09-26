@@ -33,6 +33,25 @@ function simulatedTime(day: string, when: 'move' | 'settlement'): string {
 }
 
 /** Other players on the practice leaderboard. */
+/**
+ * Practice's market from the best player down, which sets each price (and so
+ * each player's simulated games) and his tier: the top ten are stars, the
+ * next twelve starters, the rest role players.
+ */
+const PRACTICE_QUALITY = [
+  'Nikola Jokic', 'Shai Gilgeous-Alexander', 'Giannis Antetokounmpo', 'Luka Doncic',
+  'Victor Wembanyama', 'Jalen Brunson', 'Cade Cunningham', 'Karl-Anthony Towns',
+  'Donovan Mitchell', 'Kevin Durant', 'Devin Booker', 'Tyrese Maxey', 'Evan Mobley',
+  'Kawhi Leonard', 'LaMelo Ball', 'Jamal Murray', 'Bam Adebayo', 'Scottie Barnes',
+  'Jaylen Brown', 'Chet Holmgren', "De'Aaron Fox", 'Desmond Bane', 'Derrick White',
+  'Amen Thompson', 'Jalen Duren', 'OG Anunoby', 'Dyson Daniels', 'Donovan Clingan',
+  'Collin Gillespie', 'Kon Knueppel',
+];
+/** The best player's price a game; the last on the list costs about a fifth of it. */
+const PRACTICE_TOP_PRICE = 462_500;
+/** Players with no NBA season before this one. */
+const PRACTICE_ROOKIES = new Set(['Kon Knueppel']);
+
 const PRACTICE_RIVALS = ['Fast Break FC', 'Deep Threes', 'Glass Cleaners', 'Pick and Roll Club', 'Bench Mob'];
 
 function clone<T>(value: T): T {
@@ -118,13 +137,31 @@ export class MockPerGameApiClient {
       displayName: row.isCurrentUser ? 'You' : PRACTICE_RIVALS[rival++ % PRACTICE_RIVALS.length],
       cumulativePnl: row.isCurrentUser ? snapshot.account.cumulativePnl : 0,
     }));
+    // Practice prices follow how good each player is, in three tiers, with
+    // uneven steps (the fixture prices the list as a $12.5K staircase in
+    // alphabetical-ish order, so Jokic was the cheapest player and every
+    // "mid" player cost more than every "star"). Games are simulated around
+    // each price, so a fair price stays fair. Seeded: every practice season
+    // starts from the same market.
+    const priceRng = makeRng(20_251_021);
+    snapshot.market = snapshot.market.map((player) => {
+      const quality = PRACTICE_QUALITY.findIndex((name) => name === player.name);
+      if (quality === -1) return player;
+      const base = PRACTICE_TOP_PRICE * (1 - (quality / PRACTICE_QUALITY.length) * 0.78);
+      const jitter = 1 + (priceRng() - 0.5) * 0.06;
+      return {
+        ...player,
+        tier: quality < 10 ? 'star' : quality < 22 ? 'starter' : 'role',
+        currentGameCost: Math.round((base * jitter) / 500) * 500,
+      };
+    });
     // Last season's value per game, varied per player (the fixture puts every
     // player exactly $20K from his price, which makes a Value sort pointless).
-    // About one in ten has no last season (a rookie). Seeded, so every
-    // practice season starts from the same market.
+    // A rookie has no last season. Seeded, so every practice season starts
+    // from the same market.
     const valueRng = makeRng(20_262_028);
     snapshot.market = snapshot.market.map((player) => {
-      if (valueRng() < 0.1) return { ...player, priorSeasonValuePerGame: null };
+      if (PRACTICE_ROOKIES.has(player.name)) return { ...player, priorSeasonValuePerGame: null };
       const ratio = 0.72 + valueRng() * 0.56;
       return { ...player, priorSeasonValuePerGame: Math.round((player.currentGameCost * ratio) / 500) * 500 };
     });

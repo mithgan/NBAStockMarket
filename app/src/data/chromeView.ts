@@ -285,15 +285,15 @@ export function lastNightFigure(amount: number): { text: string; accessibilityLa
  * (data/perGameRules.ts); the tests hold the two together.
  */
 export function dividendBasisText(basis: DividendBasis): string {
-  return basis === 'raw_net_points' ? 'Net points scored' : 'Net points above projection';
+  return basis === 'raw_net_points' ? 'His net points each game' : 'His net points above projection';
 }
 
 /**
- * "Net points scored · $40,000 per net point", with the rate held together so
- * a narrow sheet breaks at the dot, never inside "per net point".
+ * "His net points each game · $40,000 for each net point", with the rate held
+ * together so a narrow sheet breaks at the dot, never inside the rate.
  */
 export function dividendText(basis: DividendBasis, dollarsPerNetPoint: number): string {
-  return `${dividendBasisText(basis)} · ${keepTogether(`${formatMoney(dollarsPerNetPoint)} per net point`)}`;
+  return `${dividendBasisText(basis)} · ${keepTogether(`${formatMoney(dollarsPerNetPoint)} for each net point`)}`;
 }
 
 /**

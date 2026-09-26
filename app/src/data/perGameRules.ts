@@ -4,7 +4,23 @@ import { formatMoney } from '../format';
 
 /** What net points are, in box-score terms a fan already knows. */
 export const NET_POINTS_EXPLAINER =
-  'Net points boil his box score down to one number: points, rebounds, assists, steals and blocks add to it; turnovers, missed shots and minutes played take away.';
+  'Net points boil his box score down to one number: points, rebounds, assists, steals and blocks add to it; turnovers, missed shots and minutes played take away, so a player has to produce for the minutes he gets.';
+
+/** Where a dividend comes from, for each dividend basis. */
+const DIVIDEND_RAW = "A player's dividend comes from his net points each game.";
+const DIVIDEND_PROJECTION = "A player's dividend comes from how far his net points beat his pregame projection.";
+
+/**
+ * One night worked through with the real rate, so "$40,000 per net point"
+ * connects to prices like "$117K a game": 3.5 net points pay $140,000; at a
+ * $118,000 price that game made $22,000.
+ */
+function workedExample(rate: number, raw: boolean): string {
+  const dividend = Math.round(3.5 * rate);
+  const price = Math.round((dividend * 0.84) / 1000) * 1000;
+  const points = raw ? '3.5 net points' : '3.5 net points above his projection';
+  return `For example, a game of ${points} pays a ${formatMoney(dividend)} dividend; at a ${formatMoney(price)} price, you made ${formatMoney(dividend - price)}.`;
+}
 
 /** Why prices move, and why yours does not. */
 export const PRICE_EXPLAINER =
@@ -19,17 +35,17 @@ export function perGameRulesPresentation(rules: PerGameRuleset) {
   return {
     facts: [
       { label: 'Starting score', value: '$0' },
-      { label: 'Dividend basis', value: raw ? 'Net points scored' : 'Net points above projection' },
-      { label: 'Dividend rate', value: `${formatMoney(rules.dividendDollarsPerNetPoint)} per net point` },
+      { label: 'Dividend basis', value: raw ? 'His net points each game' : 'His net points above projection' },
+      { label: 'Dividend rate', value: `${formatMoney(rules.dividendDollarsPerNetPoint)} for each net point` },
       { label: 'Roster slots', value: String(rules.longSlotLimit) },
       { label: 'Short slots', value: String(rules.shortSlotLimit) },
       { label: 'Open fee', value: formatMoney(rules.transactionFeeDollars) },
       { label: 'Drop fee', value: formatMoney(rules.transactionFeeDollars) },
       { label: 'Shorts last', value: rules.shortTermDays === null ? 'Until you close them' : `${rules.shortTermDays} days` },
     ],
-    explanation: `${raw
-      ? "A player's dividend comes from his net points each game."
-      : "A player's dividend comes from how far his net points beat his pregame projection."} ${NET_POINTS_EXPLAINER} ${ROSTER_EXPLAINER} ${SHORT_EXPLAINER} Your score adds up those games, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${NEGATIVE_DIVIDEND_EXPLAINER} ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
+    // The loop first (what you do and how you profit), one worked night,
+    // then where dividends come from, then the rest.
+    explanation: `${ROSTER_EXPLAINER} ${workedExample(rules.dividendDollarsPerNetPoint, raw)} ${raw ? DIVIDEND_RAW : DIVIDEND_PROJECTION} ${NET_POINTS_EXPLAINER} ${SHORT_EXPLAINER} Your score adds up those games, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${NEGATIVE_DIVIDEND_EXPLAINER} ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
     /** Plain definitions of the words the screens use. */
     glossary: [
       { term: 'Price', meaning: 'What one game of a player costs. The price you add him at stays locked while you hold him.' },
@@ -49,20 +65,23 @@ export function positionSlotHint(side: PerGamePositionSide, limit: number) {
 }
 
 /**
- * The explanation in short paragraphs, split before the roster sentence, the
- * short sentence, the bad-game sentence, the price sentence and the lock
- * sentence, without changing a word. The
- * Rules sheet and Settings both read it this way.
+ * The explanation in short paragraphs, each starting at one of these
+ * sentences and running to the next, without changing a word: the loop and
+ * its example; where dividends come from; shorts and fees; bad games;
+ * prices; locks. The Rules sheet and Settings both read it this way.
  */
 export function rulesParagraphs(explanation: string): string[] {
+  const markers = [DIVIDEND_RAW, DIVIDEND_PROJECTION, SHORT_EXPLAINER, NEGATIVE_DIVIDEND_EXPLAINER, PRICE_EXPLAINER, LOCK_EXPLAINER];
+  const cuts = markers
+    .map((marker) => explanation.indexOf(marker))
+    .filter((at) => at > 0)
+    .sort((left, right) => left - right);
   const paragraphs: string[] = [];
-  let rest = explanation;
-  for (const marker of [ROSTER_EXPLAINER, SHORT_EXPLAINER, NEGATIVE_DIVIDEND_EXPLAINER, PRICE_EXPLAINER, LOCK_EXPLAINER]) {
-    const at = rest.indexOf(marker);
-    if (at < 0) continue;
-    paragraphs.push(rest.slice(0, at), marker);
-    rest = rest.slice(at + marker.length);
+  let start = 0;
+  for (const at of cuts) {
+    paragraphs.push(explanation.slice(start, at));
+    start = at;
   }
-  paragraphs.push(rest);
+  paragraphs.push(explanation.slice(start));
   return paragraphs.map((part) => part.trim()).filter(Boolean);
 }

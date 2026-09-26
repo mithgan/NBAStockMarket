@@ -173,7 +173,7 @@ export type SignalTone = 'gain' | 'loss' | 'even' | 'none';
 export interface ValueSignal {
   /** Per-game edge at today's price from last season, sign already set for the side. */
   edge: number | null;
-  /** The fact: "Paid $120K a game last season ·", or null with no last season. */
+  /** The fact: "Dividend last season $120K a game ·", or null with no last season. */
   lead: string | null;
   /** The comparison: "$20K over his price", "+$20K for a short", "No last season". */
   text: string;
@@ -214,7 +214,8 @@ export function valueSignal(
   if (edge === null || player.priorSeasonValuePerGame === null) {
     return { edge: null, lead: null, text: 'No last season', tone: 'none' };
   }
-  const lead = `Paid ${money(player.priorSeasonValuePerGame)} a game last season ·`;
+  // "Dividend", not "Paid": a fan reads "paid $120K a game" as his salary.
+  const lead = `Dividend last season ${money(player.priorSeasonValuePerGame)} a game ·`;
   const tone = netTone(edge);
   if (tone === 'even') return { edge, lead, text: 'even with his price', tone };
   if (side === 'short') return { edge, lead, text: `${signedMoney(edge)} for a short`, tone };
