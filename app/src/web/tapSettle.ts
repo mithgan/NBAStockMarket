@@ -117,3 +117,19 @@ export function tapsSettling(steady = false): boolean {
 export function pressedByPointer(): boolean {
   return currentPointer() !== null;
 }
+
+/** A tap on the same spot sooner than this after a toggle is the same tap bouncing. */
+export const TOGGLE_REPEAT_MS = 350;
+
+/**
+ * Wrap a toggle's press (Watch, a side switch, a filter, a row that opens and
+ * closes): a double tap acts once instead of switching on and straight back
+ * off (walk 6 T4-11). A tap elsewhere, a later tap, and every key press act.
+ */
+export function repeatSafe<A extends unknown[]>(press: (...args: A) => void, ms = TOGGLE_REPEAT_MS): (...args: A) => void {
+  return (...args: A) => {
+    if (tapsSettling(true)) return;
+    settleTaps(0, ms);
+    press(...args);
+  };
+}

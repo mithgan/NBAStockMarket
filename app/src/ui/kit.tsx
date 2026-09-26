@@ -349,7 +349,7 @@ const CONFIRM_TAP_GUARD_MS = 400;
 
 // After a confirm is answered it folds away and the rows under it move up;
 // for a moment the next taps are ignored (see web/tapSettle).
-export { settleTaps, tapsSettling } from '../web/tapSettle';
+export { repeatSafe, settleTaps, tapsSettling } from '../web/tapSettle';
 
 /**
  * The costly choice sits away from where the opening tap landed, so a press

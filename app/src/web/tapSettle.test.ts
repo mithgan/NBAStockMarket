@@ -78,3 +78,25 @@ test('a key press right after a click is the keyboard\'s, not a repeat tap', asy
   notePressKey();
   assert.equal(pressedByPointer(), false);
 });
+
+test('a toggle wrapped by repeatSafe acts once for a double tap, twice for two taps apart', async () => {
+  // Later than any real-clock quiet an earlier test left in the module.
+  mock.timers.enable({ apis: ['Date'], now: Date.now() + 10_000_000 });
+  try {
+    const { notePointer, repeatSafe } = await import('./tapSettle');
+    let flips = 0;
+    const toggle = repeatSafe(() => { flips += 1; });
+    notePointer(100, 100);
+    toggle();
+    mock.timers.tick(90);
+    notePointer(101, 99);
+    toggle();
+    assert.equal(flips, 1);
+    mock.timers.tick(600);
+    notePointer(100, 100);
+    toggle();
+    assert.equal(flips, 2);
+  } finally {
+    mock.timers.reset();
+  }
+});
