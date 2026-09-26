@@ -117,7 +117,7 @@ test('a Drop or Close asks once, with the fee, what stays and what coming back c
   );
   assert.equal(
     confirmCloseMessage({ side: 'short', playerName: 'Bam Adebayo', feeDollars: 250, total: -12_500, endsFreeAfter: '2025-10-27' }),
-    "Close your short on Bam Adebayo for a $250 fee? This short's -$12.5K stays in your score. Left alone, it ends by itself after the Oct 27 games, at no cost. Shorting him again later sets a new price, plus another $250 fee.",
+    "Close your short on Bam Adebayo for a $250 fee? This short's -$12.5K stays in your score. Left alone, it ends by itself after Oct 27, at no cost. Shorting him again later sets a new price, plus another $250 fee.",
   );
   assert.equal(
     confirmCloseMessage({ side: 'long', playerName: 'LeBron James', feeDollars: 0, total: 0 }),

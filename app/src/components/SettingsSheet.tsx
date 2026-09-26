@@ -13,6 +13,7 @@ import { headingLevel } from '../ui/kit';
 import { cancelSettingsReturn, openRules, returnToSettingsAfterRules } from '../state/uiActions';
 import { useSheetHistory } from '../web/appHistory';
 import { colors, fonts, numeric, radius, space, type, weight } from '../theme';
+import { usePracticeRulesContext } from './SimBar';
 
 /** Account facts the sheet can show; absent entirely in the local demo. */
 type SettingsProfile = {
@@ -89,7 +90,8 @@ export function SettingsSheet({
   // swatch sits under its name (walk 3 T3-31).
   const narrow = sheetNarrow(width);
   const reducedMotion = useReducedMotion();
-  const rules = ruleset ? perGameRulesPresentation(ruleset) : null;
+  const practiceRules = usePracticeRulesContext();
+  const rules = ruleset ? perGameRulesPresentation(ruleset, practiceRules) : null;
   const { setVariant, variantId } = useDesignVariant();
   // Back closes the sheet; the app behind it is inert while it is open.
   useSheetHistory(visible, onClose);

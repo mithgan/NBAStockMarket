@@ -20,7 +20,9 @@ import {
   practiceQuestion,
   practiceSeasonEnd,
   practiceStakes,
+  SEASON_TOTAL_DAYS,
 } from '../data/chromeView';
+import type { PracticeRulesContext } from '../data/perGameRules';
 import { humanDate } from '../copy/terms';
 import { usePerGame } from '../state/PerGameContext';
 import { openTab } from '../state/uiActions';
@@ -118,6 +120,26 @@ function subscribeAdvances(listener: () => void): () => void {
 
 export function useRecentAdvances(): readonly PracticeAdvance[] {
   return useSyncExternalStore(subscribeAdvances, () => recentAdvances, () => NO_ADVANCES);
+}
+
+/**
+ * Practice's rivals and calendar for the rules ("In practice you play 4
+ * computer rivals over one season, Oct 21 to Apr 12 (174 days)."); null in
+ * the live market, whose rules do not change with the season.
+ */
+export function usePracticeRulesContext(): PracticeRulesContext | null {
+  const { bootstrap } = usePerGame();
+  if (!bootstrap || !isMockActive()) return null;
+  const start = mockSeasonStart();
+  const end = practiceSeasonEnd(start);
+  if (!start || !end) return null;
+  const opening = new Date(Date.parse(`${start}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  return {
+    rivals: Math.max(0, bootstrap.leaderboard.length - 1),
+    opens: humanDate(opening),
+    ends: humanDate(end),
+    days: SEASON_TOTAL_DAYS,
+  };
 }
 
 /** The hint line's DOM id: +1 night and +1 week point at it (aria-describedby). */

@@ -38,8 +38,35 @@ export const PRICE_EXPLAINER =
 export const NEGATIVE_DIVIDEND_EXPLAINER =
   'A bad game can make his dividend negative: then a roster spot pays it and a short collects it.';
 
-export function perGameRulesPresentation(rules: PerGameRuleset) {
+/** Practice's own opponents and calendar, for the rules' opening lines. */
+export interface PracticeRulesContext {
+  /** Computer rivals on the Leaders board. */
+  rivals: number;
+  /** "Oct 21", the first night of games. */
+  opens: string;
+  /** "Apr 12", the last day. */
+  ends: string;
+  /** 174. */
+  days: number;
+}
+
+/**
+ * Who you play and for how long, right after the goal, so a new player knows
+ * what "the highest score" is measured against (walk 4 T2-17, T4-15).
+ */
+export function practiceGoalText(practice: PracticeRulesContext): string {
+  const rivals = practice.rivals === 1 ? 'one computer rival' : `${practice.rivals} computer rivals`;
+  return `In practice you play ${rivals} over one season, ${practice.opens} to ${practice.ends} (${practice.days} days).`;
+}
+
+export function perGameRulesPresentation(rules: PerGameRuleset, practice: PracticeRulesContext | null = null) {
   const raw = rules.dividendBasis === 'raw_net_points';
+  // The rivals and dates follow the goal's first sentence: what the highest
+  // score is measured against, before where a score comes from.
+  const goalEnd = GOAL_EXPLAINER.indexOf('. ') + 1;
+  const goal = practice
+    ? `${GOAL_EXPLAINER.slice(0, goalEnd)} ${practiceGoalText(practice)}${GOAL_EXPLAINER.slice(goalEnd)}`
+    : GOAL_EXPLAINER;
   return {
     facts: [
       { label: 'Starting score', value: '$0' },
@@ -53,7 +80,7 @@ export function perGameRulesPresentation(rules: PerGameRuleset) {
     ],
     // The loop first (what you do and how you profit), one worked night,
     // then where dividends come from, then the rest.
-    explanation: `${GOAL_EXPLAINER} ${ROSTER_EXPLAINER} ${workedExample(rules.dividendDollarsPerNetPoint, raw)} ${raw ? DIVIDEND_RAW : DIVIDEND_PROJECTION} ${NET_POINTS_EXPLAINER} ${SHORT_EXPLAINER} Your score adds up those games, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${NEGATIVE_DIVIDEND_EXPLAINER} ${LUCK_EXPLAINER} ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
+    explanation: `${goal} ${ROSTER_EXPLAINER} ${workedExample(rules.dividendDollarsPerNetPoint, raw)} ${raw ? DIVIDEND_RAW : DIVIDEND_PROJECTION} ${NET_POINTS_EXPLAINER} ${SHORT_EXPLAINER} Your score adds up those games, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${NEGATIVE_DIVIDEND_EXPLAINER} ${LUCK_EXPLAINER} ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
     /** Plain definitions of the words the screens use. */
     glossary: [
       { term: 'Price', meaning: 'What one game of a player costs. The price you add him at stays locked while you hold him.' },

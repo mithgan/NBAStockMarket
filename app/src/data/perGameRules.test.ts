@@ -53,3 +53,18 @@ test('the rules read as short paragraphs without losing a word', () => {
   assert.ok(glossary.some((entry) => entry.term === 'Value'));
   assert.ok(glossary.some((entry) => entry.term === 'Dividend last season'));
 });
+
+test('practice rules name the rivals and the season right after the goal (walk 4 T2-17, T4-15)', async () => {
+  const { perGameRulesPresentation, practiceGoalText, rulesParagraphs } = await import('./perGameRules');
+  assert.equal(
+    practiceGoalText({ rivals: 4, opens: 'Oct 21', ends: 'Apr 12', days: 174 }),
+    'In practice you play 4 computer rivals over one season, Oct 21 to Apr 12 (174 days).',
+  );
+  const ruleset = {
+    dividendBasis: 'raw_net_points', dividendDollarsPerNetPoint: 4000, longSlotLimit: 10, shortSlotLimit: 5,
+    transactionFeeDollars: 250, shortTermDays: 7,
+  } as unknown as Parameters<typeof perGameRulesPresentation>[0];
+  const first = rulesParagraphs(perGameRulesPresentation(ruleset, { rivals: 4, opens: 'Oct 21', ends: 'Apr 12', days: 174 }).explanation)[0];
+  assert.match(first, /^Finish the season with the highest score on the Leaders board\. In practice you play 4 computer rivals/);
+  assert.doesNotMatch(rulesParagraphs(perGameRulesPresentation(ruleset).explanation)[0], /computer rivals/);
+});

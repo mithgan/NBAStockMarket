@@ -50,7 +50,7 @@ import { headingLevel, moneyColor, Tag, visuallyHidden } from '../ui/kit';
 import { useSheetHistory } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
-import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, useRecentAdvances } from './SimBar';
+import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, usePracticeRulesContext, useRecentAdvances } from './SimBar';
 
 /**
  * How the facts sit beside the controls.
@@ -540,7 +540,7 @@ function RulesSheet({
   const narrow = sheetNarrow(width);
   // Back closes the sheet; the app behind it is inert while it is open.
   useSheetHistory(visible, onClose);
-  const presentation = perGameRulesPresentation(rules);
+  const presentation = perGameRulesPresentation(rules, usePracticeRulesContext());
   const startingScore = presentation.facts.find((fact) => fact.label === 'Starting score')?.value;
   const fee = exactMoney(rules.transactionFeeDollars);
   const facts = [

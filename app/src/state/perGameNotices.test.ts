@@ -50,8 +50,11 @@ test('newly settled games lead with what your players made over exactly those da
     refreshNotice(before, snapshot('2025-11-11', '2025-11-12', 30_000, [], week), false),
     'Nov 5–11 games: your score fell $70K.',
   );
+  // A player on the roster who had no game that night.
+  const held = { positionId: 'a', playerName: 'Kon Knueppel', side: 'long', status: 'active', cumulativePnl: 100_000 } as PerGamePosition;
+  const heldBefore = snapshot('2025-11-04', '2025-11-05', 100_000, [held], [night('2025-11-04', 100_000)]);
   assert.equal(
-    refreshNotice(before, snapshot('2025-11-05', '2025-11-06', 100_000, [], [night('2025-11-04', 100_000)]), false),
+    refreshNotice(heldBefore, snapshot('2025-11-05', '2025-11-06', 100_000, [held], [night('2025-11-04', 100_000)]), false),
     'Nov 5 games: none of your players played.',
   );
 });
@@ -122,4 +125,12 @@ test('the last night of the season announces the final result', () => {
   } as unknown as PerGameBootstrap;
   const complete = (b: PerGameBootstrap) => b.game.nextGameDate === null;
   assert.equal(refreshNotice(before, after, false, { seasonComplete: complete }), 'Season complete. Final score +$1.06M, #2 of 3.');
+});
+
+test('nights played with nobody on the roster say so (walk 4 T2-16)', () => {
+  const before = snapshot('2025-10-20', '2025-10-21', 0, []);
+  assert.equal(
+    refreshNotice(before, snapshot('2025-10-21', '2025-10-22', 0, []), false),
+    'Oct 21 games: nobody was on your roster, so your score did not move.',
+  );
 });

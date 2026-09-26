@@ -291,7 +291,9 @@ export function confirmCloseMessage({
     sentences.push(side === 'long' ? 'He has not changed your score yet.' : 'This short has not changed your score yet.');
   }
   if (side === 'short' && endsFreeAfter) {
-    sentences.push(`Left alone, it ends by itself after the ${humanDate(endsFreeAfter)} games, at no cost.`);
+    // The day, not "the Oct 27 games": his term can end on a day he does
+    // not play (walk 4 T4-07).
+    sentences.push(`Left alone, it ends by itself after ${humanDate(endsFreeAfter)}, at no cost.`);
   }
   const another = fee ? `, plus another ${fee} fee` : '';
   // "About": today's quote can include your own position's pull on it.

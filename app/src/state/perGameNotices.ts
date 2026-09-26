@@ -94,8 +94,11 @@ export function refreshNotice(
     const played = (next.ledger?.items ?? []).some((entry) => (
       entry.gameDate !== null && entry.gameDate <= after && (before === null || entry.gameDate > before)
     ));
+    // Nobody on the roster or shorts through those nights (Play anyway): say
+    // so, rather than suggesting players who sat out (walk 4 T2-16).
+    const nobody = !(previous?.positions ?? next.positions).some((position) => position.status === 'active');
     const score = !played
-      ? 'none of your players played.'
+      ? (nobody ? 'nobody was on your roster, so your score did not move.' : 'none of your players played.')
       : change === 0
         ? 'your players broke even.'
         : `your score ${change > 0 ? 'rose' : 'fell'} ${moneyFine(Math.abs(change))}.`;
