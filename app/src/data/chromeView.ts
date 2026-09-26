@@ -78,7 +78,7 @@ export function practiceDayText(progress: PracticeProgress): string {
 
 /** "Day 16/174": the day count for the narrowest rows. */
 export function practiceDayShort(progress: PracticeProgress): string {
-  return progress.complete ? 'Season over' : `Day ${progress.day}/${progress.total}`;
+  return progress.complete ? 'Season complete' : `Day ${progress.day}/${progress.total}`;
 }
 
 /**
@@ -100,9 +100,14 @@ export function practiceStakes({ progress, players, shorts, score }: {
   return parts.join(', ');
 }
 
-/** The two season-level questions the practice controls ask before acting. */
+/**
+ * The season-level questions the practice controls ask before acting. Once
+ * the season is complete, Restart is "Play again" and asks 'play-again': the
+ * same action the status row and the result card name "Play another season"
+ * (walk 2 T2-17).
+ */
 export function practiceQuestion(
-  kind: 'restart' | 'exit' | 'empty-night' | 'empty-week',
+  kind: 'restart' | 'play-again' | 'exit' | 'empty-night' | 'empty-week',
   stakes: string,
   nextGames: string | null = null,
 ): {
@@ -124,6 +129,14 @@ export function practiceQuestion(
       ],
       confirmLabel: 'Play anyway',
       cancelLabel: 'Not yet',
+    };
+  }
+  if (kind === 'play-again') {
+    return {
+      title: 'Play another season?',
+      lines: [`Your final result will be cleared: ${stakes}.`, 'A new season starts at Day 0 with an empty roster.'],
+      confirmLabel: 'Play again',
+      cancelLabel: 'Keep this result',
     };
   }
   return kind === 'restart'
@@ -235,8 +248,11 @@ export function nextGamesText(nextGameDate: string | null | undefined): string |
   return nextGameDate ? humanDay(nextGameDate) : null;
 }
 
-/** What the status row says in place of the next games once practice is over. */
-export const PRACTICE_OVER_TEXT = 'Restart to play again';
+/**
+ * What the status row says in place of the next games once practice is over:
+ * the name the result card's button and the Play again question use too.
+ */
+export const PRACTICE_OVER_TEXT = 'Play another season';
 
 export type ChromeMode = 'practice' | 'live';
 
@@ -258,8 +274,27 @@ export interface StatusSummaryInput {
 }
 
 /**
+ * The bars name the night a result belongs to by its date, never "last night":
+ * beside the date of the night just played, "last night" read as the day
+ * before it, and "No games last night" read as an idle league right after
+ * +1 night had played that date's games (walk 2 T1-07, T1-14, T4-09).
+ */
+export const NO_PLAYERS_PLAYED = 'none of your players played';
+
+/** "Oct 21 games", the label before that night's figure. */
+export function nightGamesLabel(date: string | null | undefined): string {
+  return date ? `${humanDate(date)} games` : 'Latest games';
+}
+
+/** "Oct 22: none of your players played", in place of a figure. */
+export function noGamesText(date: string | null | undefined): string {
+  return `${date ? humanDate(date) : 'Latest games'}: ${NO_PLAYERS_PLAYED}`;
+}
+
+/**
  * The status row as one sentence for screen readers, e.g.
- * "Practice, Nov 5, day 16 of 174. Last night +$323,000. Next games Thu, Nov 6."
+ * "Practice, day 16 of 174. Nov 5 games +$323,000. Next games Thu, Nov 6."
+ * Once a night has a result, its sentence carries the date.
  */
 export function statusSummary({
   mode,
@@ -271,15 +306,21 @@ export function statusSummary({
   lockSentence,
 }: StatusSummaryInput): string {
   const parts: string[] = [];
+  const named = lastNight !== null;
   if (mode === 'practice') {
     const clock = progress
       ? (progress.complete ? 'season complete' : `day ${progress.day} of ${progress.total}`)
       : null;
-    parts.push(`Practice${lastSettledDate ? `, ${humanDate(lastSettledDate)}` : ''}${clock ? `, ${clock}` : ''}.`);
-  } else {
+    const date = lastSettledDate && !named ? `, ${humanDate(lastSettledDate)}` : '';
+    parts.push(`Practice${date}${clock ? `, ${clock}` : ''}.`);
+  } else if (!named) {
     parts.push(lastSettledDate ? `Games through ${humanDate(lastSettledDate)}.` : 'No games settled yet.');
   }
-  if (lastNight !== null) parts.push(noGames ? `${NO_GAMES_TEXT}.` : `Last night ${exactSignedMoney(lastNight)}.`);
+  if (named) {
+    parts.push(noGames
+      ? `${noGamesText(lastSettledDate)}.`
+      : `${nightGamesLabel(lastSettledDate)} ${exactSignedMoney(lastNight)}.`);
+  }
   const next = nextGamesText(nextGameDate);
   const opener = mode === 'practice' && progress?.day === 0;
   if (mode === 'practice' && progress?.complete) parts.push(`${PRACTICE_OVER_TEXT}.`);
@@ -336,18 +377,33 @@ export const CHROME_FOLDED_FACTS_MIN_WIDTH = 600;
 export const CHROME_FOLDED_ONE_LINE_MIN_WIDTH = 340;
 
 /**
- * Why moves pause, in two words, after "Roster reopens after Oct 30": the
- * lineups are set for those games. Short so the line fits a 390px phone row.
+ * Below this height a folded row too narrow for one line of controls keeps to
+ * one 44px line anyway: the day count and More, with +1 night, +1 week and
+ * Settings inside More. A 390x844 phone at 400% zoom is 98x211, where two
+ * lines of frame left the screen 58px (walk 2 T3-11).
  */
-export const LOCK_REASON = 'lineups set';
+export const CHROME_TINY_MAX_HEIGHT = 300;
 
-/** "Roster reopens after Oct 30 · lineups set". */
+export function chromeTiny(width: number, height: number): boolean {
+  return chromeFolded(height) && height < CHROME_TINY_MAX_HEIGHT && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
+}
+
+/** The day count in a tiny row, in two short lines: "Day 16" over "of 174". */
+export function practiceDayTiny(progress: PracticeProgress): string {
+  return progress.complete ? 'Season\nover' : `Day ${progress.day}\nof ${progress.total}`;
+}
+
+/**
+ * Why moves pause, after "Roster reopens after Oct 30", in plain words rather
+ * than "lineups set" (walk 2 T1-07). Not held together: at high zoom the
+ * row is narrower than either half.
+ */
+export const LOCK_REASON = 'moves pause for those games';
+
+/** "Roster reopens after Oct 30 · moves pause for those games". */
 export function lockLine(lockGameDate: string | null | undefined): string {
   return `${rosterReopensLine(lockGameDate)} · ${LOCK_REASON}`;
 }
-
-/** The result slot when the last settled day had no games for you. */
-export const NO_GAMES_TEXT = 'No games last night';
 
 /** Whether any of your players played on `date` (games, not fees). */
 export function playedOn(

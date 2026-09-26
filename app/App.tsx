@@ -339,6 +339,8 @@ const BRAND_PRODUCT_MIN_WIDTH = 330;
 
 function AppBody() {
   const [activeTab, setActiveTab] = useState<Tab>('portfolio');
+  const activeTabRef = useRef<Tab>('portfolio');
+  activeTabRef.current = activeTab;
   // The browser tab names the screen, so switching windows says where you are.
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -383,6 +385,10 @@ function AppBody() {
       if (sheetIsOpen()) return;
       const tab = (event.state as { tab?: Tab } | null)?.tab;
       if (!tab) return;
+      // A sheet closing by its own button also pops history, back to the
+      // same tab: that is not a screen change, and the sheet returns focus
+      // to whatever opened it.
+      if (tab === activeTabRef.current) return;
       setActiveTab(tab);
       // Back changed the screen: put focus on its tab, so a screen reader
       // says where you are and the keyboard is not left on the old tab.

@@ -19,17 +19,20 @@ import {
   CHROME_FOLDED_ONE_LINE_MIN_WIDTH,
   chromeFolded,
   chromeLayout,
+  chromeTiny,
   dividendText,
   EMPTY_ROSTER_HINT,
   keepTogether,
   lastNightFigure,
+  LOCK_REASON,
   lockLine,
   nextGamesText,
-  NO_GAMES_TEXT,
+  NO_PLAYERS_PLAYED,
   playedOn,
   PRACTICE_OVER_TEXT,
   practiceDayShort,
   practiceDayText,
+  practiceDayTiny,
   practiceProgress,
   type PracticeProgress,
   shortTermText,
@@ -49,10 +52,12 @@ import { PracticeControls } from './SimBar';
 
 /**
  * How the facts sit beside the controls.
- *  - wide: one line (clock with the day, last night, next games or the lock).
- *  - pair: practice on a phone. "Practice · Nov 5 · Last night +$322.5K" over
+ *  - wide: one line (clock with the day, the latest night, next games or the lock).
+ *  - pair: practice on a phone. "Practice · Nov 5 games +$322.5K" over
  *    "Day 16 of 174 · Next Thu, Nov 6"; on a locked night the lock and when it
- *    lifts take the whole second line.
+ *    lifts take a line of their own.
+ * The latest night is always named by its date ("Nov 5 games"), never "last
+ * night" (walk 2 T1-07, T1-14, T4-09).
  *  - stack: one short fact per tight line. Signed in on a phone (three
  *    controls share the row), practice at high zoom (no room for pairs), and
  *    practice while Reconcile needs the room.
@@ -96,6 +101,9 @@ export function PerGameStatusStrip() {
   const short = chromeFolded(height);
   const folded = practice && short && !layout.merged;
   const foldedFacts = folded && width >= CHROME_FOLDED_FACTS_MIN_WIDTH;
+  // Folded, narrow and very short (a phone at 400% zoom): one 44px line, the
+  // day count and More, which holds everything else (walk 2 T3-11).
+  const tiny = folded && chromeTiny(width, height);
   const rules = bootstrap.ruleset;
   const nextGameDate = bootstrap.game.nextGameDate;
   const progress = practice ? practiceProgress(mockSeasonStart(), lastSettled) : null;
@@ -155,38 +163,60 @@ export function PerGameStatusStrip() {
   const dayText = progress
     ? keepTogether(shortDay ? practiceDayShort(progress) : practiceDayText(progress))
     : null;
-  const meter = progress ? <ProgressMeter progress={progress} /> : null;
+  const meter = progress ? <ProgressMeter progress={progress} tiny={tiny} /> : null;
   const money = lastNight === null || noGames ? null : <LastNightMoney tight={tight} value={lastNight} />;
   // The narrowest phones single-space the dots, so the first line keeps to
   // one row even with last night at its finer precision.
   const dot = layout.tightDots ? ' · ' : '  ·  ';
 
-  // First line. Practice: the mode and its date, plus the day on a wide screen
-  // or last night on a phone. Signed in: how far the results go.
+  // The latest night's result names its night: "Oct 21 games +$35K", or
+  // "Oct 22: none of your players played". Wherever it shows, the lead leaves
+  // the date to it.
+  const named = lastNight !== null;
+  const nightWords = noGames ? `: ${NO_PLAYERS_PLAYED}` : ' games ';
+
+  // First line. Practice: the mode, plus the day on a wide screen or the
+  // latest night on a phone. Signed in: how far the results go, until a night
+  // has a result to name.
   const lead = practice ? (
     <Text key="lead" maxFontSizeMultiplier={1.5} style={[styles.lead, tight && styles.tight]}>
       <Text style={styles.practiceWord}>{PRACTICE_LABEL}</Text>
-      {settledDate ? `${dot}${settledDate}` : null}
+      {settledDate && (!named || arrangement === 'pair') ? `${dot}${settledDate}` : null}
       {arrangement === 'wide' && dayText ? <Text style={styles.leadMuted}>{`${dot}${dayText}`}</Text> : null}
-      {arrangement === 'pair' && lastNight !== null ? (
+      {arrangement === 'pair' && named ? (
+        // The words at the facts' size, so "Oct 22: none of your players
+        // played" keeps to one line on a 360px phone.
         <Text style={styles.leadMuted}>
-          {noGames ? `${dot}${NO_GAMES_TEXT}` : `${dot}Last night `}
+          <Text style={styles.leadNightWords}>{nightWords}</Text>
           {money}
         </Text>
       ) : null}
     </Text>
-  ) : (
+  ) : named ? null : (
     <Text key="lead" maxFontSizeMultiplier={1.5} style={[styles.lead, tight && styles.tight]}>
       {settledDate ? `Games through ${settledDate}` : 'No games settled yet'}
     </Text>
   );
-  const night = lastNight === null || arrangement === 'pair' ? null : (
+  const night = !named || arrangement === 'pair' ? null : (
     <Text key="night" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
-      <Text style={styles.factLabel}>{noGames ? NO_GAMES_TEXT : 'Last night '}</Text>
+      {settledDate ?? 'Latest'}
+      <Text style={styles.factLabel}>{nightWords}</Text>
       {money}
     </Text>
   );
-  const day = dayText && arrangement !== 'wide' ? (
+  const day = tiny && progress ? (
+    // Two short lines over the progress bar (and the padlock on a locked
+    // night), in the width More leaves.
+    <View key="day" style={styles.dayTiny}>
+      <Text maxFontSizeMultiplier={1.2} style={[styles.fact, styles.factLabel, styles.tight]}>
+        {practiceDayTiny(progress)}
+      </Text>
+      <View style={styles.dayTinyMarks}>
+        {meter}
+        {locked ? <LockIcon color={colors.goldInk} size={12} /> : null}
+      </View>
+    </View>
+  ) : dayText && arrangement !== 'wide' ? (
     <View key="day" style={styles.dayFact}>
       <Text maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel, tight && styles.tight]}>
         {dayText}
@@ -198,29 +228,41 @@ export function PerGameStatusStrip() {
   // line: the sentence Roster and Market use (terms.rosterReopensLine) plus
   // why moves pause. Wide rows lead it with the ROSTER LOCKED tag.
   const lockTag = arrangement === 'wide' && !folded;
-  const lock = locked && folded && !foldedFacts ? (
+  const lock = tiny ? null : locked && folded && !foldedFacts ? (
     // The narrowest folded row has room for the padlock only; the sentence is
     // in the row's spoken summary and on Market's and Roster's buttons.
     <View key="lock" style={styles.lock}>
       <LockIcon color={colors.goldInk} size={14} />
     </View>
   ) : locked ? (
-    <View key="lock" style={styles.lock}>
+    // With the padlock (phones) the sentence wraps beside it, never under it,
+    // so a two-line sentence costs two lines, not three.
+    <View key="lock" style={[styles.lock, !lockTag && styles.lockBeside]}>
       {lockTag ? <Tag tone="gold">ROSTER LOCKED</Tag> : <LockIcon color={colors.goldInk} />}
       <Text
         maxFontSizeMultiplier={1.5}
-        style={[styles.fact, lockTag ? styles.factLabel : styles.lockLine, tight && styles.tight]}
+        // Beside the padlock its two lines sit tight, as the stacked facts do.
+        style={[
+          styles.fact,
+          lockTag ? styles.factLabel : [styles.lockLine, styles.lockText],
+          (tight || (!lockTag && !layout.largeText)) && styles.tight,
+        ]}
       >
-        {lockLine(lockDate)}
+        {/* On a phone the line breaks at its dot, never inside the reason
+            (compact rows are narrower than the reason itself). */}
+        {layout.compact ? lockLine(lockDate) : lockLine(lockDate).replace(LOCK_REASON, keepTogether(LOCK_REASON))}
       </Text>
     </View>
   ) : null;
   const upcoming = progress?.complete ? (
-    // Compact has no room for both, so it states the fact; its Restart button
-    // sits right underneath. Wider rows pair "Season complete" with the way on.
-    <Text key="over" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel, tight && styles.tight]}>
-      {layout.compact ? practiceDayText(progress) : PRACTICE_OVER_TEXT}
-    </Text>
+    // "Season complete · Play another season": the way on, by the name the
+    // result card and the Play again question use (walk 2 T2-17). Compact
+    // has no room for both; its Play again button sits right underneath.
+    layout.compact ? null : (
+      <Text key="over" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel, tight && styles.tight]}>
+        {PRACTICE_OVER_TEXT}
+      </Text>
+    )
   ) : (
     <Text key="next" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
       <Text style={styles.factLabel}>{progress?.day === 0 ? 'Season opens ' : 'Next '}</Text>
@@ -315,7 +357,7 @@ export function PerGameStatusStrip() {
 
   // A short window has no brand bar, so Settings lives in this row (icon only
   // when folded, where the row is tight; its name stays "Settings").
-  const settingsControl = short ? (
+  const settingsControl = short && !tiny ? (
     <ChromeButton
       accessibilityLabel="Settings"
       icon={(color) => <SettingsIcon color={color} />}
@@ -329,7 +371,7 @@ export function PerGameStatusStrip() {
   ) : null;
   // Folded below ~340px the row takes two lines: the day beside Settings,
   // then +1 night, +1 week and More edge to edge.
-  const foldTwoLines = folded && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
+  const foldTwoLines = folded && !tiny && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
 
   return (
     <View
@@ -345,6 +387,7 @@ export function PerGameStatusStrip() {
           styles.row,
           layout.narrow && styles.rowNarrow,
           folded && styles.rowFolded,
+          tiny && styles.rowTiny,
           layout.largeText && styles.rowLarge,
         ]}
       >
@@ -358,6 +401,7 @@ export function PerGameStatusStrip() {
             // keeps its height budget.
             (tight || locked) && styles.factsTight,
             folded && !foldedFacts && styles.factsFolded,
+            tiny && styles.factsTiny,
             // Enlarged text signed in: three controls would squeeze the facts
             // into a sliver, so the facts take the row and the controls wrap.
             layout.largeText && !practice && styles.factsFull,
@@ -368,7 +412,14 @@ export function PerGameStatusStrip() {
         {foldTwoLines ? settingsControl : null}
         <View style={[styles.actions, foldTwoLines && styles.actionsFull]}>
           {practice && layout.merged ? <PracticeControls inline /> : null}
-          {folded ? <PracticeControls folded onRules={() => setRulesOpen(true)} /> : null}
+          {folded ? (
+            <PracticeControls
+              folded
+              onRules={() => setRulesOpen(true)}
+              onSettings={tiny ? openSettings : undefined}
+              tiny={tiny}
+            />
+          ) : null}
           {canEnterPractice ? (
             <ChromeButton
               accessibilityLabel="Practice: play a practice season in this browser. Your account is untouched."
@@ -423,7 +474,7 @@ function LastNightMoney({ tight, value }: { tight: boolean; value: number }) {
  * so it reads as a progress bar, not as a stray dash beside the words (walk 2
  * T1-03); empty on the opening eve.
  */
-function ProgressMeter({ progress }: { progress: PracticeProgress }) {
+function ProgressMeter({ progress, tiny = false }: { progress: PracticeProgress; tiny?: boolean }) {
   return (
     <View
       accessibilityLabel={progress.accessibilityLabel}
@@ -431,7 +482,7 @@ function ProgressMeter({ progress }: { progress: PracticeProgress }) {
       aria-valuemax={progress.total}
       aria-valuemin={0}
       aria-valuenow={progress.day}
-      style={styles.meter}
+      style={[styles.meter, tiny && styles.meterTiny]}
     >
       <View style={[styles.meterFill, { width: progress.day === 0 ? 0 : `${Math.max(progress.fraction * 100, 4)}%` }]} />
     </View>
@@ -502,9 +553,16 @@ function RulesSheet({
             <Text style={styles.doneText}>Done</Text>
           </Pressable>
         </View>
+        {/* The text scrolls on its own, so the keyboard can reach and scroll
+            it: a named region with the app's 2px ring (the global
+            [tabindex]:focus-visible rule), not an unnamed stop with the
+            browser's thin default (walk 2 T3-14). */}
         <ScrollView
+          aria-label="Rules text"
           contentContainerStyle={[styles.sheetContent, { paddingBottom: space.xl + insets.bottom }]}
+          role="region"
           style={styles.sheetBody}
+          tabIndex={0}
         >
           <View style={styles.explanation}>
             {rulesParagraphs(presentation.explanation).map((paragraph) => (
@@ -523,12 +581,16 @@ function RulesSheet({
             <Text accessibilityRole="header" {...headingLevel(3)} style={styles.glossaryTitle}>
               Words in the game
             </Text>
-            {presentation.glossary.map((entry) => (
-              <View key={entry.term} style={styles.glossaryRow}>
-                <Text style={styles.glossaryTerm}>{entry.term}</Text>
-                <Text style={styles.glossaryMeaning}>{entry.meaning}</Text>
-              </View>
-            ))}
+            {/* A list of terms, each with its meaning, so a screen reader
+                hears "list, 9 items" and one term at a time. */}
+            <View aria-label="Words in the game" role="list" style={styles.glossaryList}>
+              {presentation.glossary.map((entry) => (
+                <View key={entry.term} role="listitem" style={styles.glossaryRow}>
+                  <Text role="term" style={styles.glossaryTerm}>{entry.term}</Text>
+                  <Text role="definition" style={styles.glossaryMeaning}>{entry.meaning}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         </ScrollView>
       </View>
@@ -559,23 +621,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     columnGap: 6,
   },
+  // The track's edge is the controls' 3:1 edge, so it reads in Light too,
+  // where the strong border was cream on cream (walk 2 T1-26).
   meter: {
     width: 44,
     height: 6,
     borderRadius: 3,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: colors.controlBorder,
     backgroundColor: colors.surfaceRaised,
     overflow: 'hidden',
   },
+  meterTiny: {
+    width: 30,
+  },
+  // Gold ink: the bright gold on the dark themes, a deep gold in Light,
+  // where the bright one barely parts from the track.
   meterFill: {
     height: '100%',
-    backgroundColor: colors.gold,
+    backgroundColor: colors.goldInk,
   },
   // Folded and narrow: the facts are just the day, sized to it.
   factsFolded: {
     flexBasis: 'auto',
     flexShrink: 0,
+  },
+  // Tiny: the day in two lines over its bar, beside More.
+  rowTiny: {
+    columnGap: 4,
+    paddingHorizontal: 2,
+  },
+  factsTiny: {
+    flexBasis: 0,
+    flexGrow: 1,
+    flexShrink: 1,
+  },
+  dayTiny: {
+    gap: 2,
+  },
+  dayTinyMarks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: 4,
   },
   // Folded below ~340px: the practice controls take their own full line.
   actionsFull: {
@@ -657,6 +744,9 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontWeight: weight.medium,
   },
+  leadNightWords: {
+    fontSize: type.caption,
+  },
   fact: {
     color: colors.text,
     fontFamily: fonts.display,
@@ -681,6 +771,14 @@ const styles = StyleSheet.create({
   lockLine: {
     color: colors.goldInk,
     fontWeight: weight.bold,
+  },
+  lockBeside: {
+    flexWrap: 'nowrap',
+    alignItems: 'flex-start',
+  },
+  lockText: {
+    flexShrink: 1,
+    minWidth: 0,
   },
   money: {
     fontFamily: fonts.display,
@@ -803,6 +901,9 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: type.value,
     fontWeight: weight.heavy,
+  },
+  glossaryList: {
+    gap: space.sm,
   },
   glossaryRow: {
     gap: 2,

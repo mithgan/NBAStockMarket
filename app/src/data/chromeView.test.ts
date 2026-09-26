@@ -122,7 +122,7 @@ test('the status sentence says the practice clock, last night and next games in 
     statusSummary({
       mode: 'practice', lastSettledDate: '2025-11-05', nextGameDate: '2025-11-06', lastNight: 323_400, progress,
     }),
-    'Practice, Nov 5, day 16 of 174. Last night +$323,400. Next games Thu, Nov 6.',
+    'Practice, day 16 of 174. Nov 5 games +$323,400. Next games Thu, Nov 6.',
   );
   assert.equal(
     statusSummary({
@@ -143,7 +143,7 @@ test('the status sentence says the practice clock, last night and next games in 
       lastNight: -12_000,
       progress: practiceProgress(OPENING_EVE, '2026-04-12'),
     }),
-    'Practice, Apr 12, season complete. Last night -$12,000. Restart to play again.',
+    'Practice, season complete. Apr 12 games -$12,000. Play another season.',
   );
 });
 
@@ -156,7 +156,7 @@ test('the live status sentence names the last settled night and the lock', () =>
       lastNight: 0,
       lockSentence: 'Roster changes are locked for the Nov 6 game.',
     }),
-    'Games through Nov 5. Last night $0. Next games Thu, Nov 6. Roster changes are locked for the Nov 6 game.',
+    'Nov 5 games $0. Next games Thu, Nov 6. Roster changes are locked for the Nov 6 game.',
   );
   assert.equal(
     statusSummary({ mode: 'live', lastSettledDate: null, nextGameDate: null, lastNight: null }),
@@ -214,6 +214,14 @@ test('Restart and Exit say what the season would lose', async () => {
   assert.equal(restart.confirmLabel, 'Start over');
   assert.match(restart.lines[0], /Day 16 of 174, 8 players/);
   assert.equal(practiceQuestion('exit', stakes).confirmLabel, 'Leave practice');
+  // Season over: one name for the action (walk 2 T2-17).
+  const done = practiceStakes({
+    progress: practiceProgress(OPENING_EVE, '2026-04-12'), players: 8, shorts: 0, score: -40_000,
+  });
+  const again = practiceQuestion('play-again', done);
+  assert.equal(again.title, 'Play another season?');
+  assert.equal(again.lines[0], 'Your final result will be cleared: a finished season, 8 players, score -$40K.');
+  assert.equal(again.confirmLabel, 'Play again');
   assert.equal(
     practiceStakes({ progress: practiceProgress(OPENING_EVE, OPENING_EVE), players: 0, shorts: 0, score: 0 }),
     'Day 0 of 174, no players, score $0',
@@ -225,7 +233,7 @@ test('the folded frame, short day count, lock reason and no-games night', async 
   assert.equal(chromeFolded(390), true);
   assert.equal(chromeFolded(500), false);
   assert.equal(practiceDayShort(practiceProgress(OPENING_EVE, '2025-11-05')), 'Day 16/174');
-  assert.equal(lockLine('2025-10-30'), 'Roster reopens after Oct 30 · lineups set');
+  assert.equal(lockLine('2025-10-30'), 'Roster reopens after Oct 30 · moves pause for those games');
   const ledger = [{ gameId: 'g1', gameDate: '2025-10-22' }, { gameId: null, gameDate: '2025-10-23' }];
   assert.equal(playedOn(ledger, '2025-10-22'), true);
   assert.equal(playedOn(ledger, '2025-10-23'), false);
@@ -234,8 +242,44 @@ test('the folded frame, short day count, lock reason and no-games night', async 
       mode: 'practice', lastSettledDate: '2025-11-05', nextGameDate: '2025-11-06', lastNight: 0, noGames: true,
       progress: practiceProgress(OPENING_EVE, '2025-11-05'),
     }),
-    'Practice, Nov 5, day 16 of 174. No games last night. Next games Thu, Nov 6.',
+    'Practice, day 16 of 174. Nov 5: none of your players played. Next games Thu, Nov 6.',
   );
+});
+
+test('the bars name the night, never "last night" (walk 2 T1-07, T1-14, T4-09)', async () => {
+  const { lockLine, nightGamesLabel, noGamesText } = await import('./chromeView');
+  assert.equal(nightGamesLabel('2025-10-21'), 'Oct 21 games');
+  assert.equal(noGamesText('2025-10-22'), 'Oct 22: none of your players played');
+  const progress = practiceProgress(OPENING_EVE, '2025-10-22');
+  const copy = [
+    statusSummary({
+      mode: 'practice', lastSettledDate: '2025-10-22', nextGameDate: '2025-10-24', lastNight: 0, noGames: true, progress,
+    }),
+    statusSummary({
+      mode: 'practice', lastSettledDate: '2025-10-21', nextGameDate: '2025-10-22', lastNight: 35_000,
+      progress: practiceProgress(OPENING_EVE, '2025-10-21'),
+    }),
+    statusSummary({ mode: 'live', lastSettledDate: '2025-10-21', nextGameDate: '2025-10-22', lastNight: -5 }),
+    lockLine('2025-10-22'),
+  ];
+  assert.equal(copy[0], 'Practice, day 2 of 174. Oct 22: none of your players played. Next games Fri, Oct 24.');
+  assert.equal(copy[1], 'Practice, day 1 of 174. Oct 21 games +$35,000. Next games Wed, Oct 22.');
+  assert.equal(copy[3], 'Roster reopens after Oct 22 · moves pause for those games');
+  for (const line of copy) assert.doesNotMatch(line, /last night|lineups set/i);
+  const strip = readFileSync(resolve(import.meta.dirname, '../components/PerGameStatusStrip.tsx'), 'utf8');
+  assert.doesNotMatch(strip, /'Last night|No games last night/);
+});
+
+test('a folded row at 400% zoom keeps to one line: the day and More (walk 2 T3-11)', async () => {
+  const { chromeTiny, practiceDayTiny } = await import('./chromeView');
+  assert.equal(chromeTiny(98, 211), true);
+  assert.equal(chromeTiny(320, 299), true);
+  // 200% zoom (195x422) keeps its two lines; wider short rows are one line already.
+  assert.equal(chromeTiny(195, 422), false);
+  assert.equal(chromeTiny(340, 211), false);
+  assert.equal(chromeTiny(98, 800), false);
+  assert.equal(practiceDayTiny(practiceProgress(OPENING_EVE, '2025-11-05')), 'Day 16\nof 174');
+  assert.equal(practiceDayTiny(practiceProgress(OPENING_EVE, '2026-04-12')), 'Season\nover');
 });
 
 test('the hint under the advance buttons keeps its line once the first player is in', () => {
