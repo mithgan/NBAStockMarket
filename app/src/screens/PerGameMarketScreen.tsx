@@ -83,7 +83,7 @@ import { buildPerGameMarketRows, type PerGameMarketRow } from '../state/perGameS
 import { useWatchlist } from '../state/watchlist';
 import { colors, control, fonts, labelStyle, space, type, weight } from '../theme';
 import { rowMarker } from '../ui/domMarkers';
-import { Button, ConfirmStrip, EmptyState, headingLevel, Segmented, Tag, useCooldown, visuallyHidden } from '../ui/kit';
+import { Button, ConfirmStrip, EmptyState, headingLevel, Segmented, Tag, tapsSettling, useCooldown, visuallyHidden } from '../ui/kit';
 
 // Start listening at load, so the press that first opens the Market is seen.
 listenForActivations();
@@ -275,7 +275,11 @@ function MarketRow({
     reason: blocked ? row.unavailableReason : null,
   });
 
-  const openProfile = () => onOpenProfile(player.playerId);
+  const openProfile = () => {
+    // The second tap of a double tap on a confirm that just folded away.
+    if (tapsSettling()) return;
+    onOpenProfile(player.playerId);
+  };
   // At season end the row is quiet: no button at all, and the header's one
   // line says the season is over.
   const action = !rowActions(seasonOver) ? null : (

@@ -59,7 +59,7 @@ import {
 import { usePerGame } from '../state/PerGameContext';
 import { openRules } from '../state/uiActions';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
-import { Button, ConfirmStrip, EmptyState, headingLevel, Tag, useAriaDisabled, visuallyHidden } from '../ui/kit';
+import { Button, ConfirmStrip, EmptyState, headingLevel, Tag, tapsSettling, useAriaDisabled, visuallyHidden } from '../ui/kit';
 import { restartPractice } from '../web/practiceSession';
 
 /** Desktop: score and chart beside the lists. */
@@ -211,6 +211,7 @@ function PositionRow({
     now: marketPrice,
   };
   const onActionPress = () => {
+    if (tapsSettling()) return;
     // LOCKED answers a tap with why and when (a silent button teaches nothing).
     if (rosterLocked) {
       notify(`${rosterReopensLine(rosterLockDate)}. Moves pause while those games are played.`);
@@ -281,7 +282,10 @@ function PositionRow({
   const profileProps = {
     accessibilityLabel: profileLabel,
     accessibilityRole: 'button' as const,
-    onPress: () => onOpenProfile(position.playerId),
+    onPress: () => {
+      if (tapsSettling()) return;
+      onOpenProfile(position.playerId);
+    },
   };
 
   if (layout === 'table') {

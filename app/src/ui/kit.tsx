@@ -258,6 +258,8 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
       accessibilityState={{ disabled }}
       disabled={hardDisabled}
       onPress={() => {
+        // The second tap of a double tap on a confirm that just folded away.
+        if (tapsSettling()) return;
         if (!disabled) onPress();
         else onDisabledPress?.();
       }}
@@ -315,6 +317,25 @@ export function useCooldown(ms = 1200): [boolean, () => void] {
 
 /** Presses that land sooner than this after a confirm appears are ignored. */
 const CONFIRM_TAP_GUARD_MS = 400;
+
+/**
+ * After a confirm strip is answered it folds away and the rows under it move
+ * up, so the second tap of a double tap lands on a different row: another
+ * player's Add ($250) or his profile. For a moment after any answer, row
+ * buttons and row taps are ignored (walk 2, T4-02/T4-03).
+ */
+const SETTLE_AFTER_ANSWER_MS = 500;
+let quietUntil = 0;
+
+/** Call when a confirm is answered: taps elsewhere wait out the fold. */
+export function settleTaps(ms = SETTLE_AFTER_ANSWER_MS): void {
+  quietUntil = Date.now() + ms;
+}
+
+/** True while a just-answered confirm is folding away (see settleTaps). */
+export function tapsSettling(): boolean {
+  return Date.now() < quietUntil;
+}
 
 function useTapGuard() {
   const openedAt = useRef(Date.now());
@@ -385,10 +406,21 @@ export function ConfirmStrip({
         <Button
           accessibilityLabel={confirmAccessibilityLabel}
           label={confirmLabel}
-          onPress={guard(onConfirm)}
+          onPress={guard(() => {
+            settleTaps();
+            onConfirm();
+          })}
           variant="danger"
         />
-        <Button ref={keepRef} label={cancelLabel} onPress={guard(onCancel)} variant="secondary" />
+        <Button
+          ref={keepRef}
+          label={cancelLabel}
+          onPress={guard(() => {
+            settleTaps();
+            onCancel();
+          })}
+          variant="secondary"
+        />
       </View>
     </View>
   );
