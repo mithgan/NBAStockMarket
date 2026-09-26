@@ -743,10 +743,19 @@ export function PerGameResultsScreen() {
       </View>
     );
   }
+  // Phones: once far down, the way back docks under the list with the month
+  // you are reading, instead of floating over the rows' figures (walk 3
+  // T1-13). It takes the list's bottom edge, so nothing on screen moves.
+  const here = anchors.find((anchor) => anchor.key === currentMonth)?.name ?? null;
   return (
     <View style={styles.screen}>
       {list}
-      {far ? <View style={styles.floatingBack}>{back}</View> : null}
+      {far ? (
+        <View style={[styles.dock, { paddingHorizontal: edges(layout).left }]}>
+          <Text style={styles.dockWhere}>{here ?? ''}</Text>
+          {back}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -824,10 +833,21 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   // Phone: over the list's bottom padding, clear of the last row.
-  floatingBack: {
-    position: 'absolute',
-    right: space.lg,
-    bottom: space.lg,
+  dock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    columnGap: space.md,
+    paddingVertical: space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  dockWhere: {
+    flexShrink: 1,
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
   },
   title: {
     ...headingStyle,

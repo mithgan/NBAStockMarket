@@ -34,6 +34,31 @@ import { MoreIcon } from './chrome/ChromeIcons';
  */
 const ADVANCE_COOLDOWN_MS = 450;
 
+// The settled date on which the roster was last seen empty. Every place that
+// shows the practice hint (the line under the buttons on phones, the status
+// row on desktop) reads this one record, so they say the same thing and a
+// layout change that remounts the controls does not forget it.
+let rosterEmptyOn: string | null = null;
+
+/**
+ * The practice hint beside +1 night / +1 week: "Add a player first…" while
+ * the roster is empty, then "Ready. +1 night plays the Oct 21 games." from
+ * the moment a player lands until the next night is played. The line keeps
+ * its place through the first add (a line vanishing mid-tap would move the
+ * list under the finger) and goes once the player advances.
+ */
+export function usePracticeHint(): string | null {
+  const { bootstrap } = usePerGame();
+  if (!bootstrap || !isMockActive()) return null;
+  const settledOn = bootstrap.game.lastSettledDate ?? '';
+  if (practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete) return null;
+  if (!bootstrap.positions.some((position) => position.status === 'active')) {
+    rosterEmptyOn = settledOn;
+    return EMPTY_ROSTER_HINT;
+  }
+  return rosterEmptyOn === settledOn ? readyHint(bootstrap.game.nextGameDate) : null;
+}
+
 type Question = 'restart' | 'play-again' | 'exit' | 'empty-night' | 'empty-week';
 
 /**
@@ -389,17 +414,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     };
   }, []);
   const complete = practiceProgress(mockSeasonStart(), bootstrap?.game.lastSettledDate ?? null).complete;
-  // The hint line under the buttons keeps its place when the first player
-  // lands (it turns into "Ready…"), and only goes once the player advances:
-  // a line vanishing mid-tap would move the list under their finger.
-  const openCount = bootstrap?.positions.filter((position) => position.status === 'active').length ?? 0;
-  const settledOn = bootstrap?.game.lastSettledDate ?? '';
-  const [readyOn, setReadyOn] = useState<string | null>(null);
-  const wasEmptyRef = useRef(openCount === 0);
-  useEffect(() => {
-    if (wasEmptyRef.current && openCount > 0) setReadyOn(settledOn);
-    wasEmptyRef.current = openCount === 0;
-  }, [openCount, settledOn]);
+  const hintText = usePracticeHint();
 
   // Restart or Exit asks first (SimBar draws the question). An item in More
   // closes the menu and lets its history entry go before the question adds
@@ -443,8 +458,6 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // Nothing to play for yet: +1 night / +1 week stay quiet (the first move is
   // adding a player) and a line under them says what they do.
   const emptyRoster = open.length === 0 && !progress.complete;
-  const ready = !emptyRoster && !progress.complete && readyOn === settledOn;
-  const hintText = emptyRoster ? EMPTY_ROSTER_HINT : ready ? readyHint(bootstrap.game.nextGameDate) : null;
   const hint = hintText && !inline && !folded ? (
     <Text maxFontSizeMultiplier={1.5} style={styles.hint}>{hintText}</Text>
   ) : null;

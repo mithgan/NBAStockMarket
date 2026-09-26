@@ -21,7 +21,6 @@ import {
   chromeLayout,
   chromeTiny,
   dividendText,
-  EMPTY_ROSTER_HINT,
   keepTogether,
   lastNightFigure,
   LOCK_REASON,
@@ -48,7 +47,7 @@ import { headingLevel, moneyColor, Tag } from '../ui/kit';
 import { useSheetHistory } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
-import { PracticeControls } from './SimBar';
+import { PracticeControls, usePracticeHint } from './SimBar';
 
 /**
  * How the facts sit beside the controls.
@@ -92,6 +91,9 @@ export function PerGameStatusStrip() {
   const ledgerItems = bootstrap?.ledger.items;
   const earnings = useMemo(() => recentEarnings(ledgerItems, lastSettled), [lastSettled, ledgerItems]);
   const noGames = useMemo(() => !playedOn(ledgerItems, lastSettled), [lastSettled, ledgerItems]);
+  // Desktop has no line under +1 night / +1 week, so the practice hint ("Add
+  // a player first…", then "Ready…") rides at the end of the facts.
+  const practiceHint = usePracticeHint();
   if (!bootstrap) return null;
 
   const practice = isMockActive();
@@ -111,10 +113,6 @@ export function PerGameStatusStrip() {
   // games for your players says so rather than "$0".
   const lastNight = progress?.day === 0 ? null : earnings?.night ?? null;
   const next = nextGamesText(nextGameDate);
-  // Desktop has no line under +1 night / +1 week, so the empty-roster hint
-  // rides at the end of the facts.
-  const emptyRoster = practice && !progress?.complete
-    && !bootstrap.positions.some((position) => position.status === 'active');
 
   const pendingBeyondReconciliation = [...pendingActions]
     .some((key) => key !== 'account-mutation');
@@ -290,9 +288,9 @@ export function PerGameStatusStrip() {
         {night}
         {upcoming}
         {lock}
-        {emptyRoster && layout.merged ? (
+        {practiceHint && layout.merged ? (
           <Text key="hint" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel]}>
-            {EMPTY_ROSTER_HINT}
+            {practiceHint}
           </Text>
         ) : null}
       </View>
