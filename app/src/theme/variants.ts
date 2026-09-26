@@ -346,7 +346,9 @@ export const VARIANTS: Record<VariantId, DesignVariant> = {
   nocturne: {
     id: 'nocturne',
     name: 'Aurora',
-    blurb: 'Soft navy with a warm glow.',
+    // Honest about what shows: the warm glow sits behind the page, so only
+    // wide screens' margins show it (walk 4 T2-13).
+    blurb: 'A lighter, softer navy.',
     palette: variant({
       background: '#161d2b',
       surface: '#1f2736',

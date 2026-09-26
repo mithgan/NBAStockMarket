@@ -399,6 +399,19 @@ export function ConfirmStrip({
     strip?.scrollIntoView?.({ block: 'nearest' });
     const keep = keepRef.current as unknown as { focus?: (options?: object) => void } | null;
     keep?.focus?.({ preventScroll: true });
+    if (typeof window === 'undefined') return undefined;
+    // Turning the phone reflows the list: bring the open question back into
+    // view rather than leaving it below the fold (walk 4 T4-08).
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onResize = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => (stripRef.current as unknown as HTMLElement | null)?.scrollIntoView?.({ block: 'nearest' }), 250);
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (timer) clearTimeout(timer);
+    };
   }, []);
   useBackFolds(true, onCancel);
   useEffect(() => {

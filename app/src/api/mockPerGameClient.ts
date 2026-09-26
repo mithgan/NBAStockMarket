@@ -98,6 +98,8 @@ export class MockPerGameApiClient {
   private positionCounter = 0;
   /** Full nightly history per listed player, for the in-depth profile. */
   private trendsByPlayer: Record<string, TrendPoint[]> = {};
+  /** Each player's last two game days, so his schedule reads like a team's. */
+  private recentGamesByPlayer = new Map<string, string[]>();
   /**
    * What each player's games are really worth a game this season: between
    * his opening price and last season's dividend, so the market's "over his
@@ -124,6 +126,7 @@ export class MockPerGameApiClient {
     this.sequence = this.cursor;
     this.positionCounter = 0;
     this.trendsByPlayer = {};
+    this.recentGamesByPlayer = new Map();
     this.rng = makeRng(seasonSeed());
   }
 
@@ -354,6 +357,26 @@ export class MockPerGameApiClient {
   }
 
   /** Settle one night: every active position whose player plays gets paid. */
+  /**
+   * A believable NBA schedule for one player (walk 4 T1-08: four nights in a
+   * row for one, a single game in ten days for another). Never three nights
+   * running (after a back-to-back he rests), never more than three days
+   * without a game, otherwise a little over half of the game nights. About
+   * three or four games a week, like a real team. One roll every night, so
+   * a pinned seed stays reproducible.
+   */
+  private playsTonight(playerId: string, date: string): boolean {
+    const roll = this.rng();
+    const recent = this.recentGamesByPlayer.get(playerId) ?? [];
+    const last = recent[recent.length - 1];
+    const before = recent[recent.length - 2];
+    const backToBack = last !== undefined && before !== undefined
+      && addDays(before, 1) === last && addDays(last, 1) === date;
+    const plays = backToBack ? false : last === undefined || addDays(last, 3) <= date ? true : roll < 0.62;
+    if (plays) this.recentGamesByPlayer.set(playerId, [...recent.slice(-1), date]);
+    return plays;
+  }
+
   advanceNight(): void {
     const state = this.snapshot;
     const date = state.game.nextGameDate;
@@ -369,7 +392,7 @@ export class MockPerGameApiClient {
     // anyone holds him — the profile chart reads the whole league.
     const actualByPlayer = new Map<string, number>();
     for (const player of state.market) {
-      if (this.rng() > 0.55) continue;
+      if (!this.playsTonight(player.playerId, date)) continue;
       const expectedNp = (this.trueValueByPlayer.get(player.playerId) ?? player.currentGameCost) / rate;
       // Most nights land within about half his worth either way; now and
       // then a bad night goes below zero, as the rules say it can. Ordinary

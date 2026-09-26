@@ -18,6 +18,8 @@ const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
 
 let openSheets = 0;
 let nextSheetId = 1;
+/** The last control on the page (not in a sheet) that opened a sheet. */
+let lastPageOpener: HTMLElement | null = null;
 const sheetListeners = new Set<() => void>();
 
 function sheetsChanged() {
@@ -61,9 +63,15 @@ export function useSheetHistory(visible: boolean, onClose: () => void): void {
     // Whatever opened the sheet (a row, a button) gets keyboard focus back
     // when it closes, however it closes; otherwise focus falls to the top of
     // the page and a keyboard user starts the whole Tab trip again.
-    const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+    const active = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
       ? document.activeElement
       : null;
+    // A sheet opened from the page remembers its opener; one that opens
+    // with focus nowhere (Settings coming back after Rules it opened) falls
+    // back to the last opener on the page, so closing it returns focus there
+    // instead of dropping it to the top (walk 4 T2-15, T4-06).
+    if (active && appRoot()?.contains(active)) lastPageOpener = active;
+    const opener = active ?? (lastPageOpener?.isConnected ? lastPageOpener : null);
     openSheets += 1;
     setBackgroundInert(true);
     sheetsChanged();
