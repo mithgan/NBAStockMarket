@@ -433,3 +433,15 @@ test('the y-axis marks $0 and the season high and low, dropping a mark that woul
   assert.deepEqual(valueTicks([0, 50_000], yOf).map((tick) => tick.kind), ['zero']);
   assert.deepEqual(valueTicks([0, 900_000], yOf).map((tick) => tick.kind), ['high', 'zero']);
 });
+
+test('the hero score shrinks to fit a 200% zoom phone and stays full size elsewhere (walk 3 T3-28)', async () => {
+  const { heroFontSize } = await import('./rosterView');
+  // 195px wide, 16px sides: 163px for "+$139.5K" (8 characters).
+  const size = heroFontSize('+$139.5K', 163, 46);
+  assert.ok(size < 46);
+  assert.ok(size * 0.62 * 8 <= 163);
+  assert.equal(heroFontSize('+$139.5K', 358, 46), 46);
+  assert.equal(heroFontSize('$0', 163, 46), 46);
+  // Never smaller than the floor, even for a long figure in a sliver.
+  assert.equal(heroFontSize('-$12.34M', 60, 46), 26);
+});

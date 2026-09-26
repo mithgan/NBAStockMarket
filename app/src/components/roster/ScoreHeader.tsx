@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { humanDate, signedMoney } from '../../copy/terms';
-import { formatAt, WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
+import { formatAt, heroFontSize, WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { headingLevel, Label, Money } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -12,7 +12,7 @@ function StackRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <View style={styles.stackRow}>
       <Label>{label}</Label>
-      {children}
+      <View style={styles.stackValue}>{children}</View>
     </View>
   );
 }
@@ -31,8 +31,9 @@ function StackRow({ label, children }: { label: string; children: ReactNode }) {
  * summary: score, week and rank in a sentence.
  *
  * Layouts: `compact` (phone) sets the parts two to a line so roster rows start
- * high; `narrow` (under 330 CSS px) lists one part a line; `panel` (the desktop
- * column) lists them as a statement and adds slot use.
+ * high; `narrow` (under 330 CSS px) lists one part a line, with the week and
+ * rank under the score; `panel` (the desktop column) lists them as a
+ * statement and adds slot use.
  */
 export function ScoreHeader({
   title,
@@ -60,8 +61,12 @@ export function ScoreHeader({
   slots: string | null;
   variant: 'compact' | 'narrow' | 'panel';
 }) {
+  const { width } = useWindowDimensions();
   // Before the first game only fees can have moved the score.
   const feesOnly = !started && score !== 0;
+  // The hero fits its line: at 200% zoom a phone is about 195px wide, and an
+  // eight-character score at full size ran off the edge (walk 3 T3-28).
+  const heroSize = variant === 'panel' ? type.hero : heroFontSize(signedMoney(score), width - 2 * space.lg, type.hero);
   // Before any game settles there is no week to report and no standing to
   // claim; the next game date is the one useful fact.
   const facts = started ? (
@@ -102,13 +107,13 @@ export function ScoreHeader({
       <View
         accessible
         accessibilityLabel={summary}
-        style={[styles.heroRow, variant === 'panel' && styles.heroColumn]}
+        style={[styles.heroRow, variant !== 'compact' && styles.heroColumn]}
       >
         <View>
           <Money
             colored={started && score !== 0}
             size="hero"
-            style={styles.hero}
+            style={[styles.hero, heroSize < type.hero && { fontSize: heroSize, lineHeight: Math.round(heroSize * 1.17) }]}
             value={score}
           />
           {feesOnly ? <Text style={styles.feesOnly}>Fees so far</Text> : null}
@@ -172,9 +177,16 @@ const styles = StyleSheet.create({
   },
   stackRow: {
     flexDirection: 'row',
+    // Too narrow for both (200% zoom): the value takes the next line rather
+    // than running off the edge.
+    flexWrap: 'wrap',
     alignItems: 'baseline',
     justifyContent: 'space-between',
     columnGap: space.lg,
+  },
+  // On its own line (wrapped) the value still sits at the right edge.
+  stackValue: {
+    marginLeft: 'auto',
   },
   stackText: {
     color: colors.text,

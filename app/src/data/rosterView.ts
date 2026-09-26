@@ -289,6 +289,21 @@ export function closedRows(
  */
 export const WEEK_LABEL = 'Games, last 7 days';
 
+/** A heavy display figure is about this many ems wide per character. */
+const HERO_EM_PER_CHAR = 0.62;
+/** The score never shrinks below this, so it stays the biggest thing on the screen. */
+const HERO_MIN_SIZE = 26;
+
+/**
+ * The hero score's font size for a line `room` pixels wide: full size when it
+ * fits, smaller when it would run off the edge (a phone at 200% zoom is about
+ * 195px wide, and "+$139.5K" at full size did: walk 3 T3-28).
+ */
+export function heroFontSize(text: string, room: number, fullSize: number): number {
+  const fits = Math.floor(room / (Math.max(1, text.length) * HERO_EM_PER_CHAR));
+  return Math.max(HERO_MIN_SIZE, Math.min(fullSize, fits));
+}
+
 /**
  * How precisely the breakdown shows its parts. `fine` is `moneyFine` ("$552.1K",
  * "$1.05M"); `fine3` adds a digit to millions ("$1.052M"); `exact` is dollars.
