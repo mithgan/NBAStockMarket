@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle, ClipPath, Defs, G, Line, Path, Rect } from 'react-native-svg';
 
 import type { PerGameLedgerEntry } from '../api/contracts';
@@ -17,7 +17,7 @@ import {
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { buildPnlSeries, pnlChartDomain } from '../state/perGameState';
 import { colors, fonts, space, type, weight } from '../theme';
-import { Label, Money } from '../ui/kit';
+import { headingLevel, Label, Money } from '../ui/kit';
 import { usePlotPointer, type PlotIntent } from './roster/usePlotPointer';
 
 /** Room at the left of the plot for the value marks: $0, the high and the low. */
@@ -26,14 +26,6 @@ const INSET_RIGHT = 6;
 const INSET_Y = 8;
 const AXIS_LABEL_WIDTH = 64;
 const GROW_MS = 520;
-
-/** True where the main pointer is a mouse or trackpad, so the hint says "point" rather than "tap". */
-function canPoint(): boolean {
-  if (Platform.OS !== 'web' || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return false;
-  }
-  return window.matchMedia('(pointer: fine)').matches;
-}
 
 /**
  * Your score, night by night, from the $0 you start at.
@@ -57,7 +49,6 @@ export function PerGamePnlChart({
   const [width, setWidth] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const reducedMotion = useReducedMotion();
-  const pointable = useMemo(canPoint, []);
   const clipId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
 
   const span = Math.max(width - GUTTER - INSET_RIGHT, 0);
@@ -133,7 +124,7 @@ export function PerGamePnlChart({
     return (
       <View style={styles.container}>
         <View style={styles.heading}>
-          <Label>Score by night</Label>
+          <Text accessibilityRole="header" {...headingLevel(2)}><Label>Score by night</Label></Text>
         </View>
         {/* Keyed apart from the plot: react-native-web only starts observing
             onLayout when a view mounts, so the plot must mount fresh when the
@@ -166,8 +157,9 @@ export function PerGamePnlChart({
       <View style={styles.heading}>
         {point ? <Reading point={point} previous={series[shownIndex - 1]} /> : (
           <>
-            <Label>Score by night</Label>
-            <Text style={styles.hint}>{pointable ? 'Point at a night to read it' : 'Tap a night to read it'}</Text>
+            <Text accessibilityRole="header" {...headingLevel(2)}><Label>Score by night</Label></Text>
+            {/* Tap, click or arrow keys: one word for all of them. */}
+            <Text style={styles.hint}>Select a night to read it</Text>
           </>
         )}
       </View>
@@ -279,17 +271,31 @@ export function PerGamePnlChart({
   );
 }
 
-/** "Wed, Oct 29: score +$40K, that night +$12K", for the slider value. */
-function readingText(point: NightPoint, previous: NightPoint | undefined): string {
-  if (point.kind === 'start') return 'Start: you begin at $0';
-  const when = point.kind === 'night' ? humanDay(point.date) : 'Now';
-  const change = point.kind === 'night'
-    ? `that night ${signedMoney(point.change)}`
-    : `fees since ${previous?.label ?? 'the last night'} ${signedMoney(point.change)}`;
-  return `${when}: score ${signedMoney(point.cumulativePnl)}, ${change}`;
+/**
+ * A reading's parts, labels first: what the night's games made, any fees
+ * paid since the night before (they come off the score between nights), and
+ * the score after. A `now` point is the fees paid since the last night.
+ */
+function readingParts(point: NightPoint, previous: NightPoint | undefined) {
+  const when = point.kind === 'night' ? humanDay(point.date) : `After ${previous?.label ?? 'the last night'}`;
+  const fees = point.kind === 'night' && previous
+    ? Math.round(point.cumulativePnl - previous.cumulativePnl - point.change)
+    : 0;
+  return { when, fees };
 }
 
-/** The heading while a night is being read: its date, the score then, and the night's result. */
+/** "Wed, Oct 29: that night +$12K, fees -$250, score +$40K", for the slider value. */
+function readingText(point: NightPoint, previous: NightPoint | undefined): string {
+  if (point.kind === 'start') return 'Start: everyone begins at $0';
+  const { when, fees } = readingParts(point, previous);
+  if (point.kind !== 'night') {
+    return `${when}: fees ${signedMoney(point.change)}, score ${signedMoney(point.cumulativePnl)}`;
+  }
+  const feeText = fees !== 0 ? `, fees ${signedMoney(fees)}` : '';
+  return `${when}: that night ${signedMoney(point.change)}${feeText}, score ${signedMoney(point.cumulativePnl)}`;
+}
+
+/** The heading while a night is being read: its date, then each figure after its label. */
 function Reading({ point, previous }: { point: NightPoint; previous: NightPoint | undefined }) {
   if (point.kind === 'start') {
     return (
@@ -299,16 +305,20 @@ function Reading({ point, previous }: { point: NightPoint; previous: NightPoint 
       </View>
     );
   }
+  const { when, fees } = readingParts(point, previous);
+  const figure = (caption: string, value: number) => (
+    <View key={caption} style={styles.readingPair}>
+      <Text style={styles.readingCaption}>{caption}</Text>
+      <Money size="body" value={value} />
+    </View>
+  );
   return (
     <View style={styles.reading}>
-      <Text style={styles.readingDate}>{point.kind === 'night' ? humanDay(point.date) : 'Now'}</Text>
+      <Text style={styles.readingDate}>{when}</Text>
       <View style={styles.readingFigures}>
-        <Money size="body" value={point.cumulativePnl} />
-        <Text style={styles.readingCaption}>score</Text>
-        <Money size="body" value={point.change} />
-        <Text style={styles.readingCaption}>
-          {point.kind === 'night' ? 'that night' : `since ${previous?.label ?? 'last night'}`}
-        </Text>
+        {point.kind === 'night' ? figure('That night', point.change) : figure('Fees', point.change)}
+        {fees !== 0 ? figure('Fees', fees) : null}
+        {figure('Score', point.cumulativePnl)}
       </View>
     </View>
   );
@@ -354,11 +364,17 @@ const styles = StyleSheet.create({
   },
   readingFigures: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    columnGap: space.md,
+    rowGap: 2,
+  },
+  readingPair: {
+    flexDirection: 'row',
     alignItems: 'baseline',
     gap: 4,
   },
   readingCaption: {
-    marginRight: space.xs,
     color: colors.faint,
     fontFamily: fonts.display,
     fontSize: type.label,

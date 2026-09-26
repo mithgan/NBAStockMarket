@@ -204,6 +204,51 @@ export function confirmCloseButton(side: PerGamePositionSide, feeDollars: number
   return feeDollars > 0 ? `${verb} for ${exactMoney(feeDollars)}` : verb;
 }
 
+/**
+ * The confirm strip's sentence before a Drop or Close: what it costs, what
+ * stays in your score, and what changing your mind later would cost.
+ * "Drop Nikola Jokic for a $250 fee? His +$1.24M stays in your score. Adding
+ * him back later costs his price at that time, plus another $250 fee."
+ * A short in its last games also says it ends by itself, for free.
+ */
+export function confirmCloseMessage({
+  side,
+  playerName,
+  feeDollars,
+  total,
+  endsFreeAfter = null,
+  priceNow = null,
+}: {
+  side: PerGamePositionSide;
+  playerName: string;
+  feeDollars: number;
+  /** What the position has made so far; it stays in the score. */
+  total: number;
+  /** A short's end date when the next games are its last. */
+  endsFreeAfter?: string | null;
+  /** His price a game in the market today: what re-opening would lock. */
+  priceNow?: number | null;
+}): string {
+  const fee = feeDollars > 0 ? exactMoney(feeDollars) : null;
+  const forFee = fee ? ` for a ${fee} fee` : '';
+  const ask = side === 'long' ? `Drop ${playerName}${forFee}?` : `Close your short on ${playerName}${forFee}?`;
+  const sentences = [ask];
+  if (Math.round(total) !== 0) {
+    sentences.push(side === 'long'
+      ? `His ${signedMoneyFine(total)} stays in your score.`
+      : `This short's ${signedMoneyFine(total)} stays in your score.`);
+  }
+  if (side === 'short' && endsFreeAfter) {
+    sentences.push(`Left alone, it ends by itself after the ${humanDate(endsFreeAfter)} games, at no cost.`);
+  }
+  const another = fee ? `, plus another ${fee} fee` : '';
+  const today = priceNow !== null && priceNow > 0 ? ` (today ${perGame(priceNow)})` : '';
+  sentences.push(side === 'long'
+    ? `Adding him back later costs his price at that time${today}${another}.`
+    : `Shorting him again later sets a new price${today}${another}.`);
+  return sentences.join(' ');
+}
+
 /** Why a roster lock exists, in one breath. */
 export const LOCK_EXPLAINER =
   "On some nights roster moves pause while that night's games are played. Your players still play; moves reopen once those games are in.";

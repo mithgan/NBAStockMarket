@@ -114,13 +114,19 @@ test('the games line counts settled games and names the nights that did not coun
 
 test('only a short with an end date shows when it ends, in plain dates', () => {
   assert.equal(expiryLine({ side: 'short', expiresOn: '2025-11-20' }), 'Ends Nov 20');
+  // In its last games a short says it ends by itself, so nobody pays to close it.
+  assert.equal(expiryLine({ side: 'short', expiresOn: '2025-11-20' }, '2025-11-19'), 'Ends Nov 20');
+  assert.equal(
+    expiryLine({ side: 'short', expiresOn: '2025-11-20' }, '2025-11-20'),
+    'Ends after the next games · no need to close',
+  );
   assert.equal(expiryLine({ side: 'short', expiresOn: null }), null);
   assert.equal(expiryLine({ side: 'long', expiresOn: '2025-11-20' }), null);
 });
 
 test('captions say what each side pays or gets per game, never jargon', () => {
   assert.deepEqual(figureCaptions('long'), {
-    price: 'Price a game', dividend: 'Dividend a game', net: 'Net a game', total: 'Total',
+    price: 'Price a game', dividend: 'Dividend a game', net: 'Profit a game', total: 'Total',
   });
   assert.equal(figureCaptions('short').price, 'Credit a game');
   for (const side of ['long', 'short'] as const) {
@@ -262,6 +268,9 @@ test('x-axis labels name the first night and the last point, plus a middle one w
   assert.deepEqual(axisLabelIndexes(make(3), 360), [1, 3]);
   assert.deepEqual(axisLabelIndexes(make(9), 360), [1, 5, 9]);
   assert.deepEqual(axisLabelIndexes(make(9), 240), [1, 9]);
+  // Fees since the last night add a final point that never takes the last date.
+  const withFees = [...make(3), { eventCursor: 99, cumulativePnl: -250, kind: 'now' as const, date: null, label: 'Now', change: -250 }];
+  assert.deepEqual(axisLabelIndexes(withFees, 360), [1, 3]);
 });
 
 test('a pointer snaps to the nearest real night', () => {
@@ -326,7 +335,7 @@ test('the breakdown reads by source, adds up to the score and names Other only w
 test('closed rows keep dropped players and ended shorts, newest first, with how each closed', () => {
   cursor = 0;
   const ledger = [
-    // Practice stamps a move on the next game day, so dates come from the games instead.
+    // Practice books a move's fee on the day the player made it.
     entry({ positionId: 'dropped', kind: 'drop_fee', createdAt: '2025-11-06T12:00:00.000Z' }),
     entry({ positionId: 'closedShort', kind: 'drop_fee', createdAt: '2025-10-26T12:00:00.000Z' }),
     entry({ positionId: 'unplayed', kind: 'drop_fee', createdAt: '2025-10-21T12:00:00.000Z' }),
@@ -344,12 +353,19 @@ test('closed rows keep dropped players and ended shorts, newest first, with how 
     result({ positionId: 'closedShort', gameId: 'd', side: 'short', gameDate: '2025-10-25' }),
   ]);
   assert.deepEqual(rows.map((row) => [row.name, row.how, row.games, row.total, row.unplayed]), [
-    ['Nikola Jokic', 'Dropped after Nov 5', 2, 1_632_000, false],
+    ['Nikola Jokic', 'Dropped Nov 6 · last game Nov 5', 2, 1_632_000, false],
     ['Tyrese Maxey', 'Short ended Oct 28', 1, 345_000, false],
-    ['Scottie Barnes', 'Short closed after Oct 25', 1, -194_000, false],
+    ['Scottie Barnes', 'Short closed Oct 26 · last game Oct 25', 1, -194_000, false],
     // Dropped before his first game: nothing but fees moved, so it folds into Fees.
-    ['Derrick White', 'Dropped before he played', 0, 0, true],
+    ['Derrick White', 'Dropped Oct 21 before he played', 0, 0, true],
   ]);
+  // Only a short that ran its term can be shorted again from the Closed list.
+  assert.deepEqual(rows.map((row) => row.endedByTerm), [false, true, false, false]);
+  // Without a fee on record the row still dates itself by his last game.
+  const [feeless] = closedRows([
+    position({ positionId: 'dropped', playerName: 'Nikola Jokic', status: 'closed' }),
+  ], [], [result({ positionId: 'dropped', gameId: 'a', gameDate: '2025-11-03' })]);
+  assert.equal(feeless.how, 'Dropped after Nov 3');
 });
 
 test('the week figure is labelled in calendar days, as recentEarnings counts it', () => {
@@ -357,10 +373,15 @@ test('the week figure is labelled in calendar days, as recentEarnings counts it'
 });
 
 test('breakdown parts take the precision at which they visibly add up to the hero', () => {
-  // Rigor's case: "-$1.05M + $552.1K - $3,000" reads -$500.9K beside a "-$503K" hero.
-  const parts = [-1_052_100, 0, 552_100, -3_000];
+  // "-$1.05M + $552K - $3,000" reads -$501K beside a "-$503K" hero; one more
+  // digit on the millions ("-$1.052M") makes the parts add up.
+  const parts = [-1_052_000, 0, 552_000, -3_000];
   const score = parts.reduce((sum, part) => sum + part, 0);
   assert.equal(breakdownPrecision(parts, score), 'fine3');
+  // Rigor's case: the hero shows $100s ("-$503K"), which "-$1.052M + $552.1K
+  // - $3,000" (-$502.9K) still misses, so the parts read in exact dollars.
+  const rigor = [-1_052_100, 0, 552_100, -3_000];
+  assert.equal(breakdownPrecision(rigor, rigor.reduce((sum, part) => sum + part, 0)), 'exact');
   assert.equal(formatAt(-1_052_100, 'fine3', true), '-$1.052M');
   assert.equal(formatAt(552_100, 'fine3', true), '+$552.1K');
   assert.equal(formatAt(-3_000, 'fine3', true), '-$3,000');

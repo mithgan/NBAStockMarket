@@ -3,9 +3,8 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { exactSignedMoney, humanDate } from '../../copy/terms';
 import { WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
-import { useCountUp } from '../../hooks/useCountUp';
 import { colors, fonts, space, type, weight } from '../../theme';
-import { Label, Money } from '../../ui/kit';
+import { headingLevel, Label, Money } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
 
 /** One line of the stack beside the score: a label, then its value. */
@@ -25,8 +24,11 @@ function StackRow({ label, children }: { label: string; children: ReactNode }) {
  * further down. Last night lives in the status bar above every screen, so it
  * is not repeated here.
  *
- * The score counts to its new value when a night settles on screen;
- * `useCountUp` holds it still for reduced motion.
+ * The score shows its new value at once (no count-up), so a glance or a
+ * screenshot never catches it disagreeing with the parts under it. Before
+ * the first game only fees can have moved it: it then reads neutral, as
+ * "fees so far", not as an alarming loss. The hero row carries one spoken
+ * summary: score, week and rank in a sentence.
  *
  * Layouts: `compact` (phone) sets the parts two to a line so roster rows start
  * high; `narrow` (under 330 CSS px) lists one part a line; `panel` (the desktop
@@ -58,7 +60,8 @@ export function ScoreHeader({
   slots: string | null;
   variant: 'compact' | 'narrow' | 'panel';
 }) {
-  const shown = useCountUp(score);
+  // Before the first game only fees can have moved the score.
+  const feesOnly = !started && score !== 0;
   // Before any game settles there is no week to report and no standing to
   // claim; the next game date is the one useful fact.
   const facts = started ? (
@@ -84,17 +87,32 @@ export function ScoreHeader({
     </View>
   ) : null;
 
+  const summary = [
+    `${title} ${exactSignedMoney(score)}${feesOnly ? ', fees so far' : ''}`,
+    started && week !== null ? `${WEEK_LABEL.toLowerCase()} ${exactSignedMoney(week)}` : null,
+    started && rank ? `rank ${rank.replace('#', 'number ')}` : null,
+    !started && nextGameDate ? `next games ${humanDate(nextGameDate)}` : null,
+  ].filter(Boolean).join(', ');
+
   return (
     <View style={styles.header}>
-      <Label>{title}</Label>
-      <View style={[styles.heroRow, variant === 'panel' && styles.heroColumn]}>
-        <Money
-          accessibilityLabel={`${title} ${exactSignedMoney(score)}`}
-          colored={score !== 0}
-          size="hero"
-          style={styles.hero}
-          value={shown}
-        />
+      <Text accessibilityRole="header" {...headingLevel(2)}>
+        <Label>{title}</Label>
+      </Text>
+      <View
+        accessible
+        accessibilityLabel={summary}
+        style={[styles.heroRow, variant === 'panel' && styles.heroColumn]}
+      >
+        <View>
+          <Money
+            colored={started && score !== 0}
+            size="hero"
+            style={styles.hero}
+            value={score}
+          />
+          {feesOnly ? <Text style={styles.feesOnly}>Fees so far</Text> : null}
+        </View>
         {facts}
       </View>
       {parts ? (
@@ -196,6 +214,13 @@ const styles = StyleSheet.create({
     fontWeight: weight.bold,
   },
   statementLabel: {
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
+  },
+  feesOnly: {
+    marginTop: -4,
     color: colors.muted,
     fontFamily: fonts.display,
     fontSize: type.caption,

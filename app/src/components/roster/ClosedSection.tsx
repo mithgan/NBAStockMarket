@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { exactSignedMoney, gamesCount, unbrokenName } from '../../copy/terms';
@@ -22,11 +22,13 @@ function bindDates(text: string): string {
  * them stays in your score, so they stay on the screen: the section's total
  * is the "Closed" part of the score breakdown and the sum of these rows.
  */
-export function ClosedSection({ rows: allRows, total, totalInset = 0, precision = 'fine' }: {
+export function ClosedSection({ rows: allRows, total, totalInset = 0, precision = 'fine', actionFor }: {
   rows: readonly ClosedRow[];
   total: number;
   totalInset?: number;
   precision?: PartPrecision;
+  /** A follow-up move for a row, such as "Short again" on a short that ran its term. */
+  actionFor?: (row: ClosedRow) => ReactNode;
 }) {
   const [showAll, setShowAll] = useState(false);
   // A player dropped before his first game moved nothing but fees; the Fees
@@ -44,22 +46,25 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
         totalInset={totalInset}
         totalLabel="Closed total"
       />
-      {shown.map((row) => (
-        <View
-          key={row.positionId}
-          accessible
-          accessibilityLabel={`${row.name}, ${row.how}, ${gamesCount(row.games)}, ${exactSignedMoney(row.total)} stays in your score`}
-          style={styles.row}
-        >
-          <View style={styles.copy}>
-            <Text style={styles.name}>{unbrokenName(row.name)}</Text>
-            <Text style={styles.detail}>{bindDates(row.how)} · {keepTogether(gamesCount(row.games))}</Text>
+      {shown.map((row) => {
+        const action = actionFor ? actionFor(row) : null;
+        const label = `${row.name}, ${row.how.replace(/ · /g, ', ')}, ${gamesCount(row.games)}, ${exactSignedMoney(row.total)} stays in your score`;
+        return (
+          <View key={row.positionId} style={styles.row}>
+            {/* The facts read as one stop; a follow-up button stays its own stop. */}
+            <View accessible accessibilityLabel={label} style={styles.facts}>
+              <View style={styles.copy}>
+                <Text style={styles.name}>{unbrokenName(row.name)}</Text>
+                <Text style={styles.detail}>{bindDates(row.how)} · {keepTogether(gamesCount(row.games))}</Text>
+              </View>
+              <View style={{ marginRight: totalInset }}>
+                <FineMoney precision={precision} value={row.total} />
+              </View>
+            </View>
+            {action ? <View style={styles.rowAction}>{action}</View> : null}
           </View>
-          <View style={{ marginRight: totalInset }}>
-            <FineMoney precision={precision} value={row.total} />
-          </View>
-        </View>
-      ))}
+        );
+      })}
       {rows.length > COLLAPSED_COUNT ? (
         <View style={styles.more}>
           <Button
@@ -124,6 +129,16 @@ const styles = StyleSheet.create({
   },
   fees: {
     borderTopWidth: 0,
+  },
+  facts: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+  },
+  rowAction: {
+    flexShrink: 0,
   },
   copy: {
     flex: 1,

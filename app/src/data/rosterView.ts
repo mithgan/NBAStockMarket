@@ -26,6 +26,7 @@ import {
 import type { PnlPoint } from '../state/perGameState';
 import type { TagTone } from '../ui/kit';
 import {
+  entryDay,
   positionValue,
   valueVerdict,
   type ScoreBreakdown,
@@ -91,9 +92,29 @@ export function gamesLine(summary: Pick<ValueSummary, 'games' | 'dnp' | 'pending
   return parts.join(' · ');
 }
 
-/** "Ends Nov 20" for a short with an end date; null otherwise. */
-export function expiryLine(position: Pick<PerGamePosition, 'side' | 'expiresOn'>): string | null {
+/**
+ * True when a short's next games are its last: it ends by itself once they
+ * settle, so closing it now would only cost a fee.
+ */
+export function shortEndsNext(
+  position: Pick<PerGamePosition, 'side' | 'expiresOn'>,
+  nextGameDate: string | null | undefined,
+): boolean {
+  return position.side === 'short' && Boolean(position.expiresOn) && Boolean(nextGameDate)
+    && (position.expiresOn as string) <= (nextGameDate as string);
+}
+
+/**
+ * "Ends Nov 20" for a short with an end date; null otherwise. In its last
+ * games: "Ends after the next games · no need to close", so nobody pays a
+ * fee to close a short that is about to end for free.
+ */
+export function expiryLine(
+  position: Pick<PerGamePosition, 'side' | 'expiresOn'>,
+  nextGameDate: string | null = null,
+): string | null {
   if (position.side !== 'short' || !position.expiresOn) return null;
+  if (shortEndsNext(position, nextGameDate)) return 'Ends after the next games · no need to close';
   return `Ends ${humanDate(position.expiresOn)}`;
 }
 
@@ -105,8 +126,8 @@ export function figureCaptions(side: PerGamePosition['side']): {
   total: string;
 } {
   return side === 'long'
-    ? { price: 'Price a game', dividend: 'Dividend a game', net: 'Net a game', total: 'Total' }
-    : { price: 'Credit a game', dividend: 'Dividend a game', net: 'Net a game', total: 'Total' };
+    ? { price: 'Price a game', dividend: 'Dividend a game', net: 'Profit a game', total: 'Total' }
+    : { price: 'Credit a game', dividend: 'Dividend a game', net: 'Profit a game', total: 'Total' };
 }
 
 export interface RosterRowView {
@@ -121,6 +142,7 @@ export interface RosterRowView {
 export function rosterRowView(
   position: PerGamePosition,
   results: readonly PerGameSettledResult[],
+  nextGameDate: string | null = null,
 ): RosterRowView {
   const summary = positionValue(results, position.positionId);
   const verdict = valueVerdict(summary);
@@ -129,7 +151,7 @@ export function rosterRowView(
     verdict,
     tag: verdictTag(verdict),
     games: gamesLine(summary),
-    expiry: expiryLine(position),
+    expiry: expiryLine(position, nextGameDate),
   };
 }
 
@@ -189,8 +211,10 @@ export interface ClosedRow {
   /** What the position made or lost while it was open. */
   total: number;
   games: number;
-  /** "Dropped after Nov 5", "Short ended Oct 28", "Short closed after Oct 25". */
+  /** "Dropped Nov 6 · last game Nov 5", "Short ended Oct 28", "Short closed Oct 26". */
   how: string;
+  /** A short that ran its full term (not closed by you): it can be shorted again. */
+  endedByTerm: boolean;
   /**
    * Closed before he played a game for you and nothing but fees moved: the
    * screen folds these into the Fees line instead of listing a row of zeros.
@@ -203,29 +227,38 @@ export interface ClosedRow {
  * stays in the score, so the screen keeps listing them: without these rows the
  * roster stops adding up to the score as soon as anything closes.
  *
- * A drop is dated by the last game he played for you ("Dropped after Nov 5"),
- * which is always true; the fee's own stamp is the next game day in practice,
- * a day after the practice date the player saw when he dropped him. A short
- * that ran its term shows the day it ended.
+ * A move reads the day you made it, then his last game for you when that was
+ * earlier: "Dropped Oct 23 · last game Oct 21". The day is the drop fee's day
+ * (practice books fees on the day the player made the move); without a fee
+ * the row falls back to the last game ("Dropped after Oct 21"). A short that
+ * ran its term shows the day it ended.
  */
 export function closedRows(
   positions: readonly PerGamePosition[],
   ledger: readonly PerGameLedgerEntry[],
   results: readonly PerGameSettledResult[],
 ): ClosedRow[] {
-  const closedByYou = new Set(
-    ledger.filter((entry) => entry.kind === 'drop_fee').map((entry) => entry.positionId),
-  );
+  const closedOn = new Map<string, string | null>();
+  for (const entry of ledger) {
+    if (entry.kind === 'drop_fee' && entry.positionId) closedOn.set(entry.positionId, entryDay(entry));
+  }
   return positions
     .filter((position) => position.status === 'closed')
     .sort((left, right) => (right.closedEventSequence ?? 0) - (left.closedEventSequence ?? 0))
     .map((position) => {
       const value = positionValue(results, position.positionId);
-      const after = value.lastDate ? ` after ${humanDate(value.lastDate)}` : ' before he played';
+      const byYou = closedOn.has(position.positionId);
+      const day = closedOn.get(position.positionId) ?? null;
+      const verb = position.side === 'long' ? 'Dropped' : 'Short closed';
       let how: string;
-      if (position.side === 'long') how = `Dropped${after}`;
-      else if (closedByYou.has(position.positionId) || !position.expiresOn) how = `Short closed${after}`;
-      else how = `Short ended ${humanDate(position.expiresOn)}`;
+      if (position.side === 'short' && !byYou && position.expiresOn) {
+        how = `Short ended ${humanDate(position.expiresOn)}`;
+      } else if (day) {
+        const last = value.lastDate && value.lastDate !== day ? ` · last game ${humanDate(value.lastDate)}` : '';
+        how = value.lastDate ? `${verb} ${humanDate(day)}${last}` : `${verb} ${humanDate(day)} before he played`;
+      } else {
+        how = value.lastDate ? `${verb} after ${humanDate(value.lastDate)}` : `${verb} before he played`;
+      }
       return {
         positionId: position.positionId,
         playerId: position.playerId,
@@ -234,6 +267,7 @@ export function closedRows(
         total: position.cumulativePnl,
         games: value.games,
         how,
+        endedByTerm: position.side === 'short' && !byYou && Boolean(position.expiresOn),
         unplayed: value.games === 0 && Math.round(position.cumulativePnl) === 0,
       };
     });
@@ -395,13 +429,15 @@ export function hasNights(series: readonly NightPoint[]): boolean {
 
 /**
  * Which points get a date under the x-axis: the first night and the last
- * point always, plus one in the middle when the plot is wide enough that the
- * three labels cannot touch.
+ * night always, plus one in the middle when the plot is wide enough that the
+ * three labels cannot touch. A `now` point (fees since the last night) is
+ * never labelled, so a move never swaps the last date for a word.
  */
 export function axisLabelIndexes(series: readonly NightPoint[], plotWidth: number): number[] {
   const first = series.findIndex((point) => point.kind === 'night');
   if (first === -1) return [];
-  const last = series.length - 1;
+  let last = series.length - 1;
+  while (last > first && series[last].kind !== 'night') last -= 1;
   if (last === first) return [first];
   const indexes = [first, last];
   if (plotWidth >= 300 && last - first >= 4) indexes.splice(1, 0, Math.round((first + last) / 2));
@@ -477,7 +513,8 @@ export interface ValueTick {
 export function valueTicks(
   values: readonly number[],
   yOf: (value: number) => number,
-  minGap = 14,
+  // Marks are about 14px tall: 18px between centres leaves clear air.
+  minGap = 18,
 ): ValueTick[] {
   const high = Math.max(0, ...values);
   const low = Math.min(0, ...values);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -24,14 +24,16 @@ import {
   TableHeader,
 } from '../components/roster/RowFigures';
 import { ScoreHeader } from '../components/roster/ScoreHeader';
+import { SeasonCompleteCard, SeasonSoFar, WelcomeCard } from '../components/roster/SeasonCards';
 import { SectionHead } from '../components/roster/SectionHead';
 import {
+  closeActionName,
   closeVerb,
-  CONFIRM_LABEL,
-  confirmCloseLine,
-  confirmCloseName,
+  confirmCloseButton,
+  confirmCloseMessage,
   exactMoney,
   exactSignedMoney,
+  perGame,
   ROSTER_EXPLAINER,
   rosterReopensLine,
   SHORT_EXPLAINER,
@@ -40,7 +42,7 @@ import {
 } from '../copy/terms';
 import { keepTogether, practiceProgress } from '../data/chromeView';
 import { isSeasonOver } from '../data/marketView';
-import { recentEarnings, scoreBreakdown } from '../data/perGameMetrics';
+import { recentEarnings, scoreBreakdown, seasonSummary } from '../data/perGameMetrics';
 import {
   breakdownParts,
   breakdownPrecision,
@@ -49,51 +51,110 @@ import {
   rankLine,
   rosterRowView,
   rowLayout,
+  shortEndsNext,
   slotLine,
+  type ClosedRow,
   type RowLayout,
 } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
+import { openRules } from '../state/uiActions';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
-import { Button, EmptyState, headingLevel, Tag, visuallyHidden } from '../ui/kit';
+import { Button, ConfirmStrip, EmptyState, headingLevel, Tag, visuallyHidden } from '../ui/kit';
+import { restartPractice } from '../web/practiceSession';
 
 /** Desktop: score and chart beside the lists. */
 const WIDE_MIN_WIDTH = 1024;
 /** The score column; narrower on small laptops so the table keeps room for names. */
 const summaryWidth = (width: number) => (width >= 1200 ? 360 : 320);
 const ACTION_WIDTH = 72;
-/** How long Drop and Close wait for the confirming second tap (as Restart does). */
-const CONFIRM_MS = 4000;
+/** A second press on Drop this soon after it opened the confirm is a double tap: ignored. */
+const DOUBLE_TAP_MS = 400;
+/** Phone lists narrower than this leave out Profit a game (see `StackedFigures`). */
+const NARROW_LIST_MAX_WIDTH = 380;
 
-function PositionRow({ position, layout, seasonOver, onOpenProfile }: {
+/**
+ * The welcome stays hidden for the rest of this practice season once the
+ * player closes it. Practice itself lives in memory and starts over on
+ * reload, and so does this.
+ */
+let welcomeHidden = false;
+
+type FocusTarget = {
+  focus?: (options?: { preventScroll?: boolean }) => void;
+  setAttribute?: (name: string, value: string) => void;
+  hasAttribute?: (name: string) => boolean;
+};
+
+/**
+ * Move keyboard focus to a rendered element (web). A heading gets
+ * tabindex="-1" first, so it can hold focus without becoming a Tab stop.
+ */
+function focusElement(node: unknown, options?: { preventScroll?: boolean }) {
+  const element = node as FocusTarget | null | undefined;
+  if (!element?.focus) return;
+  if (element.hasAttribute && element.setAttribute && !element.hasAttribute('tabindex')) {
+    element.setAttribute('tabindex', '-1');
+  }
+  element.focus(options);
+}
+
+type ConfirmOutcome = 'kept' | 'closed';
+
+function PositionRow({
+  position,
+  layout,
+  narrow,
+  seasonOver,
+  onOpenProfile,
+  confirming,
+  onConfirmOpen,
+  onConfirmClose,
+  actionRef,
+  marketPrice,
+}: {
   position: PerGamePosition;
   layout: RowLayout;
+  /** A phone list under 380 CSS px: three figures instead of four. */
+  narrow: boolean;
   seasonOver: boolean;
   onOpenProfile: (playerId: string) => void;
+  /** This row's Drop/Close question is open. */
+  confirming: boolean;
+  onConfirmOpen: (position: PerGamePosition) => void;
+  onConfirmClose: (position: PerGamePosition, outcome: ConfirmOutcome) => void;
+  actionRef: (node: View | null) => void;
+  /** His price a game in the market today, when he is listed. */
+  marketPrice: number | null;
 }) {
-  const { bootstrap, closePosition, pendingActions } = usePerGame();
+  const { bootstrap, pendingActions } = usePerGame();
   const actionKey = `position:${position.side}:${position.playerId}`;
   const pending = pendingActions.has(actionKey);
   const locked = pendingActions.has('account-mutation');
   const rosterLocked = bootstrap?.ruleset.rosterMutationsLocked ?? true;
   const rosterLockDate = bootstrap?.ruleset.rosterLockGameDate ?? null;
+  const nextGameDate = bootstrap?.game.nextGameDate ?? null;
   const rosterLockHint = `${rosterReopensLine(rosterLockDate)}.`;
-  const disabled = pending || locked || rosterLocked || seasonOver;
-  const [confirming, setConfirming] = useState(false);
+  const disabled = pending || locked || rosterLocked;
+  const openedAt = useRef(0);
   useEffect(() => {
-    if (!confirming) return undefined;
-    const timer = setTimeout(() => setConfirming(false), CONFIRM_MS);
-    return () => clearTimeout(timer);
+    if (confirming) openedAt.current = Date.now();
   }, [confirming]);
+  // A lock that begins while the question is open would refuse its answer.
   useEffect(() => {
-    if (disabled) setConfirming(false);
-  }, [disabled]);
+    if (confirming && rosterLocked) onConfirmClose(position, 'kept');
+  }, [confirming, onConfirmClose, position, rosterLocked]);
 
   const settled = bootstrap?.settledResults;
-  const view = useMemo(() => rosterRowView(position, settled ?? []), [position, settled]);
+  const view = useMemo(
+    () => rosterRowView(position, settled ?? [], nextGameDate),
+    [nextGameDate, position, settled],
+  );
   const short = position.side === 'short';
   const verb = closeVerb(position.side);
-  const target = short ? `short on ${position.playerName}` : position.playerName;
   const fee = bootstrap?.ruleset.transactionFeeDollars ?? 0;
+  const actionName = closeActionName(position.side, position.playerName);
+  const endsNext = shortEndsNext(position, nextGameDate);
+  const priceMoved = marketPrice !== null && Math.round(marketPrice) !== Math.round(position.lockedGameCost);
 
   // Screen readers hear the whole row in one breath, lifetime totals included.
   const profileLabel = [
@@ -102,38 +163,33 @@ function PositionRow({ position, layout, seasonOver, onOpenProfile }: {
     short
       ? `credited ${exactMoney(position.lockedGameCost)} a game, set when you shorted him`
       : `price ${exactMoney(position.lockedGameCost)} a game, set when you added him`,
+    priceMoved ? `market price now ${exactMoney(marketPrice as number)} a game` : null,
     view.games || 'no games yet',
     view.summary.avgDividend === null ? null : `dividend ${exactMoney(view.summary.avgDividend)} a game`,
-    view.summary.avgNet === null ? null : `net ${exactSignedMoney(view.summary.avgNet)} a game`,
+    view.summary.avgNet === null ? null : `profit ${exactSignedMoney(view.summary.avgNet)} a game`,
     `total ${exactSignedMoney(position.cumulativePnl)}`,
     short
       ? `${exactMoney(position.cumulativeGameCost)} credited and ${exactMoney(position.cumulativeDividend)} in his dividends`
       : `${exactMoney(position.cumulativeDividend)} in dividends against ${exactMoney(position.cumulativeGameCost)} in prices`,
-    view.expiry,
+    view.expiry ? view.expiry.replace(/ · /g, ', ') : null,
     'View profile',
   ].filter(Boolean).join(', ');
 
-  // The second tap's consequence, shown in place of the verdict while armed
-  // and spoken through the row's live region. One wording app-wide (terms).
-  const consequence = confirmCloseLine(position.side, fee, position.cumulativePnl);
-  const announcement = confirming
-    ? `Tap ${CONFIRM_LABEL} to ${verb.toLowerCase()} ${target}. ${consequence}.`
-    : '';
-
-  const compact = layout === 'compact';
   const identity = (
     <View style={styles.identity}>
-      <Text style={styles.name}>{unbrokenName(position.playerName)}</Text>
+      {/* A table row keeps one line; a long name ends in an ellipsis (its
+          full name is in the row's spoken label). */}
+      <Text numberOfLines={layout === 'table' ? 1 : undefined} style={styles.name}>
+        {unbrokenName(position.playerName)}
+      </Text>
       <View style={styles.meta}>
-        {confirming ? (
-          <Text style={styles.confirmLine}>{consequence}</Text>
-        ) : (
-          <>
-            <Tag tone={view.tag.tone}>{view.tag.label}</Tag>
-            {view.games ? <Text style={styles.metaText}>{keepTogether(view.games)}</Text> : null}
-            {view.expiry ? <Text style={styles.metaText}>{keepTogether(view.expiry)}</Text> : null}
-          </>
-        )}
+        <Tag tone={view.tag.tone}>{view.tag.label}</Tag>
+        {view.games ? <Text style={styles.metaText}>{keepTogether(view.games)}</Text> : null}
+        {view.expiry ? view.expiry.split(' · ').map((part) => (
+          <Text key={part} style={[styles.metaText, endsNext && styles.metaEnds]}>
+            {part.length <= 14 ? keepTogether(part) : part}
+          </Text>
+        )) : null}
       </View>
     </View>
   );
@@ -143,28 +199,37 @@ function PositionRow({ position, layout, seasonOver, onOpenProfile }: {
     dividend: view.summary.avgDividend,
     net: view.summary.avgNet,
     total: position.cumulativePnl,
+    now: marketPrice,
   };
-  const action = (
+  const onActionPress = () => {
+    if (disabled) return;
+    if (!confirming) {
+      onConfirmOpen(position);
+      return;
+    }
+    // A double tap's second press lands here: it must not close the
+    // question the first press just opened.
+    if (Date.now() - openedAt.current < DOUBLE_TAP_MS) return;
+    onConfirmClose(position, 'kept');
+  };
+  // At season end there is nothing left to do with a row, so no button.
+  const action = seasonOver ? null : (
     <Pressable
+      ref={actionRef}
       accessibilityHint={rosterLocked ? rosterLockHint : undefined}
-      // react-native-web drops the hint, so the name carries the reason.
+      // react-native-web drops accessibilityHint, so the name carries the reason.
       accessibilityLabel={rosterLocked
-        ? `${verb} ${target} unavailable. ${rosterLockHint}`
-        : seasonOver ? `${verb} ${target} unavailable: the season is over`
-          : pending ? `${verb === 'Drop' ? 'Dropping' : 'Closing'} ${target}`
-            : confirming ? confirmCloseName(position.side, position.playerName) : `${verb} ${target}`}
+        ? `${actionName} unavailable. ${rosterLockHint}`
+        : pending ? (short ? `Closing your short on ${position.playerName}` : `Dropping ${position.playerName}`)
+          : actionName}
       accessibilityRole="button"
+      // A locked button stays in the Tab order (aria-disabled only), so a
+      // keyboard or screen-reader user reaches it and hears why.
       accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={() => {
-        if (disabled) return;
-        if (!confirming) {
-          setConfirming(true);
-          return;
-        }
-        setConfirming(false);
-        closePosition(position);
-      }}
+      aria-disabled={disabled}
+      aria-expanded={confirming}
+      disabled={pending}
+      onPress={onActionPress}
       style={({ pressed }) => [
         styles.action,
         confirming && styles.actionArmed,
@@ -176,18 +241,31 @@ function PositionRow({ position, layout, seasonOver, onOpenProfile }: {
         <ActivityIndicator color={colors.muted} size="small" />
       ) : (
         <Text style={[styles.actionText, confirming && styles.actionTextArmed]}>
-          {rosterLocked ? 'LOCKED' : confirming ? CONFIRM_LABEL.toUpperCase() : verb.toUpperCase()}
+          {rosterLocked ? 'LOCKED' : verb.toUpperCase()}
         </Text>
       )}
     </Pressable>
   );
-  // Always mounted, so a confirm request is a change inside an existing live
-  // region (react-native-web has no announceForAccessibility).
-  const liveRegion = (
-    <View accessibilityLiveRegion="polite" style={visuallyHidden}>
-      <Text>{announcement}</Text>
-    </View>
-  );
+  // The question opens under the row, never on the button itself: the
+  // costly answer sits away from where Drop was, Keep takes focus, and
+  // Escape or Keep backs out. Nothing times out while you read it.
+  const strip = confirming ? (
+    <ConfirmStrip
+      confirmAccessibilityLabel={fee > 0 ? `${actionName} for ${exactMoney(fee)}` : actionName}
+      confirmLabel={confirmCloseButton(position.side, fee)}
+      message={confirmCloseMessage({
+        side: position.side,
+        playerName: position.playerName,
+        feeDollars: fee,
+        total: position.cumulativePnl,
+        endsFreeAfter: endsNext ? position.expiresOn : null,
+        priceNow: marketPrice,
+      })}
+      onCancel={() => onConfirmClose(position, 'kept')}
+      onConfirm={() => onConfirmClose(position, 'closed')}
+      style={styles.strip}
+    />
+  ) : null;
   const profileProps = {
     accessibilityLabel: profileLabel,
     accessibilityRole: 'button' as const,
@@ -196,19 +274,22 @@ function PositionRow({ position, layout, seasonOver, onOpenProfile }: {
 
   if (layout === 'table') {
     return (
-      <View style={styles.tableRow}>
-        <Pressable {...profileProps} style={({ pressed }) => [styles.tableProfile, pressed && styles.pressed]}>
-          <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
-          {identity}
-          <TableFigures {...figures} />
-        </Pressable>
-        {action}
-        {liveRegion}
+      <View style={styles.tableItem}>
+        <View style={styles.tableRow}>
+          <Pressable {...profileProps} style={({ pressed }) => [styles.tableProfile, pressed && styles.pressed]}>
+            <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
+            {identity}
+            <TableFigures {...figures} />
+          </Pressable>
+          {/* The header reserves the action column; keep the totals under it. */}
+          {action ?? <View style={{ width: ACTION_WIDTH }} />}
+        </View>
+        {strip}
       </View>
     );
   }
 
-  if (compact) {
+  if (layout === 'compact') {
     // Nothing shares a line it cannot fit on: the name takes the full width
     // (no headshot, no space held for the button), the figures list one a
     // line, and Drop sits below them.
@@ -220,8 +301,8 @@ function PositionRow({ position, layout, seasonOver, onOpenProfile }: {
             <ListFigures {...figures} />
           </View>
         </Pressable>
-        <View style={styles.compactAction}>{action}</View>
-        {liveRegion}
+        {action ? <View style={styles.compactAction}>{action}</View> : null}
+        {strip}
       </View>
     );
   }
@@ -229,17 +310,56 @@ function PositionRow({ position, layout, seasonOver, onOpenProfile }: {
   return (
     <View style={styles.stackRow}>
       <Pressable {...profileProps} style={({ pressed }) => [styles.stackProfile, pressed && styles.pressed]}>
-        <View style={styles.stackTop}>
+        <View style={[styles.stackTop, action ? null : styles.stackTopFull]}>
           <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
           {identity}
         </View>
         <View style={styles.stackFigures}>
-          <StackedFigures {...figures} />
+          <StackedFigures {...figures} narrow={narrow} />
         </View>
       </Pressable>
-      <View style={styles.stackAction}>{action}</View>
-      {liveRegion}
+      {action ? <View style={styles.stackAction}>{action}</View> : null}
+      {strip}
     </View>
+  );
+}
+
+/**
+ * "Short again" on a short that ran its term: the same player at today's
+ * price, one tap, as the market's Short button would. Unavailable (with the
+ * reason in its name) while roster moves are locked or the shorts are full.
+ */
+function ShortAgainButton({ row, price, quoteVersion, reason, onShorted }: {
+  row: ClosedRow;
+  price: number;
+  quoteVersion: number;
+  /** Why it cannot be pressed right now, or null. */
+  reason: string | null;
+  onShorted: (playerId: string) => void;
+}) {
+  const { bootstrap, openPosition, pendingActions } = usePerGame();
+  const pending = pendingActions.has(`position:short:${row.playerId}`);
+  const busy = pendingActions.has('account-mutation');
+  const fee = bootstrap?.ruleset.transactionFeeDollars ?? 0;
+  const name = `Short ${row.name} again at ${perGame(price)}${fee > 0 ? `, ${exactMoney(fee)} fee` : ''}`;
+  return (
+    <Button
+      accessibilityHint={reason ?? undefined}
+      accessibilityLabel={pending ? `Shorting ${row.name}` : name}
+      disabled={reason !== null || pending || busy}
+      focusableWhenDisabled
+      label={pending ? 'Shorting…' : 'Short again'}
+      onPress={() => {
+        void openPosition({
+          playerId: row.playerId,
+          playerName: row.name,
+          side: 'short',
+          expectedQuoteVersion: quoteVersion,
+        }).then((ok) => {
+          if (ok) onShorted(row.playerId);
+        });
+      }}
+    />
   );
 }
 
@@ -248,10 +368,18 @@ export function PerGameRosterScreen({
 }: {
   onOpenMarket: (side: PerGamePosition['side']) => void;
 }) {
-  const { bootstrap } = usePerGame();
+  const { bootstrap, closePosition } = usePerGame();
   const { width, fontScale } = useWindowDimensions();
   const [profileId, setProfileId] = useState<string | null>(null);
   const [listWidth, setListWidth] = useState<number | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [welcomeClosed, setWelcomeClosed] = useState(welcomeHidden);
+  const actionRefs = useRef(new Map<string, View>());
+  const rosterHeading = useRef<Text>(null);
+  const shortsHeading = useRef<Text>(null);
+  const latest = useRef(bootstrap);
+  latest.current = bootstrap;
+
   const recent = useMemo(
     () => recentEarnings(bootstrap?.ledger.items, bootstrap?.game.lastSettledDate),
     [bootstrap?.game.lastSettledDate, bootstrap?.ledger.items],
@@ -268,6 +396,55 @@ export function PerGameRosterScreen({
     () => closedRows(bootstrap?.positions ?? [], bootstrap?.ledger.items ?? [], bootstrap?.settledResults ?? []),
     [bootstrap?.ledger.items, bootstrap?.positions, bootstrap?.settledResults],
   );
+  const season = useMemo(
+    () => seasonSummary({
+      score: bootstrap?.account.cumulativePnl ?? 0,
+      positions: bootstrap?.positions ?? [],
+      ledger: bootstrap?.ledger.items ?? [],
+      leaderboard: bootstrap?.leaderboard ?? [],
+    }),
+    [bootstrap?.account.cumulativePnl, bootstrap?.leaderboard, bootstrap?.ledger.items, bootstrap?.positions],
+  );
+  const market = useMemo(
+    () => new Map((bootstrap?.market ?? []).map((row) => [row.playerId, row])),
+    [bootstrap?.market],
+  );
+
+  const onConfirmOpen = useCallback((position: PerGamePosition) => {
+    setConfirmingId(position.positionId);
+  }, []);
+  const onConfirmClose = useCallback((position: PerGamePosition, outcome: ConfirmOutcome) => {
+    setConfirmingId((current) => (current === position.positionId ? null : current));
+    if (outcome === 'kept') {
+      focusElement(actionRefs.current.get(position.positionId));
+      return;
+    }
+    // Focus moves on before the row goes: to the next row's button, or to
+    // the list's heading when this was the last row.
+    const list = (latest.current?.positions ?? []).filter(
+      (row) => row.status === 'active' && row.side === position.side,
+    );
+    const index = list.findIndex((row) => row.positionId === position.positionId);
+    const next = index >= 0 ? list[index + 1] : undefined;
+    focusElement(next
+      ? actionRefs.current.get(next.positionId)
+      : (position.side === 'long' ? rosterHeading.current : shortsHeading.current));
+    void closePosition(position);
+  }, [closePosition]);
+  const actionRef = useCallback((positionId: string) => (node: View | null) => {
+    if (node) actionRefs.current.set(positionId, node);
+    else actionRefs.current.delete(positionId);
+  }, []);
+  // After "Short again", focus lands on the new short's Close button.
+  const onShorted = useCallback((playerId: string) => {
+    setTimeout(() => {
+      const fresh = (latest.current?.positions ?? []).find(
+        (row) => row.status === 'active' && row.side === 'short' && row.playerId === playerId,
+      );
+      focusElement(fresh ? actionRefs.current.get(fresh.positionId) : shortsHeading.current);
+    }, 60);
+  }, []);
+
   if (!bootstrap) return null;
   const profilePosition = profileId
     ? bootstrap.positions.find(
@@ -297,24 +474,33 @@ export function PerGameRosterScreen({
   const started = bootstrap.ledger.items.some((entry) => entry.gameDate !== null);
   const rosterLocked = bootstrap.ruleset.rosterMutationsLocked;
   const rosterLockDate = bootstrap.ruleset.rosterLockGameDate;
+  const practice = isMockActive();
   // One rule with the Market: practice ends on its last day, a live season
   // when games have settled and none are left.
   const seasonOver = isSeasonOver({
-    practiceComplete: isMockActive() && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete,
+    practiceComplete: practice && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete,
     lastSettledDate: bootstrap.game.lastSettledDate,
     nextGameDate: bootstrap.game.nextGameDate,
   });
+  const openingEve = practice && !seasonOver
+    && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).day === 0 && !started;
+  const showWelcome = openingEve && !welcomeClosed;
+  const hideWelcome = () => {
+    welcomeHidden = true;
+    setWelcomeClosed(true);
+    focusElement(rosterHeading.current, { preventScroll: true });
+  };
   const wide = width >= WIDE_MIN_WIDTH;
   const layout = rowLayout(listWidth ?? (wide ? width - summaryWidth(width) : width), width, fontScale);
+  const narrow = layout === 'stacked' && (listWidth ?? width) < NARROW_LIST_MAX_WIDTH;
   const totalInset = layout === 'table' ? ACTION_WIDTH + space.sm : 0;
   const hadLongs = bootstrap.positions.some((position) => position.side === 'long' && position.status === 'closed');
   const hadShorts = bootstrap.positions.some((position) => position.side === 'short' && position.status === 'closed');
   const { longSlots, shortSlots } = bootstrap.account;
+  const lockLine = rosterLocked ? `${rosterReopensLine(rosterLockDate)}.` : null;
   // Why Drop and Close are unavailable, in words on the screen (not only in a
   // hint react-native-web drops).
-  const actionNote = seasonOver
-    ? 'The season is over. Your roster is final.'
-    : rosterLocked ? `${rosterReopensLine(rosterLockDate)}.` : undefined;
+  const actionNote = seasonOver ? 'The season is over. Your roster is final.' : lockLine ?? undefined;
   const parts = bootstrap.ledger.items.length > 0 ? breakdownParts(breakdown) : null;
   // One precision for every figure in the statement, the least at which the
   // parts, as shown, add up to the hero figure.
@@ -323,12 +509,18 @@ export function PerGameRosterScreen({
   const sticky = layout === 'stacked';
   const legend = (side: PerGamePosition['side']) => (
     layout === 'table' ? <TableHeader actionWidth={ACTION_WIDTH} side={side} />
-      : layout === 'stacked' ? <FigureLegend side={side} /> : null
+      : layout === 'stacked' ? <FigureLegend narrow={narrow} side={side} /> : null
   );
   const rows = (positions: PerGamePosition[]) => positions.map((position) => (
     <PositionRow
       key={position.positionId}
+      actionRef={actionRef(position.positionId)}
+      confirming={confirmingId === position.positionId}
       layout={layout}
+      marketPrice={market.get(position.playerId)?.currentGameCost ?? null}
+      narrow={narrow}
+      onConfirmClose={onConfirmClose}
+      onConfirmOpen={onConfirmOpen}
       onOpenProfile={setProfileId}
       position={position}
       seasonOver={seasonOver}
@@ -339,8 +531,53 @@ export function PerGameRosterScreen({
     setListWidth((current) => (current === next ? current : next));
   };
 
+  // "Short again" goes on the latest closed row for a player whose short ran
+  // its term, while he is not on either list again.
+  const reshortable = new Set<string>();
+  {
+    const seen = new Set<string>();
+    for (const row of closed) {
+      if (seen.has(row.playerId)) continue;
+      seen.add(row.playerId);
+      if (row.endedByTerm) reshortable.add(row.positionId);
+    }
+  }
+  const heldNow = new Set(active.map((position) => position.playerId));
+  const shortReason = lockLine
+    ?? (shortSlots.used >= shortSlots.limit ? 'Your shorts are full: close one to short again.' : null);
+  const shortAgain = (row: ClosedRow) => {
+    const listed = market.get(row.playerId);
+    if (seasonOver || !reshortable.has(row.positionId) || heldNow.has(row.playerId) || !listed) return null;
+    return (
+      <ShortAgainButton
+        onShorted={onShorted}
+        price={listed.currentGameCost}
+        quoteVersion={listed.quoteVersion}
+        reason={shortReason}
+        row={row}
+      />
+    );
+  };
+
+  const fee = bootstrap.ruleset.transactionFeeDollars;
+  const opening = showWelcome ? (
+    <WelcomeCard
+      feeDollars={fee}
+      hasPlayers={active.length > 0}
+      nextGameDate={bootstrap.game.nextGameDate}
+      onHide={hideWelcome}
+      onOpenMarket={() => onOpenMarket('long')}
+      onOpenRules={() => {
+        openRules();
+      }}
+    />
+  ) : seasonOver ? (
+    <SeasonCompleteCard onPlayAgain={practice ? restartPractice : undefined} summary={season} />
+  ) : null;
+
   const summary = (
     <>
+      {wide ? null : opening}
       <ScoreHeader
         nextGameDate={bootstrap.game.nextGameDate}
         parts={parts}
@@ -353,19 +590,25 @@ export function PerGameRosterScreen({
         variant={wide ? 'panel' : layout === 'compact' ? 'narrow' : 'compact'}
         week={recent ? recent.week : null}
       />
-      <PerGamePnlChart
-        entries={bootstrap.ledger.items}
-        // Phones keep the plot short so roster rows start high; wider lists
-        // afford more, and desktop is capped so nightly swings stay readable.
-        plotHeight={wide ? 208 : layout === 'table' ? 120 : 68}
-      />
+      {/* On the opening eve the welcome says what the empty chart would. */}
+      {showWelcome ? null : (
+        <PerGamePnlChart
+          entries={bootstrap.ledger.items}
+          // Phones keep the plot short so roster rows start high; wider lists
+          // afford more, and desktop is capped so nightly swings stay readable.
+          plotHeight={wide ? 208 : layout === 'table' ? 120 : 68}
+        />
+      )}
+      {wide && started && !seasonOver ? <SeasonSoFar fees={breakdown.fees} summary={season} /> : null}
     </>
   );
   const lists = (
     <>
+      {wide ? opening : null}
       <View style={styles.section}>
         <SectionHead
           count={`${longSlots.used} of ${longSlots.limit}`}
+          headingRef={rosterHeading}
           legend={longs.length > 0 ? legend('long') : undefined}
           note={actionNote}
           precision={precision}
@@ -377,7 +620,14 @@ export function PerGameRosterScreen({
         />
         {longs.length > 0 ? rows(longs) : (
           <EmptyState
-            action={(
+            // The welcome above already offers the market on the opening eve.
+            action={showWelcome || seasonOver ? undefined : lockLine ? (
+              <Button
+                accessibilityLabel="Browse the player market"
+                label="Browse the market"
+                onPress={() => onOpenMarket('long')}
+              />
+            ) : (
               <Button
                 accessibilityLabel="Open the player market"
                 label="Open market"
@@ -385,7 +635,9 @@ export function PerGameRosterScreen({
                 variant="primary"
               />
             )}
-            copy={ROSTER_EXPLAINER}
+            copy={seasonOver
+              ? 'The season is over. There are no more players to add.'
+              : lockLine ? `${lockLine} You can look around the market until then.` : ROSTER_EXPLAINER}
             style={styles.empty}
             title={hadLongs ? 'Your roster is empty' : 'Add your first player'}
           />
@@ -395,6 +647,7 @@ export function PerGameRosterScreen({
         <SectionHead
           caption={shorts.length > 0 ? SHORT_EXPLAINER : undefined}
           count={`${shortSlots.used} of ${shortSlots.limit}`}
+          headingRef={shortsHeading}
           legend={shorts.length > 0 ? legend('short') : undefined}
           precision={precision}
           sticky={sticky && shorts.length > 0}
@@ -407,20 +660,30 @@ export function PerGameRosterScreen({
           <EmptyState
             // Once the season is over the market takes no new shorts, so the
             // empty section says so instead of sending you somewhere idle.
+            // While moves are locked it says when shorts reopen and offers a
+            // look at the market rather than a dead end.
             action={seasonOver ? undefined : (
               <Button
-                accessibilityLabel="Find a short in the player market"
-                label="Find a short"
+                accessibilityLabel={lockLine ? 'Browse shorts in the player market' : 'Find a short in the player market'}
+                label={lockLine ? 'Browse shorts' : 'Find a short'}
                 onPress={() => onOpenMarket('short')}
               />
             )}
-            copy={seasonOver ? 'The season is over, so there are no more shorts to open.' : SHORT_EXPLAINER}
+            copy={seasonOver
+              ? 'The season is over, so there are no more shorts to open.'
+              : lockLine ? `${lockLine} ${SHORT_EXPLAINER}` : SHORT_EXPLAINER}
             style={styles.empty}
             title={hadShorts ? 'No open shorts' : 'No shorts yet'}
           />
         )}
       </View>
-      <ClosedSection precision={precision} rows={closed} total={breakdown.closed} totalInset={totalInset} />
+      <ClosedSection
+        actionFor={shortAgain}
+        precision={precision}
+        rows={closed}
+        total={breakdown.closed}
+        totalInset={totalInset}
+      />
       <FeesLine
         fees={breakdown.fees}
         moves={feeMoves(bootstrap.ledger.items)}
@@ -522,6 +785,9 @@ const styles = StyleSheet.create({
     // Keeps the name and verdict clear of the Drop button that sits over this corner.
     paddingRight: ACTION_WIDTH + space.sm,
   },
+  stackTopFull: {
+    paddingRight: 0,
+  },
   stackFigures: {
     marginTop: 6,
   },
@@ -529,6 +795,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: space.sm,
     right: space.lg,
+  },
+  strip: {
+    marginHorizontal: space.lg,
+    marginBottom: space.sm,
   },
   compactRow: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -547,16 +817,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
   },
+  tableItem: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
   tableRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
     gap: space.sm,
     paddingRight: space.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
   },
   tableProfile: {
     flex: 1,
+    minWidth: 0,
     minHeight: 60,
     flexDirection: 'row',
     alignItems: 'center',
@@ -591,12 +864,8 @@ const styles = StyleSheet.create({
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
   },
-  confirmLine: {
+  metaEnds: {
     color: colors.goldInk,
-    fontFamily: fonts.display,
-    fontSize: type.caption,
-    fontWeight: weight.bold,
-    fontVariant: ['tabular-nums'],
   },
   action: {
     alignSelf: 'center',

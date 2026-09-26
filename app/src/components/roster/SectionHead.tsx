@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { useState, type ReactNode, type Ref } from 'react';
+import { Platform, StyleSheet, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 
 import { exactSignedMoney } from '../../copy/terms';
 import type { PartPrecision } from '../../data/rosterView';
@@ -7,11 +7,19 @@ import { colors, fonts, headingStyle, space, type, weight } from '../../theme';
 import { headingLevel } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
 
+/** The title row's height before it has been measured. */
+const TITLE_ESTIMATE = 33;
+
 /**
  * A list's header: its name and slot use, the section's total (the same
  * figure as its part of the score breakdown, and the sum of the rows below),
  * an optional line saying why its actions are unavailable, and the legend
  * that names the row columns once for the whole list.
+ *
+ * Rendered as siblings of the section's rows (not one block), so that when
+ * pinned only two short lines stay on screen: the title row at the top and
+ * the column legend right under it. The caption and note scroll away with
+ * the list instead of covering its rows.
  */
 export function SectionHead({
   title,
@@ -24,6 +32,7 @@ export function SectionHead({
   caption,
   note,
   legend,
+  headingRef,
 }: {
   title: string;
   /** "10 of 10", "2 closed". */
@@ -37,60 +46,72 @@ export function SectionHead({
   /** The breakdown's precision, so the total reads exactly as its part does. */
   precision?: PartPrecision;
   /**
-   * Keep the head (and its column legend) pinned under the top of the list
-   * while its rows scroll, so mid-list rows never lose their labels. Web
-   * only: CSS sticky, scoped to this section.
+   * Keep the title row and the column legend pinned under the top of the
+   * list while this section's rows scroll, so mid-list rows never lose their
+   * labels. Web only: CSS sticky, scoped to this section.
    */
   sticky?: boolean;
   /** A plain sentence about the list, e.g. how shorts work. */
   caption?: string;
-  /** A warning about the list's actions: "Locked until the Oct 31 games settle." */
+  /** A warning about the list's actions: "Roster reopens after Oct 31." */
   note?: string;
   legend?: ReactNode;
+  /** The title, so a screen can move keyboard focus to it. */
+  headingRef?: Ref<Text>;
 }) {
+  const [titleHeight, setTitleHeight] = useState(TITLE_ESTIMATE);
+  const onTitleLayout = (event: LayoutChangeEvent) => {
+    const next = Math.round(event.nativeEvent.layout.height);
+    setTitleHeight((current) => (current === next ? current : next));
+  };
   return (
-    <View style={[styles.head, sticky && STICKY]}>
-      <View style={styles.titleRow}>
-        <View style={styles.titleGroup}>
-          <Text accessibilityRole="header" {...headingLevel(2)} style={styles.title}>{title}</Text>
-          {count ? <Text style={styles.count}>{count}</Text> : null}
-        </View>
-        {total === undefined ? null : (
-          <View style={{ marginRight: totalInset }}>
-            <FineMoney
-              accessibilityLabel={totalLabel ? `${totalLabel} ${exactSignedMoney(total)}` : undefined}
-              precision={precision}
-              value={total}
-            />
+    <>
+      <View onLayout={sticky ? onTitleLayout : undefined} style={[styles.head, sticky && pinned(0, 3)]}>
+        <View style={styles.titleRow}>
+          <View style={styles.titleGroup}>
+            <Text ref={headingRef} accessibilityRole="header" {...headingLevel(2)} style={styles.title}>{title}</Text>
+            {count ? <Text style={styles.count}>{count}</Text> : null}
           </View>
-        )}
+          {total === undefined ? null : (
+            <View style={{ marginRight: totalInset }}>
+              <FineMoney
+                accessibilityLabel={totalLabel ? `${totalLabel} ${exactSignedMoney(total)}` : undefined}
+                precision={precision}
+                value={total}
+              />
+            </View>
+          )}
+        </View>
       </View>
-      {caption ? <Text style={styles.caption}>{caption}</Text> : null}
-      {note ? <Text style={styles.note}>{note}</Text> : null}
-      {legend ? <View style={styles.legend}>{legend}</View> : null}
-    </View>
+      {caption || note ? (
+        <View style={styles.body}>
+          {caption ? <Text style={styles.caption}>{caption}</Text> : null}
+          {note ? <Text style={styles.note}>{note}</Text> : null}
+        </View>
+      ) : null}
+      {legend ? (
+        <View style={[styles.legend, sticky && pinned(titleHeight, 2), sticky && styles.legendPinned]}>
+          {legend}
+        </View>
+      ) : null}
+    </>
   );
 }
 
 /**
- * react-native-web passes `position: sticky` through to CSS. The head is the
- * first child of its section, so it sticks only while its own rows scroll by.
+ * react-native-web passes `position: sticky` through to CSS. These pieces are
+ * children of their section, so they stick only while its own rows scroll by
+ * and leave with the section's last row.
  */
-const STICKY = (Platform.OS === 'web'
-  ? {
-      position: 'sticky',
-      top: 0,
-      zIndex: 2,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
-    }
-  : {}) as unknown as ViewStyle;
+function pinned(top: number, zIndex: number): ViewStyle {
+  return (Platform.OS === 'web' ? { position: 'sticky', top, zIndex } : {}) as unknown as ViewStyle;
+}
 
 const styles = StyleSheet.create({
   head: {
     paddingHorizontal: space.lg,
     paddingTop: 5,
-    paddingBottom: 4,
+    paddingBottom: 2,
     backgroundColor: colors.surface,
   },
   titleRow: {
@@ -119,6 +140,11 @@ const styles = StyleSheet.create({
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
   },
+  body: {
+    paddingHorizontal: space.lg,
+    paddingBottom: 2,
+    backgroundColor: colors.surface,
+  },
   caption: {
     marginTop: 2,
     color: colors.faint,
@@ -135,6 +161,13 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   legend: {
-    marginTop: 2,
+    paddingHorizontal: space.lg,
+    paddingTop: 2,
+    paddingBottom: 4,
+    backgroundColor: colors.surface,
+  },
+  legendPinned: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
 });

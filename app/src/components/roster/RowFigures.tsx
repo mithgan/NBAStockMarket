@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { PerGamePositionSide } from '../../api/contracts';
+import { moneyFine } from '../../copy/terms';
 import { figureCaptions } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { FineMoney } from './FineMoney';
@@ -16,6 +17,8 @@ export interface Figures {
   net: number | null;
   /** Lifetime result of this position. */
   total: number;
+  /** His price a game in the market today, shown under your locked price on wide lists. */
+  now?: number | null;
 }
 
 /** A number that does not exist yet (no settled games), kept in its column. */
@@ -31,31 +34,35 @@ function Share({ grow, children }: { grow: number; children: ReactNode }) {
 }
 
 /**
- * Phone rows: the four figures on one line, right-aligned in the same columns
- * as the section's `FigureLegend`, so each label is read once per list rather
- * than on every row.
+ * Phone rows: the figures on one line, right-aligned in the same columns as
+ * the section's `FigureLegend`, so each label is read once per list rather
+ * than on every row. `narrow` phones (under 380 CSS px) leave out Profit a
+ * game, which is the dividend minus the price, so the rest never run
+ * together. A value never shrinks below its own width: with enlarged letter
+ * or word spacing a figure wraps to a second line instead of touching the
+ * next one.
  */
-export function StackedFigures({ price, dividend, net, total }: Figures) {
+export function StackedFigures({ price, dividend, net, total, narrow = false }: Figures & { narrow?: boolean }) {
   return (
     <View style={styles.line}>
       <Share grow={PHONE_SHARES.price}><FineMoney signed={false} value={price} /></Share>
       <Share grow={PHONE_SHARES.dividend}>
         {dividend === null ? <Missing /> : <FineMoney signed={false} value={dividend} />}
       </Share>
-      <Share grow={PHONE_SHARES.net}>{net === null ? <Missing /> : <FineMoney value={net} />}</Share>
+      {narrow ? null : <Share grow={PHONE_SHARES.net}>{net === null ? <Missing /> : <FineMoney value={net} />}</Share>}
       <Share grow={PHONE_SHARES.total}><FineMoney value={total} /></Share>
     </View>
   );
 }
 
-/** The phone list's one legend: the four captions over the `StackedFigures` columns. */
-export function FigureLegend({ side }: { side: PerGamePositionSide }) {
+/** The phone list's one legend: the captions over the `StackedFigures` columns. */
+export function FigureLegend({ side, narrow = false }: { side: PerGamePositionSide; narrow?: boolean }) {
   const captions = figureCaptions(side);
   return (
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.line}>
       <Share grow={PHONE_SHARES.price}><Text style={styles.caption}>{captions.price}</Text></Share>
       <Share grow={PHONE_SHARES.dividend}><Text style={styles.caption}>{captions.dividend}</Text></Share>
-      <Share grow={PHONE_SHARES.net}><Text style={styles.caption}>{captions.net}</Text></Share>
+      {narrow ? null : <Share grow={PHONE_SHARES.net}><Text style={styles.caption}>{captions.net}</Text></Share>}
       <Share grow={PHONE_SHARES.total}><Text style={styles.caption}>{captions.total}</Text></Share>
     </View>
   );
@@ -103,12 +110,22 @@ export function TableHeader({ side, actionWidth }: { side: PerGamePositionSide; 
   );
 }
 
-/** Wide lists: the four figures as table cells under `TableHeader`. */
-export function TableFigures({ price, dividend, net, total }: Figures) {
+/**
+ * Wide lists: the four figures as table cells under `TableHeader`. When his
+ * market price has moved since you locked yours, a quiet "now $113.5K" under
+ * your price says what re-adding him would cost today.
+ */
+export function TableFigures({ price, dividend, net, total, now = null }: Figures) {
   const cell = (width: number, value: ReactNode) => <View style={[styles.cell, { width }]}>{value}</View>;
+  const moved = now !== null && moneyFine(now) !== moneyFine(price);
   return (
     <>
-      {cell(TABLE_COLUMNS.price, <FineMoney signed={false} value={price} />)}
+      {cell(TABLE_COLUMNS.price, (
+        <>
+          <FineMoney signed={false} value={price} />
+          {moved ? <Text accessibilityLabel={`market price now ${moneyFine(now)} a game`} style={styles.now}>now {moneyFine(now)}</Text> : null}
+        </>
+      ))}
       {cell(TABLE_COLUMNS.dividend, dividend === null ? <Missing /> : <FineMoney signed={false} value={dividend} />)}
       {cell(TABLE_COLUMNS.net, net === null ? <Missing /> : <FineMoney value={net} />)}
       {cell(TABLE_COLUMNS.total, <FineMoney value={total} />)}
@@ -119,11 +136,21 @@ export function TableFigures({ price, dividend, net, total }: Figures) {
 const styles = StyleSheet.create({
   line: {
     flexDirection: 'row',
-    gap: space.sm,
+    flexWrap: 'wrap',
+    columnGap: space.sm,
+    rowGap: 2,
   },
   cell: {
     alignItems: 'flex-end',
-    minWidth: 0,
+    // Never narrower than the figure it holds (react-native-web defaults to 0).
+    minWidth: 'auto',
+  },
+  now: {
+    color: colors.faint,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.bold,
+    fontVariant: ['tabular-nums'],
   },
   caption: {
     color: colors.faint,
