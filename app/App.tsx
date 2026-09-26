@@ -508,9 +508,11 @@ function AppBody() {
     const byKeyboard = consumeArrivedByKeyboard();
     const last = consumeLastSeasonResult();
     const timer = setTimeout(() => {
+      // Short: the welcome card and "Add a player first" already say what to
+      // do next, and a kept notice stays in the bar (walk 5 T4-08).
       setAppNotice(last
-        ? `New practice season. Your last one finished ${last}. Add players in the Market, then press +1 night to play the first games.`
-        : 'New practice season: Day 0, empty roster, score $0. Add players in the Market, then press +1 night to play the first games.');
+        ? `New practice season. Your last one finished ${last}.`
+        : 'New practice season: Day 0, empty roster, score $0.');
       if (!byKeyboard || typeof document === 'undefined') return;
       const target = document.getElementById(PRACTICE_WELCOME_TITLE_ID) ?? document.getElementById('app-screen');
       (target as HTMLElement | null)?.focus?.({ preventScroll: true });
