@@ -35,20 +35,20 @@ export type MarketSort = 'price' | 'value' | 'name';
 
 /** Sort choices, in the order the control shows them. Hints are for screen readers. */
 export const MARKET_SORT_OPTIONS: { key: MarketSort; label: string; hint: string }[] = [
-  { key: 'price', label: 'Price', hint: 'Cheapest price a game first' },
-  { key: 'value', label: 'Value', hint: 'Best value against last season first' },
+  { key: 'price', label: 'Price', hint: 'Lowest price a game first' },
+  { key: 'value', label: 'Value', hint: 'Highest value against last season first' },
   { key: 'name', label: 'Name', hint: 'By last name, A to Z' },
 ];
 
 /**
  * The sort choices with the chosen one's direction on it: "Price ↑" runs
- * cheapest first, "Price ↓" dearest first. Choosing it again flips it.
+ * lowest first, "Price ↓" highest first. Choosing it again flips it.
  */
 export function marketSortOptions(sort: MarketSort, reversed: boolean): { key: MarketSort; label: string; hint: string }[] {
   return MARKET_SORT_OPTIONS.map((option) => {
     if (option.key !== sort) return option;
-    // Price and Name run low to high (↑) by default; Value runs best first (↓).
-    const up = option.key === 'value' ? reversed : !reversed;
+    // Price and Name run low to high (↑) by default; Value runs highest first (↓).
+    const up = sortAscending(option.key, reversed);
     return { ...option, label: `${option.label} ${up ? '↑' : '↓'}`, hint: `${sortedLine(option.key, reversed)} Choose again to flip.` };
   });
 }
@@ -121,12 +121,15 @@ export function actionableFirst<T extends { blockedByOpposingPosition: boolean }
  * Lower-case, accent-free text without apostrophes, quotes or dots, so
  * "doncic" finds "Dončić" and "De’Aaron" (a phone's curly apostrophe),
  * "DeAaron" and "de aaron" all find "De'Aaron Fox". Hyphens stay, so
- * "Karl-Anthony" and "karl anthony" both work.
+ * "Karl-Anthony" and "karl anthony" both work, and the other dashes
+ * (U+2010 to U+2015, e.g. the non-breaking hyphen the rows print in
+ * "Gilgeous‑Alexander") count as a hyphen, so a copied name finds him.
  */
 export function searchKey(text: string): string {
   return text
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u2010-\u2015]/g, '-')
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}\s-]/gu, '')
     .trim();
@@ -456,13 +459,30 @@ export function keepNamesWhole(width: number): boolean {
 }
 
 /**
- * Row layout for a window: a table with aligned columns from tablet width up
- * (768px), the phone row below that, and the one-column large-text row when
- * text is scaled up or the window is under 300px (a phone zoomed to 200%).
+ * Below this height (a phone turned sideways, 844x390) the table's toolbar and
+ * column labels would fill the screen, and once they scroll away the rows are
+ * bare numbers. Short windows get the phone rows instead, which label their
+ * own figures, with the toolbar scrolling away with the list.
  */
-export function marketLayout(width: number, fontScale: number): MarketLayout {
+export const SHORT_WINDOW_BELOW = 500;
+
+/**
+ * From this height the table keeps its toolbar and column labels in view and
+ * explains the side in a sentence. A shorter window (a laptop split screen)
+ * drops the sentence and lets the toolbar and labels scroll with the list,
+ * so more players show at once.
+ */
+export const ROOMY_MIN_HEIGHT = 560;
+
+/**
+ * Row layout for a window: a table with aligned columns from tablet width up
+ * (768px) when the window is tall enough to keep its labels in view, the
+ * phone row otherwise, and the one-column large-text row when text is scaled
+ * up or the window is under 300px (a phone zoomed to 200%).
+ */
+export function marketLayout(width: number, fontScale: number, height = Infinity): MarketLayout {
   if (fontScale > 1.3 || width < 300) return 'large';
-  return width >= 768 ? 'table' : 'phone';
+  return width >= 768 && height >= SHORT_WINDOW_BELOW ? 'table' : 'phone';
 }
 
 export interface MarketColumnSet {
@@ -514,11 +534,52 @@ export function searchResultLine(query: string, count: number): string {
   return `${count} ${count === 1 ? 'player matches' : 'players match'} "${query}".`;
 }
 
-/** What a screen reader hears when the sort changes. */
+/**
+ * What a screen reader hears when the list changes, once typing pauses: a
+ * search's matches; right after a search is cleared, that the list is back
+ * ("Search cleared, 30 players."); the Watching filter's count against
+ * everyone ("Watching: 0 players. Show everyone to see all 30.").
+ */
+export function listCountLine({
+  query,
+  count,
+  total,
+  watchedOnly,
+  cleared = false,
+}: {
+  query: string;
+  count: number;
+  /** Every player on this side, before any filter. */
+  total: number;
+  watchedOnly: boolean;
+  /** The search was just emptied. */
+  cleared?: boolean;
+}): string {
+  const players = (n: number) => `${n} ${n === 1 ? 'player' : 'players'}`;
+  if (query) return searchResultLine(query, count);
+  if (cleared) return watchedOnly ? `Search cleared. Watching: ${players(count)}.` : `Search cleared, ${players(count)}.`;
+  if (watchedOnly) return `Watching: ${players(count)}. Show everyone to see all ${total}.`;
+  return `Showing all ${players(count)}.`;
+}
+
+/**
+ * Whether a sort runs low to high (aria-sort "ascending", the ↑ arrow).
+ * Price and Name start low to high; Value starts with the highest value.
+ */
+export function sortAscending(sort: MarketSort, reversed = false): boolean {
+  return sort === 'value' ? reversed : !reversed;
+}
+
+/** The sort's direction in plain words: "lowest first", "highest first", "A to Z". */
+export function sortDirection(sort: MarketSort, reversed = false): string {
+  const ascending = sortAscending(sort, reversed);
+  if (sort === 'name') return ascending ? 'A to Z' : 'Z to A';
+  return ascending ? 'lowest first' : 'highest first';
+}
+
+/** What a screen reader hears when the sort changes: "Sorted by price, lowest first." */
 export function sortedLine(sort: MarketSort, reversed = false): string {
-  if (sort === 'price') return reversed ? 'Sorted by price, dearest first.' : 'Sorted by price, cheapest first.';
-  if (sort === 'value') return reversed ? 'Sorted by value, worst first.' : 'Sorted by value, best first.';
-  return reversed ? 'Sorted by name, Z to A.' : 'Sorted by name, A to Z.';
+  return `Sorted by ${sort}, ${sortDirection(sort, reversed)}.`;
 }
 
 /**
@@ -529,6 +590,24 @@ export function fullNote(side: PerGamePositionSide, playerName: string, limit: n
   return side === 'long'
     ? { message: `Your roster is full (${limit} of ${limit}). Drop a player to add ${playerName}.`, action: 'Choose who to drop' }
     : { message: `All ${limit} short ${limit === 1 ? 'slot is' : 'slots are'} in use. Close a short to short ${playerName}.`, action: 'Choose a short to close' };
+}
+
+/**
+ * FULL's accessible name: why it cannot add him, with the visible word in it
+ * for voice control. It never starts with "Add" or "Short", so nothing reads
+ * it as an offer.
+ */
+export function fullActionName(side: PerGamePositionSide, playerName: string): string {
+  return side === 'long'
+    ? `Roster full: drop a player to add ${playerName}`
+    : `Shorts full: close a short to short ${playerName}`;
+}
+
+/** What the Roster says when "Choose who to drop" brings its list forward. */
+export function rosterPickReason(playerName: string, side: 'long' | 'short' = 'long'): string {
+  return side === 'long'
+    ? `Pick a player to drop to make room for ${playerName}.`
+    : `Pick a short to close to make room for ${playerName}.`;
 }
 
 /** The fee, said where the side is chosen: "$250 to add or drop". Empty with no fee. */

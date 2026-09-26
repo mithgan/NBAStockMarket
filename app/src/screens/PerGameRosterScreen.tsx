@@ -450,13 +450,14 @@ export function PerGameRosterScreen({
   // Sent here to make room ("Choose who to drop" in a full Market): bring the
   // roster list forward and say why.
   useEffect(() => {
-    const reason = takeRosterPick();
-    if (!reason) return undefined;
+    const pick = takeRosterPick();
+    if (!pick) return undefined;
     const timer = setTimeout(() => {
-      const heading = rosterHeading.current as unknown as { scrollIntoView?: (options?: object) => void } | null;
+      const target = pick.side === 'short' ? shortsHeading.current : rosterHeading.current;
+      const heading = target as unknown as { scrollIntoView?: (options?: object) => void } | null;
       heading?.scrollIntoView?.({ block: 'start' });
-      focusElement(rosterHeading.current, { preventScroll: true });
-      notify(reason);
+      focusElement(target, { preventScroll: true });
+      notify(pick.reason);
     }, 80);
     return () => clearTimeout(timer);
   }, [notify]);

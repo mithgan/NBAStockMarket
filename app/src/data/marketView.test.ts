@@ -12,6 +12,7 @@ import {
   collapseControls,
   echoQuery,
   feeHint,
+  fullActionName,
   fullNote,
   filterMarketRows,
   headerStatus,
@@ -22,6 +23,7 @@ import {
   keepNamesWhole,
   keptAnnouncement,
   KICKER_TIER_MIN_WIDTH,
+  listCountLine,
   marketColumns,
   marketLayout,
   marketSortOptions,
@@ -29,9 +31,12 @@ import {
   rowActions,
   rowKicker,
   rowProfileLabel,
+  rosterPickReason,
   searchKey,
   shownAmount,
   slotSummary,
+  sortAscending,
+  sortDirection,
   sortMarketRows,
   sortedLine,
   valueByPosition,
@@ -295,6 +300,11 @@ test('layout: a table from 768px, the phone row below, one column under 300px or
   assert.equal(marketLayout(299, 1), 'large');
   assert.equal(marketLayout(390, 2), 'large');
   assert.equal(marketLayout(1440, 2), 'large');
+  // A phone turned sideways gets the phone rows, which label their own figures (T1-19, T4-11).
+  assert.equal(marketLayout(844, 1, 390), 'phone');
+  assert.equal(marketLayout(932, 1, 430), 'phone');
+  assert.equal(marketLayout(1024, 1, 768), 'table');
+  assert.equal(marketLayout(1280, 1, 500), 'table');
   assert.equal(keepNamesWhole(360), true);
   assert.equal(keepNamesWhole(319), false);
   const wide = marketColumns(1200);
@@ -335,6 +345,10 @@ test('search ignores curly apostrophes, quotes and dots (T4-18)', () => {
   }
   assert.equal(ids(filterMarketRows(rows, { query: 'Gilgeous Alexander', watchedOnly: false, watched: [] })), 'b');
   assert.equal(ids(filterMarketRows(rows, { query: 'gilgeous-alexander', watchedOnly: false, watched: [] })), 'b');
+  // A name copied from a row (non-breaking hyphen) or typed with any Unicode dash (T4-14).
+  for (const dash of ['\u2010', '\u2011', '\u2012', '\u2013', '\u2014', '\u2015']) {
+    assert.equal(ids(filterMarketRows(rows, { query: `Gilgeous${dash}Alexander`, watchedOnly: false, watched: [] })), 'b', `U+${dash.charCodeAt(0).toString(16)}`);
+  }
 });
 
 test('the empty state echoes a long search short and breakable (T4-19)', () => {
@@ -358,6 +372,27 @@ test('FULL explains itself and says the fee where the side is chosen (T1-43, T1-
   assert.equal(feeHint('long', 0), '');
 });
 
+test('spoken counts say what the filter did, and that a cleared search is back (T2-07, T3-13)', () => {
+  const base = { query: '', count: 30, total: 30, watchedOnly: false };
+  assert.equal(listCountLine(base), 'Showing all 30 players.');
+  assert.equal(listCountLine({ ...base, count: 0, watchedOnly: true }), 'Watching: 0 players. Show everyone to see all 30.');
+  assert.equal(listCountLine({ ...base, count: 1, watchedOnly: true }), 'Watching: 1 player. Show everyone to see all 30.');
+  assert.equal(listCountLine({ ...base, cleared: true }), 'Search cleared, 30 players.');
+  assert.equal(listCountLine({ ...base, query: 'zz', count: 0 }), 'No players match "zz".');
+  assert.equal(listCountLine({ ...base, query: 'le', count: 7 }), '7 players match "le".');
+});
+
+test('FULL is named for why it cannot add him, never as an offer (T1-24, T4-06, T3-19)', () => {
+  assert.equal(fullActionName('long', 'Tyrese Maxey'), 'Roster full: drop a player to add Tyrese Maxey');
+  assert.equal(fullActionName('short', 'Luka Doncic'), 'Shorts full: close a short to short Luka Doncic');
+  for (const side of ['long', 'short'] as const) {
+    // The visible word is in the name (voice control); the harness's offer test misses it.
+    assert.match(fullActionName(side, 'x'), /full/i);
+    assert.doesNotMatch(fullActionName(side, 'x'), /^(add|short)\b/i);
+  }
+  assert.equal(rosterPickReason('Tyrese Maxey'), 'Pick a player to drop to make room for Tyrese Maxey.');
+});
+
 test('the edge is the difference of the figures shown, so the row adds up (T2-05, T1-07)', () => {
   // $200,550 prints $200.6K and $220,440 prints $220.4K: the edge reads $19.8K, not $19.9K.
   const bam = player({ currentGameCost: 200_550, priorSeasonValuePerGame: 220_440 });
@@ -375,5 +410,16 @@ test('choosing a sort again flips it; no last season still goes last (T2-N03)', 
   assert.deepEqual(marketSortOptions('price', false).map((o) => o.label), ['Price ↑', 'Value', 'Name']);
   assert.deepEqual(marketSortOptions('value', false).map((o) => o.label), ['Price', 'Value ↓', 'Name']);
   assert.equal(marketSortOptions('name', true)[2].label, 'Name ↓');
-  assert.equal(sortedLine('price', true), 'Sorted by price, dearest first.');
+  // Plain direction words (T3-18): "highest first", not "dearest first".
+  assert.equal(sortedLine('price', true), 'Sorted by price, highest first.');
+  assert.equal(sortedLine('price'), 'Sorted by price, lowest first.');
+  assert.equal(sortedLine('value'), 'Sorted by value, highest first.');
+  assert.equal(sortedLine('value', true), 'Sorted by value, lowest first.');
+  assert.equal(sortedLine('name', true), 'Sorted by name, Z to A.');
+  assert.equal(sortDirection('value'), 'highest first');
+  // aria-sort follows the arrow: Price and Name start ascending, Value descending.
+  assert.equal(sortAscending('price'), true);
+  assert.equal(sortAscending('value'), false);
+  assert.equal(sortAscending('value', true), true);
+  assert.equal(sortAscending('name', true), false);
 });

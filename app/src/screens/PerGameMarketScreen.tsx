@@ -16,6 +16,7 @@ import { isMockActive, mockPlayerTrends, mockSeasonStart } from '../api/mockPerG
 import { FullNote } from '../components/market/FullNote';
 import { LockIcon, StarIcon } from '../components/market/icons';
 import { listenForActivations, pressedInScreen } from '../components/market/lastActivation';
+import { spaceToggles } from '../components/market/switchKeys';
 import { useAriaDisabled } from '../components/market/useAriaDisabled';
 import { ControlsToggle, MarketColumnHeader, MarketSearch, WatchingToggle } from '../components/market/MarketControls';
 import { PlayerAvatar } from '../components/PlayerAvatar';
@@ -45,6 +46,7 @@ import {
   echoQuery,
   feeHint,
   filterMarketRows,
+  fullActionName,
   fullNote,
   headerStatus,
   heldDetail,
@@ -55,6 +57,7 @@ import {
   justOpenedName,
   keepNamesWhole,
   KICKER_TIER_MIN_WIDTH,
+  listCountLine,
   marketColumns,
   marketLayout,
   marketSortOptions,
@@ -62,7 +65,9 @@ import {
   rowActions,
   rowKicker,
   rowProfileLabel,
-  searchResultLine,
+  ROOMY_MIN_HEIGHT,
+  rosterPickReason,
+  SHORT_WINDOW_BELOW,
   slotSummary,
   sortedLine,
   sortMarketRows,
@@ -80,6 +85,7 @@ import { splitPlayerName } from '../data/playerName';
 import { shortEndsNext } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
 import { buildPerGameMarketRows, type PerGameMarketRow } from '../state/perGameState';
+import { requestRosterPick } from '../state/uiActions';
 import { useWatchlist } from '../state/watchlist';
 import { colors, control, fonts, labelStyle, space, type, weight } from '../theme';
 import { rowMarker } from '../ui/domMarkers';
@@ -135,6 +141,7 @@ function MarketRow({
   onAnnounce,
   watched,
   onToggleWatch,
+  dimmed = false,
 }: {
   row: PerGameMarketRow;
   layout: MarketLayout;
@@ -155,6 +162,8 @@ function MarketRow({
   /** On your watchlist; the table row carries a star to change it in place. */
   watched: boolean;
   onToggleWatch: (playerId: string) => void;
+  /** Unwatched while the Watching filter is on: kept in place, dimmed, until the filter changes. */
+  dimmed?: boolean;
 }) {
   const { bootstrap, closePosition, notify, openPosition, pendingActions } = usePerGame();
   const { player, position, side } = row;
@@ -225,6 +234,15 @@ function MarketRow({
   // cannot act, and says so to assistive tech.
   const resting = disabled || justOpened || justClosed || confirming;
   useAriaDisabled(actionRef, resting);
+  const word = actionWord({
+    side,
+    held: position !== null,
+    pending,
+    rosterLocked,
+    full: row.isFull,
+    justOpened,
+    justClosed,
+  });
 
   // One line of meaning under the name: your stake when you hold him on this
   // side, the other side's tag when that blocks this side, otherwise last
@@ -294,11 +312,14 @@ function MarketRow({
         <Button
           ref={actionRef}
           accessibilityHint={rosterLocked ? rosterLockHint : row.unavailableReason ?? undefined}
+          // FULL says why, with its own word in the name for voice control.
           accessibilityLabel={justOpened
             ? justOpenedName(side, player.name)
             : justClosed
               ? justClosedName(side, player.name)
-              : actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}
+              : word === 'Full'
+                ? fullActionName(side, player.name)
+                : actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}
           // While the confirm strip is open the row's own button rests, so a
           // second tap in the same spot does nothing.
           disabled={resting && !fullOffer}
@@ -307,15 +328,7 @@ function MarketRow({
           onDisabledPress={rosterLocked
             ? () => notify(`${rosterReopensLine(bootstrap?.ruleset.rosterLockGameDate ?? null)}. Moves pause while those games are played.`)
             : undefined}
-          label={actionWord({
-            side,
-            held: position !== null,
-            pending,
-            rosterLocked,
-            full: row.isFull,
-            justOpened,
-            justClosed,
-          })}
+          label={word}
           onPress={() => {
             if (fullOffer) {
               setNoting((open) => !open);
@@ -381,19 +394,30 @@ function MarketRow({
   const slotLimit = side === 'long' ? bootstrap?.account.longSlots.limit ?? 0 : bootstrap?.account.shortSlots.limit ?? 0;
   const note = noting && fullOffer ? (() => {
     const { message, action: actionLabel } = fullNote(side, player.name, slotLimit);
-    return <FullNote actionLabel={actionLabel} message={message} onClose={closeNote} style={table ? styles.stripTable : undefined} />;
+    return (
+      <FullNote
+        actionLabel={actionLabel}
+        message={message}
+        // The Roster brings the right list forward ("Your roster" or "Your
+        // shorts") and says why the player is there.
+        onAction={() => requestRosterPick(rosterPickReason(player.name, side), side)}
+        onClose={closeNote}
+        style={table ? styles.stripTable : undefined}
+      />
+    );
   })() : null;
 
   if (table) {
     return (
       <>
-      <View style={[styles.row, styles.rowTable]} {...rowMarker}>
+      <View style={[styles.row, styles.rowTable, dimmed && styles.rowDimmed]} {...rowMarker}>
         <Pressable
           accessibilityLabel={`Watch ${player.name}`}
           accessibilityRole="switch"
           accessibilityState={{ checked: watched }}
           aria-checked={watched}
           onPress={() => onToggleWatch(player.playerId)}
+          {...spaceToggles(() => onToggleWatch(player.playerId))}
           style={({ pressed }) => [styles.starCell, pressed && styles.pressed]}
         >
           <StarIcon filled={watched} size={18} />
@@ -424,18 +448,22 @@ function MarketRow({
               <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>Locked in</Text>
             ) : null}
           </View>
+          {/* No last season: one calm dash in both columns (the row's name says it in words). */}
           <View style={[styles.cell, { width: columns.lastSeason }]}>
-            <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, priorSeasonValuePerGame === null && styles.cellQuiet]}>
-              {priorSeasonValuePerGame === null ? 'None' : money(priorSeasonValuePerGame)}
-            </Text>
+            {priorSeasonValuePerGame === null ? (
+              <Text accessibilityLabel="no last season" maxFontSizeMultiplier={1.4} style={[styles.cellValue, styles.cellQuiet]}>—</Text>
+            ) : (
+              <Text maxFontSizeMultiplier={1.4} style={styles.cellValue}>{money(priorSeasonValuePerGame)}</Text>
+            )}
           </View>
           <View style={[styles.cell, { width: columns.edge }]}>
-            <Text
-              maxFontSizeMultiplier={1.4}
-              style={[styles.cellValue, signal.edge === null && styles.cellQuiet, { color: TONE_COLOR[signal.tone] }]}
-            >
-              {signal.edge === null ? 'No last season' : signal.tone === 'even' ? 'Even' : signedMoney(signal.edge)}
-            </Text>
+            {signal.edge === null ? (
+              <Text accessibilityLabel="no last season" maxFontSizeMultiplier={1.4} style={[styles.cellValue, styles.cellQuiet]}>—</Text>
+            ) : (
+              <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, { color: TONE_COLOR[signal.tone] }]}>
+                {signal.tone === 'even' ? 'Even' : signedMoney(signal.edge)}
+              </Text>
+            )}
           </View>
           {columns.yours > 0 ? (
             <View style={[styles.cell, { width: columns.yours }]}>
@@ -475,7 +503,7 @@ function MarketRow({
 
   return (
     <>
-    <View style={[styles.row, large && styles.rowLarge]} {...rowMarker}>
+    <View style={[styles.row, large && styles.rowLarge, dimmed && styles.rowDimmed]} {...rowMarker}>
       <Pressable
         accessibilityLabel={label}
         accessibilityRole="button"
@@ -539,6 +567,17 @@ export function PerGameMarketScreen({
   const [side, setSide] = useState<PerGamePositionSide>(remembered.side);
   const [sort, setSort] = useState<MarketSort>(remembered.sort);
   const [watchedOnly, setWatchedOnly] = useState(remembered.watchedOnly);
+  // Unwatched while Watching is on: his row stays, dimmed, until the filter
+  // changes, so one slip never loses him from view (walk 2: T2-06).
+  const [kept, setKept] = useState<readonly string[]>([]);
+  useEffect(() => {
+    setKept((list) => (list.length > 0 ? [] : list));
+  }, [watchedOnly]);
+  const { isWatched, toggle: toggleWatchlist } = watchlist;
+  const toggleWatch = useCallback((playerId: string) => {
+    if (watchedOnly && isWatched(playerId)) setKept((list) => (list.includes(playerId) ? list : [...list, playerId]));
+    toggleWatchlist(playerId);
+  }, [isWatched, toggleWatchlist, watchedOnly]);
   const [reversed, setReversed] = useState(remembered.reversed);
   useEffect(() => {
     rememberMarket({ query, side, sort, reversed, watchedOnly });
@@ -546,14 +585,23 @@ export function PerGameMarketScreen({
   const [profileId, setProfileId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [controlsOpen, setControlsOpen] = useState(false);
-  const layout = marketLayout(width, fontScale);
+  // A short window (a phone turned sideways) gets the phone rows, which label
+  // their own figures, so the table only shows where its labels fit.
+  const layout = marketLayout(width, fontScale, height);
   const folded = collapseControls(width);
   const columns = useMemo(() => marketColumns(width), [width]);
   const wide = layout === 'table';
   // On a tablet or desktop the toolbar and column labels stay put while the
   // rows scroll under them, so a row far down is never a column of unlabelled
-  // numbers. A very short window keeps them in the list for room.
-  const pinned = wide && height >= 560;
+  // numbers. Below 560px of height (a short laptop window) every row counts:
+  // the explainer sentence goes (it is in Rules), the toolbar keeps to one
+  // row, and it scrolls away with the list, column labels too (T2-21).
+  const roomy = height >= ROOMY_MIN_HEIGHT;
+  const pinned = wide && roomy;
+  // A phone turned sideways has the width for the table's toolbar rows but
+  // not the height for the stacked phone toolbar: two rows, so a third
+  // player shows on arrival.
+  const rowToolbar = wide || (layout === 'phone' && height < SHORT_WINDOW_BELOW && width >= 600);
 
   const allRows = useMemo(
     () => (bootstrap ? buildPerGameMarketRows(bootstrap, side) : []),
@@ -561,12 +609,12 @@ export function PerGameMarketScreen({
   );
   const rows = useMemo(
     () => actionableFirst(sortMarketRows(
-      filterMarketRows(allRows, { query, watchedOnly, watched: watchlist.watched }),
+      filterMarketRows(allRows, { query, watchedOnly, watched: kept.length > 0 ? [...watchlist.watched, ...kept] : watchlist.watched }),
       sort,
       side,
       reversed,
     )),
-    [allRows, query, side, sort, reversed, watchedOnly, watchlist.watched],
+    [allRows, query, side, sort, reversed, watchedOnly, watchlist.watched, kept],
   );
   const positionValues = useMemo(
     () => valueByPosition(bootstrap?.settledResults ?? []),
@@ -635,18 +683,40 @@ export function PerGameMarketScreen({
     return () => clearTimeout(timer);
   }, [width, scrollToPlayer]);
 
-  // Screen readers hear what a search or a sort did, once typing pauses.
+  // Screen readers hear what a search, a cleared search or the Watching
+  // filter did, once typing pauses; the new line replaces the old one.
   const searchText = query.trim();
   const resultCount = rows.length;
+  const totalCount = allRows.length;
   const spokenOnce = useRef(false);
+  const lastSearch = useRef(searchText);
   useEffect(() => {
+    const cleared = lastSearch.current !== '' && searchText === '';
+    lastSearch.current = searchText;
     if (!spokenOnce.current) {
       spokenOnce.current = true;
       return undefined;
     }
-    const timer = setTimeout(() => announce(searchResultLine(searchText, resultCount)), 700);
+    const line = listCountLine({ query: searchText, count: resultCount, total: totalCount, watchedOnly, cleared });
+    const timer = setTimeout(() => announce(line), 700);
     return () => clearTimeout(timer);
-  }, [searchText, resultCount, announce]);
+  }, [searchText, resultCount, totalCount, watchedOnly, announce]);
+  // If the list empties under the keyboard (the focused row left and focus
+  // fell to the page), focus the empty state's way out ("Show everyone",
+  // "Clear search") instead of leaving the user at the top (walk 2: T3-27).
+  const emptyAction = useRef<View>(null);
+  const hadRows = useRef(resultCount > 0);
+  useEffect(() => {
+    const had = hadRows.current;
+    hadRows.current = resultCount > 0;
+    if (!had || resultCount > 0 || typeof document === 'undefined') return undefined;
+    const timer = setTimeout(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
+      (emptyAction.current as unknown as { focus?: () => void } | null)?.focus?.();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [resultCount]);
   // Choosing the sort you are on flips its direction.
   const changeSort = useCallback((next: MarketSort) => {
     const flip = next === sort ? !reversed : false;
@@ -697,7 +767,7 @@ export function PerGameMarketScreen({
         { key: 'short', label: 'Short side', hint: positionSlotHint('short', bootstrap.account.shortSlots.limit) },
       ]}
       // In the folded column a flex basis would become a height, so it only sizes rows.
-      style={wide ? styles.sideToggleWide : folded ? undefined : styles.sideToggle}
+      style={rowToolbar ? styles.sideToggleWide : folded ? undefined : styles.sideToggle}
       value={side}
     />
   );
@@ -705,7 +775,7 @@ export function PerGameMarketScreen({
   // roster reopens, or that this side is full. A locked roster never shows
   // "drop one to add", because drops are locked too.
   const slotStatus = (
-    <View style={[styles.slotStatus, wide && styles.slotStatusWide, folded && styles.slotStatusFolded]}>
+    <View style={[styles.slotStatus, rowToolbar && styles.slotStatusWide, folded && styles.slotStatusFolded]}>
       <Text maxFontSizeMultiplier={1.4} style={styles.slotText}>{unbrokenTail(slotSummary(side, slots))}</Text>
       {status.kind === 'lock' ? (
         <View style={styles.lockLine}>
@@ -726,14 +796,14 @@ export function PerGameMarketScreen({
       accessibilityLabel="Sort players"
       onChange={changeSort}
       options={marketSortOptions(sort, reversed)}
-      style={wide ? styles.sortToggleWide : folded ? undefined : styles.sortToggle}
+      style={rowToolbar ? styles.sortToggleWide : folded ? undefined : styles.sortToggle}
       value={sort}
     />
   );
   const watchingToggle = (
     <WatchingToggle count={watchlist.watched.length} on={watchedOnly} onChange={setWatchedOnly} />
   );
-  const shortExplainer = side === 'short' ? (
+  const shortExplainer = side === 'short' && roomy ? (
     <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{SHORT_EXPLAINER}</Text>
   ) : null;
   // On a tablet or desktop each side explains itself in the same reserved
@@ -747,11 +817,11 @@ export function PerGameMarketScreen({
       <View style={visuallyHidden}>
         <Text accessibilityRole="header" {...headingLevel(1)}>Market</Text>
       </View>
-      {wide ? (
-        <View style={styles.controlsWide}>
+      {rowToolbar ? (
+        <View style={[styles.controlsWide, !roomy && styles.controlsShort]}>
           {sideToggle}
           {slotStatus}
-          <MarketSearch onChange={setQuery} style={styles.searchWide} value={query} />
+          <MarketSearch onChange={setQuery} style={[styles.searchWide, wide && !roomy && styles.searchShort]} value={query} />
           {sortToggle}
           {watchingToggle}
         </View>
@@ -787,12 +857,14 @@ export function PerGameMarketScreen({
           </View>
         </View>
       )}
-      {wide ? <View style={styles.explainerWide}>{sideExplainer}</View> : null}
+      {wide && roomy ? <View style={styles.explainerWide}>{sideExplainer}</View> : null}
       {wide ? (
         <MarketColumnHeader
           // No button column at season end, so the labels line up with quiet rows.
           columns={rowActions(seasonOver) ? columns : { ...columns, action: 0 }}
-          edgeLabel={side === 'long' ? 'Edge a game' : 'Short edge'}
+          // One name for this figure everywhere: the toolbar's sort, this
+          // header and its accessible name all say "Value".
+          valueLabel="Value"
           lead={STAR_LEAD}
           onSort={changeSort}
           reversed={reversed}
@@ -805,8 +877,12 @@ export function PerGameMarketScreen({
   const trimmed = query.trim();
   const emptyState = watchedOnly && watchlist.watched.length === 0 ? (
     <EmptyState
-      action={<Button label="Show everyone" onPress={() => setWatchedOnly(false)} />}
-      copy="Open a player and tap Watch to keep him here."
+      action={<Button ref={emptyAction} label="Show everyone" onPress={() => setWatchedOnly(false)} />}
+      // Said for any input (click, tap, keyboard), and where the star is: on
+      // each table row, or (phone rows have none) in the player's profile.
+      copy={wide
+        ? "Star a player with the ☆ on his row, or Watch in his profile, to keep him here."
+        : "Open a player and use Watch to keep him here."}
       level={2}
       title="You're not watching anyone yet"
     />
@@ -814,7 +890,7 @@ export function PerGameMarketScreen({
     <EmptyState
       action={(
         <View style={styles.emptyActions}>
-          <Button label="Clear search" onPress={() => setQuery('')} variant="secondary" />
+          <Button ref={emptyAction} label="Clear search" onPress={() => setQuery('')} variant="secondary" />
           {watchedOnly ? <Button label="Show everyone" onPress={clearFilters} variant="quiet" /> : null}
         </View>
       )}
@@ -828,7 +904,7 @@ export function PerGameMarketScreen({
     />
   ) : watchedOnly ? (
     <EmptyState
-      action={<Button label="Show everyone" onPress={() => setWatchedOnly(false)} />}
+      action={<Button ref={emptyAction} label="Show everyone" onPress={() => setWatchedOnly(false)} />}
       copy="The players you watch are not listed right now."
       level={2}
       title="No watched players listed"
@@ -843,7 +919,7 @@ export function PerGameMarketScreen({
       <FlatList
         contentContainerStyle={styles.content}
         data={rows}
-        extraData={[layout, columns, positionValues, pastValues, fee, width, seasonOver, watchlist.watched]}
+        extraData={[layout, columns, positionValues, pastValues, fee, width, seasonOver, watchlist.watched, kept, watchedOnly]}
         initialNumToRender={18}
         keyboardShouldPersistTaps="handled"
         keyExtractor={(row) => row.player.playerId}
@@ -870,8 +946,9 @@ export function PerGameMarketScreen({
             wholeNames={keepNamesWhole(width)}
             width={width}
             onAnnounce={announce}
-            onToggleWatch={watchlist.toggle}
+            onToggleWatch={toggleWatch}
             watched={watchlist.isWatched(item.player.playerId)}
+            dimmed={watchedOnly && kept.includes(item.player.playerId) && !watchlist.isWatched(item.player.playerId)}
             onOpenProfile={openProfile}
             pastValue={item.position ? undefined : pastValues.get(item.player.playerId)}
             row={item}
@@ -888,7 +965,7 @@ export function PerGameMarketScreen({
         dividendRate={bootstrap.ruleset.dividendDollarsPerNetPoint}
         latestSettledDate={bootstrap.game.lastSettledDate}
         onClose={() => setProfileId(null)}
-        onToggleWatch={profileId ? () => watchlist.toggle(profileId) : undefined}
+        onToggleWatch={profileId ? () => toggleWatch(profileId) : undefined}
         player={profilePlayer}
         position={profilePosition}
         results={profileResults}
@@ -942,6 +1019,10 @@ const styles = StyleSheet.create({
     gap: space.md,
     paddingHorizontal: space.lg,
     paddingVertical: space.lg,
+  },
+  controlsShort: {
+    // The phone toolbar's own inset, in a window with little height to spare.
+    paddingVertical: 10,
   },
   sideToggle: {
     // Wide enough for "ROSTER SIDE" on one line; the slot count takes the rest.
@@ -1019,6 +1100,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexBasis: 200,
   },
+  searchShort: {
+    // Gives way first, so the toolbar keeps to one row on a laptop.
+    flexBasis: 140,
+  },
   sortToggle: {
     flexGrow: 1,
     flexShrink: 1,
@@ -1041,6 +1126,9 @@ const styles = StyleSheet.create({
   },
   rowLarge: {
     flexDirection: 'column',
+  },
+  rowDimmed: {
+    opacity: 0.5,
   },
   profileArea: {
     minWidth: 0,

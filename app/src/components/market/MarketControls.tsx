@@ -6,10 +6,11 @@
 import { useRef } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { sortedLine, type MarketColumnSet, type MarketSort } from '../../data/marketView';
+import { sortAscending, sortDirection, type MarketColumnSet, type MarketSort } from '../../data/marketView';
 import { colors, control, fonts, radius, space, type, weight } from '../../theme';
 import { Label } from '../../ui/kit';
 import { CloseIcon, SearchIcon, StarIcon } from './icons';
+import { spaceToggles } from './switchKeys';
 
 export function MarketSearch({
   value,
@@ -89,6 +90,7 @@ export function WatchingToggle({
       accessibilityState={{ checked: on }}
       aria-checked={on}
       onPress={() => onChange(!on)}
+      {...spaceToggles(() => onChange(!on))}
       style={({ pressed }) => [styles.watching, on && styles.watchingOn, pressed && styles.pressed, style]}
     >
       <StarIcon filled={on} size={16} />
@@ -133,12 +135,15 @@ export function ControlsToggle({
 
 /**
  * Column labels above the table; the widths are the rows' own (marketColumns).
- * Player, Price and Edge sort the list (again to flip, with an arrow for the
- * direction); the other labels are read with each row, so they stay silent.
+ * Player, Price and Value sort the list (again to flip): they read as
+ * controls, in capitals with a sort mark (↕, or the gold arrow of the sort in
+ * use), and carry aria-sort. Their names start with the words you see (voice
+ * control: "Value, sort by value"). The other labels are plain captions, read
+ * with each row, so they stay silent.
  */
 export function MarketColumnHeader({
   columns,
-  edgeLabel,
+  valueLabel,
   sort,
   reversed,
   onSort,
@@ -147,47 +152,57 @@ export function MarketColumnHeader({
   columns: MarketColumnSet;
   /** Extra room before the avatar column (the rows' watch star). */
   lead?: number;
-  edgeLabel: string;
+  valueLabel: string;
   sort: MarketSort;
   reversed: boolean;
   onSort: (sort: MarketSort) => void;
 }) {
   const sorter = (key: MarketSort, label: string, width?: number) => {
     const on = sort === key;
-    const up = key === 'value' ? reversed : !reversed;
+    const mark = on ? (sortAscending(key, reversed) ? '↑' : '↓') : '↕';
     return (
-      <Pressable
-        accessibilityLabel={`Sort by ${key === 'value' ? 'edge' : key}${on ? `, ${sortedLine(key, reversed).replace(/^Sorted by [a-z]+, |\.$/g, '')}` : ''}`}
-        accessibilityRole="button"
-        onPress={() => onSort(key)}
-        style={({ pressed }) => [styles.sorter, width === undefined ? styles.columnPlayer : { width }, pressed && styles.pressed]}
+      <View
+        role="columnheader"
+        {...({ 'aria-sort': on ? (sortAscending(key, reversed) ? 'ascending' : 'descending') : 'none' } as object)}
+        style={width === undefined ? styles.columnPlayer : { width }}
       >
-        <View style={styles.sorterLabel}>
-          <Label style={[width !== undefined && styles.column, on && styles.columnOn]}>{width === undefined && on ? `${label} ${up ? '↑' : '↓'}` : label}</Label>
-          {/* A number column's arrow sits in the gap to its right, so the label keeps one line. */}
-          {width !== undefined && on ? (
-            <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.arrow}>{up ? '↑' : '↓'}</Text>
-          ) : null}
-        </View>
-      </Pressable>
+        <Pressable
+          accessibilityLabel={on ? `${label}, sorted ${sortDirection(key, reversed)}` : `${label}, sort by ${key}`}
+          accessibilityRole="button"
+          onPress={() => onSort(key)}
+          style={({ pressed }) => [styles.sorter, pressed && styles.pressed]}
+        >
+          <View style={styles.sorterLabel}>
+            <Label style={[width !== undefined && styles.column, styles.sortable, on && styles.columnOn]}>
+              {width === undefined ? `${label}\u00A0${mark}` : label}
+            </Label>
+            {/* A number column's mark sits in the gap to its right, so the label keeps one line. */}
+            {width !== undefined ? (
+              <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.arrow, on && styles.arrowOn]}>{mark}</Text>
+            ) : null}
+          </View>
+        </Pressable>
+      </View>
     );
   };
   return (
-    <View style={[styles.columns, { gap: columns.gap }]}>
-      {lead > 0 ? <View style={{ width: lead }} /> : null}
-      <View style={{ width: columns.avatar }} />
-      {sorter('name', 'Player')}
-      {sorter('price', 'Price a game', columns.price)}
-      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.quietColumn, { width: columns.lastSeason }]}>
-        <Label style={styles.column}>Last season</Label>
-      </View>
-      {sorter('value', edgeLabel, columns.edge)}
-      {columns.yours > 0 ? (
-        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.quietColumn, { width: columns.yours }]}>
-          <Label style={styles.column}>Your net a game</Label>
+    <View accessibilityLabel="Market columns" role="table">
+      <View role="row" style={[styles.columns, { gap: columns.gap }]}>
+        {lead > 0 ? <View style={{ width: lead }} /> : null}
+        <View style={{ width: columns.avatar }} />
+        {sorter('name', 'Player')}
+        {sorter('price', 'Price a game', columns.price)}
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.quietColumn, { width: columns.lastSeason }]}>
+          <Text maxFontSizeMultiplier={1.4} style={styles.plainColumn}>Dividend last season</Text>
         </View>
-      ) : null}
-      <View style={{ width: columns.action }} />
+        {sorter('value', valueLabel, columns.edge)}
+        {columns.yours > 0 ? (
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.quietColumn, { width: columns.yours }]}>
+            <Text maxFontSizeMultiplier={1.4} style={styles.plainColumn}>Your net a game</Text>
+          </View>
+        ) : null}
+        <View style={{ width: columns.action }} />
+      </View>
     </View>
   );
 }
@@ -308,8 +323,21 @@ const styles = StyleSheet.create({
   column: {
     textAlign: 'right',
   },
+  sortable: {
+    // A control: the brighter label colour, in capitals, with its sort mark.
+    color: colors.muted,
+  },
   columnOn: {
     color: colors.goldInk,
+  },
+  plainColumn: {
+    // A caption, not a control: sentence case, lighter, no sort mark.
+    color: colors.faint,
+    fontFamily: fonts.body,
+    fontSize: type.label,
+    fontWeight: weight.bold,
+    lineHeight: 14,
+    textAlign: 'right',
   },
   sorter: {
     minHeight: control.height,
@@ -322,10 +350,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -11,
     top: 0,
-    color: colors.goldInk,
+    color: colors.faint,
     fontFamily: fonts.display,
     fontSize: type.label,
     fontWeight: weight.heavy,
+  },
+  arrowOn: {
+    color: colors.goldInk,
   },
   quietColumn: {
     justifyContent: 'center',

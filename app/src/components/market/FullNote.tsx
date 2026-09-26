@@ -13,11 +13,14 @@ import { canOpenRoster, openRoster } from './openRoster';
 export function FullNote({
   message,
   actionLabel,
+  onAction,
   onClose,
   style,
 }: {
   message: string;
   actionLabel: string;
+  /** Runs before the Roster opens (e.g. to say why he was sent there). */
+  onAction?: () => void;
   onClose: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -40,7 +43,10 @@ export function FullNote({
     <View accessibilityRole="alert" style={[styles.note, style]}>
       <Text style={styles.text}>{message}</Text>
       <View style={styles.buttons}>
-        {showGo ? <Button ref={go} label={actionLabel} onPress={() => openRoster()} variant="primary" /> : null}
+        {showGo ? <Button ref={go} label={actionLabel} onPress={() => {
+          onAction?.();
+          openRoster();
+        }} variant="primary" /> : null}
         <Button ref={ok} label="OK" onPress={onClose} variant="secondary" />
       </View>
     </View>
