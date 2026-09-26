@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { exactMoney, exactSignedMoney, humanDate, signedMoneyFine } from '../../copy/terms';
+import { exactMoney, humanDate, signedMoney, signedMoneyFine } from '../../copy/terms';
 import type { SeasonSummary } from '../../data/perGameMetrics';
 import { colors, control, fonts, headingStyle, radius, space, type, weight } from '../../theme';
 import { Button, headingLevel, Label, Money } from '../../ui/kit';
@@ -90,7 +90,7 @@ export function SeasonCompleteCard({
     },
   ].filter((line): line is { label: string; text: string } => line !== null);
   const spoken = [
-    `Final score ${exactSignedMoney(summary.finalScore)}`,
+    `Final score ${signedMoney(summary.finalScore)}`,
     place ? `finished ${place.replace('#', 'number ')}` : null,
     ...lines.map((line) => `${line.label} ${line.text.replace(/ · /g, ', ')}`),
   ].filter(Boolean).join(', ');

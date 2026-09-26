@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { exactMoney, exactSignedMoney, gamesCount, unbrokenName } from '../../copy/terms';
+import { exactMoney, gamesCount, unbrokenName } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
-import type { ClosedRow, PartPrecision } from '../../data/rosterView';
+import { formatAt, type ClosedRow, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { Button } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -48,7 +48,7 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
       />
       {shown.map((row) => {
         const action = actionFor ? actionFor(row) : null;
-        const label = `${row.name}, ${row.how.replace(/ · /g, ', ')}, ${gamesCount(row.games)}, ${exactSignedMoney(row.total)} stays in your score`;
+        const label = `${row.name}, ${row.how.replace(/ · /g, ', ')}, ${gamesCount(row.games)}, ${formatAt(row.total, precision, true)} stays in your score`;
         return (
           <View key={row.positionId} style={styles.row}>
             {/* The facts read as one stop; a follow-up button stays its own stop. */}
@@ -102,7 +102,7 @@ export function FeesLine({ fees, moves, feeEach = 0, unplayed = 0, totalInset = 
   return (
     <View
       accessible
-      accessibilityLabel={`Fees, ${detail}, ${exactSignedMoney(fees)}`}
+      accessibilityLabel={`Fees, ${detail}, ${formatAt(fees, precision, true)}`}
       style={[styles.row, styles.fees]}
     >
       <View style={styles.copy}>

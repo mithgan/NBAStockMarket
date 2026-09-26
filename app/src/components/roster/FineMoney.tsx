@@ -1,6 +1,5 @@
 import { StyleSheet, Text, type StyleProp, type TextStyle } from 'react-native';
 
-import { exactMoney, exactSignedMoney } from '../../copy/terms';
 import { formatAt, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, type, weight } from '../../theme';
 import { moneyColor } from '../../ui/kit';
@@ -31,7 +30,8 @@ export function FineMoney({
 }) {
   return (
     <Text
-      accessibilityLabel={accessibilityLabel ?? (signed ? exactSignedMoney(value) : exactMoney(value))}
+      // Screen readers hear the figure the screen shows.
+      accessibilityLabel={accessibilityLabel ?? formatAt(value, precision, signed)}
       maxFontSizeMultiplier={1.4}
       style={[
         styles.money,

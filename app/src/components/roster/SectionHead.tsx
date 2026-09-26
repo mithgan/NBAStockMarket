@@ -1,8 +1,7 @@
 import { useState, type ReactNode, type Ref } from 'react';
 import { Platform, StyleSheet, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 
-import { exactSignedMoney } from '../../copy/terms';
-import type { PartPrecision } from '../../data/rosterView';
+import { formatAt, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, headingStyle, space, type, weight } from '../../theme';
 import { headingLevel } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -75,7 +74,7 @@ export function SectionHead({
           {total === undefined ? null : (
             <View style={{ marginRight: totalInset }}>
               <FineMoney
-                accessibilityLabel={totalLabel ? `${totalLabel} ${exactSignedMoney(total)}` : undefined}
+                accessibilityLabel={totalLabel ? `${totalLabel} ${formatAt(total, precision, true)}` : undefined}
                 precision={precision}
                 value={total}
               />

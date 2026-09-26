@@ -32,12 +32,13 @@ import {
   confirmCloseButton,
   confirmCloseMessage,
   exactMoney,
-  exactSignedMoney,
+  money,
   perGame,
   ROSTER_EXPLAINER,
   rosterReopensLine,
   SHORT_EXPLAINER,
   sideHeading,
+  signedMoney,
   unbrokenName,
 } from '../copy/terms';
 import { keepTogether, practiceProgress } from '../data/chromeView';
@@ -170,16 +171,16 @@ function PositionRow({
     position.playerName,
     view.tag.label,
     short
-      ? `credited ${exactMoney(position.lockedGameCost)} a game, set when you shorted him`
-      : `price ${exactMoney(position.lockedGameCost)} a game, set when you added him`,
-    priceMoved ? `market price now ${exactMoney(marketPrice as number)} a game` : null,
+      ? `credited ${money(position.lockedGameCost)} a game, set when you shorted him`
+      : `price ${money(position.lockedGameCost)} a game, set when you added him`,
+    priceMoved ? `market price now ${money(marketPrice as number)} a game` : null,
     view.games || 'no games yet',
-    view.summary.avgDividend === null ? null : `dividend ${exactMoney(view.summary.avgDividend)} a game`,
-    view.summary.avgNet === null ? null : `profit ${exactSignedMoney(view.summary.avgNet)} a game`,
-    `total ${exactSignedMoney(position.cumulativePnl)}`,
+    view.summary.avgDividend === null ? null : `dividend ${money(view.summary.avgDividend)} a game`,
+    view.summary.avgNet === null ? null : `profit ${signedMoney(view.summary.avgNet)} a game`,
+    `total ${signedMoney(position.cumulativePnl)}`,
     short
-      ? `${exactMoney(position.cumulativeGameCost)} credited and ${exactMoney(position.cumulativeDividend)} in his dividends`
-      : `${exactMoney(position.cumulativeDividend)} in dividends against ${exactMoney(position.cumulativeGameCost)} in prices`,
+      ? `${money(position.cumulativeGameCost)} credited and ${money(position.cumulativeDividend)} in his dividends`
+      : `${money(position.cumulativeDividend)} in dividends against ${money(position.cumulativeGameCost)} in prices`,
     view.expiry ? view.expiry.replace(/ · /g, ', ') : null,
     'View profile',
   ].filter(Boolean).join(', ');

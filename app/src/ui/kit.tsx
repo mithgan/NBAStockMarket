@@ -101,7 +101,8 @@ export function Money({
   const fontSize = MONEY_SIZE[size];
   return (
     <Text
-      accessibilityLabel={accessibilityLabel ?? (signed ? exactSignedMoney(value) : exactMoney(value))}
+      // Screen readers hear the figure the screen shows, not a finer one.
+      accessibilityLabel={accessibilityLabel ?? text}
       maxFontSizeMultiplier={size === 'hero' || size === 'display' ? 1.2 : 1.4}
       style={[
         styles.money,

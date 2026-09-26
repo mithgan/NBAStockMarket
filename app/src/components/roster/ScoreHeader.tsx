@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { exactSignedMoney, humanDate } from '../../copy/terms';
-import { WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
+import { humanDate, signedMoney } from '../../copy/terms';
+import { formatAt, WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { headingLevel, Label, Money } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -88,8 +88,8 @@ export function ScoreHeader({
   ) : null;
 
   const summary = [
-    `${title} ${exactSignedMoney(score)}${feesOnly ? ', fees so far' : ''}`,
-    started && week !== null ? `${WEEK_LABEL.toLowerCase()} ${exactSignedMoney(week)}` : null,
+    `${title} ${signedMoney(score)}${feesOnly ? ', fees so far' : ''}`,
+    started && week !== null ? `${WEEK_LABEL.toLowerCase()} ${signedMoney(week)}` : null,
     started && rank ? `rank ${rank.replace('#', 'number ')}` : null,
     !started && nextGameDate ? `next games ${humanDate(nextGameDate)}` : null,
   ].filter(Boolean).join(', ');
@@ -117,7 +117,7 @@ export function ScoreHeader({
       </View>
       {parts ? (
         <View
-          accessibilityLabel={`${title} by source: ${parts.map((part) => `${part.label} ${exactSignedMoney(part.value)}`).join(', ')}`}
+          accessibilityLabel={`${title} by source: ${parts.map((part) => `${part.label} ${formatAt(part.value, precision, true)}`).join(', ')}`}
           accessible
           style={[styles.parts, variant === 'compact' && styles.partsGrid]}
         >
