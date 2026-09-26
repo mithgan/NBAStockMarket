@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { PerGameRuleset } from '../api/contracts';
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
-import { exactMoney, humanDate, PRACTICE_LABEL } from '../copy/terms';
+import { exactMoney, humanDate, PRACTICE_LABEL, rosterReopensLine } from '../copy/terms';
 import {
   CHROME_FOLDED_FACTS_MIN_WIDTH,
   CHROME_FOLDED_ONE_LINE_MIN_WIDTH,
@@ -240,17 +240,18 @@ export function PerGameStatusStrip() {
     <View key="lock" style={[styles.lock, !lockTag && styles.lockBeside]}>
       {lockTag ? <Tag tone="gold">ROSTER LOCKED</Tag> : <LockIcon color={colors.goldInk} />}
       <Text
+        // Spoken whole everywhere; beside the padlock (phones) the line shows
+        // only when moves reopen, so a locked night keeps the frame to one
+        // line (the padlock and the Rules say why moves pause).
+        accessibilityLabel={lockLine(lockDate)}
         maxFontSizeMultiplier={1.5}
-        // Beside the padlock its two lines sit tight, as the stacked facts do.
         style={[
           styles.fact,
           lockTag ? styles.factLabel : [styles.lockLine, styles.lockText],
           (tight || (!lockTag && !layout.largeText)) && styles.tight,
         ]}
       >
-        {/* On a phone the line breaks at its dot, never inside the reason
-            (compact rows are narrower than the reason itself). */}
-        {layout.compact ? lockLine(lockDate) : lockLine(lockDate).replace(LOCK_REASON, keepTogether(LOCK_REASON))}
+        {lockTag ? lockLine(lockDate).replace(LOCK_REASON, keepTogether(LOCK_REASON)) : rosterReopensLine(lockDate)}
       </Text>
     </View>
   ) : null;
