@@ -8,7 +8,13 @@ import { perGameRulesPresentation, rulesSummary } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { tapsSettling } from '../web/tapSettle';
 import { useDesignVariant } from '../theme/ThemeProvider';
-import { APPEARANCE_CHOICES, VARIANTS } from '../theme/variants';
+import { APPEARANCE_CHOICES, DEFAULT_VARIANT, VARIANTS, type DesignVariant } from '../theme/variants';
+import type { AppearanceChoice } from '../theme/variantPersistence';
+
+/** "Match device" first, then the themes. */
+const CHOICES: AppearanceChoice[] = ['device', ...APPEARANCE_CHOICES];
+const DEVICE_NAME = 'Match device';
+const DEVICE_BLURB = 'Light while your device is set to light, Default while it is dark.';
 import { rowMarker } from '../ui/domMarkers';
 import { headingLevel } from '../ui/kit';
 import { reduceMotionChosen, setReduceMotion, useReduceMotionChoice } from '../state/motionPreference';
@@ -111,7 +117,7 @@ export function SettingsSheet({
   const reducedMotion = useReducedMotion();
   const practiceRules = usePracticeRulesContext();
   const rules = ruleset ? perGameRulesPresentation(ruleset, practiceRules) : null;
-  const { setVariant, variantId } = useDesignVariant();
+  const { choice: chosen, setVariant } = useDesignVariant();
   // Back closes the sheet; the app behind it is inert while it is open.
   useSheetHistory(visible, onClose);
   const sheetTop = visible ? (floating ? measuredFloatTop() : measuredSheetTop()) : null;
@@ -142,13 +148,13 @@ export function SettingsSheet({
   // Appearance is a radio group: arrow keys move and choose, like any other
   // radio group, and only the chosen theme is a Tab stop.
   const onChoiceKey = (event: { key: string; preventDefault: () => void }) => {
-    const index = APPEARANCE_CHOICES.indexOf(variantId as (typeof APPEARANCE_CHOICES)[number]);
+    const index = CHOICES.indexOf(chosen);
     let next = -1;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') next = (Math.max(index, 0) + 1) % APPEARANCE_CHOICES.length;
-    else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') next = (Math.max(index, 0) - 1 + APPEARANCE_CHOICES.length) % APPEARANCE_CHOICES.length;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') next = (Math.max(index, 0) + 1) % CHOICES.length;
+    else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') next = (Math.max(index, 0) - 1 + CHOICES.length) % CHOICES.length;
     if (next < 0) return;
     event.preventDefault();
-    setVariant(APPEARANCE_CHOICES[next]);
+    setVariant(CHOICES[next]);
     (choiceRefs.current[next] as unknown as { focus?: () => void } | null)?.focus?.();
   };
   // "Keep notices until I close them": Enter reaches it as a press, but
@@ -210,24 +216,34 @@ export function SettingsSheet({
         <ScrollView aria-label="Settings content" role="region" style={styles.sheetBody} tabIndex={0}>
           <Section narrow={narrow} title="Appearance">
             <View accessibilityLabel="Theme" accessibilityRole="radiogroup" {...({ onKeyDown: onChoiceKey } as object)}>
-              {APPEARANCE_CHOICES.map((choice, index) => {
-                const variant = VARIANTS[choice];
-                const selected = choice === variantId;
+              {CHOICES.map((choice, index) => {
+                const device = choice === 'device';
+                const variant = VARIANTS[device ? DEFAULT_VARIANT : choice];
+                const name = device ? DEVICE_NAME : variant.name;
+                const blurb = device ? DEVICE_BLURB : variant.blurb;
+                const selected = choice === chosen;
                 // A small preview of the theme itself: its page, a card with
                 // a line of text, and its gain, loss and accent colours, so
-                // themes can be told apart before trying them.
-                const swatch = (
-                  <View style={[styles.swatch, { backgroundColor: variant.palette.background }]}>
-                    <View style={[styles.swatchCard, { backgroundColor: variant.palette.surface }]}>
-                      <View style={[styles.swatchLine, { backgroundColor: variant.palette.text }]} />
+                // themes can be told apart before trying them. "Match device"
+                // shows Default and Light side by side.
+                const preview = (theme: DesignVariant, half?: 'left' | 'right') => (
+                  <View style={[styles.swatch, half && styles.swatchHalf, half === 'left' && styles.swatchLeft, half === 'right' && styles.swatchRight, { backgroundColor: theme.palette.background }]}>
+                    <View style={[styles.swatchCard, { backgroundColor: theme.palette.surface }]}>
+                      <View style={[styles.swatchLine, { backgroundColor: theme.palette.text }]} />
                       <View style={styles.swatchMarks}>
-                        <View style={[styles.swatchMark, { backgroundColor: variant.palette.green }]} />
-                        <View style={[styles.swatchMark, { backgroundColor: variant.palette.red }]} />
-                        <View style={[styles.swatchMark, { backgroundColor: variant.palette.gold }]} />
+                        <View style={[styles.swatchMark, { backgroundColor: theme.palette.green }]} />
+                        <View style={[styles.swatchMark, { backgroundColor: theme.palette.red }]} />
+                        <View style={[styles.swatchMark, { backgroundColor: theme.palette.gold }]} />
                       </View>
                     </View>
                   </View>
                 );
+                const swatch = device ? (
+                  <View style={styles.swatchPair}>
+                    {preview(VARIANTS[DEFAULT_VARIANT], 'left')}
+                    {preview(VARIANTS.light, 'right')}
+                  </View>
+                ) : preview(variant);
                 const inUse = selected ? <Text style={styles.check}>IN USE</Text> : null;
                 return (
                   <Pressable
@@ -235,7 +251,7 @@ export function SettingsSheet({
                     ref={(node) => {
                       choiceRefs.current[index] = node;
                     }}
-                    accessibilityLabel={`${variant.name}. ${variant.blurb}`}
+                    accessibilityLabel={`${name}. ${blurb}`}
                     accessibilityRole="radio"
                     accessibilityState={{ selected, checked: selected }}
                     // react-native-web drops accessibilityState.checked, so the
@@ -248,9 +264,9 @@ export function SettingsSheet({
                   >
                     {narrow ? null : swatch}
                     <View style={[styles.choiceCopy, narrow && styles.choiceCopyNarrow]}>
-                      <Text style={[styles.choiceName, selected && styles.choiceNameSelected]}>{variant.name}</Text>
+                      <Text style={[styles.choiceName, selected && styles.choiceNameSelected]}>{name}</Text>
                       {/* Narrow, the blurb wraps in full rather than stopping at "…". */}
-                      <Text numberOfLines={narrow ? undefined : 2} style={styles.choiceBlurb}>{variant.blurb}</Text>
+                      <Text numberOfLines={narrow ? undefined : 2} style={styles.choiceBlurb}>{blurb}</Text>
                     </View>
                     {narrow ? (
                       // The swatch under the name, so the name keeps the width.
@@ -563,6 +579,26 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     borderColor: colors.borderStrong,
     borderWidth: 1,
+  },
+  // "Match device": Default and Light halves in the same 44px box.
+  swatchPair: {
+    width: 44,
+    height: 36,
+    flexDirection: 'row',
+    flexShrink: 0,
+  },
+  swatchHalf: {
+    width: 22,
+    padding: 3,
+  },
+  swatchLeft: {
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+    borderRightWidth: 0,
+  },
+  swatchRight: {
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
   },
   swatchCard: {
     flex: 1,
