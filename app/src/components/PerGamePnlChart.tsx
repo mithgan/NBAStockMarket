@@ -128,7 +128,7 @@ export function PerGamePnlChart({
     return (
       <View style={styles.container}>
         <View style={styles.heading}>
-          <Text accessibilityRole="header" {...headingLevel(2)}><Label>Score by night</Label></Text>
+          <Text accessibilityLabel="Score by night" accessibilityRole="header" {...headingLevel(2)}><Label>Score by night</Label></Text>
         </View>
         {/* Keyed apart from the plot: react-native-web only starts observing
             onLayout when a view mounts, so the plot must mount fresh when the
@@ -163,7 +163,7 @@ export function PerGamePnlChart({
       <View style={styles.heading}>
         {point ? <Reading point={point} previous={series[shownIndex - 1]} /> : (
           <>
-            <Text accessibilityRole="header" {...headingLevel(2)}><Label>Score by night</Label></Text>
+            <Text accessibilityLabel="Score by night" accessibilityRole="header" {...headingLevel(2)}><Label>Score by night</Label></Text>
             {/* Tap, click or arrow keys: one word for all of them. */}
             <Text style={styles.hint}>Select a night to read it</Text>
           </>
