@@ -302,6 +302,9 @@ export function PerGamePlayerProfile({
         // (in a tall enough window; see pinBar).
         stickyHeaderIndices={pinBar ? [1] : undefined}
         style={styles.scroll}
+        // A named, focusable scroll region, so a keyboard can reach and scroll
+        // the last season and game log below the chart (walk 3 T3-10).
+        {...({ tabIndex: 0, role: 'region', 'aria-label': `${player.name}: profile details` } as object)}
       >
         <View>
         <View style={[styles.identity, inset]}>

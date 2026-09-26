@@ -405,11 +405,13 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // closes the menu and lets its history entry go before the question adds
   // its own, so Back and the entries stay in step.
   const askQuestion = (kind: Question) => {
-    // Nothing to lose yet (the opening eve, no moves): Restart just restarts.
-    if (kind === 'restart' && bootstrap
+    // Nothing to lose yet (the opening eve, no moves): Restart just restarts
+    // and Exit just leaves, as a reload does without a warning.
+    if ((kind === 'restart' || kind === 'exit') && bootstrap
       && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).day === 0
       && bootstrap.ledger.items.length === 0) {
-      restartPractice();
+      if (kind === 'restart') restartPractice();
+      else leavePractice();
       return;
     }
     if (!moreOpen) {

@@ -23,6 +23,7 @@ import { humanDateWithYear, spoken } from './src/copy/terms';
 import { Button, visuallyHidden } from './src/ui/kit';
 import { registerSettingsOpener, registerTabOpener, settingsReturnStep } from './src/state/uiActions';
 import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
+import { settleTaps } from './src/web/tapSettle';
 import { consumePracticeRestarted, setPracticeProgress } from './src/web/practiceSession';
 import {
   PerGameProvider as PortfolioProvider,
@@ -131,6 +132,9 @@ function CenteredState({
   const actionRef = useRef<View | null>(null);
   useEffect(() => {
     if (!brand) return;
+    // The second tap of a double tap on "Leave practice" lands here, where
+    // Back to practice now sits: let it pass (walk 3 T4-06).
+    settleTaps(700);
     (actionRef.current as unknown as { focus?: () => void } | null)?.focus?.();
   }, [brand]);
   useEffect(() => {

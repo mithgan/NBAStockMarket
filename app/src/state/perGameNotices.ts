@@ -17,11 +17,15 @@ function endedShorts(previous: PerGameBootstrap | null, next: PerGameBootstrap):
 
 function endedSentence(ended: PerGamePosition[]): string {
   if (ended.length === 0) return '';
+  // "Lost $15.5K", never "made -$15.5K" (walk 3 T1-10).
+  const result = (amount: number) => (Math.round(amount) < 0
+    ? `lost ${moneyFine(Math.abs(amount))}`
+    : `made ${signedMoneyFine(amount)}`);
   if (ended.length === 1) {
-    return ` Your short on ${ended[0].playerName} is over: it made ${signedMoneyFine(ended[0].cumulativePnl)} in all, already in your score.`;
+    return ` Your short on ${ended[0].playerName} is over: it ${result(ended[0].cumulativePnl)} in all, already in your score.`;
   }
   const total = ended.reduce((sum, position) => sum + position.cumulativePnl, 0);
-  return ` ${ended.length} shorts are over: they made ${signedMoneyFine(total)} in all, already in your score.`;
+  return ` ${ended.length} shorts are over: they ${result(total)} in all, already in your score.`;
 }
 
 /** A roster lock that begins with these games, in one sentence. */

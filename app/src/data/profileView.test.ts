@@ -370,8 +370,9 @@ test('ranges are spelled out, only offered when they narrow his games, and fit 4
   assert.deepEqual(labels(rangeOptions({ total: 40, yours: 3, room: 'phone' })), ['With you', 'Last 5', 'Last 15', 'Season']);
   assert.deepEqual(labels(rangeOptions({ total: 40, yours: 3, room: 'narrow' })), ['Yours', 'L5', 'All']);
   assert.equal(rangeOptions({ total: 40, yours: 3, room: 'narrow' })[2].key, 'Season');
-  // All of his games were yours: "With you" would repeat Season.
-  assert.deepEqual(labels(rangeOptions({ total: 4, yours: 4, room: 'phone' })), ['Season']);
+  // All of his games were yours: one tab, and it says so ("With you").
+  assert.deepEqual(labels(rangeOptions({ total: 4, yours: 4, room: 'phone' })), ['With you']);
+  assert.equal(rangeOptions({ total: 4, yours: 4, room: 'phone' })[0].key, 'Season');
 });
 
 test('the game log follows the range and says which games it lists (walk-1 T2-36)', () => {
@@ -390,6 +391,8 @@ test('the profile opens on your games when you hold him, else a range that narro
   assert.equal(defaultRange(rangeOptions({ total: 10, yours: 3, room: 'phone' }), false), 'Season');
   assert.equal(defaultRange(rangeOptions({ total: 20, yours: 0, room: 'phone' }), false), 'L15');
   assert.equal(defaultRange(rangeOptions({ total: 1, yours: 0, room: 'phone' }), true), 'Season');
+  // Held all his games: opens on them (labelled "With you"), matching the header (walk 3 T2-08).
+  assert.equal(defaultRange(rangeOptions({ total: 19, yours: 19, room: 'wide' }), true), 'Season');
   assert.deepEqual(rangeNights(nights, 'Yours').map((night) => night.source), ['yours', 'yours', 'yours', 'yours']);
   assert.equal(isRecentRange('Yours', 4, 6), false);
 });

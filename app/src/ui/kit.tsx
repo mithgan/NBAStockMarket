@@ -388,8 +388,9 @@ export function ConfirmStrip({
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onCancel]);
   return (
-    <View accessibilityRole="alert" style={[styles.confirmStrip, style]}>
-      <Text style={styles.confirmText}>{message}</Text>
+    <View style={[styles.confirmStrip, style]}>
+      {/* The question alone is announced; the buttons are read as focus reaches them. */}
+      <Text accessibilityRole="alert" style={styles.confirmText}>{message}</Text>
       <View style={styles.confirmButtons}>
         <Button
           accessibilityLabel={confirmAccessibilityLabel}
@@ -589,7 +590,8 @@ export function Segmented<K extends string>({
               ];
             }}
           >
-            <Text maxFontSizeMultiplier={1.3} style={[styles.segmentText, selected && styles.segmentTextSelected]}>
+            {/* One line: "VALUE ↑" never breaks its arrow onto a second line (walk 3 T1-09). */}
+            <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[styles.segmentText, selected && styles.segmentTextSelected]}>
               {option.label}
             </Text>
           </Pressable>

@@ -459,18 +459,25 @@ export function rangeOptions({ total, yours, room }: {
       label: narrow ? range.key : `Last ${range.games}`,
       hint: `His last ${range.games} games`,
     }));
-  const season: RangeOption = { key: 'Season', label: narrow ? 'All' : 'Season', hint: 'Every game he played this season' };
+  // Every game he has played was yours: the season is your time with him,
+  // and says so (walk 3 T2-08).
+  const allYours = yours > 0 && yours === total;
+  const season: RangeOption = allYours
+    ? { key: 'Season', label: narrow ? 'Yours' : 'With you', hint: 'Every game he has played, all for you' }
+    : { key: 'Season', label: narrow ? 'All' : 'Season', hint: 'Every game he played this season' };
   const fit = room === 'wide' ? 5 : room === 'phone' ? 4 : 3;
   while (withYou.length + recent.length + 1 > fit) recent = recent.slice(0, -1);
   return [...withYou, ...recent, season];
 }
 
 /**
- * Where the profile opens: your games when you hold him and have played some,
+ * Where the profile opens: your games when you hold him (the same span as
+ * the header's result: "With you", or his season when every game was yours),
  * his last 15 once he has more than 15, otherwise his whole season.
  */
 export function defaultRange(options: readonly RangeOption[], held: boolean): ProfileRange {
   if (held && options.some((option) => option.key === 'Yours')) return 'Yours';
+  if (held) return 'Season';
   if (options.some((option) => option.key === 'L15')) return 'L15';
   return 'Season';
 }
