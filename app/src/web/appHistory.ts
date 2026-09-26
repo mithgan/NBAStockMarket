@@ -99,6 +99,37 @@ export function useSheetHistory(visible: boolean, onClose: () => void): void {
   }, [visible]);
 }
 
+/**
+ * An inline question (a Drop or Close confirm strip) in browser history: the
+ * first Back folds the question, as it closes a sheet, instead of leaving the
+ * tab under it (walk 3 T4-03). Unlike a sheet it leaves the page usable, and
+ * `onFold` is the question's own cancel (it puts focus back on the row).
+ */
+export function useBackFolds(visible: boolean, onFold: () => void): void {
+  const onFoldRef = useRef(onFold);
+  onFoldRef.current = onFold;
+  useEffect(() => {
+    if (!isWeb || !visible) return undefined;
+    const id = nextSheetId++;
+    let poppedByBack = false;
+    window.history.pushState({ ...(window.history.state ?? {}), question: id }, '');
+    const onPop = () => {
+      if ((window.history.state as { question?: number } | null)?.question !== id) {
+        poppedByBack = true;
+        onFoldRef.current();
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      // Answered or cancelled on the page: remove the entry we pushed.
+      if (!poppedByBack && (window.history.state as { question?: number } | null)?.question === id) {
+        window.history.back();
+      }
+    };
+  }, [visible]);
+}
+
 /** Whether a sheet is open right now (the tab history ignores Back while one is). */
 export function sheetIsOpen(): boolean {
   return openSheets > 0;

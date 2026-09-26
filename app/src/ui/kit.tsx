@@ -14,6 +14,7 @@
  */
 import { forwardRef, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { useBackFolds } from '../web/appHistory';
 import { settleTaps, tapsSettling } from '../web/tapSettle';
 import {
   Modal,
@@ -345,13 +346,21 @@ function focusNode(ref: { current: unknown }) {
   node?.focus?.();
 }
 
+/** After a confirm strip is answered, taps rest this long (it folds under the finger). */
+const STRIP_SETTLE_MS = 700;
+/** …and a repeat on the answered button's spot is ignored this long. */
+const STRIP_SPOT_MS = 1400;
+
 /**
  * The second, deliberate step before something that costs money: an inline
  * strip under the row that says what happens and offers two real buttons.
  * "Keep" sits on the right, where the row's Drop/Close button was, so a
  * double tap lands on the safe choice; the costly button sits to its left.
  * Taps in the first 400 ms are ignored, keyboard focus starts on Keep, Escape
- * cancels, and nothing times out while the player reads it.
+ * and Back cancel, and nothing times out while the player reads it. Once
+ * answered, the strip folds and the next row slides under the finger, so taps
+ * rest for 0.7 s, and a repeat on the same spot for longer: a hurried "keep,
+ * keep" never buys the player below.
  */
 export function ConfirmStrip({
   message,
@@ -375,6 +384,7 @@ export function ConfirmStrip({
   useEffect(() => {
     focusNode(keepRef);
   }, []);
+  useBackFolds(true, onCancel);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     // Escape answers this question only. A sheet around the strip (the player
@@ -403,7 +413,7 @@ export function ConfirmStrip({
           accessibilityLabel={confirmAccessibilityLabel}
           label={confirmLabel}
           onPress={guard(() => {
-            settleTaps();
+            settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS);
             onConfirm();
           })}
           variant="danger"
@@ -412,7 +422,7 @@ export function ConfirmStrip({
           ref={keepRef}
           label={cancelLabel}
           onPress={guard(() => {
-            settleTaps();
+            settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS);
             onCancel();
           })}
           variant="secondary"

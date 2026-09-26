@@ -252,8 +252,9 @@ export function PerGameProvider({
     setMessage(null);
     // The second tap of a double tap on a money button must not land on the
     // next row's button when this move reflows the list (walk 3 T4-01: a
-    // double tap on "Short again" re-shorted the next player).
-    settleTaps(500);
+    // double tap on "Short again" re-shorted the next player). A hurried
+    // repeat on the same spot is ignored for longer.
+    settleTaps(500, 1200);
     let reconciliationReason: ReconciliationReason | null = null;
     const actionSnapshot = bootstrapRef.current;
     try {
