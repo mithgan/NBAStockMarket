@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import {
   confirmCloseMessage,
+  moneyCompact,
+  signedMoneyCompact,
   CONFIRM_LABEL,
   closeActionName,
   confirmCloseButton,
@@ -121,4 +123,14 @@ test('a Drop or Close asks once, with the fee, what stays and what coming back c
     confirmCloseMessage({ side: 'long', playerName: 'LeBron James', feeDollars: 0, total: 0 }),
     'Drop LeBron James? He has not changed your score yet. Adding him back later costs his price at that time.',
   );
+});
+
+test('per-game columns read one style: K from $1,000, dollars below', () => {
+  assert.equal(moneyCompact(6_500), '$6.5K');
+  assert.equal(moneyCompact(9_432), '$9.4K');
+  assert.equal(moneyCompact(21_500), '$21.5K');
+  assert.equal(moneyCompact(950), '$950');
+  assert.equal(moneyCompact(1_062_500), '$1.06M');
+  assert.equal(signedMoneyCompact(-4_000), '-$4K');
+  assert.equal(signedMoneyCompact(0), '$0');
 });

@@ -22,6 +22,8 @@ import {
   rosterReopensLine,
   signedMoney,
   signedMoneyFine,
+  moneyCompact,
+  signedMoneyCompact,
 } from '../copy/terms';
 import {
   currentResults,
@@ -221,8 +223,10 @@ export function valueSignal(
   const lead = `Dividend last season ${money(player.priorSeasonValuePerGame)} a game ·`;
   const tone = netTone(edge);
   if (tone === 'even') return { edge, lead, text: 'even with his price', tone };
-  if (side === 'short') return { edge, lead, text: `${signedMoney(edge)} for a short`, tone };
-  return { edge, lead, text: `${money(Math.abs(edge))} ${edge > 0 ? 'over' : 'under'} his price`, tone };
+  // Compact, so a list reads "$6.5K under" beside "$21.5K over" (edges are
+  // whole $100s, so nothing is lost).
+  if (side === 'short') return { edge, lead, text: `${signedMoneyCompact(edge)} for a short`, tone };
+  return { edge, lead, text: `${moneyCompact(Math.abs(edge))} ${edge > 0 ? 'over' : 'under'} his price`, tone };
 }
 
 /** "8 of 10 on your roster" / "1 of 5 shorts". */

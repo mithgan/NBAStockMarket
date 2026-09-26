@@ -130,6 +130,28 @@ export function moneyFine(amount: number): string {
   return `${sign}$${trimDecimals((abs / 1_000_000).toFixed(2))}M`;
 }
 
+/**
+ * Money for a column or list of per-game figures, where every amount should
+ * read in one style: thousands in K from $1,000 ("$6.5K" beside "$21.5K",
+ * not "$6,500"), full dollars only under $1,000 ("$250"). Totals that must
+ * add up on screen keep `moneyFine` (walk 3 T1-02, walk 2 T1-05/T4-18).
+ */
+export function moneyCompact(amount: number): string {
+  const rounded = Math.round(amount);
+  const sign = rounded < 0 ? '-' : '';
+  const abs = Math.abs(rounded);
+  if (abs < 1_000) return `${sign}$${abs}`;
+  if (abs < 999_950) return `${sign}$${trimDecimals((abs / 1_000).toFixed(1))}K`;
+  return `${sign}$${trimDecimals((abs / 1_000_000).toFixed(2))}M`;
+}
+
+/** Signed `moneyCompact`: "+$6.5K", "-$950", and "$0" for zero. */
+export function signedMoneyCompact(amount: number): string {
+  const text = moneyCompact(amount);
+  if (text === '$0') return text;
+  return text.startsWith('-') ? text : `+${text}`;
+}
+
 /** Signed `moneyFine`: "+$137.5K", "-$4.85M", and "$0" for zero. */
 export function signedMoneyFine(amount: number): string {
   const text = moneyFine(amount);

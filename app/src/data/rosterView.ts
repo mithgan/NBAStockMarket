@@ -22,6 +22,8 @@ import {
   moneyFine,
   signedMoney,
   signedMoneyFine,
+  moneyCompact,
+  signedMoneyCompact,
 } from '../copy/terms';
 import type { PnlPoint } from '../state/perGameState';
 import type { TagTone } from '../ui/kit';
@@ -286,7 +288,7 @@ export const WEEK_LABEL = 'Games, last 7 days';
  * How precisely the breakdown shows its parts. `fine` is `moneyFine` ("$552.1K",
  * "$1.05M"); `fine3` adds a digit to millions ("$1.052M"); `exact` is dollars.
  */
-export type PartPrecision = 'fine' | 'fine3' | 'exact';
+export type PartPrecision = 'fine' | 'fine3' | 'exact' | 'compact';
 
 const PRECISIONS: PartPrecision[] = ['fine', 'fine3', 'exact'];
 
@@ -307,6 +309,7 @@ function trimZeros(value: string): string {
 /** Format money at a breakdown precision, signed ("+$1.052M") or plain. */
 export function formatAt(amount: number, precision: PartPrecision, signed: boolean): string {
   if (precision === 'exact') return signed ? exactSignedMoney(amount) : exactMoney(amount);
+  if (precision === 'compact') return signed ? signedMoneyCompact(amount) : moneyCompact(amount);
   const rounded = Math.round(amount);
   if (precision === 'fine3' && Math.abs(rounded) >= 999_950) {
     const text = `$${trimZeros((Math.abs(rounded) / 1_000_000).toFixed(3))}M`;

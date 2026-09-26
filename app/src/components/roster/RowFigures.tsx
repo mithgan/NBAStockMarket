@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { PerGamePositionSide } from '../../api/contracts';
-import { moneyFine } from '../../copy/terms';
+import { moneyCompact } from '../../copy/terms';
 import { figureCaptions } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { FineMoney } from './FineMoney';
@@ -45,11 +45,11 @@ function Share({ grow, children }: { grow: number; children: ReactNode }) {
 export function StackedFigures({ price, dividend, net, total, narrow = false }: Figures & { narrow?: boolean }) {
   return (
     <View style={styles.line}>
-      <Share grow={PHONE_SHARES.price}><FineMoney signed={false} value={price} /></Share>
+      <Share grow={PHONE_SHARES.price}><FineMoney precision="compact" signed={false} value={price} /></Share>
       <Share grow={PHONE_SHARES.dividend}>
-        {dividend === null ? <Missing /> : <FineMoney signed={false} value={dividend} />}
+        {dividend === null ? <Missing /> : <FineMoney precision="compact" signed={false} value={dividend} />}
       </Share>
-      {narrow ? null : <Share grow={PHONE_SHARES.net}>{net === null ? <Missing /> : <FineMoney value={net} />}</Share>}
+      {narrow ? null : <Share grow={PHONE_SHARES.net}>{net === null ? <Missing /> : <FineMoney precision="compact" value={net} />}</Share>}
       <Share grow={PHONE_SHARES.total}><FineMoney value={total} /></Share>
     </View>
   );
@@ -84,9 +84,9 @@ export function ListFigures({ side, price, dividend, net, total }: Figures) {
   );
   return (
     <View style={styles.list}>
-      {line(captions.price, <FineMoney signed={false} value={price} />)}
-      {line(captions.dividend, dividend === null ? <Missing /> : <FineMoney signed={false} value={dividend} />)}
-      {line(captions.net, net === null ? <Missing /> : <FineMoney value={net} />)}
+      {line(captions.price, <FineMoney precision="compact" signed={false} value={price} />)}
+      {line(captions.dividend, dividend === null ? <Missing /> : <FineMoney precision="compact" signed={false} value={dividend} />)}
+      {line(captions.net, net === null ? <Missing /> : <FineMoney precision="compact" value={net} />)}
       {line(captions.total, <FineMoney value={total} />)}
     </View>
   );
@@ -117,17 +117,17 @@ export function TableHeader({ side, actionWidth }: { side: PerGamePositionSide; 
  */
 export function TableFigures({ price, dividend, net, total, now = null }: Figures) {
   const cell = (width: number, value: ReactNode) => <View style={[styles.cell, { width }]}>{value}</View>;
-  const moved = now !== null && moneyFine(now) !== moneyFine(price);
+  const moved = now !== null && moneyCompact(now) !== moneyCompact(price);
   return (
     <>
       {cell(TABLE_COLUMNS.price, (
         <>
-          <FineMoney signed={false} value={price} />
-          {moved ? <Text accessibilityLabel={`market price now ${moneyFine(now)} a game`} style={styles.now}>now {moneyFine(now)}</Text> : null}
+          <FineMoney precision="compact" signed={false} value={price} />
+          {moved ? <Text accessibilityLabel={`market price now ${moneyCompact(now)} a game`} style={styles.now}>now {moneyCompact(now)}</Text> : null}
         </>
       ))}
-      {cell(TABLE_COLUMNS.dividend, dividend === null ? <Missing /> : <FineMoney signed={false} value={dividend} />)}
-      {cell(TABLE_COLUMNS.net, net === null ? <Missing /> : <FineMoney value={net} />)}
+      {cell(TABLE_COLUMNS.dividend, dividend === null ? <Missing /> : <FineMoney precision="compact" signed={false} value={dividend} />)}
+      {cell(TABLE_COLUMNS.net, net === null ? <Missing /> : <FineMoney precision="compact" value={net} />)}
       {cell(TABLE_COLUMNS.total, <FineMoney value={total} />)}
     </>
   );

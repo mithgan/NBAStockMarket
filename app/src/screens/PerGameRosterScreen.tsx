@@ -33,12 +33,14 @@ import {
   confirmCloseMessage,
   exactMoney,
   money,
+  moneyCompact,
   perGame,
   ROSTER_EXPLAINER,
   rosterReopensLine,
   SHORT_EXPLAINER,
   sideHeading,
   signedMoney,
+  signedMoneyCompact,
   unbrokenName,
 } from '../copy/terms';
 import { keepTogether, practiceProgress } from '../data/chromeView';
@@ -171,12 +173,12 @@ function PositionRow({
     position.playerName,
     view.tag.label,
     short
-      ? `credited ${money(position.lockedGameCost)} a game, set when you shorted him`
-      : `price ${money(position.lockedGameCost)} a game, set when you added him`,
-    priceMoved ? `market price now ${money(marketPrice as number)} a game` : null,
+      ? `credited ${moneyCompact(position.lockedGameCost)} a game, set when you shorted him`
+      : `price ${moneyCompact(position.lockedGameCost)} a game, set when you added him`,
+    priceMoved ? `market price now ${moneyCompact(marketPrice as number)} a game` : null,
     view.games || 'no games yet',
-    view.summary.avgDividend === null ? null : `dividend ${money(view.summary.avgDividend)} a game`,
-    view.summary.avgNet === null ? null : `profit ${signedMoney(view.summary.avgNet)} a game`,
+    view.summary.avgDividend === null ? null : `dividend ${moneyCompact(view.summary.avgDividend)} a game`,
+    view.summary.avgNet === null ? null : `profit ${signedMoneyCompact(view.summary.avgNet)} a game`,
     `total ${signedMoney(position.cumulativePnl)}`,
     short
       ? `${money(position.cumulativeGameCost)} credited and ${money(position.cumulativeDividend)} in his dividends`
