@@ -489,8 +489,9 @@ export function PerGameRosterScreen({
     lastSettledDate: bootstrap.game.lastSettledDate,
     nextGameDate: bootstrap.game.nextGameDate,
   });
-  const openingEve = practice && !seasonOver
-    && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).day === 0 && !started;
+  // The welcome stays until a player of yours has played a game (not just
+  // until a night passes): +1 night with an empty roster must not skip it.
+  const openingEve = practice && !seasonOver && !started;
   const showWelcome = openingEve && !welcomeClosed;
   const hideWelcome = () => {
     welcomeHidden = true;

@@ -76,14 +76,36 @@ function makeRng(seed: number) {
   };
 }
 
+/**
+ * The seed for a season's nights. Each practice season plays its own games
+ * (so "Play another season" is a new season, not a replay); `?mock&seed=42`
+ * pins one for a reproducible walk. The market itself is always the same.
+ */
+function seasonSeed(): number {
+  if (typeof window !== 'undefined') {
+    const pinned = Number(new URLSearchParams(window.location.search).get('seed'));
+    if (Number.isInteger(pinned) && pinned > 0) return pinned;
+    return 1 + Math.floor(Math.random() * 2_147_483_000);
+  }
+  return 20_262_027;
+}
+
 export class MockPerGameApiClient {
   private snapshot: PerGameBootstrap;
-  private rng = makeRng(20_262_027);
+  private rng = makeRng(seasonSeed());
   private sequence: number;
   private cursor: number;
   private positionCounter = 0;
   /** Full nightly history per listed player, for the in-depth profile. */
   private trendsByPlayer: Record<string, TrendPoint[]> = {};
+  /**
+   * What each player's games are really worth a game this season: between
+   * his opening price and last season's dividend, so the market's "over his
+   * price" line is a real (if noisy) signal a player can learn to use.
+   */
+  private trueValueByPlayer = new Map<string, number>();
+  /** Each practice rival's steady lean per night: some climb, some sink. */
+  private rivalLeanByEntry = new Map<string, number>();
 
   /** The sandbox season's opening date, for the sim bar's day counter. */
   seasonStart: string | null;
@@ -102,7 +124,7 @@ export class MockPerGameApiClient {
     this.sequence = this.cursor;
     this.positionCounter = 0;
     this.trendsByPlayer = {};
-    this.rng = makeRng(20_262_027);
+    this.rng = makeRng(seasonSeed());
   }
 
   private openingSnapshot(): PerGameBootstrap {
@@ -162,9 +184,26 @@ export class MockPerGameApiClient {
     const valueRng = makeRng(20_262_028);
     snapshot.market = snapshot.market.map((player) => {
       if (PRACTICE_ROOKIES.has(player.name)) return { ...player, priorSeasonValuePerGame: null };
-      const ratio = 0.72 + valueRng() * 0.56;
+      const ratio = 0.82 + valueRng() * 0.36;
       return { ...player, priorSeasonValuePerGame: Math.round((player.currentGameCost * ratio) / 500) * 500 };
     });
+    // A player's real worth this season sits a little under halfway from his
+    // price to last season's dividend; a rookie's is a coin toss around his
+    // price. Fair on average, so a season is won by picking, not by luck.
+    this.trueValueByPlayer = new Map(snapshot.market.map((player) => {
+      const price = player.currentGameCost;
+      const prior = player.priorSeasonValuePerGame;
+      const worth = prior === null ? price * (0.94 + valueRng() * 0.12) : price + (prior - price) * 0.3;
+      return [player.playerId, worth];
+    }));
+    // Rivals lean from about +$22K to -$14K a night: the best finish a few
+    // million up, the worst a million or two down, so a well-picked roster
+    // can win and a careless one ends mid-table or last.
+    const rivals = snapshot.leaderboard.filter((row) => !row.isCurrentUser);
+    this.rivalLeanByEntry = new Map(rivals.map((row, index) => [
+      row.entryId,
+      rivals.length > 1 ? Math.round(22_000 - (36_000 * index) / (rivals.length - 1)) : 0,
+    ]));
     return snapshot;
   }
 
@@ -331,12 +370,15 @@ export class MockPerGameApiClient {
     const actualByPlayer = new Map<string, number>();
     for (const player of state.market) {
       if (this.rng() > 0.55) continue;
-      const expectedNp = player.currentGameCost / rate;
-      // Most nights land within about half his price either way; now and
-      // then a bad night goes below zero, as the rules say it can.
+      const expectedNp = (this.trueValueByPlayer.get(player.playerId) ?? player.currentGameCost) / rate;
+      // Most nights land within about half his worth either way; now and
+      // then a bad night goes below zero, as the rules say it can. Ordinary
+      // nights sit about 9% above his worth, which pays for the bad nights:
+      // on average a player earns what he is worth (the old draw lost about
+      // 9% of the price every game, so every long lost money).
       const swing = (this.rng() + this.rng() + this.rng() - 1.5) * 0.5;
       const badNight = this.rng() < 0.06;
-      const rawNp = badNight ? -expectedNp * (0.2 + 0.5 * this.rng()) : expectedNp * (1 + swing);
+      const rawNp = badNight ? -expectedNp * (0.2 + 0.5 * this.rng()) : expectedNp * (1.093 + swing);
       const actualNp = Math.round(rawNp * 10) / 10;
       actualByPlayer.set(player.playerId, actualNp);
       const trend = this.trendsByPlayer[player.playerId]
@@ -424,7 +466,11 @@ export class MockPerGameApiClient {
     }
 
     for (const player of state.market) {
-      const drift = 1 + (this.rng() - 0.5) * 0.04;
+      // Prices wander, and slowly follow what the player is really worth, so
+      // a price you locked early can turn out to be a bargain (or not).
+      const worth = this.trueValueByPlayer.get(player.playerId) ?? player.currentGameCost;
+      const pull = Math.max(-1, Math.min(1, (worth - player.currentGameCost) / player.currentGameCost));
+      const drift = 1 + (this.rng() - 0.5) * 0.03 + 0.012 * pull;
       const next = Math.max(25_000, Math.round(player.currentGameCost * drift));
       if (next !== player.currentGameCost) {
         player.currentGameCost = next;
@@ -436,7 +482,7 @@ export class MockPerGameApiClient {
       if (row.isCurrentUser) {
         row.cumulativePnl = state.account.cumulativePnl;
       } else {
-        row.cumulativePnl += Math.round((this.rng() - 0.48) * 800_000);
+        row.cumulativePnl += Math.round((this.rng() - 0.5) * 500_000) + (this.rivalLeanByEntry.get(row.entryId) ?? 0);
       }
     }
     state.leaderboard.sort((left, right) => right.cumulativePnl - left.cumulativePnl);
@@ -451,7 +497,10 @@ export class MockPerGameApiClient {
     // A quarter of nights close with the next slate already locked, so the
     // LOCKED chip and disabled mutation states stay reviewable in the mock.
     // Never two nights in a row: "Roster reopens after <date>" must hold.
-    if (!lockedTonight && this.rng() < 0.25) {
+    // The opening week never locks: a new player's first nights are for
+    // building a roster.
+    const openingWeek = this.seasonStart !== null && date < addDays(this.seasonStart, 7);
+    if (!lockedTonight && !openingWeek && this.rng() < 0.25) {
       state.ruleset.rosterMutationsLocked = true;
       state.ruleset.rosterLockGameDate = state.game.nextGameDate;
     }

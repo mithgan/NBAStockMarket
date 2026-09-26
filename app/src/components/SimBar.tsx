@@ -33,7 +33,7 @@ import { MoreIcon } from './chrome/ChromeIcons';
  */
 const ADVANCE_COOLDOWN_MS = 450;
 
-type Question = 'restart' | 'exit';
+type Question = 'restart' | 'exit' | 'empty-night' | 'empty-week';
 
 /**
  * Run `action` once the dialog that asked for it has closed and its history
@@ -196,6 +196,8 @@ export function PracticeControls({ inline = false, folded = false, onRules }: {
   const advancedRef = useRef(false);
   const restartRef = useRef<View>(null);
   const exitRef = useRef<View>(null);
+  const nightRef = useRef<View>(null);
+  const weekRef = useRef<View>(null);
   const moreRef = useRef<View>(null);
   const askedFromMenuRef = useRef(false);
   const complete = practiceProgress(mockSeasonStart(), bootstrap?.game.lastSettledDate ?? null).complete;
@@ -222,7 +224,10 @@ export function PracticeControls({ inline = false, folded = false, onRules }: {
   const closeQuestion = () => {
     const asked = question;
     setQuestion(null);
-    focusLater(askedFromMenuRef.current ? moreRef : asked === 'exit' ? exitRef : restartRef);
+    focusLater(askedFromMenuRef.current ? moreRef
+      : asked === 'exit' ? exitRef
+        : asked === 'empty-night' ? nightRef
+          : asked === 'empty-week' ? weekRef : restartRef);
   };
   useSheetHistory(question !== null, closeQuestion);
   // The last night is in: the advance buttons have nothing left to play, so
@@ -258,11 +263,19 @@ export function PracticeControls({ inline = false, folded = false, onRules }: {
     shorts: open.filter((position) => position.side === 'short').length,
     score: bootstrap.account.cumulativePnl,
   });
-  const prompt = question ? practiceQuestion(question, stakes) : null;
-  // Start over / Leave practice: close the question first, then act.
+  const prompt = question
+    ? practiceQuestion(question, stakes, bootstrap.game.nextGameDate ? humanDate(bootstrap.game.nextGameDate) : null)
+    : null;
+  // Start over / Leave practice / Play anyway: close the question first, then act.
   const confirmQuestion = () => {
-    afterDialogCloses(question === 'exit' ? leavePractice : restartPractice);
+    const asked = question;
     setQuestion(null);
+    if (asked === 'empty-night' || asked === 'empty-week') {
+      focusLater(asked === 'empty-night' ? nightRef : weekRef);
+      void advance(asked === 'empty-night' ? 'night' : 'week');
+      return;
+    }
+    afterDialogCloses(asked === 'exit' ? leavePractice : restartPractice);
   };
   const dialog = prompt ? (
     <ConfirmDialog
@@ -308,24 +321,28 @@ export function PracticeControls({ inline = false, folded = false, onRules }: {
   const advanceButtons = (
     <>
       <Button
+        ref={nightRef}
         accessibilityLabel={nightDate ? `+1 night: advance one night, to the ${nightDate} games` : '+1 night: advance one night'}
         disabled={advanceBusy || progress.complete}
         focusableWhenDisabled={!progress.complete}
         label={stackLabels ? '+1\nnight' : nightDate ? `+1 night\n${nightDate}` : '+1 night'}
         onPress={() => {
-          void advance('night');
+          if (emptyRoster) askQuestion('empty-night');
+          else void advance('night');
         }}
         style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, emptyRoster && styles.advanceQuiet]}
         textStyle={emptyRoster ? styles.advanceTextQuiet : styles.advanceText}
         variant="secondary"
       />
       <Button
+        ref={weekRef}
         accessibilityLabel="+1 week: advance one week"
         disabled={advanceBusy || progress.complete}
         focusableWhenDisabled={!progress.complete}
         label={stackLabels ? '+1\nweek' : '+1 week'}
         onPress={() => {
-          void advance('week');
+          if (emptyRoster) askQuestion('empty-week');
+          else void advance('week');
         }}
         style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, emptyRoster && styles.advanceQuiet]}
         textStyle={emptyRoster ? styles.advanceTextQuiet : styles.advanceText}

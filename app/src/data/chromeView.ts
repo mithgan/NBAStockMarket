@@ -101,12 +101,31 @@ export function practiceStakes({ progress, players, shorts, score }: {
 }
 
 /** The two season-level questions the practice controls ask before acting. */
-export function practiceQuestion(kind: 'restart' | 'exit', stakes: string): {
+export function practiceQuestion(
+  kind: 'restart' | 'exit' | 'empty-night' | 'empty-week',
+  stakes: string,
+  nextGames: string | null = null,
+): {
   title: string;
   lines: string[];
   confirmLabel: string;
   cancelLabel: string;
 } {
+  // +1 night / +1 week with nobody to play for: asked once, so a new
+  // player's first tap does not spend the opening night on nothing.
+  if (kind === 'empty-night' || kind === 'empty-week') {
+    return {
+      title: kind === 'empty-night' ? 'Play with nobody on your roster?' : 'Play a week with nobody on your roster?',
+      lines: [
+        kind === 'empty-night'
+          ? `Nobody plays for you in the ${nextGames ?? 'next'} games, so your score won't move.`
+          : "Nobody plays for you all week, so your score won't move.",
+        'Add a player from the Market first to start earning.',
+      ],
+      confirmLabel: 'Play anyway',
+      cancelLabel: 'Not yet',
+    };
+  }
   return kind === 'restart'
     ? {
       title: 'Start over?',

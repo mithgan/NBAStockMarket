@@ -6,10 +6,11 @@ import { colors, control, fonts, headingStyle, radius, space, type, weight } fro
 import { Button, headingLevel, Label, Money } from '../../ui/kit';
 
 /**
- * The first thing a new player reads on the opening eve of a practice season:
- * what to do, what +1 night does, that nothing is saved, and where the rules
- * are. Once a player is on the roster it turns into the next step (play the
- * first games). Hidden for the session with ×, and gone once games settle.
+ * The first thing a new player reads in a practice season: what to do, what
+ * +1 night does, that nothing is saved, and where the rules are. Once a
+ * player is on the roster it turns into the next step (play the first
+ * games). Hidden for the session with ×, and gone once one of your players
+ * has played a game.
  */
 export function WelcomeCard({
   hasPlayers,
