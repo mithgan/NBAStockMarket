@@ -20,7 +20,7 @@ import { PerGameResultsScreen as PlaysScreen, scrollResultsToNewest } from './sr
 import { DesignPreviewScreen } from './src/screens/DesignPreviewScreen';
 import { PerGameRosterScreen as PortfolioScreen } from './src/screens/PerGameRosterScreen';
 import { humanDateWithYear, spoken } from './src/copy/terms';
-import { visuallyHidden } from './src/ui/kit';
+import { Button, visuallyHidden } from './src/ui/kit';
 import { registerSettingsOpener, registerTabOpener } from './src/state/uiActions';
 import { sheetIsOpen } from './src/web/appHistory';
 import { consumePracticeRestarted, setPracticeProgress } from './src/web/practiceSession';
@@ -100,6 +100,8 @@ function VariantTexture() {
 
 function CenteredState({
   title,
+  heading,
+  brand = false,
   copy,
   details,
   actionLabel,
@@ -107,9 +109,14 @@ function CenteredState({
   onAction,
   busy = false,
 }: {
+  /** What this state is (the page title); shown unless a `heading` is given. */
   title: string;
+  /** A friendlier visible heading for players, e.g. on the config screen. */
+  heading?: string;
+  /** Lead with the databallr mark, for a screen a player lands on. */
+  brand?: boolean;
   copy: string;
-  /** Technical detail for developers, shown small under the action. */
+  /** Technical detail for developers, behind a small "Details" toggle. */
   details?: string;
   actionLabel?: string;
   actionDisabled?: boolean;
@@ -119,27 +126,46 @@ function CenteredState({
   // A spinner is the only moving element in the app, so it is the one thing the
   // reduced-motion setting has to silence.
   const reducedMotion = useReducedMotion();
+  const [showDetails, setShowDetails] = useState(false);
+  useEffect(() => {
+    if (typeof document !== 'undefined') document.title = heading ?? title;
+  }, [heading, title]);
   return (
     <View accessibilityRole="alert" style={styles.centeredState}>
+      {brand ? (
+        <View style={styles.stateBrand}>
+          <View style={styles.mark}>
+            <Text maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text>
+          </View>
+          <Text maxFontSizeMultiplier={1.3} style={styles.brand}>databallr</Text>
+          <View style={styles.brandDivider} />
+          <Text maxFontSizeMultiplier={1.3} style={styles.product}>STOCK MARKET</Text>
+        </View>
+      ) : null}
       {busy ? (
         reducedMotion
           ? <Text style={styles.stateBusy}>WORKING…</Text>
           : <ActivityIndicator color={colors.gold} size="large" />
       ) : null}
-      <Text accessibilityRole="header" style={styles.stateTitle}>{title}</Text>
+      <Text accessibilityRole="header" style={styles.stateTitle}>{heading ?? title}</Text>
       <Text style={styles.stateCopy}>{copy}</Text>
       {actionLabel && onAction ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: actionDisabled }}
-          disabled={actionDisabled}
-          onPress={onAction}
-          style={({ pressed }) => [styles.stateButton, actionDisabled && styles.disabled, pressed && styles.pressed]}
-        >
-          <Text style={styles.stateButtonText}>{actionLabel}</Text>
-        </Pressable>
+        // The app's own button, so this screen looks like the rest of it.
+        <View style={styles.stateAction}>
+          <Button disabled={actionDisabled} label={actionLabel} onPress={onAction} variant="primary" />
+        </View>
       ) : null}
-      {details ? <Text style={styles.stateDetails}>{details}</Text> : null}
+      {details ? (
+        <View style={styles.stateDetailsBox}>
+          <Button
+            accessibilityLabel={showDetails ? 'Hide details for developers' : 'Show details for developers'}
+            label={showDetails ? 'Hide details' : 'Details for developers'}
+            onPress={() => setShowDetails((open) => !open)}
+            variant="quiet"
+          />
+          {showDetails ? <Text style={styles.stateDetails}>{details}</Text> : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -684,11 +710,13 @@ export default function App() {
         ) : (
           <CenteredState
             actionLabel="Back to practice"
-            copy="The live market isn't set up on this device yet. Practice works anywhere: it plays a generated season in this browser."
+            brand
+            copy="The live market (real NBA games and a saved account) isn't set up on this device yet. Practice works anywhere: it plays a generated season in this browser."
             details={`For developers: ${configResult.error} Set the public API URL, API prefix, and Supabase auth configuration before starting Expo.`}
             onAction={() => {
               window.location.search = '?mock';
             }}
+            heading="The live market isn't available here yet"
             title="App configuration missing"
           />
         )}
@@ -837,6 +865,19 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     fontWeight: '800',
   },
+  stateAction: {
+    marginTop: space.lg,
+  },
+  stateBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginBottom: space.xl,
+  },
+  stateDetailsBox: {
+    marginTop: space.lg,
+    alignItems: 'center',
+  },
   stateDetails: {
     maxWidth: 420,
     marginTop: space.lg,
@@ -904,20 +945,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'center',
     marginTop: space.sm,
-  },
-  stateButton: {
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.gold,
-    borderRadius: radius.md,
-    paddingHorizontal: space.lg,
-    marginTop: space.lg,
-  },
-  stateButtonText: {
-    color: colors.background,
-    fontSize: type.label,
-    fontWeight: '900',
   },
   disabled: {
     opacity: 0.45,
