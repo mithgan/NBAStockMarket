@@ -7,6 +7,7 @@ import type { SeasonSummary } from '../../data/perGameMetrics';
 import { finalSummary, formatAt, tipTag, tipWords, welcomeDetails, welcomeSteps, type BreakdownPart, type PartPrecision, type TipVerdict } from '../../data/rosterView';
 import { colors, control, fonts, headingStyle, radius, space, type, weight } from '../../theme';
 import { Button, headingLevel, Label, tapsSettling, visuallyHidden } from '../../ui/kit';
+import { SEASON_RESULT_HEADING_ID } from '../../ui/domMarkers';
 import { FineMoney } from './FineMoney';
 import { ScoreParts } from './ScoreHeader';
 
@@ -247,7 +248,7 @@ export function SeasonCompleteCard({
   return (
     <View style={[styles.band, styles.finalBand]}>
       <Label tone="gold">Season complete</Label>
-      <Text accessibilityRole="header" {...headingLevel(2)} style={styles.title}>Your final result</Text>
+      <Text accessibilityRole="header" {...headingLevel(2)} nativeID={SEASON_RESULT_HEADING_ID} style={styles.title}>Your final result</Text>
       {/* The one sentence is text screen readers reach in reading mode, and
           the drawn figures are hidden from them, as in the score block
           (walk 7 T3-10): never "+$4.95M", "number 1 of 5" as loose pieces. */}

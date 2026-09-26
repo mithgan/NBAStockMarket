@@ -57,7 +57,7 @@ import { useSheetHistory, useSheetShown } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
 import { measuredFloatTop, measuredSheetTop } from './chrome/sheetTop';
-import { PRACTICE_HINT_ID, PracticeControls, QueuedCancelButton, usePracticeHint, usePracticeRulesContext, useReaderSpacing, useRecentAdvances, useSpacingFold } from './SimBar';
+import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, usePracticeRulesContext, useReaderSpacing, useRecentAdvances, useSpacingFold } from './SimBar';
 import { unlessSettling } from '../web/tapSettle';
 
 /**
@@ -121,6 +121,11 @@ export function PerGameStatusStrip() {
   // T3-08); the brand bar then stays, and Settings with it.
   const spacingFolded = useSpacingFold();
   const readerSpacing = useReaderSpacing();
+  // The tallest the facts have been at this window width (phone rows): the
+  // block keeps it, so a week landing never moves the screen under it
+  // ("Season opens Tue, Oct 21" took two lines at 320px, "Next Tue, Oct 28"
+  // one, and everything below jumped up 8px; walk 10 T4-11).
+  const [factsFloor, setFactsFloor] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   if (!bootstrap) return null;
 
   const practice = isMockActive();
@@ -284,6 +289,10 @@ export function PerGameStatusStrip() {
   // line: the sentence Roster and Market use (terms.rosterReopensLine) plus
   // why moves pause. Wide rows lead it with the ROSTER LOCKED tag.
   const lockTag = arrangement === 'wide' && !folded;
+  // Nobody held: no "your players still play" (walk 10 T2-13). The line
+  // says what to do instead, and the hint beside it, which said the same,
+  // gives way to it.
+  const lockSaysNobody = locked && lockTag && emptyNow && !progress?.complete;
   // A portrait phone's practice row carries the lock beside +1 week, so a
   // week landing on a lock adds no line here (walk 9 T4-08).
   const lockInControls = practice && !layout.wide && !folded && width >= PHONE_SLOT_MIN_WIDTH && !progress?.complete;
@@ -307,7 +316,7 @@ export function PerGameStatusStrip() {
         // Spoken whole everywhere; beside the padlock (phones) the line shows
         // only when moves reopen, so a locked night keeps the frame to one
         // line (the padlock and the Rules say why moves pause).
-        accessibilityLabel={lockLine(lockDate)}
+        accessibilityLabel={lockLine(lockDate, emptyNow)}
         maxFontSizeMultiplier={1.5}
         style={[
           styles.fact,
@@ -315,7 +324,9 @@ export function PerGameStatusStrip() {
           (tight || (!lockTag && !layout.largeText)) && styles.tight,
         ]}
       >
-        {lockTag ? lockLine(lockDate).replace(LOCK_REASON, keepTogether(LOCK_REASON)) : rosterReopensLine(lockDate)}
+        {lockTag
+          ? (lockSaysNobody ? lockLine(lockDate, true) : lockLine(lockDate).replace(LOCK_REASON, keepTogether(LOCK_REASON)))
+          : rosterReopensLine(lockDate)}
       </Text>
     </View>
   ) : null;
@@ -367,14 +378,11 @@ export function PerGameStatusStrip() {
         {night}
         {upcoming}
         {lock}
-        {practiceHint && (layout.merged || foldedFacts) ? (
+        {practiceHint && (layout.merged || foldedFacts) && !lockSaysNobody ? (
           <Text key="hint" maxFontSizeMultiplier={1.5} nativeID={PRACTICE_HINT_ID} style={[styles.fact, styles.factLabel]}>
             {layout.merged ? practiceHint : practiceHintShort}
           </Text>
         ) : null}
-        {/* Presses waiting behind the one playing can be cancelled here, at
-            the end of the facts, so the controls never move (walk 8 T4-N1). */}
-        {practice && layout.merged && !folded ? <QueuedCancelButton /> : null}
       </View>
     );
   } else if (arrangement === 'pair') {
@@ -453,6 +461,7 @@ export function PerGameStatusStrip() {
   // Folded below ~340px the row takes two lines: the day beside Settings,
   // then +1 night, +1 week and More edge to edge.
   const foldTwoLines = folded && !tiny && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
+  const holdFacts = practice && !layout.wide && !folded && !reconciliationRequired;
 
   return (
     <View
@@ -478,8 +487,13 @@ export function PerGameStatusStrip() {
         <Text style={visuallyHidden}>{summary}</Text>
         <View
           aria-hidden
+          onLayout={holdFacts ? (event) => {
+            const next = Math.round(event.nativeEvent.layout.height);
+            setFactsFloor((current) => (current.width === width && current.height >= next ? current : { width, height: next }));
+          } : undefined}
           style={[
             styles.facts,
+            holdFacts && factsFloor.width === width && factsFloor.height > 0 && { minHeight: factsFloor.height },
             practice ? (layout.compact ? styles.factsCompact : styles.factsPractice) : styles.factsLive,
             // A locked night adds a line; the lines sit flush so the frame
             // keeps its height budget.

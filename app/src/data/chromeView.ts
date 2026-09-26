@@ -733,9 +733,19 @@ export function spokenLabel(label: string): string {
  */
 export const LOCK_REASON = 'your players still play';
 
-/** "Moves reopen after Oct 30 · your players still play". */
-export function lockLine(lockGameDate: string | null | undefined): string {
-  return `${rosterReopensLine(lockGameDate)} · ${LOCK_REASON}`;
+/**
+ * With nobody held there are no players to "still play": the lock says what
+ * to do instead (walk 10 T2-13, where it argued with "Nobody on your roster").
+ */
+export const LOCK_NOBODY_REASON = 'play that night, then add players';
+
+/**
+ * "Moves reopen after Oct 30 · your players still play"; with nobody held
+ * (`nobodyHeld`), "Moves reopen after Oct 30 · play that night, then add
+ * players".
+ */
+export function lockLine(lockGameDate: string | null | undefined, nobodyHeld = false): string {
+  return `${rosterReopensLine(lockGameDate)} · ${nobodyHeld ? LOCK_NOBODY_REASON : LOCK_REASON}`;
 }
 
 /**
@@ -1046,6 +1056,64 @@ export function queuedCancelHint(count: number): string {
 }
 
 /**
+ * How long the queue must still have to run for "Press Cancel…" to be worth
+ * saying: a screen reader needs a few seconds for the line, and a queue that
+ * empties sooner made the instruction arrive after its Cancel had nothing
+ * left to drop (walk 10 T3-09).
+ */
+export const CANCEL_HINT_MIN_MS = 3000;
+
+/**
+ * Whether the queued line adds "Press Cancel…": only when the presses queued
+ * (`count`) should take CANCEL_HINT_MIN_MS or more at the last step's pace
+ * (`stepMs`, null before any step has been timed).
+ */
+export function cancelHintFits(count: number, stepMs: number | null): boolean {
+  return stepMs !== null && count > 0 && count * stepMs >= CANCEL_HINT_MIN_MS;
+}
+
+/**
+ * Whether one more press fits behind the ones queued: presses queue as far as
+ * the season's last day (a week covers seven days, a night at least one), so
+ * a steady run of +1 week reaches the end rather than stopping at five
+ * without a word (walk 10 T4-02, T4-N1). `daysLeft`: the season's days after
+ * the step playing now.
+ */
+export function queueHasRoom(queued: readonly QueuedStep[], daysLeft: number): boolean {
+  const covered = queued.reduce((days, step) => days + (step === 'week' ? 7 : 1), 0);
+  return covered < daysLeft;
+}
+
+/** Said once when a press finds the rest of the season already queued. */
+export function queueFullLine(seasonEnd: string | null | undefined): string {
+  return `The rest of the season is already queued${seasonEnd ? `, to the ${humanDate(seasonEnd)} games` : ''}. Cancel drops it.`;
+}
+
+/**
+ * +1 night's name, its visible words first so a voice command matches what
+ * the button shows (walk 10 T3-05): "+1 night Oct 21: play the Oct 21
+ * games"; "+1 night: play the Oct 21 games" where the label has no room for
+ * the date.
+ */
+export function nightButtonName(nightDate: string | null, showsDate: boolean): string {
+  if (!nightDate) return "+1 night: play the next night's games";
+  return `+1 night${showsDate ? ` ${nightDate}` : ''}: play the ${nightDate} games`;
+}
+
+/**
+ * The frame's way on at season end. On the Roster, where the result card
+ * carries the gold "Play another season", the frame's is a quiet "New
+ * season", so the screen shows one primary action, not two identical ones
+ * (walk 10 T4-03); on other screens it is the gold "Play another season".
+ * Both names keep "restart practice" for anyone looking.
+ */
+export function seasonEndControl(cardOnScreen: boolean): { label: string; name: string; primary: boolean } {
+  return cardOnScreen
+    ? { label: 'New season', name: 'New season: restart practice', primary: false }
+    : { label: PRACTICE_OVER_TEXT, name: `${PRACTICE_OVER_TEXT}: restart practice`, primary: true };
+}
+
+/**
  * A cancel that lands while a step still plays is said with that step's
  * result, at its end: "Oct 21–27 games: your score rose $454K. Queued week
  * cancelled." (walk 9 T1-15: its own notice was replaced 80 ms later).
@@ -1093,9 +1161,6 @@ export function advanceTap(
   }
   return { plays: 1, state: { lastAt: now, held: false, steady: gap < ADVANCE_RHYTHM_MS } };
 }
-
-/** At most this many presses wait behind the one playing (a steady run of presses still counts each). */
-export const MAX_QUEUED_PRESSES = 5;
 
 /**
  * A press that arrives this soon after the last step landed continues that
@@ -1147,6 +1212,18 @@ export function asksBeforeEmptyNight(emptyRoster: boolean, playedWithoutRoster: 
   // walk 9 T4-03). +1 week still asks, and offers the night instead.
   if (lockedNight) return false;
   return emptyRoster && !playedWithoutRoster;
+}
+
+/**
+ * Whether +1 week asks first. With nobody held and the next night locked it
+ * always asks, with "+1 night instead" first, even after the once-a-season
+ * "Play anyway": nothing can be added before those games, and a week played
+ * straight through cost six nights that could have had a roster (walk 10
+ * T2-14). Otherwise as +1 night asks.
+ */
+export function asksBeforeEmptyWeek(emptyRoster: boolean, playedWithoutRoster: boolean, lockedNight = false): boolean {
+  if (lockedNight && emptyRoster) return true;
+  return asksBeforeEmptyNight(emptyRoster, playedWithoutRoster);
 }
 
 /**

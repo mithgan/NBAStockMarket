@@ -18,3 +18,10 @@ export const rowMarker: DomMarker =
 /** Player cards that lift toward the cursor: `[data-card="player"]`. */
 export const cardMarker: DomMarker =
   Platform.OS === 'web' ? { dataSet: { card: 'player' } } : {};
+
+/**
+ * The Roster's season result heading ("Your final result"): the practice
+ * controls bring it into view and focus it when a season ends by the
+ * player's own press (walk 10 T2-02), by this id, not by its words.
+ */
+export const SEASON_RESULT_HEADING_ID = 'season-result-heading';

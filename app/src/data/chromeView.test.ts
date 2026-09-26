@@ -589,7 +589,7 @@ test('Play to the end asks what it plays and what stays, in days (walk 6 T2-N1, 
 });
 
 test('quick presses form one run, with or without a delay; a queued button counts its presses (walk 7 T4-03, T2-05, T2-06)', async () => {
-  const { continuesRun, MAX_QUEUED_PRESSES, playToEndQueuedLine, queuedLabel, queuedLine, RUN_CONTINUE_MS } = await import('./chromeView');
+  const { continuesRun, playToEndQueuedLine, queuedLabel, queuedLine, RUN_CONTINUE_MS } = await import('./chromeView');
   // A press queued behind a playing step always continues its run.
   assert.equal(continuesRun(true, null), true);
   // A press soon after the last step landed continues it too (no network delay).
@@ -605,7 +605,6 @@ test('quick presses form one run, with or without a delay; a queued button count
   assert.equal(queuedLabel('week', false, 2), '+1 week\n×2 queued');
   assert.equal(queuedLabel('night', true, 3), '×3\nqueued');
   assert.equal(queuedLabel('week', false, 1), '+1 week\nqueued');
-  assert.ok(MAX_QUEUED_PRESSES >= 2);
   // Play to the end confirmed mid-night waits its turn and says so (walk 7 T2-04).
   assert.equal(playToEndQueuedLine('Oct 21'), 'Play to the end queued. It plays once Oct 21 is in.');
   assert.equal(playToEndQueuedLine(null), 'Play to the end queued. It plays in a moment.');
@@ -775,4 +774,36 @@ test('walk 9: Play to the end with only shorts says nobody plays after they end,
   assert.equal(playToEndOffersMarket(0, false), true);
   assert.equal(playToEndOffersMarket(0, true), false);
   assert.equal(playToEndOffersMarket(2, false), false);
+});
+
+test('walk 10: the queue reaches the season end, the Cancel hint only when there is time, one way on at season end', async () => {
+  const { asksBeforeEmptyWeek, cancelHintFits, lockLine, nightButtonName, queueFullLine, queueHasRoom, seasonEndControl } = await import('./chromeView');
+  // T4-02: presses queue to the season's last day, not five and silence.
+  const weeks = (n: number) => Array.from({ length: n }, () => 'week' as const);
+  assert.equal(queueHasRoom(weeks(5), 160), true);
+  assert.equal(queueHasRoom(weeks(22), 160), true);
+  assert.equal(queueHasRoom(weeks(23), 160), false);
+  assert.equal(queueHasRoom([], 0), false);
+  assert.equal(queueHasRoom(['night', 'night'], 3), true);
+  assert.equal(queueFullLine('2026-04-12'), 'The rest of the season is already queued, to the Apr 12 games. Cancel drops it.');
+  // T3-09: "Press Cancel" only when the queue should last a few seconds.
+  assert.equal(cancelHintFits(1, null), false);
+  assert.equal(cancelHintFits(1, 700), false);
+  assert.equal(cancelHintFits(5, 700), true);
+  assert.equal(cancelHintFits(0, 5000), false);
+  // T2-13: nobody held, so no "your players still play".
+  assert.equal(lockLine('2025-10-28', true), 'Moves reopen after Oct 28 · play that night, then add players');
+  assert.equal(lockLine('2025-10-28'), 'Moves reopen after Oct 28 · your players still play');
+  // T2-14: +1 week on a locked night with nobody held always asks, even after Play anyway.
+  assert.equal(asksBeforeEmptyWeek(true, true, true), true);
+  assert.equal(asksBeforeEmptyWeek(true, true, false), false);
+  assert.equal(asksBeforeEmptyWeek(true, false, false), true);
+  assert.equal(asksBeforeEmptyWeek(false, false, true), false);
+  // T3-05: the name starts with the visible words.
+  assert.equal(nightButtonName('Oct 21', true), '+1 night Oct 21: play the Oct 21 games');
+  assert.equal(nightButtonName('Oct 21', false), '+1 night: play the Oct 21 games');
+  assert.equal(nightButtonName(null, false), "+1 night: play the next night's games");
+  // T4-03: one primary way on where the result card shows it.
+  assert.deepEqual(seasonEndControl(true), { label: 'New season', name: 'New season: restart practice', primary: false });
+  assert.deepEqual(seasonEndControl(false), { label: 'Play another season', name: 'Play another season: restart practice', primary: true });
 });
