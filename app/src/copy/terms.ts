@@ -165,7 +165,9 @@ export function moneyFine(amount: number): string {
   if (abs < 1_000) return `${sign}$${abs}`;
   if (abs < 9_995) return `${sign}$${trimDecimals((abs / 1_000).toFixed(2))}K`;
   if (abs < 999_950) return `${sign}$${trimDecimals((abs / 1_000).toFixed(1))}K`;
-  return `${sign}$${trimDecimals((abs / 1_000_000).toFixed(2))}M`;
+  // Millions keep two decimals, so "+$1.60M" sits beside "+$1.61M" as one
+  // precision, not "+$1.6M" that looks $10K away (walk 7 T4-14).
+  return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
 }
 
 /**
@@ -180,7 +182,9 @@ export function moneyCompact(amount: number): string {
   const abs = Math.abs(rounded);
   if (abs < 1_000) return `${sign}$${abs}`;
   if (abs < 999_950) return `${sign}$${trimDecimals((abs / 1_000).toFixed(1))}K`;
-  return `${sign}$${trimDecimals((abs / 1_000_000).toFixed(2))}M`;
+  // Millions keep two decimals, so "+$1.60M" sits beside "+$1.61M" as one
+  // precision, not "+$1.6M" that looks $10K away (walk 7 T4-14).
+  return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
 }
 
 /** Signed `moneyCompact`: "+$6.5K", "-$950", and "$0" for zero. */

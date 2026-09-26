@@ -57,7 +57,7 @@ test('game dates read as people say them, not as ISO strings', () => {
 test('prices are per game in words, never /GM or spelled-out dollars', () => {
   assert.equal(perGame(237_500), '$237.5K a game');
   assert.equal(perGameShort(105_000), '$105K/game');
-  assert.equal(money(1_300_000), '$1.3M');
+  assert.equal(money(1_300_000), '$1.30M');
   assert.equal(signedMoney(-66_500), '-$66.5K');
   assert.equal(signedMoney(0), '$0');
   assert.equal(signedMoney(-0.4), '$0');
@@ -80,8 +80,8 @@ test('fine money keeps figures that sit side by side honest', () => {
   assert.equal(moneyFine(137_500), '$137.5K');
   assert.equal(moneyFine(288_000), '$288K');
   assert.equal(moneyFine(4_850_000), '$4.85M');
-  assert.equal(moneyFine(5_200_000), '$5.2M');
-  assert.equal(moneyFine(999_960), '$1M');
+  assert.equal(moneyFine(5_200_000), '$5.20M');
+  assert.equal(moneyFine(999_960), '$1.00M');
   assert.equal(moneyFine(-80_250), '-$80.3K');
   assert.equal(signedMoneyFine(150_500), '+$150.5K');
   assert.equal(signedMoneyFine(-3_500), '-$3.5K');
