@@ -23,26 +23,37 @@ import {
   rosterReopensLine,
 } from '../../copy/terms';
 import { practiceProgress } from '../../data/chromeView';
-import { actionName, isSeasonOver } from '../../data/marketView';
+import { actionName, fullNote, isSeasonOver } from '../../data/marketView';
 import { shortEndsNext } from '../../data/rosterView';
 import { usePerGame } from '../../state/PerGameContext';
 import { buildPerGameMarketRows } from '../../state/perGameState';
+import { openTab, requestRosterPick } from '../../state/uiActions';
 import { colors, control, fonts, space, type, weight } from '../../theme';
 import { Button, ConfirmStrip, useCooldown } from '../../ui/kit';
+import { sheetIsOpen } from '../../web/appHistory';
 
-export function ProfileActionBar({ player, position, side }: {
+export function ProfileActionBar({ player, position, side, onLeave }: {
   player: PerGameMarketPlayer;
   /** The position you hold on him now, on either side. */
   position: PerGamePosition | null;
   /** The side the profile reads from: his position's side, else the market tab. */
   side: PerGamePositionSide;
+  /** Closes the profile (for "Choose who to drop", which leaves for the Roster). */
+  onLeave?: () => void;
 }) {
-  const { bootstrap, closePosition, openPosition, pendingActions } = usePerGame();
+  const { bootstrap, closePosition, notify, openPosition, pendingActions } = usePerGame();
   // A brief tick after a move lands ("Added ✓"), in the button's place.
   const [done, showDone] = useCooldown();
   const [doneWords, setDoneWords] = useState({ tick: '', note: '' });
+  // Keyboard focus follows the move: onto the tick while it shows, then onto
+  // the button that replaces it (Drop after an Add, Add after a Drop), so it
+  // never falls out of the sheet to the page (walk-2 T2-24, in the profile).
+  const doneRef = useRef<View>(null);
+  const openRef = useRef<View>(null);
+  const follow = useRef(false);
   const finish = (tick: string, note: string) => {
     setDoneWords({ tick, note });
+    follow.current = true;
     showDone();
   };
   // Drop and Close ask once more in the kit's ConfirmStrip. Keep hands focus
@@ -62,11 +73,34 @@ export function ProfileActionBar({ player, position, side }: {
   useEffect(() => {
     setConfirming(false);
   }, [position?.positionId]);
+  useEffect(() => {
+    if (!follow.current || typeof document === 'undefined') return;
+    // Only when focus was lost with the button (not if you moved on).
+    const active = document.activeElement;
+    const lost = !active || active === document.body || !active.isConnected
+      || active === (doneRef.current as unknown as Element | null);
+    if (done) {
+      if (lost) focusView(doneRef.current);
+      return;
+    }
+    follow.current = false;
+    if (lost) focusView(closeRef.current ?? openRef.current);
+  }, [done]);
   const row = useMemo(
     () => (bootstrap && !position
       ? buildPerGameMarketRows(bootstrap, side).find((entry) => entry.player.playerId === player.playerId) ?? null
       : null),
     [bootstrap, player.playerId, position, side],
+  );
+  // The other side, offered quietly beside the main move (walk-2 T2-23), so
+  // you can short a player you opened from the roster side, or the reverse,
+  // without closing him, switching the market's side and reopening him.
+  const otherSide: PerGamePositionSide = side === 'long' ? 'short' : 'long';
+  const otherRow = useMemo(
+    () => (bootstrap && !position
+      ? buildPerGameMarketRows(bootstrap, otherSide).find((entry) => entry.player.playerId === player.playerId) ?? null
+      : null),
+    [bootstrap, otherSide, player.playerId, position],
   );
   if (!bootstrap) return null;
 
@@ -85,7 +119,7 @@ export function ProfileActionBar({ player, position, side }: {
   if (done) {
     return (
       <Bar note={doneWords.note}>
-        <View style={styles.done}>
+        <View ref={doneRef} style={styles.done} {...({ tabIndex: -1 } as object)}>
           <Text maxFontSizeMultiplier={1.3} style={styles.doneText}>{doneWords.tick}</Text>
         </View>
       </Bar>
@@ -135,6 +169,8 @@ export function ProfileActionBar({ player, position, side }: {
           disabled={disabled}
           focusableWhenDisabled
           label={pending ? 'Wait' : rosterLocked ? 'Locked' : closeVerb(held)}
+          // A tap on LOCKED says why, as well as the line beside it.
+          onDisabledPress={rosterLocked ? () => notify(lockLine) : undefined}
           onPress={() => {
             if (!disabled) setConfirming(true);
           }}
@@ -148,6 +184,55 @@ export function ProfileActionBar({ player, position, side }: {
   if (!row) return null;
   if (row.blockedByOpposingPosition) return <Bar note={row.unavailableReason ?? ''} />;
 
+  const open = (which: PerGamePositionSide) => {
+    void openPosition({
+      playerId: player.playerId,
+      playerName: player.name,
+      side: which,
+      expectedQuoteVersion: player.quoteVersion,
+    }).then((ok) => {
+      if (!ok) return;
+      if (which === 'long') finish('Added ✓', `${player.name} is on your roster.`);
+      else finish('Shorted ✓', `You're shorting ${player.name}.`);
+    });
+  };
+  // While its own move is pending it stays, dimmed, so focus stays on it.
+  const otherPending = pendingActions.has(`position:${otherSide}:${player.playerId}`);
+  const otherBlocked = otherPending || pending || locked;
+  const instead = otherRow && !rosterLocked && (otherPending || (otherRow.canSubmit && !otherRow.isFull)) ? (
+    <Button
+      accessibilityHint={`${actionName('open', otherSide, player.name, player.currentGameCost)}${fee > 0 ? ` · ${exactMoney(fee)} fee` : ''}`}
+      disabled={otherBlocked}
+      focusableWhenDisabled
+      label={otherPending ? 'Wait' : `${openVerb(otherSide)} instead`}
+      onPress={() => {
+        if (!otherBlocked) open(otherSide);
+      }}
+      style={styles.instead}
+      variant="quiet"
+    />
+  ) : null;
+
+  // Full: say so in full, and offer the way forward instead of a dead FULL.
+  if (row.isFull && /full/i.test(row.unavailableReason ?? '') && !rosterLocked && !pending && !locked) {
+    const limit = side === 'long' ? bootstrap.account.longSlots.limit : bootstrap.account.shortSlots.limit;
+    const { message, action } = fullNote(side, player.name, limit);
+    const why = side === 'long'
+      ? `Pick a player to drop to make room for ${player.name}.`
+      : `Pick a short to close to make room for ${player.name}.`;
+    return (
+      <Bar below={instead} note={message} warn>
+        <Button
+          accessibilityLabel={`${action} to ${side === 'long' ? 'add' : 'short'} ${player.name}`}
+          label={action}
+          onPress={() => leaveForRoster(why, side, onLeave, notify)}
+          style={styles.action}
+          variant="secondary"
+        />
+      </Bar>
+    );
+  }
+
   const disabled = !row.canSubmit || pending || locked || rosterLocked;
   const reason = rosterLocked ? lockLine : row.unavailableReason;
   const noun = side === 'long' ? 'price' : 'credit';
@@ -156,25 +241,17 @@ export function ProfileActionBar({ player, position, side }: {
     ?? `Locks his ${noun} at ${perGame(player.currentGameCost)}${fee > 0 ? ` · ${exactMoney(fee)} fee` : ''}`;
   const word = pending ? 'Wait' : rosterLocked ? 'Locked' : row.isFull ? 'Full' : openVerb(side);
   return (
-    <Bar note={note} warn={reason !== null}>
+    <Bar below={instead} note={note} warn={reason !== null}>
       <Button
+        ref={openRef}
         accessibilityHint={reason ?? undefined}
         accessibilityLabel={actionName('open', side, player.name, player.currentGameCost)}
         disabled={disabled}
         focusableWhenDisabled
         label={word}
+        onDisabledPress={reason ? () => notify(reason) : undefined}
         onPress={() => {
-          if (disabled) return;
-          void openPosition({
-            playerId: player.playerId,
-            playerName: player.name,
-            side,
-            expectedQuoteVersion: player.quoteVersion,
-          }).then((ok) => {
-            if (!ok) return;
-            if (side === 'long') finish('Added ✓', `${player.name} is on your roster.`);
-            else finish('Shorted ✓', `You're shorting ${player.name}.`);
-          });
+          if (!disabled) open(side);
         }}
         style={styles.action}
         variant="primary"
@@ -183,11 +260,62 @@ export function ProfileActionBar({ player, position, side }: {
   );
 }
 
-/** One line of context on the left, the action on the right. */
-function Bar({ note, warn = false, children }: { note: string; warn?: boolean; children?: ReactNode }) {
+function focusView(node: unknown) {
+  (node as { focus?: (options?: object) => void } | null)?.focus?.({ preventScroll: true });
+}
+
+/**
+ * "Choose who to drop": the Roster says why when it opens, the profile closes,
+ * and the Roster tab opens once the sheet has stepped Back out of its history
+ * entry, so one Back from the Roster returns to the Market. Opened over the
+ * Roster itself, the list is already behind the sheet: close it and say why.
+ */
+function leaveForRoster(
+  why: string,
+  side: 'long' | 'short',
+  close: (() => void) | undefined,
+  say: (text: string) => void,
+) {
+  const web = typeof window !== 'undefined';
+  const onRoster = web && (window.history?.state as { tab?: string } | null)?.tab === 'portfolio';
+  if (onRoster) {
+    close?.();
+    say(why);
+    return;
+  }
+  // The Roster brings the matching list forward: "Your roster" or "Your shorts".
+  requestRosterPick(why, side);
+  if (!close || !web || !sheetIsOpen()) {
+    close?.();
+    openTab('portfolio');
+    return;
+  }
+  let gone = false;
+  const go = () => {
+    if (gone) return;
+    gone = true;
+    window.removeEventListener('popstate', go);
+    openTab('portfolio');
+  };
+  window.addEventListener('popstate', go);
+  close();
+  // No Back step came (the sheet's entry was not on top): go anyway.
+  setTimeout(go, 400);
+}
+
+/** One line of context on the left (and a quieter move under it), the action on the right. */
+function Bar({ note, warn = false, below, children }: {
+  note: string;
+  warn?: boolean;
+  below?: ReactNode;
+  children?: ReactNode;
+}) {
   return (
     <View style={styles.bar}>
-      <Text maxFontSizeMultiplier={1.4} style={[styles.note, warn && styles.noteWarn]}>{note}</Text>
+      <View style={styles.noteColumn}>
+        <Text maxFontSizeMultiplier={1.4} style={[styles.note, warn && styles.noteWarn]}>{note}</Text>
+        {below}
+      </View>
       {children}
     </View>
   );
@@ -207,10 +335,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  note: {
+  noteColumn: {
     flexGrow: 1,
     flexShrink: 1,
     flexBasis: 160,
+    alignItems: 'flex-start',
+  },
+  note: {
     color: colors.muted,
     fontSize: type.body,
     lineHeight: 18,
@@ -224,6 +355,10 @@ const styles = StyleSheet.create({
   },
   action: {
     minWidth: 88,
+  },
+  instead: {
+    // A quiet text button: its words line up with the note above.
+    paddingHorizontal: 0,
   },
   done: {
     minHeight: control.height,

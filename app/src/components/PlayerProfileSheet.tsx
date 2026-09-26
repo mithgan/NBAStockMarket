@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Modal, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,6 +21,38 @@ const PANEL_WIDTH = 600;
 const SHEET_MAX_WIDTH = 640;
 /** Dimmed screen left above the phone sheet: a real target for closing by tap. */
 const SHEET_TOP_GAP = 44;
+
+/**
+ * Keyboard focus goes back to whatever opened the profile once it closes
+ * (walk-2 T2-08, T3-06). Closing steps Back out of the sheet's history entry,
+ * and the frame answers that Back by focusing the current tab; this runs
+ * after it and returns focus to the row you opened him from. It steps in only
+ * when focus sits on a tab or nowhere, and only while the opener is still on
+ * the page (not after "Choose who to drop" has left for the Roster).
+ */
+function useReturnFocus(open: boolean) {
+  useEffect(() => {
+    if (!open || typeof document === 'undefined' || typeof window === 'undefined') return undefined;
+    const active = document.activeElement;
+    const opener = active instanceof HTMLElement && active !== document.body ? active : null;
+    if (!opener) return undefined;
+    return () => {
+      let settled = false;
+      const restore = () => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('popstate', afterBack);
+        const now = document.activeElement;
+        const stray = !now || now === document.body || !now.isConnected || now.getAttribute('role') === 'tab';
+        if (stray && opener.isConnected) opener.focus({ preventScroll: true });
+      };
+      // The frame focuses its tab in a zero-delay timer after the popstate.
+      const afterBack = () => setTimeout(restore, 30);
+      window.addEventListener('popstate', afterBack);
+      setTimeout(restore, 400);
+    };
+  }, [open]);
+}
 
 /**
  * The per-game player profile, over whichever screen opened it. A full-height
@@ -66,6 +99,7 @@ export function PlayerProfileSheet({
   // Back (the browser button or a phone's back gesture) closes the profile,
   // not the app; the screen behind it is inert while it is open.
   useSheetHistory(visible && player !== null, onClose);
+  useReturnFocus(visible && player !== null);
   if (!player) return null;
   const panel = width >= PANEL_MIN_WIDTH;
   const sheetWidth = Math.min(width, SHEET_MAX_WIDTH);

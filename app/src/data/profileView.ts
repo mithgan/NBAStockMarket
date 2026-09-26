@@ -17,13 +17,14 @@
  *    price that night, and is labelled as such.
  */
 import type {
+  PerGameLedgerEntry,
   PerGameMarketPlayer,
   PerGamePosition,
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
 import { gamesCount, humanDate, money, moneyFine, signedMoneyFine } from '../copy/terms';
-import { currentResults, lastYearEdge, type ValueSummary } from './perGameMetrics';
+import { currentResults, entryDay, lastYearEdge, type ValueSummary } from './perGameMetrics';
 import {
   selectHighLowPoints,
   selectSettledTrendPoints,
@@ -502,9 +503,16 @@ export function priceStory(nights: readonly ProfileNight[], side: PerGamePositio
       : `went from ${moneyFine(from)} to ${moneyFine(to)}`;
     const prices = yourPrices(mine);
     const locked = prices.kind === 'one' ? `you locked ${prices.text}` : `your ${word}s were ${prices.text}`;
-    const lead = now === undefined ? `${locked.charAt(0).toUpperCase()}${locked.slice(1)}.` : `Market now ${moneyFine(now)} a game; ${locked}.`;
-    if (nights.length === 1) return `${lead} His market ${word} was ${moneyFine(to)} in that game.`;
-    return `${lead} Over these ${gamesCount(nights.length)} his market ${word} ${move}.`;
+    if (now === undefined) {
+      const lead = `${locked.charAt(0).toUpperCase()}${locked.slice(1)}.`;
+      if (nights.length === 1) return `${lead} His market ${word} was ${moneyFine(to)} in that game.`;
+      return `${lead} Over these ${gamesCount(nights.length)} his market ${word} ${move}.`;
+    }
+    // "Today" for the price in the header, "in these games" for the chart's
+    // points: his price can move after his latest game (walk-2 T2-19).
+    const lead = `Today his market ${word} is ${moneyFine(now)} a game; ${locked}.`;
+    if (nights.length === 1) return `${lead} In that game it was ${moneyFine(to)}.`;
+    return `${lead} In these ${gamesCount(nights.length)} it ${move}.`;
   }
   const first = nights[0].price;
   const last = nights[nights.length - 1].price;
@@ -536,22 +544,77 @@ export function holdingStatus(position: Pick<PerGamePosition, 'side' | 'lockedGa
 export type StakeTone = 'gain' | 'loss' | 'even' | 'none';
 
 /**
+ * The day you took a position: the day its add or short fee was booked.
+ * Null when no fee is on record (a free move, or an older ledger page).
+ */
+export function positionOpenedDay(
+  entries: readonly Pick<PerGameLedgerEntry, 'positionId' | 'kind' | 'gameDate' | 'createdAt' | 'eventCursor'>[],
+  positionId: string,
+): string | null {
+  let first: (typeof entries)[number] | null = null;
+  for (const entry of entries) {
+    if (entry.positionId !== positionId || (entry.kind !== 'open_fee' && entry.kind !== 'fee')) continue;
+    if (!first || entry.eventCursor < first.eventCursor) first = entry;
+  }
+  return first ? entryDay(first as PerGameLedgerEntry) : null;
+}
+
+/** "Oct 21", "Oct 21 to 27", "Oct 21 to Nov 3". */
+function dateSpan(from: string, to: string): string {
+  if (from === to) return humanDate(from);
+  const end = humanDate(to);
+  return `${humanDate(from)} to ${from.slice(0, 7) === to.slice(0, 7) ? end.split(' ').pop() : end}`;
+}
+
+/**
+ * Who he was to you before, for a player you no longer hold (walk-2 T2-20):
+ * the side, how many stints, and the game dates they spanned, as in "Your
+ * short, Oct 21 to 27:". Null with no games with you.
+ */
+export function pastStintLead(
+  results: readonly Pick<PerGameSettledResult, 'positionId' | 'side' | 'gameDate'>[],
+): string | null {
+  if (results.length === 0) return null;
+  const sides = new Set(results.map((row) => row.side));
+  const stints = new Set(results.map((row) => row.positionId)).size;
+  const dates = results.map((row) => row.gameDate).sort();
+  const who = sides.size > 1
+    ? 'With you'
+    : sides.has('long')
+      ? stints > 1 ? `Your ${stints} roster spots` : 'Your roster spot'
+      : stints > 1 ? `Your ${stints} shorts` : 'Your short';
+  return `${who}, ${dateSpan(dates[0], dates[dates.length - 1])}:`;
+}
+
+/**
  * Your money with him in one line: the current position when you hold him
- * (the same numbers as its Roster row), otherwise every past stint.
+ * (the same numbers as its Roster row), otherwise every past stint, named by
+ * side and dates (`past`, from pastStintLead).
+ *
+ * Held with no games yet: "No games since you added him (Oct 20)" (or
+ * "shorted"), and "No games yet at this price" only for a re-add, when he
+ * already played for you at another price (`readd`).
  */
 export function stakeLine(
   summary: Pick<ValueSummary, 'games' | 'total'>,
   held: boolean,
   side: PerGamePositionSide = 'long',
+  opened: { since?: string | null; readd?: boolean; past?: string | null } = {},
 ): {
   lead: string;
   total: string | null;
   tone: StakeTone;
 } | null {
-  if (summary.games === 0) return held ? { lead: 'No games yet at this price', total: null, tone: 'none' } : null;
+  if (summary.games === 0) {
+    if (!held) return null;
+    if (opened.readd) return { lead: 'No games yet at this price', total: null, tone: 'none' };
+    const verb = side === 'long' ? 'added' : 'shorted';
+    const day = opened.since ? ` (${humanDate(opened.since)})` : '';
+    return { lead: `No games since you ${verb} him${day}`, total: null, tone: 'none' };
+  }
   const tone: StakeTone = Math.abs(summary.total) < EVEN_BAND ? 'even' : summary.total > 0 ? 'gain' : 'loss';
   // Your result leads (walk-1 T1-44): "Your short: -$699.2K over 3 games".
-  const lead = !held ? 'Before, with you:' : side === 'long' ? 'Your roster spot:' : 'Your short:';
+  const lead = !held ? opened.past ?? 'Before, with you:' : side === 'long' ? 'Your roster spot:' : 'Your short:';
   return { lead, total: `${signedMoneyFine(summary.total)} over ${gamesCount(summary.games)}`, tone };
 }
 

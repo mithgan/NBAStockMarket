@@ -40,7 +40,7 @@ import {
   signedMoneyFine,
   unbrokenName,
 } from '../copy/terms';
-import { playerValue, positionValue } from '../data/perGameMetrics';
+import { currentResults, playerValue, positionValue } from '../data/perGameMetrics';
 import { splitPlayerName } from '../data/playerName';
 import {
   buildProfileNights,
@@ -54,6 +54,8 @@ import {
   logRows,
   logStatusNights,
   mixNote,
+  pastStintLead,
+  positionOpenedDay,
   priceSourceCaption,
   priceStory,
   rangeNights,
@@ -68,6 +70,7 @@ import {
   type StakeTone,
 } from '../data/profileView';
 import type { TrendPoint } from '../data/trendPresentation';
+import { usePerGame } from '../state/PerGameContext';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
 import { Button, headingLevel, Label, Money, moneyColor, SectionHeader, Segmented, Tag } from '../ui/kit';
 import { CloseIcon, StarIcon } from './market/icons';
@@ -84,6 +87,9 @@ const METRIC_OPTIONS: { key: ProfileMetric; label: string; hint: string }[] = [
 /** Games the log shows before "Show all"; a list only a couple longer just shows in full. */
 const LOG_PREVIEW = 10;
 const LOG_SLACK = 2;
+
+/** Below this window height the action bar scrolls away with his name. */
+const PIN_BAR_MIN_HEIGHT = 500;
 
 /** Once the name block has scrolled away, the top bar shows who this is. */
 const TITLE_AFTER_SCROLL = 72;
@@ -174,7 +180,11 @@ export function PerGamePlayerProfile({
   const [metric, setMetric] = useState<ProfileMetric>('dividends');
   const [showAllGames, setShowAllGames] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  // A short window (a phone at 200% zoom, a phone on its side) keeps the
+  // action bar with his name instead of pinning it: pinned under the top bar
+  // it would leave the chart and log about half the screen.
+  const pinBar = windowHeight >= PIN_BAR_MIN_HEIGHT;
   // A zoomed browser (200% on a phone) leaves under 240px: trim the side
   // gutters so four range tabs still get 44px each, and shrink Watch to its star.
   const inset = !wide && windowWidth < 240 ? styles.insetTight : null;
@@ -202,7 +212,19 @@ export function PerGamePlayerProfile({
     () => (position ? positionValue(results, position.positionId) : playerValue(results, player.playerId)),
     [player.playerId, position, results],
   );
-  const stake = stakeLine(stakeSummary, held, viewSide);
+  // No games yet: say since when ("No games since you added him (Oct 20)");
+  // "at this price" only when he already played for you at another price.
+  const { bootstrap } = usePerGame();
+  const ledger = bootstrap?.ledger.items;
+  const opened = useMemo(() => (position ? {
+    since: positionOpenedDay(ledger ?? [], position.positionId),
+    readd: results.some((row) => row.playerId === player.playerId && row.side === position.side
+      && row.positionId !== position.positionId && row.status === 'settled'),
+  } : {
+    // Not held: name the side and dates of your past games with him.
+    past: pastStintLead(currentResults(results).filter((row) => row.playerId === player.playerId)),
+  }), [ledger, player.playerId, position, results]);
+  const stake = stakeLine(stakeSummary, held, viewSide, opened);
   // Nights with no money to show: he did not play, or the game has not settled.
   const quietNote = unsettledNote(stakeSummary);
   const quiet = useMemo(() => statusNights(results, viewSide), [results, viewSide]);
@@ -216,6 +238,15 @@ export function PerGamePlayerProfile({
   const priceHeader = logPriceHeader(shown, viewSide);
   const mixedLog = priceHeader === 'Price' || priceHeader === 'Credit';
   const title = narrow ? splitPlayerName(player.name).surname : player.name;
+
+  // Space toggles a switch (the WAI-ARIA pattern screen readers teach), but
+  // react-native-web only presses buttons on Space; without this the sheet
+  // scrolls a screen instead. Enter already presses it. A held key toggles once.
+  const onWatchKey = (event: { key: string; repeat?: boolean; preventDefault: () => void }) => {
+    if (event.key !== ' ' && event.key !== 'Spacebar') return;
+    event.preventDefault();
+    if (!event.repeat) onToggleWatch();
+  };
 
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = event.nativeEvent.contentOffset.y > TITLE_AFTER_SCROLL;
@@ -240,16 +271,23 @@ export function PerGamePlayerProfile({
             </Text>
           ) : null}
         </View>
+        {/* A switch, like the Market's star: one name ("Watch Nikola Jokic"),
+            its state on or off (the star fills, the chip turns gold), and Space
+            or Enter toggles it. The visible word stays "Watch" so the spoken
+            name always contains it. */}
         <Pressable
-          accessibilityLabel={watching ? `Stop watching ${player.name}` : `Watch ${player.name}`}
-          accessibilityRole="button"
+          accessibilityLabel={`Watch ${player.name}`}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: watching }}
+          aria-checked={watching}
           onPress={onToggleWatch}
           style={({ pressed }) => [styles.watch, narrow && styles.watchIcon, watching && styles.watchOn, pressed && styles.pressed]}
+          {...({ onKeyDown: onWatchKey } as object)}
         >
           <StarIcon filled={watching} />
           {narrow ? null : (
             <Text maxFontSizeMultiplier={1.3} style={[styles.watchText, watching && styles.watchTextOn]}>
-              {watching ? 'Watching' : 'Watch'}
+              Watch
             </Text>
           )}
         </Pressable>
@@ -260,8 +298,9 @@ export function PerGamePlayerProfile({
         onScroll={onScroll}
         scrollEventThrottle={32}
         // The action bar (child 1) sits under his name and your status, then
-        // stays pinned to the top while the rest of the profile scrolls.
-        stickyHeaderIndices={[1]}
+        // stays pinned to the top while the rest of the profile scrolls
+        // (in a tall enough window; see pinBar).
+        stickyHeaderIndices={pinBar ? [1] : undefined}
         style={styles.scroll}
       >
         <View>
@@ -307,7 +346,7 @@ export function PerGamePlayerProfile({
           {quietNote ? <Text maxFontSizeMultiplier={1.4} style={styles.stakeLead}>{quietNote}</Text> : null}
         </View>
         </View>
-        <ProfileActionBar player={player} position={position} side={viewSide} />
+        <ProfileActionBar onLeave={onClose} player={player} position={position} side={viewSide} />
 
         <SectionHeader
           level={3}
@@ -328,7 +367,9 @@ export function PerGamePlayerProfile({
                   value={range}
                 />
               ) : null}
-              <Text maxFontSizeMultiplier={1.4} style={styles.verdict}>
+              {/* Spoken politely when a range tab changes it, not only the
+                  tab's name (walk-2 T3-N5). */}
+              <Text accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.4} style={styles.verdict}>
                 {formVerdict(summary, {
                   recent,
                   side: viewSide,
@@ -411,16 +452,18 @@ export function PerGamePlayerProfile({
           {lastSeason.worth === null || lastSeason.edge === null ? (
             <Text maxFontSizeMultiplier={1.4} style={styles.note}>No last season on record for him.</Text>
           ) : (
+            // The Market's names for the same two facts ("Dividend last season
+            // $120K a game · $20K over his price"), so a row and its profile agree.
             <View style={styles.grid}>
               <Figure
-                caption="his dividend a game"
-                label="Worth a game"
+                caption="a game"
+                label="Dividend last season"
                 style={styles.cellHalf}
                 value={<Money signed={false} size="title" value={lastSeason.worth} />}
               />
               <Figure
                 caption={lastSeason.edgeCaption}
-                label="Edge at today's price"
+                label="Value at today's price"
                 style={styles.cellHalf}
                 value={<Money size="title" value={lastSeason.edge} />}
               />

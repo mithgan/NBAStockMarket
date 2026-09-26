@@ -29,6 +29,8 @@ import {
   rangeOptions,
   sideNet,
   sideWords,
+  pastStintLead,
+  positionOpenedDay,
   stakeLine,
   statusNights,
   steppedIndex,
@@ -423,9 +425,39 @@ test('holding status and stake line say where you stand, from the same numbers a
   assert.deepEqual(stakeLine({ games: 3, total: 377_500 }, true)?.total, '+$377.5K over 3 games');
   // A short leads with its own result (walk-1 T1-44).
   assert.deepEqual(stakeLine({ games: 3, total: -699_200 }, true, 'short'), { lead: 'Your short:', total: '-$699.2K over 3 games', tone: 'loss' });
-  assert.deepEqual(stakeLine({ games: 0, total: 0 }, true), { lead: 'No games yet at this price', total: null, tone: 'none' });
+  // No games yet (walk-2 T2-11): since when, and "at this price" only for a re-add.
+  assert.deepEqual(stakeLine({ games: 0, total: 0 }, true, 'long', { since: '2025-10-20' }), { lead: 'No games since you added him (Oct 20)', total: null, tone: 'none' });
+  assert.equal(stakeLine({ games: 0, total: 0 }, true, 'short', { since: '2025-10-20' })?.lead, 'No games since you shorted him (Oct 20)');
+  assert.equal(stakeLine({ games: 0, total: 0 }, true)?.lead, 'No games since you added him');
+  assert.deepEqual(stakeLine({ games: 0, total: 0 }, true, 'long', { since: '2025-10-25', readd: true }), { lead: 'No games yet at this price', total: null, tone: 'none' });
   assert.deepEqual(stakeLine({ games: 3, total: -60_000 }, false), { lead: 'Before, with you:', total: '-$60K over 3 games', tone: 'loss' });
   assert.equal(stakeLine({ games: 0, total: 0 }, false), null);
+});
+
+test('a past stint is named by side and dates (walk-2 T2-20)', () => {
+  const row = (positionId: string, side: 'long' | 'short', gameDate: string) => ({ positionId, side, gameDate });
+  assert.equal(pastStintLead([row('s1', 'short', '2025-10-27'), row('s1', 'short', '2025-10-21'), row('s1', 'short', '2025-10-24')]), 'Your short, Oct 21 to 27:');
+  assert.equal(pastStintLead([row('l1', 'long', '2025-10-30'), row('l1', 'long', '2025-11-03')]), 'Your roster spot, Oct 30 to Nov 3:');
+  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22')]), 'Your roster spot, Oct 22:');
+  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22'), row('l2', 'long', '2025-11-02')]), 'Your 2 roster spots, Oct 22 to Nov 2:');
+  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22'), row('s1', 'short', '2025-11-02')]), 'With you, Oct 22 to Nov 2:');
+  assert.equal(pastStintLead([]), null);
+  assert.deepEqual(stakeLine({ games: 3, total: -37_500 }, false, 'long', { past: 'Your short, Oct 21 to 27:' }), { lead: 'Your short, Oct 21 to 27:', total: '-$37.5K over 3 games', tone: 'loss' });
+});
+
+test('a position opens on the day its add or short fee was booked', () => {
+  const fee = (positionId: string, eventCursor: number, createdAt: string, kind = 'open_fee') => ({
+    positionId, eventCursor, createdAt, kind: kind as 'open_fee', gameDate: null,
+  });
+  const entries = [
+    fee('p1', 3, '2025-10-20T23:45:00.000Z'),
+    { positionId: 'p1', eventCursor: 9, createdAt: '2025-10-22T23:30:00.000Z', kind: 'game_cost' as const, gameDate: '2025-10-22' },
+    fee('p2', 12, '2025-10-25T23:45:00.000Z', 'fee'),
+    fee('p2', 20, '2025-10-30T23:45:00.000Z', 'drop_fee'),
+  ];
+  assert.equal(positionOpenedDay(entries, 'p1'), '2025-10-20');
+  assert.equal(positionOpenedDay(entries, 'p2'), '2025-10-25');
+  assert.equal(positionOpenedDay(entries, 'p3'), null);
 });
 
 test('last season facts flip the edge for a short and admit a missing season', () => {
@@ -489,10 +521,12 @@ test('the price view plots his market price against your locked price (walk-1 T2
   assert.equal(nightReadout(held[2], 'price'), 'Market $128K · your price $125K');
   assert.equal(
     priceStory(held, 'long', 128_500),
-    'Market now $128.5K a game; you locked $125K. Over these 3 games his market price went from $120K to $128K.',
+    // "Today" for the header's price, "in these games" for the chart's points (walk-2 T2-19).
+    'Today his market price is $128.5K a game; you locked $125K. In these 3 games it went from $120K to $128K.',
   );
   assert.equal(priceStory(held, 'short'), 'You locked $125K. Over these 3 games his market credit went from $120K to $128K.');
-  assert.equal(priceStory(held.slice(0, 1), 'long', 99_700), 'Market now $99.7K a game; you locked $125K. His market price was $120K in that game.');
+  assert.equal(priceStory(held.slice(0, 1), 'long', 99_700), 'Today his market price is $99.7K a game; you locked $125K. In that game it was $120K.');
+  assert.equal(priceStory(held.slice(0, 1), 'short'), 'You locked $125K. His market credit was $120K in that game.');
   assert.match(chartSummary(held, 'price'), /^His market price a game over 3 games, against your locked price\. High \$128K/);
   // Outside practice there is no market line: your price is the one line.
   const live = held.map(({ market: _market, ...night }) => night);
