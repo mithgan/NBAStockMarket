@@ -57,6 +57,7 @@ import {
   newestPlace,
   NEWEST_CORNER_RESERVE,
   stickyNightIndices,
+  pinnedNightClips,
   playerFeedSource,
   type MonthAnchor,
   type NightSummary,
@@ -461,11 +462,50 @@ function naturalTop(node: HTMLElement, scroller: HTMLElement): number {
 function readableTop(scroller: HTMLElement): number {
   const top = Math.max(scroller.getBoundingClientRect().top, 0);
   let below = top;
+  // The last one stuck there is drawn on top; those under it are clipped to
+  // its height (clipPinnedNights).
   scroller.querySelectorAll<HTMLElement>('[id^="results-day-"]').forEach((header) => {
     const box = header.getBoundingClientRect();
-    if (box.top <= top + 1 && box.bottom > below) below = box.bottom;
+    if (box.top <= top + 1) below = Math.max(top, box.bottom);
   });
   return below;
+}
+
+/** A night header's sticky cell (web): react-native-web wraps each pinned one. */
+const stickyCells = new WeakMap<HTMLElement, HTMLElement | null>();
+function stickyCellOf(header: HTMLElement, scroller: HTMLElement): HTMLElement | null {
+  if (stickyCells.has(header)) return stickyCells.get(header) ?? null;
+  let cell: HTMLElement | null = header;
+  while (cell && cell !== scroller && getComputedStyle(cell).position !== 'sticky') cell = cell.parentElement;
+  const found = cell && cell !== scroller ? cell : null;
+  stickyCells.set(header, found);
+  return found;
+}
+
+/**
+ * Every header already passed stays stuck at the top under the one you are
+ * reading (the sticky cells share one list): each is clipped to the top one's
+ * height, so a taller one never shows its last line over the first row. They
+ * stay in the page for screen readers.
+ */
+function clipPinnedNights(scroller: HTMLElement, clipped: Set<HTMLElement>): void {
+  const top = scroller.getBoundingClientRect().top;
+  const cells: HTMLElement[] = [];
+  scroller.querySelectorAll<HTMLElement>('[id^="results-day-"]').forEach((header) => {
+    const cell = stickyCellOf(header, scroller);
+    if (cell) cells.push(cell);
+  });
+  const boxes = cells.map((cell) => cell.getBoundingClientRect());
+  const stuck = cells.filter((_, index) => Math.abs(boxes[index].top - top) < 1.5);
+  const clips = pinnedNightClips(stuck.map((cell) => boxes[cells.indexOf(cell)].height));
+  const want = new Map(stuck.map((cell, index) => [cell, clips[index]]));
+  for (const cell of new Set([...cells, ...clipped])) {
+    const by = want.get(cell) ?? 0;
+    const clip = by > 0 ? `inset(0 0 ${by}px 0)` : '';
+    if (cell.style.clipPath !== clip) cell.style.clipPath = clip;
+    if (by > 0) clipped.add(cell);
+    else clipped.delete(cell);
+  }
 }
 
 /**
@@ -1054,6 +1094,31 @@ export function PerGameResultsScreen() {
       node.removeEventListener('focusin', onFocus);
     };
     // A layout switch (desktop, phone, short window) draws the list anew.
+  }, [sticky, place]);
+  // Pinned headers already passed never show under the one on top.
+  useEffect(() => {
+    if (!sticky || typeof document === 'undefined') return undefined;
+    const node = (listRef.current as unknown as { getScrollableNode?: () => unknown } | null)
+      ?.getScrollableNode?.() as HTMLElement | null | undefined;
+    if (!node || typeof node.querySelectorAll !== 'function') return undefined;
+    const clipped = new Set<HTMLElement>();
+    const apply = () => clipPinnedNights(node, clipped);
+    apply();
+    // In the scroll event itself, so the clip lands in the same frame.
+    node.addEventListener('scroll', apply, { passive: true });
+    window.addEventListener('resize', apply);
+    // Rows opening, a week landing, headers mounting as the list windows.
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(apply);
+    const content = node.firstElementChild;
+    if (observer && content) observer.observe(content);
+    return () => {
+      node.removeEventListener('scroll', apply);
+      window.removeEventListener('resize', apply);
+      observer?.disconnect();
+      clipped.forEach((cell) => {
+        cell.style.clipPath = '';
+      });
+    };
   }, [sticky, place]);
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = event.nativeEvent.contentOffset.y > Math.max(600, listHeight.current * FAR_SCREENS);

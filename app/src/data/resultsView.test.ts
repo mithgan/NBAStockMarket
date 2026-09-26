@@ -23,6 +23,7 @@ import {
   clearOfBottom,
   mathTitle,
   stickyNightIndices,
+  pinnedNightClips,
   newestPlace,
   NEWEST_CORNER_RESERVE,
   monthAnchors,
@@ -903,4 +904,15 @@ test('in a tall window each night header stays pinned while its rows scroll (wal
   assert.equal(stickyNightIndices(items, 422), undefined);
   assert.equal(stickyNightIndices(items, 200), undefined);
   assert.equal(stickyNightIndices([row('a')], 844), undefined);
+});
+
+test('pinned night headers under the top one never show below it', () => {
+  // Two wrapped (73px) headers under a one-line (56px) one: 17px clipped from each.
+  assert.deepEqual(pinnedNightClips([56, 73, 73, 56]), [0, 17, 17, 0]);
+  // The top one is taller: nothing under it shows.
+  assert.deepEqual(pinnedNightClips([56, 56, 73]), [0, 0, 0]);
+  // Sub-pixel differences are not a line of text.
+  assert.deepEqual(pinnedNightClips([56.4, 56]), [0, 0]);
+  assert.deepEqual(pinnedNightClips([73.3, 56]), [18, 0]);
+  assert.deepEqual(pinnedNightClips([]), []);
 });

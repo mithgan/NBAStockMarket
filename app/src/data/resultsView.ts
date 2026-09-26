@@ -639,6 +639,23 @@ export function stickyNightIndices(items: readonly ResultsFeedItem[], height: nu
 }
 
 /**
+ * Pinned night headers pile up on the web: react-native-web pins each with
+ * CSS sticky inside the one list, so every header already passed stays stuck
+ * at the top under the one you are reading. A taller one (its summary wrapped,
+ * at 360px on a night a short played) showed its last line under a shorter
+ * one, over the first row. For the headers stuck at the top, in page order:
+ * how much to clip from the bottom of each. The last is drawn on top and keeps
+ * all of itself; each under it keeps no more than the top one's height.
+ */
+export function pinnedNightClips(stuckHeights: readonly number[]): number[] {
+  const top = stuckHeights[stuckHeights.length - 1] ?? 0;
+  return stuckHeights.map((height, index) => {
+    const extra = height - top;
+    return index < stuckHeights.length - 1 && extra > 0.5 ? Math.ceil(extra) : 0;
+  });
+}
+
+/**
  * Far down the feed, where "Back to newest" goes (walk 10 T3-06): the desktop
  * side column; a dock under the list with the month; or, in a short window (a
  * laptop at 400% zoom leaves about 200px), a small corner button, so the list
