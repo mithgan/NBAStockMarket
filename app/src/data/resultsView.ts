@@ -354,9 +354,18 @@ export function feedNights(items: readonly ResultsFeedItem[]): NightSummary[] {
  */
 export function nightSummaryParts(night: NightSummary): string[] {
   const parts: string[] = [];
-  if (night.rosterGames > 0) parts.push(`${night.rosterWins} of ${night.rosterGames} beat their price`);
+  // One game that night (one player held, or one player's games shown):
+  // "Beat his price", never "1 of 1 beat their price".
+  const single = night.rosterGames + night.shortGames + night.pending + night.dnp === 1;
+  if (night.rosterGames > 0) {
+    parts.push(single
+      ? night.rosterWins > 0 ? 'Beat his price' : "Didn't beat his price"
+      : `${night.rosterWins} of ${night.rosterGames} beat their price`);
+  }
   if (night.shortGames > 0) {
-    parts.push(`${night.shortWins} of ${night.shortGames} ${night.shortGames === 1 ? 'short' : 'shorts'} paid off`);
+    parts.push(single
+      ? night.shortWins > 0 ? 'The short paid off' : "The short didn't pay off"
+      : `${night.shortWins} of ${night.shortGames} ${night.shortGames === 1 ? 'short' : 'shorts'} paid off`);
   }
   if (night.pending > 0) parts.push(`${night.pending} waiting on stats`);
   if (night.dnp > 0) parts.push(`${night.dnp} didn't play`);

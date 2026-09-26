@@ -253,7 +253,7 @@ test('a fee dated to a game night sits in that night on its own line, apart from
   assert.equal(night.fees, -5_000);
   assert.equal(night.feeCount, 1);
   assert.equal(night.scoreChange, 55_000);
-  assert.equal(nightSummaryLine(night), '1 of 1 beat their price');
+  assert.equal(nightSummaryLine(night), 'Beat his price', 'one game reads as one game');
   const heading = feed[2];
   assert.ok(heading.type === 'fees');
   assert.equal(heading.moves, false, 'a penalty is a fee, not a roster move');
@@ -302,7 +302,7 @@ test('add and drop fees join the night they were booked on, or make a day of the
   assert.equal(opener.total, 50_000, 'the header is what the players made');
   assert.equal(opener.fees, -500, 'the moves made for that night are on their own line');
   assert.equal(opener.scoreChange, 49_500);
-  assert.equal(nightSummaryLine(opener), '1 of 1 beat their price');
+  assert.equal(nightSummaryLine(opener), 'Beat his price');
   const heading = feed.find((item) => item.key === 'fees:2025-11-01');
   assert.ok(heading && heading.type === 'fees');
   assert.deepEqual({ count: heading.count, total: heading.total, moves: heading.moves }, { count: 2, total: -500, moves: true });
@@ -661,7 +661,7 @@ test('moves made before your first games read as moves, not as a night nobody pl
   const season = feedNights(buildResultsFeed(source([game], [...eve, later]), { lastSettledDate: '2025-10-22' }));
   assert.deepEqual(season.map((day) => [day.date, day.beforeGames, nightSummaryLine(day)]), [
     ['2025-10-22', false, 'none of your players played'],
-    ['2025-10-21', false, '1 of 1 beat their price'],
+    ['2025-10-21', false, 'Beat his price'],
     ['2025-10-20', true, ''],
   ]);
 });
