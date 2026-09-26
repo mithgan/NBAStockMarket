@@ -331,8 +331,19 @@ function NoticeToast({
   // leaves the screen more than half of what is left under the frame): its
   // first words stay at the top and the rest scrolls inside it (walk 5 T3-06).
   const dockText = tinyDock ? 18 : Math.max(36, Math.round(Math.min(height * 0.3, (height - 150) * 0.45)));
+  // At 400% zoom the one-line strip is a stop on the Tab path: the rest of
+  // the notice scrolls with the arrow keys, and it waits while focused
+  // (walk 8 T3-01: a keyboard user could never read past the first line).
+  const readable = tinyDock
+    ? ({
+      tabIndex: 0,
+      'aria-label': `Notice: ${message}`,
+      onFocus: () => setHeld(true),
+      onBlur: () => setHeld(false),
+    } as object)
+    : null;
   const words = placement === 'dock' ? (
-    <ScrollView style={[styles.noticeScroll, { maxHeight: dockText }]}>
+    <ScrollView style={[styles.noticeScroll, { maxHeight: dockText }]} {...readable}>
       <Text style={styles.noticeText}>{message}</Text>
     </ScrollView>
   ) : (
@@ -345,9 +356,11 @@ function NoticeToast({
     return (
       <Pressable
         ref={noticeRef}
-        accessibilityElementsHidden
-        aria-hidden
-        importantForAccessibility="no-hide-descendants"
+        // Hidden from screen readers (the live region spoke it), except at
+        // 400% zoom, where its words are a focus stop of their own.
+        accessibilityElementsHidden={!tinyDock}
+        aria-hidden={!tinyDock}
+        importantForAccessibility={tinyDock ? 'auto' : 'no-hide-descendants'}
         onHoverIn={() => setHeld(true)}
         onHoverOut={() => setHeld(false)}
         onPress={dismissByTap}

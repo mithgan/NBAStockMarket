@@ -37,6 +37,7 @@ import {
   moneyCompact,
   perGame,
   ROSTER_EXPLAINER,
+  confirmCloseName,
   lockNotice,
   rosterReopensLine,
   seasonResultLine,
@@ -385,7 +386,7 @@ function PositionRow({
   // Escape or Keep backs out. Nothing times out while you read it.
   const strip = confirming ? (
     <ConfirmStrip
-      confirmAccessibilityLabel={fee > 0 ? `${actionName} for ${exactMoney(fee)}` : actionName}
+      confirmAccessibilityLabel={confirmCloseName(position.side, position.playerName, fee)}
       confirmLabel={confirmCloseButton(position.side, fee)}
       message={confirmCloseMessage({
         side: position.side,

@@ -243,8 +243,10 @@ export function rosterReopensLine(lockGameDate: string | null | undefined): stri
 export const CONFIRM_LABEL = 'Confirm';
 
 /** Accessible name of the armed Drop or Close button. */
-export function confirmCloseName(side: PerGamePositionSide, playerName: string): string {
-  return side === 'long' ? `Confirm dropping ${playerName}` : `Confirm closing your short on ${playerName}`;
+export function confirmCloseName(side: PerGamePositionSide, playerName: string, feeDollars = 0): string {
+  // The name starts with the words on the button, so a voice-control user
+  // can say what they see ("Drop for $250"; walk 8 T3-16), then says whom.
+  return `${confirmCloseButton(side, feeDollars)}, ${side === 'long' ? playerName : `your short on ${playerName}`}`;
 }
 
 /**

@@ -98,8 +98,10 @@ test('one lock sentence and one confirm line everywhere', () => {
   assert.equal(rosterReopensLine('2025-10-31'), 'Moves reopen after Oct 31');
   assert.equal(rosterReopensLine(null), 'Moves reopen after these games');
   assert.equal(CONFIRM_LABEL, 'Confirm');
-  assert.equal(confirmCloseName('long', 'Nikola Jokic'), 'Confirm dropping Nikola Jokic');
-  assert.equal(confirmCloseName('short', 'Tyrese Maxey'), 'Confirm closing your short on Tyrese Maxey');
+  // Names start with the button's own words, for voice control (walk 8 T3-16).
+  assert.equal(confirmCloseName('long', 'Nikola Jokic', 250), 'Drop for $250, Nikola Jokic');
+  assert.equal(confirmCloseName('short', 'Tyrese Maxey', 250), 'Close for $250, your short on Tyrese Maxey');
+  assert.equal(confirmCloseName('long', 'Nikola Jokic'), 'Drop, Nikola Jokic');
   assert.equal(confirmCloseLine('long', 250, 764_000), '$250 fee · his +$764K stays in your score');
   assert.equal(confirmCloseLine('short', 250, -45_500), "$250 fee · this short's -$45.5K stays in your score");
   assert.equal(confirmCloseLine('long', 0, 0), 'his $0 stays in your score');

@@ -25,12 +25,11 @@ import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
 import {
   ROSTER_EXPLAINER,
   SHORT_EXPLAINER,
-  closeActionName,
   confirmCloseButton,
   confirmCloseMessage,
-  exactMoney,
   money,
   perGameShort,
+  confirmCloseName,
   lockNotice,
   rosterReopensLine,
   signedMoney,
@@ -659,7 +658,7 @@ function MarketRow({
   // to its left. Focus starts on Keep; Escape or Keep closes the strip.
   const strip = confirming && position ? (
     <ConfirmStrip
-      confirmAccessibilityLabel={fee > 0 ? `${closeActionName(side, player.name)} for ${exactMoney(fee)}` : closeActionName(side, player.name)}
+      confirmAccessibilityLabel={confirmCloseName(side, player.name, fee)}
       confirmLabel={confirmCloseButton(side, fee)}
       // One wording on every screen: the fee, what stays, and what coming
       // back would cost today.

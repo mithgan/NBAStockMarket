@@ -140,7 +140,7 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
     if (confirming && !disabled) {
       return (
         <ConfirmStrip
-          confirmAccessibilityLabel={confirmCloseName(held, player.name)}
+          confirmAccessibilityLabel={confirmCloseName(held, player.name, fee)}
           confirmLabel={confirmCloseButton(held, fee)}
           // One wording with the Roster and Market: fee, what stays, and what
           // coming back would cost today.
