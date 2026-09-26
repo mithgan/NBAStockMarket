@@ -318,6 +318,7 @@ export function ControlsToggle({
 export function MarketColumnHeader({
   columns,
   valueLabel,
+  valueExplain,
   sort,
   reversed,
   onChoose,
@@ -325,8 +326,11 @@ export function MarketColumnHeader({
   lead = 0,
   tableRoles = false,
   actionHeader = '',
+  resortFirst = false,
 }: {
   columns: MarketColumnSet;
+  /** The order is from before the latest games: the sorted column's press re-sorts it (onFlip does). */
+  resortFirst?: boolean;
   /** Extra room before the avatar column (the rows' watch star). */
   lead?: number;
   /** The header row of a table (walk 8 T3-09): columnheaders, aria-sort on the sorted one. */
@@ -334,6 +338,8 @@ export function MarketColumnHeader({
   /** The button column's header words, said only ("Add or drop"). */
   actionHeader?: string;
   valueLabel: string;
+  /** The Value header's explanation for the side on show (valueColumnExplanation). */
+  valueExplain: string;
   sort: MarketSort;
   reversed: boolean;
   onChoose: (sort: MarketSort) => void;
@@ -417,8 +423,8 @@ export function MarketColumnHeader({
           </View>
         ) : null}
         <View style={{ width: columns.avatar }} />
-        <SortHeader columnKey="name" label="Player" onChoose={onChoose} onFlip={onFlip} reversed={reversed} sort={sort} tableRoles={tableRoles} />
-        <SortHeader columnKey="price" label={'Price a\u00A0game'} onChoose={onChoose} onFlip={onFlip} reversed={reversed} sort={sort} tableRoles={tableRoles} width={columns.price} />
+        <SortHeader columnKey="name" label="Player" onChoose={onChoose} onFlip={onFlip} resortFirst={resortFirst} reversed={reversed} sort={sort} tableRoles={tableRoles} />
+        <SortHeader columnKey="price" label={'Price a\u00A0game'} onChoose={onChoose} onFlip={onFlip} resortFirst={resortFirst} reversed={reversed} sort={sort} tableRoles={tableRoles} width={columns.price} />
         <SortHeader
           columnKey="dividend"
           explain={COLUMN_EXPLANATIONS.dividend}
@@ -427,6 +433,7 @@ export function MarketColumnHeader({
           label={'Dividend last\u00A0season'}
           onChoose={onChoose}
           onFlip={onFlip}
+          resortFirst={resortFirst}
           reversed={reversed}
           sort={sort}
           tableRoles={tableRoles}
@@ -434,12 +441,13 @@ export function MarketColumnHeader({
         />
         <SortHeader
           columnKey="value"
-          explain={COLUMN_EXPLANATIONS.value}
+          explain={valueExplain}
           onTip={onTip}
           tipShown={tip?.key === 'value'}
           label={valueLabel}
           onChoose={onChoose}
           onFlip={onFlip}
+          resortFirst={resortFirst}
           reversed={reversed}
           sort={sort}
           tableRoles={tableRoles}
@@ -566,8 +574,11 @@ function SortHeader({
   onChoose,
   onFlip,
   tableRoles = false,
+  resortFirst = false,
 }: {
   columnKey: MarketSort;
+  /** The column in use re-sorts a held order before it reverses anything (walk 10 T2-11). */
+  resortFirst?: boolean;
   /** A table's columnheader, with aria-sort while it is the sort (walk 8 T3-09). */
   tableRoles?: boolean;
   label: string;
@@ -608,7 +619,9 @@ function SortHeader({
       {...(tableRoles ? ({ role: 'columnheader', ...(on ? { 'aria-sort': ascending ? 'ascending' : 'descending' } : {}) } as object) : {})}
     >
       <Pressable
-        accessibilityLabel={on ? `${words}, sorted ${sortDirection(columnKey, reversed)}` : `${words}, sort by ${words.toLowerCase()}`}
+        accessibilityLabel={on
+          ? `${words}, sorted ${sortDirection(columnKey, reversed)}${resortFirst ? ', press to re-sort for the latest games' : ''}`
+          : `${words}, sort by ${words.toLowerCase()}`}
         accessibilityRole="button"
         onBlur={() => onTip?.(columnKey, 'focus', false)}
         // Keyboard focus shows the explanation; a click's focus does not.

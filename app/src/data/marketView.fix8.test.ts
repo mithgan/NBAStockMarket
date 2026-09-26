@@ -39,8 +39,8 @@ test('walk 8 T3-16, T2-07: the Watching switch starts with its visible words; th
   assert.equal(watchingToggleName(0), 'Watching 0, show only players you watch');
   assert.ok(watchingToggleName(2).startsWith('Watching 2'));
   const base = { query: '', total: 30, watchedOnly: true };
-  assert.equal(listCountLine({ ...base, count: 1 }), 'Watching: 1 player. Show all 30 to see everyone.');
-  assert.equal(listCountLine({ ...base, count: 0, listed: 1 }), 'Watching: 0 players. Show all 30 to see everyone.', 'kept rows: the footer\'s Show all 30');
+  assert.equal(listCountLine({ ...base, count: 1 }), 'Watching: 1 player. Show all 30 is below the list.');
+  assert.equal(listCountLine({ ...base, count: 0, listed: 1 }), 'Watching: 0 players. Show all 30 is below the list.', 'kept rows: the footer\'s Show all 30');
   assert.equal(listCountLine({ ...base, count: 0 }), 'Watching: 0 players. Show everyone to see all 30.', 'empty list: its Show everyone');
 });
 
@@ -54,5 +54,7 @@ test('walk 8 T1-10: "$250" never stands alone, and 340-389px phones give the slo
   assert.equal(slotRoomFirst(360), true);
   assert.equal(slotRoomFirst(375), true);
   assert.equal(slotRoomFirst(390), false);
-  assert.equal(slotRoomFirst(320), false, 'under the toggle there: no race for room');
+  // Beside the toggle from 320px now (walk 10 T4-04): the slot column takes the room first there too.
+  assert.equal(slotRoomFirst(320), true);
+  assert.equal(slotRoomFirst(300), false, 'under the toggle there: no race for room');
 });

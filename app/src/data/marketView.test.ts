@@ -228,14 +228,16 @@ test('a held row reads the current position only, like its Roster row (grader B1
   const current = [result({ positionId: 'mock-position-12', gameId: 'new-1', netPnl: -368_339, dividendDollars: -265_000 })];
   const all = [...firstStint, ...current];
   // The all-stints value (what round 1 showed) is +$105K a game; the Roster row is -$368K.
-  assert.equal(heldDetail(accountValueByPlayer(all, 'long').get('a'), 103_000).text, '+$105.3K a game over 12 games');
+  // The total leads, the average after it (walk 10 T1-05).
+  assert.equal(heldDetail(accountValueByPlayer(all, 'long').get('a'), 103_000).text, '+$1.26M over 12 games, +$105.3K a game');
   const detail = heldDetail(positionValue(all, 'mock-position-12'), 103_000);
   // The Roster's precision (grader S-2): -$368.3K, not -$368K.
   // One game reads "in 1 game" (walk 5 T1-05).
-  assert.deepEqual(detail, { text: '-$368.3K in 1 game', tone: 'loss' });
+  // Its dividend went below zero, so the loss outgrew his price: said why (walk 10 T1-03).
+  assert.deepEqual(detail, { text: '-$368.3K in 1 game', total: '-$368.3K in 1 game', tone: 'loss', why: 'a below-zero night' });
   // Right after a re-add, before the new stint plays: the locked price, not the old stint.
   // Right after a re-add the price box shows "yours $104.3K"; the line says no games yet.
-  assert.deepEqual(heldDetail(positionValue(all, 'mock-position-13'), 104_250), { text: 'no games yet', tone: 'none' });
+  assert.deepEqual(heldDetail(positionValue(all, 'mock-position-13'), 104_250), { text: 'no games yet', total: 'no games yet', tone: 'none', why: null });
   assert.doesNotMatch(detail.text, /so far/);
 });
 
@@ -441,7 +443,7 @@ test('spoken counts say what the filter did, and that a cleared search is back (
   assert.equal(listCountLine(base), 'Showing all 30 players.');
   assert.equal(listCountLine({ ...base, count: 0, watchedOnly: true }), 'Watching: 0 players. Show everyone to see all 30.');
   // Walk 8 T2-07: names the button under the list, "Show all 30".
-  assert.equal(listCountLine({ ...base, count: 1, watchedOnly: true }), 'Watching: 1 player. Show all 30 to see everyone.');
+  assert.equal(listCountLine({ ...base, count: 1, watchedOnly: true }), 'Watching: 1 player. Show all 30 is below the list.');
   assert.equal(listCountLine({ ...base, cleared: true }), 'Search cleared. Showing all 30 players.');
   assert.equal(listCountLine({ ...base, query: 'zz', count: 0 }), 'No players match "zz".');
   assert.equal(listCountLine({ ...base, query: 'le', count: 7 }), '7 players match "le".');
@@ -494,10 +496,12 @@ test('choosing a sort never flips it; only the order button does (T1-08, T2-05, 
   assert.equal(sortAscending('dividend'), false);
 });
 
-test('the slot line sits beside the side toggle from 340px, under it below (T1-09)', () => {
+test('the slot line sits beside the side toggle from 320px, under it below (T1-09; walk 10 T4-04)', () => {
   assert.equal(slotLineBeside(360), true);
   assert.equal(slotLineBeside(340), true);
-  assert.equal(slotLineBeside(320), false);
+  // At 320x568 it stacked under the toggle and left one player in view (walk 10 T4-04).
+  assert.equal(slotLineBeside(320), true);
+  assert.equal(slotLineBeside(300), false);
 });
 
 test('search: no letters asks for a name; spaces and hyphens are ignored; initials find players (T4-05, T4-12)', () => {
@@ -672,7 +676,9 @@ test('every phone row breaks its value in the same place, and one game reads "in
   assert.ok(none.second.length > 0, 'the second line is never empty');
   const one = { games: 1, avgNet: 194_500 } as Parameters<typeof heldDetail>[0];
   assert.equal(heldDetail(one, 417_500).text, '+$194.5K in 1 game');
-  assert.equal(heldDetail({ ...one, games: 2, avgNet: 1_473 } as Parameters<typeof heldDetail>[0], 417_500).text, '+$1.5K a game over 2 games');
+  const two = heldDetail({ ...one, games: 2, avgNet: 1_473, total: 2_946 } as Parameters<typeof heldDetail>[0], 417_500);
+  assert.equal(two.text, '+$2.95K over 2 games, +$1.5K a game');
+  assert.equal(two.total, '+$2.95K over 2 games');
 });
 
 test('a phone list names the tier on every row, in one word and one place per width (walk 6 T1-01, T4-03, T4-06; walk 5 T1-03)', () => {

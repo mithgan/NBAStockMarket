@@ -91,13 +91,23 @@ export function orderButtonTitle(sort: MarketSort, reversed: boolean): string {
   return `${orderButtonName(sort, reversed)}. Flip to ${sortDirection(sort, !reversed)}.`;
 }
 
-/** What the table's Value and Dividend last season headers explain on hover and focus. */
+/** What the table's Dividend last season and Your profit headers explain on hover and focus. */
 export const COLUMN_EXPLANATIONS = {
-  value: "Last season's dividend minus his price (yours once you hold him), for this side",
   dividend: 'What he paid out a game last season',
   // "Your profit a game" says what it is, like its neighbours (walk 6 T2-03).
   yours: 'Your result a game so far, on players you hold',
 } as const;
+
+/**
+ * What the Value header explains, true to its side (walk 10 T2-07: the
+ * Short side stated the roster's formula, so +$69K read as a player who
+ * out-earned his price). Plus is good for you on either side.
+ */
+export function valueColumnExplanation(side: PerGamePositionSide): string {
+  return side === 'short'
+    ? "His price minus last season's dividend (your price once you short him). Plus is good for you."
+    : "Last season's dividend minus his price (your price once you hold him). Plus is good for you.";
+}
 
 /**
  * A held row's caption under its price at table widths: today's price when
@@ -488,26 +498,37 @@ export function netTone(net: number | null): SignalTone {
 
 /**
  * What a held row says after "On your roster ·" / "Shorted ·": the current
- * position's net a game and games (positionValue, the Roster row's source),
- * or the price you locked in before his first game.
+ * position's result (positionValue, the Roster row's source), the total
+ * first, as the profile and the Roster's Total lead with it, then the average
+ * (walk 10 T1-05: "+$113.5K a game over 4 games" beside the profile's
+ * "+$454K over 4 games"); one game is "+$194.5K in 1 game" (walk 5 T1-05).
+ * Before his first game: "no games yet". `why` explains a result bigger than
+ * his price, muted beside it (walk 10 T1-03: "-$315K in 1 game" under "yours
+ * $259K" read as a mistake): his dividend went below zero, so a roster spot
+ * paid his price and more (a short kept his price and more).
  */
 export function heldDetail(summary: ValueSummary | undefined, lockedGameCost: number): {
   text: string;
+  /** The total alone ("+$454K over 4 games"), for a line too narrow for the average too. */
+  total: string;
   tone: SignalTone;
+  why: string | null;
 } {
   if (summary && summary.avgNet !== null && summary.games > 0) {
-    // The Roster's per-game precision ("+$1.5K a game", not "+$1,473"), so
-    // the same figure reads the same on both screens (walk 4 T4-13). One game
-    // is "+$194.5K in 1 game", not "a game over 1 game" (walk 5 T1-05).
+    // The Roster's per-game precision for the average ("+$1.5K a game", not
+    // "+$1,473"), the profile's for the total (walk 4 T4-13).
+    const one = summary.games === 1;
+    const below = summary.avgDividend !== null && Math.round(summary.avgDividend) < 0;
+    const total = one ? `${signedMoneyCompact(summary.avgNet)} in 1 game` : `${signedMoney(summary.total)} over ${summary.games} games`;
     return {
-      text: summary.games === 1
-        ? `${signedMoneyCompact(summary.avgNet)} in 1 game`
-        : `${signedMoneyCompact(summary.avgNet)} a game over ${summary.games} games`,
-      tone: netTone(summary.avgNet),
+      text: one ? total : `${total}, ${signedMoneyCompact(summary.avgNet)} a game`,
+      total,
+      tone: netTone(one ? summary.avgNet : summary.total),
+      why: below ? (one ? 'a below-zero night' : 'below zero on average') : null,
     };
   }
-  // His price box already shows your locked price ("yours $104.3K").
-  return { text: 'no games yet', tone: 'none' };
+  // His price box already shows your locked price ("yours $104.3K/game").
+  return { text: 'no games yet', total: 'no games yet', tone: 'none', why: null };
 }
 
 /**
@@ -530,6 +551,28 @@ export function heldValueLine(
   if (edge === null) return { edge, value: 'No last season', now, tone: 'none' };
   const tone = netTone(edge);
   return { edge, value: tone === 'even' ? 'Last season even at your price' : `Last season ${signedMoneyCompact(edge)} at your price`, now, tone };
+}
+
+/**
+ * Under a held row's Value on the tables: where the figure comes from, as a
+ * held phone row says it ("Last season +$35K at your price"), so it never
+ * reads as this season's result (walk 10 T2-12).
+ */
+export const HELD_VALUE_CAPTION = 'last season at\u00A0your\u00A0price';
+
+/**
+ * A held phone row's price keeps its "/game" (walk 10 T1-02: "yours $417.5K"
+ * read as what he cost in all). Beside the given name and tier, "yours" fits
+ * too only from this width: at 390px "KARL-ANTHONY · STAR  yours
+ * $379.5K/game" wrapped and made rows taller than the rest (walk 5 T1-04).
+ * Narrower, the row says it is yours in its "On your roster ·" line and "at
+ * your price · now $X" line; the large-text row, whose price has a line of its
+ * own, always says "yours".
+ */
+export const HELD_YOURS_MIN_WIDTH = 440;
+
+export function heldPriceSaysYours(width: number, ownLine: boolean): boolean {
+  return ownLine || width >= HELD_YOURS_MIN_WIDTH;
 }
 
 /**
@@ -713,10 +756,24 @@ export function collapseControls(width: number, height = Infinity, _table = fals
  * goes under the toggle, left-aligned, so no empty block is left beside it
  * (walk 3 T1-09).
  */
-export const SLOT_LINE_BESIDE_MIN_WIDTH = 340;
+export const SLOT_LINE_BESIDE_MIN_WIDTH = 320;
 
 export function slotLineBeside(width: number): boolean {
   return width >= SLOT_LINE_BESIDE_MIN_WIDTH;
+}
+
+/**
+ * The share of the window the rows keep under a pinned toolbar and column
+ * labels. Below it (a laptop at 125-150% zoom, 960x600: the rows scrolled in
+ * the bottom 206px) the toolbar folds search, sort and Watching behind its
+ * "Search & sort" button, as on a short phone, so the rows get the room back
+ * while the labels stay put (walk 10 T2-16).
+ */
+export const PINNED_ROWS_MIN_SHARE = 0.55;
+
+export function pinnedChromeTooTall(rowsHeight: number, windowHeight: number): boolean {
+  if (!(rowsHeight > 0) || !(windowHeight > 0)) return false;
+  return rowsHeight < windowHeight * PINNED_ROWS_MIN_SHARE;
 }
 
 /**
@@ -988,7 +1045,7 @@ export function searchResultLine(query: string, count: number): string {
  * search's matches; right after a search is cleared, that the list is back
  * ("Search cleared. Showing all 30 players."); the Watching filter's count against
  * everyone, naming the button that is really there (walk 8 T2-07): "Show all
- * 30" under a list ("Watching: 1 player. Show all 30 to see everyone."), or
+ * 30" under a list ("Watching: 1 player. Show all 30 is below the list."), or
  * the empty list's "Show everyone" ("Watching: 0 players. Show everyone to
  * see all 30.").
  */
@@ -1016,8 +1073,9 @@ export function listCountLine({
   // Says the list is whole again, in the words the list uses (walk 6 T3-N4).
   if (cleared) return watchedOnly ? `Search cleared. Watching: ${players(count)}.` : `Search cleared. Showing all ${players(count)}.`;
   if (watchedOnly) {
+    // Says where the way back is, as the line under the list does (walk 10 T3-08).
     return listed > 0
-      ? `Watching: ${players(count)}. Show all ${total} to see everyone.`
+      ? `Watching: ${players(count)}. Show all ${total} is below the list.`
       : `Watching: ${players(count)}. Show everyone to see all ${total}.`;
   }
   return `Showing all ${players(count)}.`;
@@ -1366,6 +1424,59 @@ function gamesSince(previousNight: string, night: string): string {
   return first < night ? humanDaySpan(first, night) : humanDate(night);
 }
 
+/** Whole days from one ISO date to a later one ("2025-10-20" to "2025-10-27" is 7). */
+function daysBetween(fromIso: string, toIso: string): number {
+  const from = Date.parse(`${fromIso}T00:00:00Z`);
+  const to = Date.parse(`${toIso}T00:00:00Z`);
+  if (Number.isNaN(from) || Number.isNaN(to)) return 0;
+  return Math.round((to - from) / 86_400_000);
+}
+
+/** The longest run of games after which the list still keeps its order: a week. */
+export const HELD_ORDER_MAX_DAYS = 7;
+
+/**
+ * The list keeps its order after a night or a week, so nothing moves under
+ * the next tap (walk 7 T4-11). A longer run, or one that ends the season,
+ * sorts afresh once it settles (walk 10 T2-03: after Play to the end the list
+ * under "VALUE ↓" kept its Oct 20 order, "Same order as before the Oct
+ * 21–Apr 12 games"). `sortedNight` is the night the order was sorted for.
+ */
+export function resortsAfterRun(sortedNight: string, night: string, seasonOver: boolean): boolean {
+  if (!sortedNight || !night || sortedNight >= night) return false;
+  return seasonOver || daysBetween(sortedNight, night) > HELD_ORDER_MAX_DAYS;
+}
+
+/**
+ * The group line over players held on the other side, who sit at the end of
+ * the list (walk 5 T2-19): how to take one of them, or, once the season is
+ * over and nothing can be dropped or closed, only who they are (walk 10 T2-04).
+ */
+export function otherSideGroupLine(side: PerGamePositionSide, seasonOver: boolean): string {
+  if (side === 'short') return seasonOver ? 'On your roster this season' : 'On your roster: to short one of them, drop him there first';
+  return seasonOver ? 'Shorted this season' : 'Shorted: to add one of them, close his short first';
+}
+
+/**
+ * The "Your profit a game" cell of a player you do not hold on this side, in
+ * words (the cell shows a dash): held on the other side says where he is
+ * ("on your roster", "shorted"), never "not held" (walk 10 T2-04).
+ */
+/**
+ * Why a row held on the other side cannot be taken, as its name says it: the
+ * list's own reason while moves can happen ("He's on your roster. Drop him to
+ * short him."), only where he is once the season is over (walk 10 T2-04).
+ */
+export function otherSideReason(side: PerGamePositionSide, reason: string | null, seasonOver: boolean): string | null {
+  if (!seasonOver || reason === null) return reason;
+  return side === 'short' ? "He's on your roster." : "You're shorting him.";
+}
+
+export function unheldProfitWords(side: PerGamePositionSide, heldOtherSide: boolean): string {
+  if (!heldOtherSide) return 'not held';
+  return side === 'short' ? 'on your roster' : 'shorted';
+}
+
 /**
  * After a night the list keeps the order it had, so nothing moves under a tap
  * (walk 7 T4-11); a tall table says so in its sentence slot: "Same order as
@@ -1386,17 +1497,28 @@ export function orderLine({
   sort,
   reversed,
   heldNote,
+  gamesIn = true,
 }: {
   sort: MarketSort;
   reversed: boolean;
   /** heldOrderLine(...) while the order is from before the latest games, else null. */
   heldNote: string | null;
-}): { text: string; tone: 'quiet' | 'flipped' | 'stale'; resort: boolean; reserve: string } {
-  const reserve = 'Same order as before the Oct 21–27 games.';
-  if (heldNote) return { text: heldNote, tone: 'stale', resort: true, reserve };
+  /**
+   * Games have been played. Before them the order cannot be held, so the line
+   * keeps only its own longest wording (walk 10 T4-04: at 320x568 the held
+   * line's two reserved lines pushed all but one player below the fold).
+   */
+  gamesIn?: boolean;
+}): { text: string; tone: 'quiet' | 'flipped' | 'stale'; resort: boolean; reserve: string; reserveResort: boolean } {
   const said = sortedLine(sort, reversed);
-  if (reversed) return { text: flippedSortNote(sort).text, tone: 'flipped', resort: false, reserve };
-  return { text: said, tone: 'quiet', resort: false, reserve };
+  const flipped = flippedSortNote(sort).text;
+  const plain = sortedLine(sort, false);
+  const reserve = gamesIn ? 'Same order as before the Oct 21–27 games.' : flipped.length > plain.length ? flipped : plain;
+  // Re-sort's 44px target is kept in the reserve only once it can appear.
+  const reserveResort = gamesIn;
+  if (heldNote) return { text: heldNote, tone: 'stale', resort: true, reserve, reserveResort };
+  if (reversed) return { text: flipped, tone: 'flipped', resort: false, reserve, reserveResort };
+  return { text: said, tone: 'quiet', resort: false, reserve, reserveResort };
 }
 
 /**

@@ -15,6 +15,7 @@ export function OrderLine({
   tone,
   reserve,
   resort,
+  reserveResort = true,
   style,
 }: {
   text: string;
@@ -23,6 +24,8 @@ export function OrderLine({
   reserve: string;
   /** Re-sort for the latest games: its button's name and press. */
   resort: { name: string; onPress: () => void } | null;
+  /** The reserve keeps Re-sort's height too (from the first games on, orderLine). */
+  reserveResort?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const words = (shown: string, action: boolean, ghost: boolean) => (
@@ -57,7 +60,7 @@ export function OrderLine({
         style={[styles.layer, styles.ghost]}
         {...({ 'aria-hidden': true } as object)}
       >
-        {words(reserve, true, true)}
+        {words(reserve, reserveResort || resort !== null, true)}
       </View>
     </View>
   );
