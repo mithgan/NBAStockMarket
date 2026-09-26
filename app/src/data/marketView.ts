@@ -13,9 +13,8 @@ import type {
   PerGameSlotSummary,
 } from '../api/contracts';
 import {
-  CONFIRM_LABEL,
   closeVerb,
-  confirmCloseLine,
+  exactMoney,
   money,
   moneyFine,
   openVerb,
@@ -41,6 +40,19 @@ export const MARKET_SORT_OPTIONS: { key: MarketSort; label: string; hint: string
   { key: 'name', label: 'Name', hint: 'By last name, A to Z' },
 ];
 
+/**
+ * The sort choices with the chosen one's direction on it: "Price ↑" runs
+ * cheapest first, "Price ↓" dearest first. Choosing it again flips it.
+ */
+export function marketSortOptions(sort: MarketSort, reversed: boolean): { key: MarketSort; label: string; hint: string }[] {
+  return MARKET_SORT_OPTIONS.map((option) => {
+    if (option.key !== sort) return option;
+    // Price and Name run low to high (↑) by default; Value runs best first (↓).
+    const up = option.key === 'value' ? reversed : !reversed;
+    return { ...option, label: `${option.label} ${up ? '↑' : '↓'}`, hint: `${sortedLine(option.key, reversed)} Choose again to flip.` };
+  });
+}
+
 /** Under half a thousand either way reads as even, matching valueVerdict. */
 const EVEN_BAND = 500;
 
@@ -60,6 +72,20 @@ function compareNames(left: string, right: string): number {
  * renders.
  */
 export function sortMarketRows<T extends { player: PerGameMarketPlayer }>(
+  rows: readonly T[],
+  sort: MarketSort,
+  side: PerGamePositionSide,
+  reversed = false,
+): T[] {
+  const ordered = sortForward(rows, sort, side);
+  if (!reversed) return ordered;
+  // The other way round, but players with no last season still go last.
+  if (sort !== 'value') return ordered.reverse();
+  const known = ordered.filter((row) => lastYearEdge(row.player, side) !== null);
+  return [...known.reverse(), ...ordered.filter((row) => lastYearEdge(row.player, side) === null)];
+}
+
+function sortForward<T extends { player: PerGameMarketPlayer }>(
   rows: readonly T[],
   sort: MarketSort,
   side: PerGamePositionSide,
@@ -91,13 +117,33 @@ export function actionableFirst<T extends { blockedByOpposingPosition: boolean }
   ];
 }
 
-/** Lower-case, accent-free text so "doncic" finds "Dončić". */
+/**
+ * Lower-case, accent-free text without apostrophes, quotes or dots, so
+ * "doncic" finds "Dončić" and "De’Aaron" (a phone's curly apostrophe),
+ * "DeAaron" and "de aaron" all find "De'Aaron Fox". Hyphens stay, so
+ * "Karl-Anthony" and "karl anthony" both work.
+ */
 export function searchKey(text: string): string {
   return text
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
     .trim();
+}
+
+/** The longest search the empty state repeats back before it trims it. */
+const ECHO_MAX = 24;
+
+/**
+ * The search as the empty state repeats it: trimmed to a readable length
+ * and given a break point every 10 characters, so a pasted run with no
+ * spaces wraps instead of running off the screen.
+ */
+export function echoQuery(query: string): string {
+  const trimmed = query.trim();
+  const short = trimmed.length > ECHO_MAX ? `${trimmed.slice(0, ECHO_MAX)}…` : trimmed;
+  return short.replace(/(\S{10})(?=\S)/g, '$1\u200B');
 }
 
 /**
@@ -127,30 +173,52 @@ export type SignalTone = 'gain' | 'loss' | 'even' | 'none';
 export interface ValueSignal {
   /** Per-game edge at today's price from last season, sign already set for the side. */
   edge: number | null;
-  /** The fact: "Last year $120K a game ·", or null with no last season. */
+  /** The fact: "Paid $120K a game last season ·", or null with no last season. */
   lead: string | null;
-  /** The comparison: "+$20K vs his price", "-$20K for a short", "No last season". */
+  /** The comparison: "$20K over his price", "+$20K for a short", "No last season". */
   text: string;
   tone: SignalTone;
 }
 
 /**
- * The value line a fan reads at a glance: what he was worth a game last
+ * An amount rounded the way `money` prints it (to $1 under $10K, to $100
+ * under $1M, then to $10K), so a difference of two printed figures is
+ * itself a printed figure and the row's numbers add up on screen.
+ */
+export function shownAmount(amount: number): number {
+  const abs = Math.abs(Math.round(amount));
+  const step = abs < 10_000 ? 1 : abs < 999_950 ? 100 : 10_000;
+  return Math.sign(amount) * Math.round(abs / step) * step;
+}
+
+/** Last season against today's price, from the figures as printed. */
+export function shownEdge(
+  player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
+  side: PerGamePositionSide,
+): number | null {
+  if (player.priorSeasonValuePerGame === null) return null;
+  const edge = shownAmount(player.priorSeasonValuePerGame) - shownAmount(player.currentGameCost);
+  return side === 'long' ? edge : -edge;
+}
+
+/**
+ * The value line a fan reads at a glance: what his dividend paid a game last
  * season, then how that compares with his price today. On the Short tab the
- * comparison is what a short would have made (lastYearEdge flips the sign).
+ * comparison is what a short would have made (the sign flips).
  */
 export function valueSignal(
   player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
   side: PerGamePositionSide,
 ): ValueSignal {
-  const edge = lastYearEdge(player, side);
+  const edge = lastYearEdge(player, side) === null ? null : shownEdge(player, side);
   if (edge === null || player.priorSeasonValuePerGame === null) {
     return { edge: null, lead: null, text: 'No last season', tone: 'none' };
   }
-  const lead = `Last year ${money(player.priorSeasonValuePerGame)} a game ·`;
+  const lead = `Paid ${money(player.priorSeasonValuePerGame)} a game last season ·`;
   const tone = netTone(edge);
   if (tone === 'even') return { edge, lead, text: 'even with his price', tone };
-  return { edge, lead, text: `${signedMoney(edge)} ${side === 'long' ? 'vs his price' : 'for a short'}`, tone };
+  if (side === 'short') return { edge, lead, text: `${signedMoney(edge)} for a short`, tone };
+  return { edge, lead, text: `${money(Math.abs(edge))} ${edge > 0 ? 'over' : 'under'} his price`, tone };
 }
 
 /** "8 of 10 on your roster" / "1 of 5 shorts". */
@@ -172,6 +240,23 @@ export function actionName(
     ? `${closeVerb(side)} ${playerName} from your roster`
     : `${closeVerb(side)} your short on ${playerName}`;
 }
+
+/**
+ * The button's accessible name during the moment after an Add or Short, while
+ * it shows "Added ✓" and ignores taps: "Added Nikola Jokic to your roster".
+ * It never starts with "Add" or "Short", so nothing mistakes it for an offer.
+ */
+export function justOpenedName(side: PerGamePositionSide, playerName: string): string {
+  return side === 'long' ? `Added ${playerName} to your roster` : `Shorted ${playerName}`;
+}
+
+/** The same moment after a confirmed Drop or Close: "Dropped Nikola Jokic". */
+export function justClosedName(side: PerGamePositionSide, playerName: string): string {
+  return side === 'long' ? `Dropped ${playerName}` : `Closed your short on ${playerName}`;
+}
+
+/** How long the "Added ✓" / "Dropped ✓" state holds after the action lands. */
+export const JUST_OPENED_MS = 1200;
 
 /**
  * This account's own settled games with each player on one side, keyed by
@@ -239,43 +324,63 @@ export function heldDetail(summary: ValueSummary | undefined, lockedGameCost: nu
 /**
  * The action button's visible word. A pending action waits; a lock or a full
  * side says so on the button itself, so a dimmed button never goes
- * unexplained; an armed Drop or Close reads "Confirm", the word the Roster
- * and Restart use. (At season end there are no buttons: see `rowActions`.)
+ * unexplained; right after an Add or Short it reads "Added ✓" / "Shorted ✓".
+ * A Drop or Close asks in a confirm strip under the row, so the button itself
+ * never turns into a second, costly tap. (At season end there are no buttons:
+ * see `rowActions`.)
  */
 export function actionWord({
   side,
   held,
   pending,
-  confirming,
   rosterLocked,
   full,
+  justOpened = false,
+  justClosed = false,
 }: {
   side: PerGamePositionSide;
   held: boolean;
   pending: boolean;
-  confirming: boolean;
   rosterLocked: boolean;
   full: boolean;
+  /** He was added or shorted a moment ago: the button says so and takes no taps. */
+  justOpened?: boolean;
+  /** He was dropped (or his short closed) a moment ago: the same quiet beat. */
+  justClosed?: boolean;
 }): string {
   const verb = held ? closeVerb(side) : openVerb(side);
   if (pending) return 'Wait';
+  if (held && justOpened) return side === 'long' ? 'Added ✓' : 'Shorted ✓';
+  if (!held && justClosed) return side === 'long' ? 'Dropped ✓' : 'Closed ✓';
   if (rosterLocked) return 'Locked';
-  if (held && confirming) return CONFIRM_LABEL;
   if (!held && full) return 'Full';
   return verb;
 }
 
 /**
- * What the live region says when a Drop or Close is armed: the same line the
- * button shows under it, led by what to tap.
- * "Tap Confirm to drop Nikola Jokic. $250 fee · his +$764K stays in your score."
+ * What the confirm strip under a row says before a Drop or Close: the question,
+ * the fee, what stays in the score, and what coming back would cost. Whole
+ * sentences, so a screen reader reads it the way it looks.
+ * "Drop Nikola Jokic? $250 fee. His +$764K stays in your score. Adding him
+ * back costs another $250, at that day's price."
  */
-export function confirmAnnouncement(side: PerGamePositionSide, playerName: string, fee: number, total: number): string {
-  const what = side === 'long' ? `drop ${playerName}` : `close your short on ${playerName}`;
-  // With no fee the shared line starts "his …" or "this short's …"; it is a
-  // sentence of its own here, so it starts with a capital.
-  const line = confirmCloseLine(side, fee, total);
-  return `Tap ${CONFIRM_LABEL} to ${what}. ${line.charAt(0).toUpperCase()}${line.slice(1)}.`;
+export function confirmStripMessage(side: PerGamePositionSide, playerName: string, fee: number, total: number): string {
+  const long = side === 'long';
+  const question = long ? `Drop ${playerName}?` : `Close your short on ${playerName}?`;
+  const feeLine = fee > 0 ? ` ${exactMoney(fee)} fee.` : '';
+  const stays = Math.round(total) === 0
+    ? ` ${long ? 'He has' : 'This short has'} not changed your score yet.`
+    : ` ${long ? 'His' : "This short's"} ${signedMoneyFine(total)} stays in your score.`;
+  const back = long ? 'Adding him back' : 'Shorting him again';
+  const again = fee > 0
+    ? ` ${back} costs another ${exactMoney(fee)}, at that day's price.`
+    : ` ${back} is at that day's price.`;
+  return `${question}${feeLine}${stays}${again}`;
+}
+
+/** What the live region says when a player backs out of a Drop or Close. */
+export function keptAnnouncement(side: PerGamePositionSide, playerName: string): string {
+  return side === 'long' ? `Kept ${playerName} on your roster.` : `Kept your short on ${playerName}.`;
 }
 
 /**
@@ -358,9 +463,6 @@ export function rowKicker(given: string, tier: string | null | undefined, width:
   return [given, width >= KICKER_TIER_MIN_WIDTH ? tier : null].filter(Boolean).join(' · ');
 }
 
-/** How long a Drop or Close waits for its second tap. */
-export const CONFIRM_WINDOW_MS = 4000;
-
 export type MarketLayout = 'phone' | 'large' | 'table';
 
 /**
@@ -422,4 +524,34 @@ export function rowProfileLabel({
 }): string {
   const facts = [name, tier.toLowerCase(), perGame(price), detail].filter(Boolean).join(', ');
   return reason ? `${facts}. ${reason} View profile` : `${facts}, View profile`;
+}
+
+/** What a screen reader hears when typing pauses: "7 players match "le"". */
+export function searchResultLine(query: string, count: number): string {
+  if (!query) return `Showing all ${count} ${count === 1 ? 'player' : 'players'}.`;
+  if (count === 0) return `No players match "${query}".`;
+  return `${count} ${count === 1 ? 'player matches' : 'players match'} "${query}".`;
+}
+
+/** What a screen reader hears when the sort changes. */
+export function sortedLine(sort: MarketSort, reversed = false): string {
+  if (sort === 'price') return reversed ? 'Sorted by price, dearest first.' : 'Sorted by price, cheapest first.';
+  if (sort === 'value') return reversed ? 'Sorted by value, worst first.' : 'Sorted by value, best first.';
+  return reversed ? 'Sorted by name, Z to A.' : 'Sorted by name, A to Z.';
+}
+
+/**
+ * Why FULL cannot add him, and what to do: "Your roster is full (10 of 10).
+ * Drop a player to add Tyrese Maxey." The button under it opens the Roster.
+ */
+export function fullNote(side: PerGamePositionSide, playerName: string, limit: number): { message: string; action: string } {
+  return side === 'long'
+    ? { message: `Your roster is full (${limit} of ${limit}). Drop a player to add ${playerName}.`, action: 'Choose who to drop' }
+    : { message: `All ${limit} short ${limit === 1 ? 'slot is' : 'slots are'} in use. Close a short to short ${playerName}.`, action: 'Choose a short to close' };
+}
+
+/** The fee, said where the side is chosen: "$250 to add or drop". Empty with no fee. */
+export function feeHint(side: PerGamePositionSide, fee: number): string {
+  if (fee <= 0) return '';
+  return side === 'long' ? `${exactMoney(fee)} to add or drop` : `${exactMoney(fee)} to short or close`;
 }

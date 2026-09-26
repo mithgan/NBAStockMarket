@@ -3,9 +3,10 @@
  * desktop column header. The screen composes them; the rows live with the
  * screen because their actions and locks are part of its contract.
  */
+import { useRef } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import type { MarketColumnSet } from '../../data/marketView';
+import { sortedLine, type MarketColumnSet, type MarketSort } from '../../data/marketView';
 import { colors, control, fonts, radius, space, type, weight } from '../../theme';
 import { Label } from '../../ui/kit';
 import { CloseIcon, SearchIcon, StarIcon } from './icons';
@@ -20,16 +21,25 @@ export function MarketSearch({
   style?: StyleProp<ViewStyle>;
 }) {
   // The input itself carries the border so its own box is the full 44px; the
-  // magnifier and the clear control sit over its padding.
+  // magnifier and the clear control sit over its padding. Clearing keeps the
+  // keyboard up (focus goes back into the field); Escape clears a search, and
+  // a second Escape leaves the field.
+  const input = useRef<TextInput>(null);
   return (
     <View style={[styles.search, style]}>
       <TextInput
+        ref={input}
         accessibilityLabel="Search players"
         autoCapitalize="none"
         autoCorrect={false}
         clearButtonMode="never"
         maxFontSizeMultiplier={1.4}
         onChangeText={onChange}
+        onKeyPress={(event) => {
+          if (event.nativeEvent.key !== 'Escape') return;
+          if (value.length > 0) onChange('');
+          else input.current?.blur();
+        }}
         placeholder="Search players"
         placeholderTextColor={colors.faint}
         returnKeyType="search"
@@ -43,7 +53,10 @@ export function MarketSearch({
         <Pressable
           accessibilityLabel="Clear search"
           accessibilityRole="button"
-          onPress={() => onChange('')}
+          onPress={() => {
+            onChange('');
+            input.current?.focus();
+          }}
           style={({ pressed }) => [styles.clear, pressed && styles.pressed]}
         >
           <CloseIcon color={colors.muted} size={14} />
@@ -118,20 +131,62 @@ export function ControlsToggle({
   );
 }
 
-/** Column labels above the table; the widths are the rows' own (marketColumns). */
-export function MarketColumnHeader({ columns, edgeLabel }: { columns: MarketColumnSet; edgeLabel: string }) {
+/**
+ * Column labels above the table; the widths are the rows' own (marketColumns).
+ * Player, Price and Edge sort the list (again to flip, with an arrow for the
+ * direction); the other labels are read with each row, so they stay silent.
+ */
+export function MarketColumnHeader({
+  columns,
+  edgeLabel,
+  sort,
+  reversed,
+  onSort,
+  lead = 0,
+}: {
+  columns: MarketColumnSet;
+  /** Extra room before the avatar column (the rows' watch star). */
+  lead?: number;
+  edgeLabel: string;
+  sort: MarketSort;
+  reversed: boolean;
+  onSort: (sort: MarketSort) => void;
+}) {
+  const sorter = (key: MarketSort, label: string, width?: number) => {
+    const on = sort === key;
+    const up = key === 'value' ? reversed : !reversed;
+    return (
+      <Pressable
+        accessibilityLabel={`Sort by ${key === 'value' ? 'edge' : key}${on ? `, ${sortedLine(key, reversed).replace(/^Sorted by [a-z]+, |\.$/g, '')}` : ''}`}
+        accessibilityRole="button"
+        onPress={() => onSort(key)}
+        style={({ pressed }) => [styles.sorter, width === undefined ? styles.columnPlayer : { width }, pressed && styles.pressed]}
+      >
+        <View style={styles.sorterLabel}>
+          <Label style={[width !== undefined && styles.column, on && styles.columnOn]}>{width === undefined && on ? `${label} ${up ? '↑' : '↓'}` : label}</Label>
+          {/* A number column's arrow sits in the gap to its right, so the label keeps one line. */}
+          {width !== undefined && on ? (
+            <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.arrow}>{up ? '↑' : '↓'}</Text>
+          ) : null}
+        </View>
+      </Pressable>
+    );
+  };
   return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={[styles.columns, { gap: columns.gap }]}
-    >
+    <View style={[styles.columns, { gap: columns.gap }]}>
+      {lead > 0 ? <View style={{ width: lead }} /> : null}
       <View style={{ width: columns.avatar }} />
-      <Label style={styles.columnPlayer}>Player</Label>
-      <Label style={[styles.column, { width: columns.price }]}>Price a game</Label>
-      <Label style={[styles.column, { width: columns.lastSeason }]}>Last season</Label>
-      <Label style={[styles.column, { width: columns.edge }]}>{edgeLabel}</Label>
-      {columns.yours > 0 ? <Label style={[styles.column, { width: columns.yours }]}>Your net a game</Label> : null}
+      {sorter('name', 'Player')}
+      {sorter('price', 'Price a game', columns.price)}
+      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.quietColumn, { width: columns.lastSeason }]}>
+        <Label style={styles.column}>Last season</Label>
+      </View>
+      {sorter('value', edgeLabel, columns.edge)}
+      {columns.yours > 0 ? (
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.quietColumn, { width: columns.yours }]}>
+          <Label style={styles.column}>Your net a game</Label>
+        </View>
+      ) : null}
       <View style={{ width: columns.action }} />
     </View>
   );
@@ -229,6 +284,9 @@ const styles = StyleSheet.create({
     color: colors.goldInk,
   },
   watchingCount: {
+    // A fixed slot for up to two digits, so the row never shifts as it counts.
+    minWidth: 16,
+    textAlign: 'center',
     color: colors.faint,
     fontFamily: fonts.display,
     fontSize: type.label,
@@ -236,7 +294,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   columns: {
-    minHeight: 32,
+    minHeight: control.height,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: space.lg,
@@ -249,6 +307,28 @@ const styles = StyleSheet.create({
   },
   column: {
     textAlign: 'right',
+  },
+  columnOn: {
+    color: colors.goldInk,
+  },
+  sorter: {
+    minHeight: control.height,
+    justifyContent: 'center',
+  },
+  sorterLabel: {
+    position: 'relative',
+  },
+  arrow: {
+    position: 'absolute',
+    right: -11,
+    top: 0,
+    color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.heavy,
+  },
+  quietColumn: {
+    justifyContent: 'center',
   },
   pressed: {
     opacity: 0.72,

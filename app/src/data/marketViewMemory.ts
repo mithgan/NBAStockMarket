@@ -1,0 +1,70 @@
+/**
+ * What the Market remembers while you visit other tabs: the side, the sort
+ * (and its direction), the search, the Watching filter and where you were in
+ * the list. The screen unmounts on every tab switch, so this lives at module
+ * level for the session (a reload or Restart starts fresh).
+ */
+import type { PerGamePositionSide } from '../api/contracts';
+import type { MarketSort } from './marketView';
+
+export interface MarketMemory {
+  side: PerGamePositionSide;
+  sort: MarketSort;
+  /** The sort runs the other way (most expensive first, worst value first, Z to A). */
+  reversed: boolean;
+  query: string;
+  watchedOnly: boolean;
+  /** The first row you could see, so the list comes back to the same player. */
+  anchorId: string | null;
+  /** How far the list was scrolled, and at what window width. */
+  offset: number;
+  width: number;
+  /** The side the app last asked the Market to open on. */
+  lastInitialSide: PerGamePositionSide | null;
+}
+
+const FRESH: MarketMemory = {
+  side: 'long',
+  sort: 'price',
+  reversed: false,
+  query: '',
+  watchedOnly: false,
+  anchorId: null,
+  offset: 0,
+  width: 0,
+  lastInitialSide: null,
+};
+
+let memory: MarketMemory = { ...FRESH };
+
+export function marketMemory(): MarketMemory {
+  return memory;
+}
+
+export function rememberMarket(patch: Partial<MarketMemory>): void {
+  memory = { ...memory, ...patch };
+}
+
+export function forgetMarket(): void {
+  memory = { ...FRESH };
+}
+
+/**
+ * The side the Market opens on. A new request wins (the Roster's "Find a
+ * short" asks for the Short side; so does any press inside a screen that
+ * opens the Market); coming back through the tab bar or Back restores the
+ * side you left it on.
+ */
+export function openingSide({
+  initialSide,
+  remembered,
+  requestedFromScreen,
+}: {
+  initialSide: PerGamePositionSide;
+  remembered: Pick<MarketMemory, 'side' | 'lastInitialSide'>;
+  requestedFromScreen: boolean;
+}): PerGamePositionSide {
+  if (requestedFromScreen) return initialSide;
+  if (remembered.lastInitialSide === null || remembered.lastInitialSide !== initialSide) return initialSide;
+  return remembered.side;
+}
