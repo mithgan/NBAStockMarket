@@ -116,7 +116,12 @@ export function expiryLine(
   nextGameDate: string | null = null,
 ): string | null {
   if (position.side !== 'short' || !position.expiresOn) return null;
-  if (shortEndsNext(position, nextGameDate)) return 'Ends by itself after the next games, no need to close';
+  if (shortEndsNext(position, nextGameDate)) {
+    return nextGameDate && (position.expiresOn as string) < nextGameDate
+      // His term is over and he has no game in it before it ends.
+      ? `Term over ${humanDate(position.expiresOn)}: it ends by itself, nothing more can change`
+      : 'Ends by itself after the next games, no need to close';
+  }
   return `Ends ${humanDate(position.expiresOn)}`;
 }
 

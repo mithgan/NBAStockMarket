@@ -390,6 +390,17 @@ export class MockPerGameApiClient {
         dividend_per_holder: Math.round(actualNp * rate) - player.currentGameCost,
       });
     }
+    // A short whose term ended before tonight (no games on its last days)
+    // closes now, before the games: it never plays past its term.
+    for (const position of state.positions) {
+      if (position.status !== 'active' || position.expiresOn === null || position.expiresOn >= date) continue;
+      this.sequence += 1;
+      position.status = 'closed';
+      position.closedEventSequence = this.sequence;
+      const slots = position.side === 'long' ? state.account.longSlots : state.account.shortSlots;
+      slots.used = Math.max(0, slots.used - 1);
+      slots.remaining = Math.max(0, slots.limit - slots.used);
+    }
     let nightPnl = 0;
     for (const position of state.positions) {
       if (position.status !== 'active') continue;

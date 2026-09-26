@@ -176,11 +176,12 @@ function PositionRow({
       ? `credited ${moneyCompact(position.lockedGameCost)} a game, set when you shorted him`
       : `price ${moneyCompact(position.lockedGameCost)} a game, set when you added him`,
     priceMoved ? `market price now ${moneyCompact(marketPrice as number)} a game` : null,
-    view.games || 'no games yet',
+    // The tag already says "No games yet" when he has none.
+    view.games || null,
     view.summary.avgDividend === null ? null : `dividend ${moneyCompact(view.summary.avgDividend)} a game`,
     view.summary.avgNet === null ? null : `profit ${signedMoneyCompact(view.summary.avgNet)} a game`,
     `total ${signedMoney(position.cumulativePnl)}`,
-    short
+    view.summary.games === 0 ? null : short
       ? `${money(position.cumulativeGameCost)} credited and ${money(position.cumulativeDividend)} in his dividends`
       : `${money(position.cumulativeDividend)} in dividends against ${money(position.cumulativeGameCost)} in prices`,
     view.expiry ? view.expiry.replace(/ · /g, ', ') : null,
@@ -236,7 +237,7 @@ function PositionRow({
       accessibilityHint={rosterLocked ? rosterLockHint : undefined}
       // react-native-web drops accessibilityHint, so the name carries the reason.
       accessibilityLabel={rosterLocked
-        ? `${actionName} unavailable. ${rosterLockHint}`
+        ? `${actionName}: locked. ${rosterLockHint}`
         : pending ? (short ? `Closing your short on ${position.playerName}` : `Dropping ${position.playerName}`)
           : actionName}
       accessibilityRole="button"
@@ -248,7 +249,9 @@ function PositionRow({
       style={({ pressed }) => [
         styles.action,
         confirming && styles.actionArmed,
-        disabled && styles.disabled,
+        // LOCKED is read and pressed for its reason: full-contrast words and a
+        // dashed edge, not a faded button (walk 3 T3-16).
+        rosterLocked ? styles.actionLocked : disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
       ]}
     >
@@ -992,6 +995,9 @@ const styles = StyleSheet.create({
     // Outlined, not filled: dropping is a secondary move on a row whose job
     // is to show how the player is doing.
     backgroundColor: 'transparent',
+  },
+  actionLocked: {
+    borderStyle: 'dashed',
   },
   actionArmed: {
     borderColor: colors.gold,

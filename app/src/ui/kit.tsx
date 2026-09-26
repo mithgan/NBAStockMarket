@@ -277,7 +277,13 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
           variant === 'danger' && styles.buttonDanger,
           width !== undefined && { width },
           hovered && !disabled && (variant === 'primary' ? styles.hoverPrimary : styles.hover),
-          disabled && styles.disabled,
+          // A reachable disabled button (LOCKED, FULL, "Added ✓") is read and
+          // pressed for its reason, so it keeps full-contrast words and shows
+          // its state by a dashed edge, not by fading (walk 3 T3-16).
+          disabled && (focusableWhenDisabled ? styles.reachableDisabled : styles.disabled),
+          // A gold fill would read as live: a reachable disabled primary
+          // takes the outlined look.
+          disabled && focusableWhenDisabled && variant === 'primary' && styles.reachablePrimary,
           pressed && !disabled && styles.pressed,
           style,
         ];
@@ -290,6 +296,7 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
           variant === 'primary' && styles.buttonTextPrimary,
           variant === 'quiet' && styles.buttonTextQuiet,
           variant === 'danger' && styles.buttonTextDanger,
+          disabled && focusableWhenDisabled && styles.buttonTextReachable,
           textStyle,
         ]}
       >
@@ -914,6 +921,16 @@ const styles = StyleSheet.create({
   },
   emptyAction: {
     marginTop: space.lg,
+  },
+  reachableDisabled: {
+    borderStyle: 'dashed',
+    borderColor: colors.controlBorder,
+  },
+  buttonTextReachable: {
+    color: colors.muted,
+  },
+  reachablePrimary: {
+    backgroundColor: colors.surfaceRaised,
   },
   disabled: {
     opacity: 0.45,

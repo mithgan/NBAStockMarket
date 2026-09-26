@@ -121,6 +121,11 @@ test('only a short with an end date shows when it ends, in plain dates', () => {
     expiryLine({ side: 'short', expiresOn: '2025-11-20' }, '2025-11-20'),
     'Ends by itself after the next games, no need to close',
   );
+  // Past its term with no game left in it: nothing more can change.
+  assert.equal(
+    expiryLine({ side: 'short', expiresOn: '2025-11-20' }, '2025-11-22'),
+    'Term over Nov 20: it ends by itself, nothing more can change',
+  );
   assert.equal(expiryLine({ side: 'short', expiresOn: null }), null);
   assert.equal(expiryLine({ side: 'long', expiresOn: '2025-11-20' }), null);
 });
