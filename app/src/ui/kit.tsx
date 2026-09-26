@@ -15,7 +15,7 @@
 import { forwardRef, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import { useBackFolds } from '../web/appHistory';
-import { settleTaps, tapsSettling } from '../web/tapSettle';
+import { quietLift, settleTaps, tapsSettling } from '../web/tapSettle';
 import {
   Modal,
   Pressable,
@@ -363,6 +363,9 @@ function useTapGuard(ms = CONFIRM_TAP_GUARD_MS) {
   const openedAt = useRef(Date.now());
   return useCallback((fn: () => void) => () => {
     if (Date.now() - openedAt.current < ms) return;
+    // A dialog's backdrop closes on the lift: what it uncovers must not take
+    // the click that follows (walk 10 T1-11).
+    quietLift();
     fn();
   }, [ms]);
 }

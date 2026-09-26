@@ -141,6 +141,28 @@ test('a double click whose second lift comes before the sheet quiets its spot st
   }
 });
 
+test('a backdrop closing on the lift keeps that tap\'s click off what it uncovers (walk 10 T1-11)', async () => {
+  mock.timers.enable({ apis: ['Date'], now: 70_000_000 });
+  try {
+    const { noteClick, notePointer, quietLift, tapsSettling } = await import('./tapSettle');
+    // A finger lifts on the dimmed backdrop over +1 night; the backdrop
+    // closes on that lift, before the tap's click.
+    notePointer(640, 24, false);
+    quietLift();
+    // 77 ms later the click lands on +1 night, now uncovered: ignored.
+    mock.timers.tick(77);
+    noteClick(640, 24);
+    assert.equal(tapsSettling(true), true);
+    // A deliberate tap there a moment later acts.
+    mock.timers.tick(700);
+    notePointer(640, 24, false);
+    noteClick(640, 24);
+    assert.equal(tapsSettling(true), false);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
 test('a key press right after a click is the keyboard\'s, not a repeat tap', async () => {
   const { notePointer, notePressKey, pressedByPointer } = await import('./tapSettle');
   notePointer(10, 10);

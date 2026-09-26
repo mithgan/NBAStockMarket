@@ -228,6 +228,30 @@ export function repeatSafe<A extends unknown[]>(press: (...args: A) => void, ms 
   };
 }
 
+/** How long the spot of a backdrop's closing lift stays quiet. */
+export const LIFT_CLOSE_SPOT_MS = 450;
+
+/**
+ * Quiet the spot of the finger lifting now. A backdrop closes on the lift (a
+ * responder release), and the browser's click for that same tap comes about
+ * 80 ms later, onto whatever the backdrop uncovered: it played a night, a
+ * week, and paid for an Add in a landscape phone (walk 10 T1-11). The lift is
+ * the press being handled, though its click has not come yet. A key press, or
+ * a lift from long ago, quiets nothing.
+ */
+export function quietLift(ms = LIFT_CLOSE_SPOT_MS): void {
+  const now = Date.now();
+  if (!lastPointer || lastPointer.at <= lastPressKeyAt || now - lastPointer.at >= POINTER_FRESH_MS) return;
+  spot = {
+    x: lastPointer.x,
+    y: lastPointer.y,
+    until: now + ms,
+    at: now,
+    holdThroughScroll: false,
+    marks: scrollMarks(lastPointer.x, lastPointer.y),
+  };
+}
+
 /**
  * A sheet's own closers (its backdrop, Done, a menu's toggle): the second tap
  * of the double tap that opened it lands on one of them and must not close
@@ -237,6 +261,8 @@ export function repeatSafe<A extends unknown[]>(press: (...args: A) => void, ms 
 export function unlessSettling<A extends unknown[]>(close: (...args: A) => void): (...args: A) => void {
   return (...args: A) => {
     if (tapsSettling(true)) return;
+    // What the closer uncovers must not take the rest of this tap.
+    quietLift();
     close(...args);
   };
 }

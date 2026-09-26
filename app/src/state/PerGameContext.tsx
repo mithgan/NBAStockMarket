@@ -21,7 +21,7 @@ import type {
   PerGamePosition,
 } from '../api/contracts';
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
-import { exactMoney, moneyFine, perGame, rosterReopensLine } from '../copy/terms';
+import { exactMoney, moneyCompact, moneyFine, perGame, rosterReopensLine } from '../copy/terms';
 import { practiceProgress } from '../data/chromeView';
 import { isAppResume } from './appResume';
 import { ActionLock } from './actionLock';
@@ -377,28 +377,61 @@ export function PerGameProvider({
   // Moves pause for the Oct 28 games, so Scottie Barnes and Devin Booker were
   // not added." They are said together once the last of them has failed.
   const lastRefreshNotice = useRef<{ text: string; at: number } | null>(null);
-  const lockedMoves = useRef<{ verb: string; names: string[]; base: string | null } | null>(null);
-  const sayLockedMoves = useCallback((move: { name: string; verb: string }) => {
-    const last = lockedMoves.current;
-    if (last && last.verb === move.verb) {
-      if (!last.names.includes(move.name)) last.names.push(move.name);
+  // A move that waited for games is checked before any call: moves locked by
+  // those games, or whose price moved with them, fail at once and are told
+  // together in one notice after the games' result (walk 9 T4-04, walk 10
+  // T4-05: two refusals 0.4 s apart hid the night's result): "Oct 21 games:
+  // your score rose $194.5K. Scottie Barnes and Devin Booker were not added:
+  // their prices moved to $261.4K and $336.1K a game. Add them again if you
+  // still want them."
+  type WaitedMove = { verb: string; name: string; locked: boolean; cost: number | null };
+  const waitedMoves = useRef<{ moves: WaitedMove[]; base: string | null } | null>(null);
+  const sayWaitedMove = useCallback((move: WaitedMove) => {
+    const batch = waitedMoves.current;
+    if (batch) {
+      if (!batch.moves.some((entry) => entry.name === move.name && entry.verb === move.verb)) batch.moves.push(move);
       return;
     }
     const recent = lastRefreshNotice.current;
-    const base = recent && Date.now() - recent.at < 6000 && LOCK_SENTENCE.test(` ${recent.text}`) ? recent.text : null;
-    lockedMoves.current = { verb: move.verb, names: [move.name], base };
+    waitedMoves.current = { moves: [move], base: recent && Date.now() - recent.at < 6000 ? recent.text : null };
     setTimeout(() => {
-      const batch = lockedMoves.current;
-      lockedMoves.current = null;
-      if (!batch) return;
-      const who = `${nameList(batch.names)} ${batch.names.length === 1 ? 'was' : 'were'} not ${batch.verb}`;
-      const date = bootstrapRef.current?.ruleset.rosterLockGameDate;
-      const text = batch.base
-        ? `${batch.base.replace(/\.$/, '')}, so ${who}.`
-        : `${who}. Your roster is locked. ${rosterReopensLine(date)}.`;
+      const done = waitedMoves.current;
+      waitedMoves.current = null;
+      if (!done) return;
+      const verbs = [...new Set(done.moves.map((entry) => entry.verb))];
+      const parts: string[] = [];
+      let base = done.base;
+      const locked = done.moves.filter((entry) => entry.locked);
+      if (locked.length > 0) {
+        const who = verbs
+          .filter((verb) => locked.some((entry) => entry.verb === verb))
+          .map((verb) => {
+            const names = locked.filter((entry) => entry.verb === verb).map((entry) => entry.name);
+            return `${nameList(names)} ${names.length === 1 ? 'was' : 'were'} not ${verb}`;
+          })
+          .join(', and ');
+        if (base && LOCK_SENTENCE.test(` ${base}`)) {
+          parts.push(`${base.replace(/\.$/, '')}, so ${who}.`);
+        } else {
+          if (base) parts.push(base);
+          parts.push(`${who}. Your roster is locked. ${rosterReopensLine(bootstrapRef.current?.ruleset.rosterLockGameDate)}.`);
+        }
+        base = null;
+      } else if (base) {
+        parts.push(base);
+      }
+      for (const verb of verbs) {
+        const moved = done.moves.filter((entry) => !entry.locked && entry.verb === verb);
+        if (moved.length === 0) continue;
+        const one = moved.length === 1;
+        const prices = moved.map((entry) => (entry.cost === null ? null : moneyCompact(entry.cost)));
+        const known = prices.every((price) => price !== null);
+        const again = `${verb === 'shorted' ? 'Short' : 'Add'} ${one ? 'him' : 'them'} again if you still want ${one ? 'him' : 'them'}.`;
+        parts.push(`${nameList(moved.map((entry) => entry.name))} ${one ? 'was' : 'were'} not ${verb}: ${one ? 'his price' : 'their prices'} moved${known ? ` to ${nameList(prices as string[])} a game` : ''}. ${again}`);
+      }
       // The games' own notice is inside this one: it is not said again.
       silentNotice.current = null;
-      say(text);
+      say(parts.join(' '));
     }, 0);
   }, [say]);
 
@@ -409,14 +442,21 @@ export function PerGameProvider({
     /** Which move failed, said first ("Kawhi Leonard was not added."): a move
      * that waited its turn can fail after the player has moved on. `priceMoved`
      * says what his price is now when the quote moved under the move. */
-    failedMove: { name: string; verb: string; priceMoved?: () => string; folds?: boolean } | null = null,
+    failedMove: { name: string; verb: string; priceMoved?: () => string; movedCost?: () => number | null; folds?: boolean } | null = null,
   ): Promise<boolean> => {
     const coordinator = reconciliation.current;
     if (!coordinator) return false;
     // Moves are locked now (it waited for the games that brought the lock;
     // every button says LOCKED otherwise): no call that must fail.
     if (failedMove && bootstrapRef.current?.ruleset.rosterMutationsLocked) {
-      sayLockedMoves(failedMove);
+      sayWaitedMove({ verb: failedMove.verb, name: failedMove.name, locked: true, cost: null });
+      return false;
+    }
+    // His price moved since the press (it waited for games): the call would
+    // be refused, so it is told with the others instead.
+    const movedCost = failedMove?.movedCost?.() ?? null;
+    if (failedMove && movedCost !== null) {
+      sayWaitedMove({ verb: failedMove.verb, name: failedMove.name, locked: false, cost: movedCost });
       return false;
     }
     if (!coordinator.beginMutation()) {
@@ -485,7 +525,7 @@ export function PerGameProvider({
       coordinator.finishMutation(reconciliationReason);
       updatePendingActions();
     }
-  }, [burstNotice, failureNotice, loadSnapshot, say, sayLockedMoves, updatePendingActions]);
+  }, [burstNotice, failureNotice, loadSnapshot, say, sayWaitedMove, updatePendingActions]);
 
   // Moves save one at a time (the account has one version), but a move
   // pressed while another saves waits its turn instead of vanishing: a player
@@ -548,6 +588,10 @@ export function PerGameProvider({
           name: playerName,
           verb: side === 'long' ? 'added' : 'shorted',
           folds: true,
+          movedCost: () => {
+            const now = bootstrapRef.current?.market.find((row) => row.playerId === playerId);
+            return now && now.quoteVersion !== expectedQuoteVersion ? now.currentGameCost : null;
+          },
           priceMoved: () => {
             const again = side === 'long' ? 'Add him again' : 'Short him again';
             const now = bootstrapRef.current?.market.find((row) => row.playerId === playerId);
