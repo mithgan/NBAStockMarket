@@ -600,8 +600,10 @@ function ConfirmDialogBody({
           <Text key={line} accessibilityElementsHidden aria-hidden importantForAccessibility="no" style={styles.dialogLine}>{line}</Text>
         ))}
         <View style={styles.dialogButtons}>
-          <Button label={confirmLabel} onPress={aimed(onConfirm)} variant={confirmTone === 'danger' ? 'danger' : 'secondary'} />
-          <Button ref={cancelRef} label={cancelLabel} onPress={guard(onCancel)} variant="primary" />
+          {/* A dialog sits above every list, so a list's short tap quiet
+              never swallows its answer (walk 7 T2-04 follow-up). */}
+          <Button label={confirmLabel} onPress={aimed(onConfirm)} steady variant={confirmTone === 'danger' ? 'danger' : 'secondary'} />
+          <Button ref={cancelRef} label={cancelLabel} onPress={guard(onCancel)} steady variant="primary" />
         </View>
       </View>
     </View>
