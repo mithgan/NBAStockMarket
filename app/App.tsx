@@ -312,7 +312,14 @@ function AppBody() {
       // Back with a sheet open closes the sheet (the sheet handles it).
       if (sheetIsOpen()) return;
       const tab = (event.state as { tab?: Tab } | null)?.tab;
-      if (tab) setActiveTab(tab);
+      if (!tab) return;
+      setActiveTab(tab);
+      // Back changed the screen: put focus on its tab, so a screen reader
+      // says where you are and the keyboard is not left on the old tab.
+      setTimeout(() => {
+        const index = tabs.findIndex((entry) => entry.key === tab);
+        (tabRefs.current[index] as unknown as { focus?: (options?: object) => void } | null)?.focus?.({ preventScroll: true });
+      }, 0);
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);

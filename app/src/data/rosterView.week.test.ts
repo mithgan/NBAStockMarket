@@ -20,7 +20,7 @@ const daysBetween = (from: string, to: string) => Math.round(
  * figure against the notice the app shows after each 7-day advance.
  */
 test('one rostered player: after each 7-day advance the notice equals the Last 7 days figure to the dollar', async () => {
-  assert.equal(WEEK_LABEL, 'Last 7 days');
+  assert.equal(WEEK_LABEL, 'Games, last 7 days');
   const client = new MockPerGameApiClient();
   const opening = await client.bootstrap();
   const player = opening.market[0];

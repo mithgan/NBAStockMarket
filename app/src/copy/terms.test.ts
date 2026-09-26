@@ -111,7 +111,7 @@ test('one money format everywhere, and shared action wording', () => {
 test('a Drop or Close asks once, with the fee, what stays and what coming back costs', () => {
   assert.equal(
     confirmCloseMessage({ side: 'long', playerName: 'Nikola Jokic', feeDollars: 250, total: 4_000, priceNow: 98_800 }),
-    'Drop Nikola Jokic for a $250 fee? His +$4,000 stays in your score. Adding him back later costs his price at that time (today $98.8K a game), plus another $250 fee.',
+    'Drop Nikola Jokic for a $250 fee? His +$4,000 stays in your score. Adding him back later costs his price at that time (today about $98.8K a game), plus another $250 fee.',
   );
   assert.equal(
     confirmCloseMessage({ side: 'short', playerName: 'Bam Adebayo', feeDollars: 250, total: -12_500, endsFreeAfter: '2025-10-27' }),

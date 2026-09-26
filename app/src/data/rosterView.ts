@@ -114,7 +114,7 @@ export function expiryLine(
   nextGameDate: string | null = null,
 ): string | null {
   if (position.side !== 'short' || !position.expiresOn) return null;
-  if (shortEndsNext(position, nextGameDate)) return 'Ends after the next games · no need to close';
+  if (shortEndsNext(position, nextGameDate)) return 'Ends by itself after the next games, no need to close';
   return `Ends ${humanDate(position.expiresOn)}`;
 }
 
@@ -280,7 +280,7 @@ export function closedRows(
  * notice reports the same games-only sum over the days that settled, so the
  * two agree to the dollar whatever the size of the roster.
  */
-export const WEEK_LABEL = 'Last 7 days';
+export const WEEK_LABEL = 'Games, last 7 days';
 
 /**
  * How precisely the breakdown shows its parts. `fine` is `moneyFine` ("$552.1K",

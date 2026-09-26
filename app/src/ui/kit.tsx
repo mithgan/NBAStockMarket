@@ -451,7 +451,9 @@ export function ConfirmDialog({
 }) {
   if (!visible) return null;
   return (
-    <Modal accessibilityLabel={title} animationType="none" onRequestClose={onCancel} transparent visible>
+    // Named with its consequence, so a screen reader hears what would be lost
+    // before the choice ("Start over? You'd lose this season: Day 16 …").
+    <Modal accessibilityLabel={[title, ...lines].join(' ')} animationType="none" onRequestClose={onCancel} transparent visible>
       <ConfirmDialogBody
         cancelLabel={cancelLabel}
         confirmLabel={confirmLabel}
@@ -820,6 +822,10 @@ const styles = StyleSheet.create({
   },
   segmentSelected: {
     backgroundColor: colors.goldSoft,
+    // A 3px bar marks the chosen segment in any colour vision and in every
+    // theme (High contrast's gold-on-olive tint alone read backwards).
+    borderBottomWidth: 3,
+    borderBottomColor: colors.gold,
   },
   segmentText: {
     color: colors.muted,

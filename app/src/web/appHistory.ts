@@ -45,6 +45,12 @@ export function useSheetHistory(visible: boolean, onClose: () => void): void {
     if (!isWeb || !visible) return undefined;
     const id = nextSheetId++;
     let poppedByBack = false;
+    // Whatever opened the sheet (a row, a button) gets keyboard focus back
+    // when it closes, however it closes; otherwise focus falls to the top of
+    // the page and a keyboard user starts the whole Tab trip again.
+    const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+      ? document.activeElement
+      : null;
     openSheets += 1;
     setBackgroundInert(true);
     window.history.pushState({ ...(window.history.state ?? {}), sheet: id }, '');
@@ -64,6 +70,13 @@ export function useSheetHistory(visible: boolean, onClose: () => void): void {
       if (!poppedByBack && (window.history.state as { sheet?: number } | null)?.sheet === id) {
         window.history.back();
       }
+      // After the sheet has left the page, and only if nothing else has
+      // taken focus (a dialog may move it on purpose).
+      setTimeout(() => {
+        const current = document.activeElement;
+        const lost = !current || current === document.body || !current.isConnected;
+        if (lost && opener?.isConnected) opener.focus({ preventScroll: true });
+      }, 60);
     };
   }, [visible]);
 }

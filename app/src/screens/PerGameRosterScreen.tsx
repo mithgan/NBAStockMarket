@@ -194,12 +194,11 @@ function PositionRow({
       <View style={styles.meta}>
         <Tag tone={view.tag.tone}>{view.tag.label}</Tag>
         {view.games ? <Text style={styles.metaText}>{keepTogether(view.games)}</Text> : null}
-        {view.expiry ? view.expiry.split(' · ').map((part) => (
-          <Text key={part} style={[styles.metaText, endsNext && styles.metaEnds]}>
-            {part.length <= 14 ? keepTogether(part) : part}
-          </Text>
-        )) : null}
+        {view.expiry && !endsNext ? <Text style={styles.metaText}>{keepTogether(view.expiry)}</Text> : null}
       </View>
+      {/* In its last games a short says so in one sentence, on its own line
+          so it never splits beside the tag. */}
+      {view.expiry && endsNext ? <Text style={[styles.metaText, styles.metaEnds, styles.endsLine]}>{view.expiry}</Text> : null}
     </View>
   );
   const figures = {
@@ -885,6 +884,9 @@ const styles = StyleSheet.create({
   },
   metaEnds: {
     color: colors.goldInk,
+  },
+  endsLine: {
+    marginTop: 2,
   },
   action: {
     alignSelf: 'center',

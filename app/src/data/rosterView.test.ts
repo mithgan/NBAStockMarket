@@ -119,7 +119,7 @@ test('only a short with an end date shows when it ends, in plain dates', () => {
   assert.equal(expiryLine({ side: 'short', expiresOn: '2025-11-20' }, '2025-11-19'), 'Ends Nov 20');
   assert.equal(
     expiryLine({ side: 'short', expiresOn: '2025-11-20' }, '2025-11-20'),
-    'Ends after the next games · no need to close',
+    'Ends by itself after the next games, no need to close',
   );
   assert.equal(expiryLine({ side: 'short', expiresOn: null }), null);
   assert.equal(expiryLine({ side: 'long', expiresOn: '2025-11-20' }), null);
@@ -370,7 +370,7 @@ test('closed rows keep dropped players and ended shorts, newest first, with how 
 });
 
 test('the week figure is labelled in calendar days, as recentEarnings counts it', () => {
-  assert.equal(WEEK_LABEL, 'Last 7 days');
+  assert.equal(WEEK_LABEL, 'Games, last 7 days');
 });
 
 test('breakdown parts take the precision at which they visibly add up to the hero', () => {

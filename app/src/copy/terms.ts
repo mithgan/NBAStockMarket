@@ -244,7 +244,8 @@ export function confirmCloseMessage({
     sentences.push(`Left alone, it ends by itself after the ${humanDate(endsFreeAfter)} games, at no cost.`);
   }
   const another = fee ? `, plus another ${fee} fee` : '';
-  const today = priceNow !== null && priceNow > 0 ? ` (today ${perGame(priceNow)})` : '';
+  // "About": today's quote can include your own position's pull on it.
+  const today = priceNow !== null && priceNow > 0 ? ` (today about ${perGame(priceNow)})` : '';
   sentences.push(side === 'long'
     ? `Adding him back later costs his price at that time${today}${another}.`
     : `Shorting him again later sets a new price${today}${another}.`);

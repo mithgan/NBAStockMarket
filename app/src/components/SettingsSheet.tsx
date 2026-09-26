@@ -120,7 +120,7 @@ export function SettingsSheet({
         <View style={styles.sheetHead}>
           <Text accessibilityRole="header" {...headingLevel(2)} style={styles.sheetTitle}>Settings</Text>
           <Pressable
-            accessibilityLabel="Close settings"
+            accessibilityLabel="Done, close settings"
             accessibilityRole="button"
             onPress={onClose}
             style={({ pressed }) => [styles.close, pressed && styles.pressed]}
