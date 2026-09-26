@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PerGameApiClient as MarketApiClient } from './src/api/perGameClient';
@@ -484,6 +484,34 @@ function AppBody() {
   const noticePlacement: NoticePlacement = short ? 'dock' : width < NOTICE_BAR_WIDE_MIN_WIDTH ? 'bar' : 'barWide';
   const tabRefs = useRef<Array<View | null>>([]);
   const [appNotice, setAppNotice] = useState<string | null>(null);
+  // The brand bar never gets shorter by itself: a notice that needed a third
+  // line leaves its height behind when it clears on its timer, until the
+  // player's next press or a screen switch, so nothing under a finger jumps
+  // 14px (walk 8 T1-12, T4-04).
+  const [barHold, setBarHold] = useState(0);
+  const barHoldRef = useRef(0);
+  barHoldRef.current = barHold;
+  // Whether a notice is in the bar now (set as the bar renders): the height
+  // is only let go once it has cleared.
+  const barNoticeRef = useRef(false);
+  const releaseBar = useCallback(() => {
+    if (barHoldRef.current && !barNoticeRef.current) setBarHold(0);
+  }, []);
+  useEffect(releaseBar, [activeTab, width, releaseBar]);
+  // Always set (react-native-web only measures a view that had onLayout when
+  // it mounted); it records the bar's height while a notice is in it.
+  const holdBar = useCallback((event: LayoutChangeEvent) => {
+    const barHeight = Math.round(event.nativeEvent.layout.height);
+    if (barNoticeRef.current && barHeight > barHoldRef.current) setBarHold(barHeight);
+  }, []);
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    // Once the press has landed where it was aimed (and dismissed a notice,
+    // if it was on one).
+    const release = () => setTimeout(releaseBar, 0);
+    document.addEventListener('click', release, true);
+    return () => document.removeEventListener('click', release, true);
+  }, [releaseBar]);
 
   // Tabs live in browser history, so Back steps back through the tabs a
   // player visited (after closing any open sheet) before it leaves the app.
@@ -510,7 +538,7 @@ function AppBody() {
     // market", "Find a short"); a switch that waited for a question to close
     // says so itself.
     const byKey = options?.focusScreen ?? !pressedByPointer();
-    settleTaps(0, 600, 'list');
+    settleTaps(0, 600, 'list', true);
     pushTab(tab);
     setActiveTab(tab);
     if (typeof document === 'undefined') return;
@@ -518,13 +546,26 @@ function AppBody() {
     // focus would fall to the page and a screen reader hear nothing (walk 6
     // T2-02, walk 7 T3-04). Focus goes to the new screen, which is named
     // ("Market, main"), unless the new screen has already put it somewhere.
-    setTimeout(() => {
-      const active = document.activeElement as HTMLElement | null;
-      const lost = !active || active === document.body || !active.isConnected;
-      if (!lost && !byKey) return;
-      if (!lost && active && document.getElementById('app-screen')?.contains(active)) return;
-      (document.getElementById('app-screen') as HTMLElement | null)?.focus?.({ preventScroll: true });
-    }, 60);
+    // It waits until the new screen is on the page (the main region carries
+    // its name), however long that render takes.
+    const label = tabs.find((entry) => entry.key === tab)?.label;
+    let tries = 0;
+    const settle = () => {
+      const screen = document.getElementById('app-screen');
+      if (screen?.getAttribute('aria-label') !== label && tries < 40) {
+        tries += 1;
+        setTimeout(settle, 50);
+        return;
+      }
+      setTimeout(() => {
+        const active = document.activeElement as HTMLElement | null;
+        const lost = !active || active === document.body || !active.isConnected;
+        if (!lost && !byKey) return;
+        if (!lost && active && document.getElementById('app-screen')?.contains(active)) return;
+        (document.getElementById('app-screen') as HTMLElement | null)?.focus?.({ preventScroll: true });
+      }, 60);
+    };
+    setTimeout(settle, 0);
   }, [pushTab]);
   // Screens switch tabs through uiActions (the Market's "Choose who to drop").
   useEffect(() => registerTabOpener(switchScreen), [switchScreen]);
@@ -622,6 +663,26 @@ function AppBody() {
       : null);
   }, [bootstrap]);
 
+  // The screen on show, kept as one element until the tab or the Market's
+  // side changes, so a notice or a sheet opening does not redraw it from the
+  // top. (Rendering the next screen in the background let the tab light up
+  // sooner, but the screen itself came 0.1-0.3 s later at 4x CPU.)
+  const screens = useMemo(() => (
+    <>
+      {activeTab === 'portfolio' && (
+        <PortfolioScreen
+          onOpenMarket={(side) => {
+            setMarketSide(side);
+            switchScreen('market');
+          }}
+        />
+      )}
+      {activeTab === 'market' && <MarketScreen initialSide={marketSide} />}
+      {activeTab === 'plays' && <PlaysScreen />}
+      {activeTab === 'leaderboard' && <LeaderboardScreen />}
+    </>
+  ), [marketSide, activeTab, switchScreen]);
+
   const body = (() => {
     if (isLoading) {
       // Practice builds its season in this browser; there is no account or
@@ -665,21 +726,7 @@ function AppBody() {
         />
       );
     }
-    return (
-      <>
-        {activeTab === 'portfolio' && (
-          <PortfolioScreen
-            onOpenMarket={(side) => {
-              setMarketSide(side);
-              switchScreen('market');
-            }}
-          />
-        )}
-        {activeTab === 'market' && <MarketScreen initialSide={marketSide} />}
-        {activeTab === 'plays' && <PlaysScreen />}
-        {activeTab === 'leaderboard' && <LeaderboardScreen />}
-      </>
-    );
+    return screens;
   })();
 
   const tabIndexOf = (tab: Tab) => tabs.findIndex((item) => item.key === tab);
@@ -784,6 +831,7 @@ function AppBody() {
   ) : appNotice && !sheetOpen && !message ? (
     <NoticeToast message={appNotice} onDismiss={() => setAppNotice(null)} placement={noticePlacement} seq={-1} tone="success" />
   ) : null;
+  barNoticeRef.current = Boolean(notice) && noticePlacement !== 'dock';
 
   return (
     <View nativeID="app-root" style={styles.app}>
@@ -794,7 +842,11 @@ function AppBody() {
       {/* Databallr brand bar: gold wordmark, a rule, then the product name.
           In a short window it folds away; the status row carries Settings. */}
       {short ? null : (
-      <View role="banner" style={[styles.header, { paddingTop: insets.top + 4 }]}>
+      <View
+        onLayout={holdBar}
+        role="banner"
+        style={[styles.header, { paddingTop: insets.top + 4 }, barHold > 0 && { minHeight: barHold }]}
+      >
         {/* On a phone a notice takes the logo's place for its few seconds;
             Settings stays where the thumb expects it (walk 5 T1-06). */}
         {notice && noticePlacement === 'bar' ? notice : (

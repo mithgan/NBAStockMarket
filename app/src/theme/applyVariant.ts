@@ -21,5 +21,7 @@ export function applyVariant(id: VariantId): void {
   root.style.setProperty('--f-body', variant.fonts.body);
   root.dataset.variant = id;
   document.body.style.backgroundColor = variant.palette.background;
+  // The page painted before the app loaded (public/index.html) follows too.
+  root.style.backgroundColor = variant.palette.background;
   root.style.setProperty('--glow-blur', `${variant.glow?.blur ?? 64}px`);
 }

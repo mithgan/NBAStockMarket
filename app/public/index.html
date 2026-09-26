@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>%WEB_TITLE%</title>
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+    <!-- The page paints in the player's look before the app loads, so a
+         restart (a reload) never flashes white on a dark screen (walk 8
+         T4-02). Same choice as ThemeProvider: the saved look, else the
+         device's (more contrast, light, or navy). src/theme/prepaint.test.ts
+         keeps this map in step with src/theme/variants.ts. -->
+    <script id="theme-prepaint">
+      (function () {
+        var backgrounds = {"default":"#0e1218","og":"#1b212c","immersive":"#07090d","tape":"#0c0d10","slab":"#111214","brushed":"#0f1214","grain":"#0e1218","dark":"#040506","light":"#f3ecdf","anvil":"#131211","monochrome":"#0f1114","ambient":"#0a0d14","haze":"#0c0f16","nocturne":"#161d2b","contrast":"#000000"};
+        var choice = null;
+        try {
+          choice = window.localStorage.getItem('nba-stock-market.design-variant');
+        } catch (error) {}
+        var matches = function (query) {
+          return Boolean(window.matchMedia && window.matchMedia(query).matches);
+        };
+        var id = choice && backgrounds[choice] ? choice
+          : matches('(prefers-contrast: more)') ? 'contrast'
+            : matches('(prefers-color-scheme: light)') ? 'light'
+              : 'grain';
+        document.documentElement.style.backgroundColor = backgrounds[id];
+      })();
+    </script>
+  </head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  </body>
+</html>

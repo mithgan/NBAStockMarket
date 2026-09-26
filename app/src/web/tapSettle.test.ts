@@ -71,6 +71,76 @@ test('a deliberate scroll releases the quieted spot (walk 4 T2-04)', async () =>
   }
 });
 
+test('a screen switch keeps its spot through the new screen\'s own scroll (walk 8 T4-01)', async () => {
+  mock.timers.enable({ apis: ['Date'], now: 20_000_000 });
+  try {
+    const { notePageScroll, notePointer, settleTaps, tapsSettling } = await import('./tapSettle');
+    // "Choose who to drop" pressed at (200, 500): the Roster comes forward
+    // and scrolls "Making room for …" into view 0.2 s later.
+    notePointer(200, 500);
+    settleTaps(0, 600, 'list', true);
+    mock.timers.tick(200);
+    notePageScroll();
+    // The second tap of the double tap lands on a Roster row: ignored.
+    mock.timers.tick(50);
+    notePointer(201, 502);
+    assert.equal(tapsSettling(), true);
+    // A move's spot (no hold) is released by the same kind of scroll: what
+    // a screen reader brought under the finger is a new choice.
+    mock.timers.tick(1000);
+    notePointer(200, 500);
+    settleTaps(0, 1200, 'list');
+    mock.timers.tick(200);
+    notePageScroll();
+    mock.timers.tick(50);
+    notePointer(200, 500);
+    assert.equal(tapsSettling(), false);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test('a lift still waiting for its click is the next tap, never the press being handled', async () => {
+  mock.timers.enable({ apis: ['Date'], now: 30_000_000 });
+  try {
+    const { noteClick, notePointer, settleTaps, tapsSettling } = await import('./tapSettle');
+    // Add on Donovan Mitchell, clicked.
+    notePointer(339, 900, false);
+    noteClick(339, 900);
+    // A finger lifts from Jalen Brunson's Add; its click has not come yet
+    // when a queued move quiets "the spot of the press being handled".
+    mock.timers.tick(120);
+    notePointer(339, 992, false);
+    settleTaps(0, 1200, 'list');
+    // Brunson's click arrives: it is a new press on another spot and acts.
+    mock.timers.tick(20);
+    noteClick(339, 992);
+    assert.equal(tapsSettling(), false);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test('a double click whose second lift comes before the sheet quiets its spot still acts once (walk 7 T2-17)', async () => {
+  mock.timers.enable({ apis: ['Date'], now: 40_000_000 });
+  try {
+    const { noteClick, notePointer, settleTaps, tapsSettling } = await import('./tapSettle');
+    // The first click opens a player's profile.
+    notePointer(500, 300, false);
+    noteClick(500, 300);
+    // The second lift comes before the sheet has quieted the spot.
+    mock.timers.tick(40);
+    notePointer(500, 300, false);
+    settleTaps(0, 450);
+    // Its click lands on the sheet's backdrop: ignored, the sheet stays.
+    mock.timers.tick(5);
+    noteClick(500, 300);
+    assert.equal(tapsSettling(true), true);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
 test('a key press right after a click is the keyboard\'s, not a repeat tap', async () => {
   const { notePointer, notePressKey, pressedByPointer } = await import('./tapSettle');
   notePointer(10, 10);

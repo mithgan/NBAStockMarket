@@ -97,6 +97,17 @@ interface PerGameContextValue {
 
 const PerGameContext = createContext<PerGameContextValue | null>(null);
 
+/** Moves that land this close together share one notice. */
+const MOVE_BURST_MS = 1500;
+
+/** "Luka Doncic", "Luka Doncic and Scottie Barnes", "A, B and C". */
+function nameList(names: string[]): string {
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** How long a move waits for a refresh (a practice night) before it says so. */
+const MOVE_WAITS_FOR_REFRESH_MS = 10_000;
+
 function errorMessage(error: unknown): string {
   if (error instanceof PerGameApiError) return error.message;
   return 'The per-game market could not load. Try again.';
@@ -132,13 +143,16 @@ export function PerGameProvider({
     const fee = bootstrapRef.current?.ruleset.transactionFeeDollars ?? 0;
     return fee > 0 ? ` ${exactMoney(fee)}\u00a0fee.` : '';
   };
-  const say = useCallback((text: string, tone: NoticeTone = 'problem') => {
+  /** `spoken`: what screen readers hear instead, when it differs. */
+  const say = useCallback((text: string, tone: NoticeTone = 'problem', spoken?: string) => {
     const lock = tone === 'success' ? text.match(LOCK_SENTENCE) : null;
     setNoticeTone(tone);
     setMessage(lock && lock.index !== undefined && lock.index > 0 ? text.slice(0, lock.index) + text.slice(lock.index + lock[0].length) : text);
-    setNoticeSpoken(lock ? text : null);
+    setNoticeSpoken(spoken ?? (lock ? text : null));
     setNoticeSeq((seq) => seq + 1);
   }, []);
+  const shownMessage = useRef<string | null>(null);
+  shownMessage.current = message;
   const [serverError, setServerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -282,10 +296,28 @@ export function PerGameProvider({
       ? [...last.names, move.name]
       : [move.name];
     recentFailure.current = { verb: move.verb, reason, names, at: now };
-    const who = names.length === 1
-      ? names[0]
-      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-    return `${who} ${names.length === 1 ? 'was' : 'were'} not ${move.verb}. ${reason}`;
+    return `${nameList(names)} ${names.length === 1 ? 'was' : 'were'} not ${move.verb}. ${reason}`;
+  }, []);
+
+  // Quick moves of one kind share one notice, so a fast fill of the roster
+  // (or "Keep notices") shows all of them, not only the last (walk 8 T4-N2):
+  // "Luka Doncic and Scottie Barnes added. $500 in fees." Screen readers
+  // still hear each move's own sentence, with its price.
+  const recentMoves = useRef<{ verb: string; names: string[]; shown: string; at: number } | null>(null);
+  const burstNotice = useCallback((move: { name: string; verb: string }, text: string): string => {
+    const now = Date.now();
+    const last = recentMoves.current;
+    const names = last && last.verb === move.verb && now - last.at < MOVE_BURST_MS
+      && shownMessage.current === last.shown && !last.names.includes(move.name)
+      ? [...last.names, move.name]
+      : [move.name];
+    const fee = bootstrapRef.current?.ruleset.transactionFeeDollars ?? 0;
+    const fees = fee > 0 ? ` ${exactMoney(fee * names.length)}\u00a0in fees.` : '';
+    const shown = names.length === 1 ? text
+      : names.length <= 3 ? `${nameList(names)} ${move.verb}.${fees}`
+        : `${move.name} ${move.verb}: ${names.length} players in a row.${fees}`;
+    recentMoves.current = { verb: move.verb, names, shown, at: now };
+    return shown;
   }, []);
 
   const runPositionAction = useCallback(async <T extends { accountVersion: number },>(
@@ -293,11 +325,21 @@ export function PerGameProvider({
     action: () => Promise<T>,
     successMessage: string | ((result: T) => string),
     /** Which move failed, said first ("Kawhi Leonard was not added."): a move
-     * that waited its turn can fail after the player has moved on. */
-    failedMove: { name: string; verb: string } | null = null,
+     * that waited its turn can fail after the player has moved on. `priceMoved`
+     * says what his price is now when the quote moved under the move. */
+    failedMove: { name: string; verb: string; priceMoved?: () => string; folds?: boolean } | null = null,
   ): Promise<boolean> => {
     const coordinator = reconciliation.current;
-    if (!coordinator || !coordinator.beginMutation()) return false;
+    if (!coordinator) return false;
+    if (!coordinator.beginMutation()) {
+      // Never silence: a move that cannot start says so (walk 8 T4-03).
+      if (failedMove) {
+        say(failureNotice(failedMove, coordinator.requiresReconciliation
+          ? 'Reconcile before making another roster change.'
+          : 'The market was still updating. Try again in a moment.'));
+      }
+      return false;
+    }
     if (!actionLock.current.acquire(key)) {
       coordinator.finishMutation(null);
       return false;
@@ -306,12 +348,6 @@ export function PerGameProvider({
     // The last move's notice stays until this one lands: clearing it here
     // wiped a queued move's result before anyone saw or heard it (walk 7
     // T3-16: with any network delay the first of two moves was never spoken).
-    // The second tap of a double tap on a money button must not land on
-    // whatever the move brings under the finger (walk 3 T4-01: a double tap
-    // on "Short again" re-shorted the next player): a repeat on the same spot
-    // is ignored for 1.2 s. A tap anywhere else is a new choice and acts at
-    // once (walk 5 T4-01: adding down the list lost every other player).
-    settleTaps(0, 1200, 'list');
     let reconciliationReason: ReconciliationReason | null = null;
     const actionSnapshot = bootstrapRef.current;
     try {
@@ -334,7 +370,9 @@ export function PerGameProvider({
           say('Your roster action completed, but the latest account could not sync. Reconcile before making another roster change.');
           return false;
         }
-        say(typeof successMessage === 'function' ? successMessage(outcome.result) : successMessage, 'success');
+        const text = typeof successMessage === 'function' ? successMessage(outcome.result) : successMessage;
+        const shown = failedMove?.folds ? burstNotice(failedMove, text) : text;
+        say(shown, 'success', shown === text ? undefined : text);
         return true;
       }
       const suffix = outcome.reconciliationReason === 'ambiguous'
@@ -344,7 +382,14 @@ export function PerGameProvider({
           : outcome.refreshed
             ? ' Market refreshed. Review the updated roster and quote before trying again.'
             : '';
-      const reason = `${errorMessage(outcome.error)}${suffix}`;
+      // A named move whose price moved (it waited behind a night) or that met
+      // a lock says just that, and the price or the reopening, in one line.
+      const code = outcome.error instanceof PerGameApiError && !outcome.reconciliationReason ? outcome.error.code : null;
+      const reason = failedMove?.priceMoved && (code === 'quote_conflict' || code === 'quote_version_conflict')
+        ? failedMove.priceMoved()
+        : failedMove && code === 'roster_locked'
+          ? errorMessage(outcome.error)
+          : `${errorMessage(outcome.error)}${suffix}`;
       say(failedMove ? failureNotice(failedMove, reason) : reason);
       return false;
     } finally {
@@ -352,24 +397,43 @@ export function PerGameProvider({
       coordinator.finishMutation(reconciliationReason);
       updatePendingActions();
     }
-  }, [failureNotice, loadSnapshot, say, updatePendingActions]);
+  }, [burstNotice, failureNotice, loadSnapshot, say, updatePendingActions]);
 
   // Moves save one at a time (the account has one version), but a move
   // pressed while another saves waits its turn instead of vanishing: a player
   // adding down the list, or adding the next search result, gets every one
   // (walk 5 T4-01, T4-12). The same move pressed twice runs once. Each move
   // reads the account version when its turn comes, not when it was pressed.
+  // A move pressed while the market refreshes (a practice night playing, the
+  // app coming back) waits for the refresh too, then reads the account and
+  // his price as they stand: it vanished without a word (walk 8 T4-03).
+  const untilRefreshed = useCallback(async () => {
+    const deadline = Date.now() + MOVE_WAITS_FOR_REFRESH_MS;
+    while (actionLock.current.has('account-refresh') && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }, []);
+
   const queueMove = useCallback((key: string, run: () => Promise<boolean>): Promise<boolean> => {
     if (queuedMoves.current.has(key)) return Promise.resolve(false);
+    // The second tap of a double tap on a money button must not land on
+    // whatever the move brings under the finger (walk 3 T4-01: a double tap
+    // on "Short again" re-shorted the next player): a repeat on the same spot
+    // is ignored for 1.2 s. A tap anywhere else is a new choice and acts at
+    // once (walk 5 T4-01: adding down the list lost every other player). The
+    // spot is the press's own, taken now: when a queued move's turn came it
+    // was wherever the next tap had just lifted, and that tap was lost.
+    settleTaps(0, 1200, 'list');
     queuedMoves.current.add(key);
     updatePendingActions();
-    const turn = moveChain.current.then(run, run).finally(() => {
+    const inTurn = () => untilRefreshed().then(run);
+    const turn = moveChain.current.then(inTurn, inTurn).finally(() => {
       queuedMoves.current.delete(key);
       updatePendingActions();
     });
     moveChain.current = turn.catch(() => undefined);
     return turn;
-  }, [updatePendingActions]);
+  }, [untilRefreshed, updatePendingActions]);
 
   const openPosition = useCallback(({
     playerId,
@@ -392,7 +456,18 @@ export function PerGameProvider({
         (result) => result.side === 'long'
           ? `${playerName} added at ${perGame(result.lockedGameCost)}, locked in.${feeNote()}`
           : `Shorted ${playerName} at ${perGame(result.lockedGameCost)}, locked in.${feeNote()}`,
-        { name: playerName, verb: side === 'long' ? 'added' : 'shorted' },
+        {
+          name: playerName,
+          verb: side === 'long' ? 'added' : 'shorted',
+          folds: true,
+          priceMoved: () => {
+            const again = side === 'long' ? 'Add him again' : 'Short him again';
+            const now = bootstrapRef.current?.market.find((row) => row.playerId === playerId);
+            return now && now.quoteVersion !== expectedQuoteVersion
+              ? `His price moved to ${perGame(now.currentGameCost)}. ${again} if you still want him.`
+              : `His price moved. ${again} at the new price if you still want him.`;
+          },
+        },
       );
     });
   }, [apiClient, queueMove, runPositionAction]);
@@ -410,7 +485,8 @@ export function PerGameProvider({
           ? `${position.playerName} dropped. His next games won't count toward your score.${feeNote()}${also}`
           : `Short on ${position.playerName} closed.${feeNote()}${also}`,
         position.side === 'long'
-          ? { name: position.playerName, verb: 'dropped' }
+          // A drop that made room says so itself; it never folds.
+          ? { name: position.playerName, verb: 'dropped', folds: !options?.also }
           : { name: `Your short on ${position.playerName}`, verb: 'closed' },
       );
     });

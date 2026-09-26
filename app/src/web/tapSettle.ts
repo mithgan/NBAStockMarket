@@ -27,7 +27,7 @@ let quietUntil = 0;
  * press there is meant (walk 5 T2-12: +1 week 0.1 s after an Add vanished).
  */
 let listQuietUntil = 0;
-let spot: { x: number; y: number; until: number; at: number } | null = null;
+let spot: { x: number; y: number; until: number; at: number; holdThroughScroll: boolean } | null = null;
 /**
  * A scroll this long after a tap moved the page on purpose (a screen reader,
  * switch access or the app's own scroll into view for the next control): the
@@ -36,7 +36,17 @@ let spot: { x: number; y: number; until: number; at: number } | null = null;
  * view) and keeps the spot.
  */
 const SCROLL_RELEASES_AFTER_MS = 150;
+/** Where the last finger or mouse lifted. */
 let lastPointer: { x: number; y: number; at: number } | null = null;
+/**
+ * The last lift whose click has come: the press being handled, or the last
+ * one handled. A lift still waiting for its click is the next tap, not this
+ * press: a move that quieted that spot swallowed the next Add in a fast fill
+ * (walk 8, the lead's own check).
+ */
+let lastPressed: { x: number; y: number; at: number } | null = null;
+/** How near its lift a click counts as that lift's (px). */
+const CLICK_MATCH_PX = 8;
 /** When Enter or Space last went down: a press after it is the keyboard's. */
 let lastPressKeyAt = 0;
 
@@ -45,14 +55,23 @@ export function notePressKey(): void {
   lastPressKeyAt = Date.now();
 }
 
-/** Record where a finger or mouse lifted (the page's pointerup, or a test). */
-export function notePointer(x: number, y: number): void {
+/**
+ * Record where a finger or mouse lifted (the page's pointerup, whose click
+ * comes after it, or a test's press, already clicked).
+ */
+export function notePointer(x: number, y: number, clicked = true): void {
   lastPointer = { x, y, at: Date.now() };
+  if (clicked) lastPressed = lastPointer;
   // A tap somewhere else, once the short quiet is over, is a new intent: the
   // quieted spot is released, so a later deliberate tap there (Short, then
   // Roster side, then Add in the same place) is not taken for a repeat (walk
   // 4 T3 note). Inside the short quiet it is part of the same flurry.
   if (spot && Date.now() >= Math.max(quietUntil, listQuietUntil) && Math.hypot(x - spot.x, y - spot.y) > SPOT_RADIUS) spot = null;
+}
+
+/** The browser's click for the last lift: that press is being handled now. */
+export function noteClick(x: number, y: number): void {
+  if (lastPointer && Math.hypot(x - lastPointer.x, y - lastPointer.y) <= CLICK_MATCH_PX) lastPressed = lastPointer;
 }
 
 /**
@@ -65,10 +84,25 @@ export function noteScrollGesture(): void {
   spot = null;
 }
 
+/**
+ * The page scrolled, whoever did it: a scroll a moment after the tap releases
+ * its spot. A new screen's own scroll on arrival (the Roster bringing "Making
+ * room for …" forward) is the app's doing, not the player's, and keeps the
+ * spot of the press that switched screens (walk 8 T4-01).
+ */
+export function notePageScroll(): void {
+  if (spot && !spot.holdThroughScroll && Date.now() - spot.at > SCROLL_RELEASES_AFTER_MS) spot = null;
+}
+
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   // Where the finger or mouse last lifted: presses fire on that lift, so this
   // is where the press being handled happened. Keyboard presses have none.
-  window.addEventListener('pointerup', (event) => notePointer(event.clientX, event.clientY), true);
+  window.addEventListener('pointerup', (event) => notePointer(event.clientX, event.clientY, false), true);
+  // Presses fire on the click, which can come a task or two after the lift;
+  // a key's click (detail 0) has no pointer.
+  window.addEventListener('click', (event) => {
+    if (event.detail > 0) noteClick(event.clientX, event.clientY);
+  }, true);
   // A key press soon after a click is still a key press (walk 6 T2-10: Enter
   // on "Play another season" 0.2 s after a click was taken for a tap).
   window.addEventListener('keydown', (event) => {
@@ -77,9 +111,7 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
   window.addEventListener('wheel', noteScrollGesture, { capture: true, passive: true });
   // Any scroll a moment after the tap, whoever made it (scroll events do not
   // bubble, but a capturing listener on the window sees every one).
-  window.addEventListener('scroll', () => {
-    if (spot && Date.now() - spot.at > SCROLL_RELEASES_AFTER_MS) spot = null;
-  }, { capture: true, passive: true });
+  window.addEventListener('scroll', notePageScroll, { capture: true, passive: true });
   // Typing changes the list on purpose too: after adding one search result,
   // the next search's first Add sits where the last one was, and a tap on
   // it is the next purchase, not a repeat (walk 5 T4-12).
@@ -96,20 +128,22 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
 }
 
 function currentPointer(): { x: number; y: number } | null {
-  if (!lastPointer || lastPointer.at <= lastPressKeyAt) return null;
-  return Date.now() - lastPointer.at < POINTER_FRESH_MS ? lastPointer : null;
+  if (!lastPressed || lastPressed.at <= lastPressKeyAt) return null;
+  return Date.now() - lastPressed.at < POINTER_FRESH_MS ? lastPressed : null;
 }
 
 /**
  * Start (or extend) the quiet period. With `sameSpotMs`, a pointer press also
- * quiets the spot it was made on for that long.
+ * quiets the spot it was made on for that long; `holdThroughScroll` keeps it
+ * through the page's own scrolling (a screen switch), though a wheel, a drag
+ * or typing still releases it.
  */
-export function settleTaps(ms = SETTLE_MS, sameSpotMs = 0, scope: 'all' | 'list' = 'all'): void {
+export function settleTaps(ms = SETTLE_MS, sameSpotMs = 0, scope: 'all' | 'list' = 'all', holdThroughScroll = false): void {
   const now = Date.now();
   if (scope === 'all') quietUntil = Math.max(quietUntil, now + ms);
   else listQuietUntil = Math.max(listQuietUntil, now + ms);
   const at = sameSpotMs > 0 ? currentPointer() : null;
-  if (at) spot = { x: at.x, y: at.y, until: now + sameSpotMs, at: now };
+  if (at) spot = { x: at.x, y: at.y, until: now + sameSpotMs, at: now, holdThroughScroll };
 }
 
 /**
