@@ -202,3 +202,37 @@ test('chrome copy never uses the words the design bans', () => {
   ].join('\n');
   assert.doesNotMatch(copy, /\binverse\b|\/GM\b|raw net points|cumulative|sandbox|\b\d{4}-\d{2}-\d{2}\b/i);
 });
+
+test('Restart and Exit say what the season would lose', async () => {
+  const { practiceQuestion, practiceStakes } = await import('./chromeView');
+  const stakes = practiceStakes({
+    progress: practiceProgress(OPENING_EVE, '2025-11-05'), players: 8, shorts: 1, score: 120_000,
+  });
+  assert.equal(stakes, 'Day 16 of 174, 8 players, 1 short, score +$120K');
+  const restart = practiceQuestion('restart', stakes);
+  assert.equal(restart.confirmLabel, 'Start over');
+  assert.match(restart.lines[0], /Day 16 of 174, 8 players/);
+  assert.equal(practiceQuestion('exit', stakes).confirmLabel, 'Leave practice');
+  assert.equal(
+    practiceStakes({ progress: practiceProgress(OPENING_EVE, OPENING_EVE), players: 0, shorts: 0, score: 0 }),
+    'Day 0 of 174, no players, score $0',
+  );
+});
+
+test('the folded frame, short day count, lock reason and no-games night', async () => {
+  const { chromeFolded, lockLine, playedOn, practiceDayShort } = await import('./chromeView');
+  assert.equal(chromeFolded(390), true);
+  assert.equal(chromeFolded(500), false);
+  assert.equal(practiceDayShort(practiceProgress(OPENING_EVE, '2025-11-05')), 'Day 16/174');
+  assert.equal(lockLine('2025-10-30'), 'Roster reopens after Oct 30 · lineups set');
+  const ledger = [{ gameId: 'g1', gameDate: '2025-10-22' }, { gameId: null, gameDate: '2025-10-23' }];
+  assert.equal(playedOn(ledger, '2025-10-22'), true);
+  assert.equal(playedOn(ledger, '2025-10-23'), false);
+  assert.equal(
+    statusSummary({
+      mode: 'practice', lastSettledDate: '2025-11-05', nextGameDate: '2025-11-06', lastNight: 0, noGames: true,
+      progress: practiceProgress(OPENING_EVE, '2025-11-05'),
+    }),
+    'Practice, Nov 5, day 16 of 174. No games last night. Next games Thu, Nov 6.',
+  );
+});

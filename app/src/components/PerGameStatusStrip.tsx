@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -13,17 +13,25 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { PerGameRuleset } from '../api/contracts';
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
-import { exactMoney, humanDate, PRACTICE_LABEL, rosterReopensLine } from '../copy/terms';
+import { exactMoney, humanDate, PRACTICE_LABEL } from '../copy/terms';
 import {
-  CHROME_LOCK_TAG_MIN_WIDTH,
+  CHROME_FOLDED_FACTS_MIN_WIDTH,
+  CHROME_FOLDED_ONE_LINE_MIN_WIDTH,
+  chromeFolded,
   chromeLayout,
   dividendText,
+  EMPTY_ROSTER_HINT,
   keepTogether,
   lastNightFigure,
+  lockLine,
   nextGamesText,
+  NO_GAMES_TEXT,
+  playedOn,
   PRACTICE_OVER_TEXT,
+  practiceDayShort,
   practiceDayText,
   practiceProgress,
+  type PracticeProgress,
   shortTermText,
   statusSummary,
 } from '../data/chromeView';
@@ -31,10 +39,12 @@ import { recentEarnings } from '../data/perGameMetrics';
 import { perGameRulesPresentation, positionSlotHint, rulesParagraphs } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
+import { openSettings, registerRulesOpener } from '../state/uiActions';
 import { colors, control, fonts, labelStyle, radius, space, type, weight } from '../theme';
 import { headingLevel, moneyColor, Tag } from '../ui/kit';
+import { useSheetHistory } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
-import { PracticeIcon, RefreshIcon, RulesIcon } from './chrome/ChromeIcons';
+import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
 import { PracticeControls } from './SimBar';
 
 /**
@@ -61,7 +71,7 @@ type FactsArrangement = 'wide' | 'pair' | 'stack';
  * screen instead of pushing the content down.
  */
 export function PerGameStatusStrip() {
-  const { fontScale, width } = useWindowDimensions();
+  const { fontScale, height, width } = useWindowDimensions();
   const {
     bootstrap,
     isGameplayReady,
@@ -71,19 +81,32 @@ export function PerGameStatusStrip() {
     refreshData,
   } = usePerGame();
   const [rulesOpen, setRulesOpen] = useState(false);
+  // Any screen can open the rules (the Roster welcome card does).
+  useEffect(() => registerRulesOpener(() => setRulesOpen(true)), []);
   const lastSettled = bootstrap?.game.lastSettledDate ?? null;
   const ledgerItems = bootstrap?.ledger.items;
   const earnings = useMemo(() => recentEarnings(ledgerItems, lastSettled), [lastSettled, ledgerItems]);
+  const noGames = useMemo(() => !playedOn(ledgerItems, lastSettled), [lastSettled, ledgerItems]);
   if (!bootstrap) return null;
 
   const practice = isMockActive();
   const layout = chromeLayout(width, fontScale);
+  // A short window hides the brand bar (App), so this row carries Settings;
+  // in practice it also folds the practice bar into this one row.
+  const short = chromeFolded(height);
+  const folded = practice && short && !layout.merged;
+  const foldedFacts = folded && width >= CHROME_FOLDED_FACTS_MIN_WIDTH;
   const rules = bootstrap.ruleset;
   const nextGameDate = bootstrap.game.nextGameDate;
   const progress = practice ? practiceProgress(mockSeasonStart(), lastSettled) : null;
-  // Before the first night there is no "last night" to report.
+  // Before the first night there is no "last night" to report; a day with no
+  // games for your players says so rather than "$0".
   const lastNight = progress?.day === 0 ? null : earnings?.night ?? null;
   const next = nextGamesText(nextGameDate);
+  // Desktop has no line under +1 night / +1 week, so the empty-roster hint
+  // rides at the end of the facts.
+  const emptyRoster = practice && !progress?.complete
+    && !bootstrap.positions.some((position) => position.status === 'active');
 
   const pendingBeyondReconciliation = [...pendingActions]
     .some((key) => key !== 'account-mutation');
@@ -107,15 +130,16 @@ export function PerGameStatusStrip() {
     lastSettledDate: lastSettled,
     nextGameDate,
     lastNight,
+    noGames,
     progress: progress ?? undefined,
     lockSentence,
   });
 
-  const arrangement: FactsArrangement = layout.wide
+  const arrangement: FactsArrangement = layout.wide || foldedFacts
     ? 'wide'
-    : !practice || layout.compact || reconciliationRequired ? 'stack' : 'pair';
+    : !practice || layout.compact || folded || reconciliationRequired ? 'stack' : 'pair';
   // Enlarged text keeps its natural line height and simply wraps.
-  const tight = arrangement === 'stack' && !layout.largeText;
+  const tight = (arrangement === 'stack' || folded) && !layout.largeText;
   // Only the signed-in row has three controls to squeeze; practice's Rules
   // control is 44px wide with its name, so it always keeps it.
   const placement: ChromeButtonPlacement = layout.wide
@@ -125,8 +149,14 @@ export function PerGameStatusStrip() {
 
   // ---- facts ---------------------------------------------------------------
   const settledDate = lastSettled ? keepTogether(humanDate(lastSettled)) : null;
-  const dayText = progress ? keepTogether(practiceDayText(progress)) : null;
-  const money = lastNight === null ? null : <LastNightMoney tight={tight} value={lastNight} />;
+  // The narrowest rows (a phone at high zoom, a folded row) keep a short day
+  // count, "Day 16/174"; the bar after it is the season's progress.
+  const shortDay = layout.compact || (folded && !foldedFacts);
+  const dayText = progress
+    ? keepTogether(shortDay ? practiceDayShort(progress) : practiceDayText(progress))
+    : null;
+  const meter = progress ? <ProgressMeter progress={progress} /> : null;
+  const money = lastNight === null || noGames ? null : <LastNightMoney tight={tight} value={lastNight} />;
   // The narrowest phones single-space the dots, so the first line keeps to
   // one row even with last night at its finer precision.
   const dot = layout.tightDots ? ' · ' : '  ·  ';
@@ -138,9 +168,9 @@ export function PerGameStatusStrip() {
       <Text style={styles.practiceWord}>{PRACTICE_LABEL}</Text>
       {settledDate ? `${dot}${settledDate}` : null}
       {arrangement === 'wide' && dayText ? <Text style={styles.leadMuted}>{`${dot}${dayText}`}</Text> : null}
-      {arrangement === 'pair' && money ? (
+      {arrangement === 'pair' && lastNight !== null ? (
         <Text style={styles.leadMuted}>
-          {`${dot}Last night `}
+          {noGames ? `${dot}${NO_GAMES_TEXT}` : `${dot}Last night `}
           {money}
         </Text>
       ) : null}
@@ -150,39 +180,44 @@ export function PerGameStatusStrip() {
       {settledDate ? `Games through ${settledDate}` : 'No games settled yet'}
     </Text>
   );
-  const night = money === null || arrangement === 'pair' ? null : (
+  const night = lastNight === null || arrangement === 'pair' ? null : (
     <Text key="night" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
-      <Text style={styles.factLabel}>Last night </Text>
+      <Text style={styles.factLabel}>{noGames ? NO_GAMES_TEXT : 'Last night '}</Text>
       {money}
     </Text>
   );
-  const day = dayText && arrangement !== 'wide' && !(arrangement === 'stack' && layout.compact) ? (
-    <Text key="day" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel, tight && styles.tight]}>
-      {dayText}
-    </Text>
-  ) : null;
-  // The lock says one sentence everywhere, the same one Roster and Market use
-  // (terms.rosterReopensLine). The ROSTER LOCKED tag rides along only where
-  // the tag and the sentence share one line: a wide row, or a practice phone
-  // row from 356px. Tight rows (signed in beside three controls, or 200% zoom)
-  // and the narrowest phones show the sentence alone, in gold.
-  const lockTag = arrangement === 'wide' || (arrangement === 'pair' && width >= CHROME_LOCK_TAG_MIN_WIDTH);
-  const upcoming = locked ? (
-    lockTag ? (
-      <View key="lock" style={styles.lock}>
-        <Tag tone="gold">ROSTER LOCKED</Tag>
-        <Text maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel]}>
-          {rosterReopensLine(lockDate)}
-        </Text>
-      </View>
-    ) : (
-      <Text key="lock" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.lockLine, tight && styles.tight]}>
-        {rosterReopensLine(lockDate)}
+  const day = dayText && arrangement !== 'wide' ? (
+    <View key="day" style={styles.dayFact}>
+      <Text maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel, tight && styles.tight]}>
+        {dayText}
       </Text>
-    )
-  ) : progress?.complete ? (
-    // Compact has no day line, so it states the fact; its Restart button sits
-    // right underneath. Wider rows pair "Season complete" with the way on.
+      {meter}
+    </View>
+  ) : null;
+  // A locked night keeps the day and the next games; the lock adds its own
+  // line: the sentence Roster and Market use (terms.rosterReopensLine) plus
+  // why moves pause. Wide rows lead it with the ROSTER LOCKED tag.
+  const lockTag = arrangement === 'wide' && !folded;
+  const lock = locked && folded && !foldedFacts ? (
+    // The narrowest folded row has room for the padlock only; the sentence is
+    // in the row's spoken summary and on Market's and Roster's buttons.
+    <View key="lock" style={styles.lock}>
+      <LockIcon color={colors.goldInk} size={14} />
+    </View>
+  ) : locked ? (
+    <View key="lock" style={styles.lock}>
+      {lockTag ? <Tag tone="gold">ROSTER LOCKED</Tag> : <LockIcon color={colors.goldInk} />}
+      <Text
+        maxFontSizeMultiplier={1.5}
+        style={[styles.fact, lockTag ? styles.factLabel : styles.lockLine, tight && styles.tight]}
+      >
+        {lockLine(lockDate)}
+      </Text>
+    </View>
+  ) : null;
+  const upcoming = progress?.complete ? (
+    // Compact has no room for both, so it states the fact; its Restart button
+    // sits right underneath. Wider rows pair "Season complete" with the way on.
     <Text key="over" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel, tight && styles.tight]}>
       {layout.compact ? practiceDayText(progress) : PRACTICE_OVER_TEXT}
     </Text>
@@ -194,12 +229,29 @@ export function PerGameStatusStrip() {
   );
 
   let facts;
-  if (arrangement === 'wide') {
+  if (folded && !foldedFacts) {
+    // Folded and narrow: the day and its progress, and a padlock when locked.
+    facts = (
+      <View style={[styles.line, styles.lineFolded]}>
+        {day}
+        {lock}
+      </View>
+    );
+  } else if (arrangement === 'wide') {
     facts = (
       <View style={[styles.line, styles.lineWide]}>
-        {lead}
+        <View style={styles.dayFact}>
+          {lead}
+          {meter}
+        </View>
         {night}
         {upcoming}
+        {lock}
+        {emptyRoster && layout.merged ? (
+          <Text key="hint" maxFontSizeMultiplier={1.5} style={[styles.fact, styles.factLabel]}>
+            {EMPTY_ROSTER_HINT}
+          </Text>
+        ) : null}
       </View>
     );
   } else if (arrangement === 'pair') {
@@ -207,9 +259,10 @@ export function PerGameStatusStrip() {
       <>
         {lead}
         <View style={styles.line}>
-          {locked ? null : day}
+          {day}
           {upcoming}
         </View>
+        {lock}
       </>
     );
   } else {
@@ -217,12 +270,13 @@ export function PerGameStatusStrip() {
       <>
         {lead}
         {night}
-        {day && !locked ? (
+        {day ? (
           <View style={styles.line}>
             {day}
             {upcoming}
           </View>
         ) : upcoming}
+        {lock}
       </>
     );
   }
@@ -259,6 +313,24 @@ export function PerGameStatusStrip() {
     />
   );
 
+  // A short window has no brand bar, so Settings lives in this row (icon only
+  // when folded, where the row is tight; its name stays "Settings").
+  const settingsControl = short ? (
+    <ChromeButton
+      accessibilityLabel="Settings"
+      icon={(color) => <SettingsIcon color={color} />}
+      key="settings"
+      label="Settings"
+      onPress={() => {
+        openSettings();
+      }}
+      placement={folded ? 'icon' : placement}
+    />
+  ) : null;
+  // Folded below ~340px the row takes two lines: the day beside Settings,
+  // then +1 night, +1 week and More edge to edge.
+  const foldTwoLines = folded && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
+
   return (
     <View
       nativeID="status-strip"
@@ -272,6 +344,7 @@ export function PerGameStatusStrip() {
         style={[
           styles.row,
           layout.narrow && styles.rowNarrow,
+          folded && styles.rowFolded,
           layout.largeText && styles.rowLarge,
         ]}
       >
@@ -281,7 +354,10 @@ export function PerGameStatusStrip() {
           style={[
             styles.facts,
             practice ? (layout.compact ? styles.factsCompact : styles.factsPractice) : styles.factsLive,
-            tight && styles.factsTight,
+            // A locked night adds a line; the lines sit flush so the frame
+            // keeps its height budget.
+            (tight || locked) && styles.factsTight,
+            folded && !foldedFacts && styles.factsFolded,
             // Enlarged text signed in: three controls would squeeze the facts
             // into a sliver, so the facts take the row and the controls wrap.
             layout.largeText && !practice && styles.factsFull,
@@ -289,11 +365,13 @@ export function PerGameStatusStrip() {
         >
           {facts}
         </View>
-        <View style={styles.actions}>
+        {foldTwoLines ? settingsControl : null}
+        <View style={[styles.actions, foldTwoLines && styles.actionsFull]}>
           {practice && layout.merged ? <PracticeControls inline /> : null}
+          {folded ? <PracticeControls folded onRules={() => setRulesOpen(true)} /> : null}
           {canEnterPractice ? (
             <ChromeButton
-              accessibilityLabel="Play a practice season in this browser. Your account is untouched."
+              accessibilityLabel="Practice: play a practice season in this browser. Your account is untouched."
               icon={(color) => <PracticeIcon color={color} />}
               label={PRACTICE_LABEL}
               onPress={() => {
@@ -303,13 +381,16 @@ export function PerGameStatusStrip() {
             />
           ) : null}
           {refreshControl}
-          <ChromeButton
-            accessibilityLabel="Show the game rules"
-            icon={(color) => <RulesIcon color={color} />}
-            label="Rules"
-            onPress={() => setRulesOpen(true)}
-            placement={placement}
-          />
+          {folded ? null : (
+            <ChromeButton
+              accessibilityLabel="Rules: show the game rules"
+              icon={(color) => <RulesIcon color={color} />}
+              label="Rules"
+              onPress={() => setRulesOpen(true)}
+              placement={placement}
+            />
+          )}
+          {foldTwoLines ? null : settingsControl}
         </View>
       </View>
       <RulesSheet onClose={() => setRulesOpen(false)} rules={rules} visible={rulesOpen} />
@@ -336,8 +417,24 @@ function LastNightMoney({ tight, value }: { tight: boolean; value: number }) {
   );
 }
 
-/** Below this width the rules sheet rises from the bottom; above it, it is a centred panel. */
-const RULES_SHEET_DOCKED_MAX_WIDTH = 640;
+/**
+ * The season's progress, right after the day count that labels it: a short
+ * bar, gold as far as the season has gone.
+ */
+function ProgressMeter({ progress }: { progress: PracticeProgress }) {
+  return (
+    <View
+      accessibilityLabel={progress.accessibilityLabel}
+      accessibilityRole="progressbar"
+      aria-valuemax={progress.total}
+      aria-valuemin={0}
+      aria-valuenow={progress.day}
+      style={styles.meter}
+    >
+      <View style={[styles.meterFill, { width: `${Math.max(progress.fraction * 100, 3)}%` }]} />
+    </View>
+  );
+}
 
 /**
  * The rules, over the screen. Plain English first (the shared rules copy, in
@@ -355,8 +452,9 @@ function RulesSheet({
 }) {
   const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const docked = width < RULES_SHEET_DOCKED_MAX_WIDTH;
+  const { height } = useWindowDimensions();
+  // Back closes the sheet; the app behind it is inert while it is open.
+  useSheetHistory(visible, onClose);
   const presentation = perGameRulesPresentation(rules);
   const startingScore = presentation.facts.find((fact) => fact.label === 'Starting score')?.value;
   const fee = exactMoney(rules.transactionFeeDollars);
@@ -388,17 +486,13 @@ function RulesSheet({
         onStartShouldSetResponder={() => true}
         style={styles.scrim}
       />
-      <View
-        style={[
-          styles.sheet,
-          docked ? styles.sheetDocked : styles.sheetCentered,
-          docked && { paddingBottom: insets.bottom },
-        ]}
-      >
+      {/* Framed like Settings: a sheet from the bottom, 64px below the top
+          (less in a short window), scrolling inside. */}
+      <View style={[styles.sheet, chromeFolded(height) && styles.sheetShort]}>
         <View style={styles.sheetHead}>
           <Text accessibilityRole="header" {...headingLevel(2)} style={styles.sheetTitle}>Game rules</Text>
           <Pressable
-            accessibilityLabel="Close the game rules"
+            accessibilityLabel="Done, close the game rules"
             accessibilityRole="button"
             onPress={onClose}
             style={({ pressed }) => [styles.done, pressed && styles.pressed]}
@@ -406,7 +500,10 @@ function RulesSheet({
             <Text style={styles.doneText}>Done</Text>
           </Pressable>
         </View>
-        <ScrollView contentContainerStyle={styles.sheetContent} style={styles.sheetBody}>
+        <ScrollView
+          contentContainerStyle={[styles.sheetContent, { paddingBottom: space.xl + insets.bottom }]}
+          style={styles.sheetBody}
+        >
           <View style={styles.explanation}>
             {rulesParagraphs(presentation.explanation).map((paragraph) => (
               <Text key={paragraph} style={styles.paragraph}>{paragraph}</Text>
@@ -417,6 +514,17 @@ function RulesSheet({
               <View key={fact.label} style={styles.factRow}>
                 <Text style={styles.factName}>{fact.label}</Text>
                 <Text style={styles.factValue}>{fact.value}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={styles.glossary}>
+            <Text accessibilityRole="header" {...headingLevel(3)} style={styles.glossaryTitle}>
+              Words in the game
+            </Text>
+            {presentation.glossary.map((entry) => (
+              <View key={entry.term} style={styles.glossaryRow}>
+                <Text style={styles.glossaryTerm}>{entry.term}</Text>
+                <Text style={styles.glossaryMeaning}>{entry.meaning}</Text>
               </View>
             ))}
           </View>
@@ -443,6 +551,33 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
   },
+  // The day count and its progress bar travel together.
+  dayFact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: 6,
+  },
+  meter: {
+    width: 24,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.surfaceRaised,
+    overflow: 'hidden',
+  },
+  meterFill: {
+    height: '100%',
+    backgroundColor: colors.gold,
+  },
+  // Folded and narrow: the facts are just the day, sized to it.
+  factsFolded: {
+    flexBasis: 'auto',
+    flexShrink: 0,
+  },
+  // Folded below ~340px: the practice controls take their own full line.
+  actionsFull: {
+    flexBasis: '100%',
+    marginLeft: 0,
+  },
   row: {
     minHeight: control.height,
     flexDirection: 'row',
@@ -456,6 +591,12 @@ const styles = StyleSheet.create({
   rowNarrow: {
     columnGap: 6,
     paddingHorizontal: space.md,
+  },
+  // Folded: slimmer gutters so day, +1 night, +1 week, More and Settings
+  // share one line down to 340px, locked nights included.
+  rowFolded: {
+    columnGap: 6,
+    paddingHorizontal: space.sm,
   },
   rowLarge: {
     paddingVertical: space.xs,
@@ -487,6 +628,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
     columnGap: space.md,
+  },
+  lineFolded: {
+    columnGap: 6,
   },
   // One line of mixed sizes (the 13px clock, 12px facts) sits on a baseline.
   lineWide: {
@@ -564,25 +708,25 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
+  // The same frame as the Settings sheet (SettingsSheet styles.sheet).
   sheet: {
+    flex: 1,
     alignSelf: 'center',
     width: '100%',
-    maxWidth: 560,
-    maxHeight: '88%',
+    maxWidth: 520,
+    marginTop: 64,
+    marginBottom: 0,
     backgroundColor: colors.background,
     borderColor: colors.border,
     borderWidth: 1,
-    overflow: 'hidden',
-  },
-  sheetDocked: {
-    marginTop: 'auto',
     borderBottomWidth: 0,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
+    overflow: 'hidden',
   },
-  sheetCentered: {
-    marginVertical: 'auto',
-    borderRadius: radius.lg,
+  // A short window keeps the rules, not the gap above them.
+  sheetShort: {
+    marginTop: space.sm,
   },
   sheetHead: {
     minHeight: 52,
@@ -614,7 +758,7 @@ const styles = StyleSheet.create({
     fontWeight: weight.bold,
   },
   sheetBody: {
-    flexGrow: 0,
+    flex: 1,
   },
   sheetContent: {
     padding: space.lg,
@@ -646,6 +790,30 @@ const styles = StyleSheet.create({
   factName: {
     ...labelStyle,
     width: 96,
+  },
+  glossary: {
+    gap: space.sm,
+  },
+  glossaryTitle: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.heavy,
+  },
+  glossaryRow: {
+    gap: 2,
+  },
+  glossaryTerm: {
+    color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.bold,
+  },
+  glossaryMeaning: {
+    color: colors.text,
+    fontFamily: fonts.body,
+    fontSize: type.body,
+    lineHeight: 19,
   },
   factValue: {
     flexGrow: 1,

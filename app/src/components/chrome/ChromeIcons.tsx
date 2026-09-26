@@ -56,3 +56,25 @@ export function MoreIcon({ color, size = 18 }: IconProps) {
     </Svg>
   );
 }
+
+/** Two sliders: Settings, in the folded frame where the brand bar is hidden. */
+export function SettingsIcon({ color, size = 18 }: IconProps) {
+  return (
+    <Svg height={size} viewBox="0 0 24 24" width={size}>
+      <Line stroke={color} strokeLinecap="round" strokeWidth={STROKE} x1={3.5} x2={20.5} y1={7.5} y2={7.5} />
+      <Line stroke={color} strokeLinecap="round" strokeWidth={STROKE} x1={3.5} x2={20.5} y1={16.5} y2={16.5} />
+      <Circle cx={15} cy={7.5} fill="none" r={3} stroke={color} strokeWidth={STROKE} />
+      <Circle cx={9} cy={16.5} fill="none" r={3} stroke={color} strokeWidth={STROKE} />
+    </Svg>
+  );
+}
+
+/** A padlock: roster moves are paused for the next games. */
+export function LockIcon({ color, size = 12 }: IconProps) {
+  return (
+    <Svg height={size} viewBox="0 0 24 24" width={size}>
+      <Rect fill="none" height={10} rx={2} stroke={color} strokeWidth={2.5} width={15} x={4.5} y={10.5} />
+      <Path d="M8 10.5 V7.5 a4 4 0 0 1 8 0 V10.5" fill="none" stroke={color} strokeLinecap="round" strokeWidth={2.5} />
+    </Svg>
+  );
+}

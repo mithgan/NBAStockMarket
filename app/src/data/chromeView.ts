@@ -6,7 +6,14 @@
  * themselves live in components/PerGameStatusStrip.tsx and components/SimBar.tsx.
  */
 import type { DividendBasis } from '../api/contracts';
-import { exactSignedMoney, humanDate, humanDay, signedMoneyFine } from '../copy/terms';
+import {
+  exactSignedMoney,
+  humanDate,
+  humanDay,
+  rosterReopensLine,
+  signedMoney,
+  signedMoneyFine,
+} from '../copy/terms';
 import { formatMoney } from '../format';
 
 /** Length of the practice season: opening-night eve (day 0) to the last night. */
@@ -67,6 +74,52 @@ export function keepTogether(phrase: string): string {
 /** "Day 16 of 174", or "Season complete" once the last night is in. */
 export function practiceDayText(progress: PracticeProgress): string {
   return progress.complete ? 'Season complete' : `Day ${progress.day} of ${progress.total}`;
+}
+
+/** "Day 16/174": the day count for the narrowest rows. */
+export function practiceDayShort(progress: PracticeProgress): string {
+  return progress.complete ? 'Season over' : `Day ${progress.day}/${progress.total}`;
+}
+
+/**
+ * What a practice season holds, for the Restart and Exit questions:
+ * "Day 16 of 174, 8 players, 2 shorts, score +$120K".
+ */
+export function practiceStakes({ progress, players, shorts, score }: {
+  progress: PracticeProgress;
+  players: number;
+  shorts: number;
+  score: number;
+}): string {
+  const parts = [
+    progress.complete ? 'a finished season' : `Day ${progress.day} of ${progress.total}`,
+    players === 0 ? 'no players' : `${players} ${players === 1 ? 'player' : 'players'}`,
+  ];
+  if (shorts > 0) parts.push(`${shorts} ${shorts === 1 ? 'short' : 'shorts'}`);
+  parts.push(`score ${signedMoney(score)}`);
+  return parts.join(', ');
+}
+
+/** The two season-level questions the practice controls ask before acting. */
+export function practiceQuestion(kind: 'restart' | 'exit', stakes: string): {
+  title: string;
+  lines: string[];
+  confirmLabel: string;
+  cancelLabel: string;
+} {
+  return kind === 'restart'
+    ? {
+      title: 'Start over?',
+      lines: [`You'd lose this season: ${stakes}.`, 'A new season starts at Day 0 with an empty roster.'],
+      confirmLabel: 'Start over',
+      cancelLabel: 'Keep playing',
+    }
+    : {
+      title: 'Leave practice?',
+      lines: [`You'd lose this season: ${stakes}.`, "Practice isn't saved anywhere, so it can't be picked up later."],
+      confirmLabel: 'Leave practice',
+      cancelLabel: 'Keep playing',
+    };
 }
 
 /**
@@ -177,6 +230,8 @@ export interface StatusSummaryInput {
    * (perGameMetrics.recentEarnings), or null before any games.
    */
   lastNight: number | null;
+  /** None of your players had a game on the last settled day. */
+  noGames?: boolean;
   /** Practice only. */
   progress?: PracticeProgress;
   /** A sentence about the roster lock, when it is on. */
@@ -192,6 +247,7 @@ export function statusSummary({
   lastSettledDate,
   nextGameDate,
   lastNight,
+  noGames = false,
   progress,
   lockSentence,
 }: StatusSummaryInput): string {
@@ -204,7 +260,7 @@ export function statusSummary({
   } else {
     parts.push(lastSettledDate ? `Games through ${humanDate(lastSettledDate)}.` : 'No games settled yet.');
   }
-  if (lastNight !== null) parts.push(`Last night ${exactSignedMoney(lastNight)}.`);
+  if (lastNight !== null) parts.push(noGames ? `${NO_GAMES_TEXT}.` : `Last night ${exactSignedMoney(lastNight)}.`);
   const next = nextGamesText(nextGameDate);
   const opener = mode === 'practice' && progress?.day === 0;
   if (mode === 'practice' && progress?.complete) parts.push(`${PRACTICE_OVER_TEXT}.`);
@@ -239,6 +295,52 @@ export function dividendBasisText(basis: DividendBasis): string {
 export function dividendText(basis: DividendBasis, dollarsPerNetPoint: number): string {
   return `${dividendBasisText(basis)} · ${keepTogether(`${formatMoney(dollarsPerNetPoint)} per net point`)}`;
 }
+
+/**
+ * Below this window height the frame folds, as App's SHORT_LAYOUT_MAX_HEIGHT
+ * does: the brand bar hides, and the status row and practice bar become one
+ * row (day, +1 night, +1 week, More, Settings) so the game keeps the screen.
+ */
+export const CHROME_SHORT_MAX_HEIGHT = 500;
+
+export function chromeFolded(height: number): boolean {
+  return height < CHROME_SHORT_MAX_HEIGHT;
+}
+
+/** From this width the folded row has room for the facts beside its controls. */
+export const CHROME_FOLDED_FACTS_MIN_WIDTH = 600;
+/**
+ * Below this width the folded row takes two lines (the day beside Settings,
+ * then the three practice controls): "Day 16/174", +1 night, +1 week, More
+ * and Settings need about 320px in one line.
+ */
+export const CHROME_FOLDED_ONE_LINE_MIN_WIDTH = 340;
+
+/**
+ * Why moves pause, in two words, after "Roster reopens after Oct 30": the
+ * lineups are set for those games. Short so the line fits a 390px phone row.
+ */
+export const LOCK_REASON = 'lineups set';
+
+/** "Roster reopens after Oct 30 · lineups set". */
+export function lockLine(lockGameDate: string | null | undefined): string {
+  return `${rosterReopensLine(lockGameDate)} · ${LOCK_REASON}`;
+}
+
+/** The result slot when the last settled day had no games for you. */
+export const NO_GAMES_TEXT = 'No games last night';
+
+/** Whether any of your players played on `date` (games, not fees). */
+export function playedOn(
+  ledger: readonly { gameId: string | null; gameDate: string | null }[] | undefined,
+  date: string | null | undefined,
+): boolean {
+  if (!ledger || !date) return false;
+  return ledger.some((entry) => entry.gameId !== null && entry.gameDate === date);
+}
+
+/** Under +1 night / +1 week while the roster is empty. */
+export const EMPTY_ROSTER_HINT = "Add a player first. +1 night plays the next night's games.";
 
 /** How long a short stays open, in words. */
 export function shortTermText(shortTermDays: number | null): string {

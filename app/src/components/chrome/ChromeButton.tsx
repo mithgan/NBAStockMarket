@@ -7,24 +7,14 @@
  * very narrow phone only the icon shows and the name lives in the accessibility
  * label. Every placement keeps the full 44x44 hit area — no hitSlop.
  */
-import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { forwardRef, type ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, type View } from 'react-native';
 
 import { colors, control, fonts, radius, space, type, weight } from '../../theme';
 
 export type ChromeButtonPlacement = 'stacked' | 'inline' | 'icon';
 
-export function ChromeButton({
-  icon,
-  label,
-  accessibilityLabel,
-  onPress,
-  disabled = false,
-  busy = false,
-  placement,
-  tone = 'plain',
-  expanded,
-}: {
+type ChromeButtonProps = {
   /** Rendered with the colour the button hands it. */
   icon: (color: string) => ReactNode;
   label: string;
@@ -37,11 +27,25 @@ export function ChromeButton({
   tone?: 'plain' | 'gold';
   /** For a control that shows and hides more controls (More). */
   expanded?: boolean;
-}) {
+};
+
+/** Forwards its ref so a menu can hand focus back to the control that opened it. */
+export const ChromeButton = forwardRef<View, ChromeButtonProps>(function ChromeButton({
+  icon,
+  label,
+  accessibilityLabel,
+  onPress,
+  disabled = false,
+  busy = false,
+  placement,
+  tone = 'plain',
+  expanded,
+}, ref) {
   const gold = tone === 'gold';
   const color = disabled ? colors.faint : gold || expanded ? colors.goldInk : colors.muted;
   return (
     <Pressable
+      ref={ref}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
       // react-native-web turns only some accessibilityState keys into ARIA
@@ -74,7 +78,7 @@ export function ChromeButton({
       )}
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   base: {

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Modal, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import {
   advanceMockDays,
@@ -7,15 +7,123 @@ import {
   isMockActive,
   mockSeasonStart,
 } from '../api/mockPerGameClient';
-import { chromeLayout, practiceProgress, practiceSeasonEnd } from '../data/chromeView';
+import {
+  CHROME_FOLDED_ONE_LINE_MIN_WIDTH,
+  chromeFolded,
+  chromeLayout,
+  EMPTY_ROSTER_HINT,
+  practiceProgress,
+  practiceQuestion,
+  practiceSeasonEnd,
+  practiceStakes,
+} from '../data/chromeView';
+import { humanDate } from '../copy/terms';
 import { usePerGame } from '../state/PerGameContext';
-import { colors, space } from '../theme';
-import { Button } from '../ui/kit';
+import { colors, fonts, radius, space, type } from '../theme';
+import { Button, ConfirmDialog } from '../ui/kit';
+import { useSheetHistory } from '../web/appHistory';
+import { leavePractice, restartPractice } from '../web/practiceSession';
 import { ChromeButton } from './chrome/ChromeButton';
 import { MoreIcon } from './chrome/ChromeIcons';
 
-/** How long the restart button waits for its confirming second tap. */
-const RESET_CONFIRM_MS = 4000;
+/**
+ * After a night or week has played, the advance buttons rest this long before
+ * they take another press, so a double tap plays one night, not two.
+ */
+const ADVANCE_COOLDOWN_MS = 450;
+
+type Question = 'restart' | 'exit';
+
+/**
+ * Run `action` once the dialog that asked for it has closed and its history
+ * entry is gone, so a reload or a new page never keeps a stale sheet entry.
+ */
+function afterDialogCloses(action: () => void): void {
+  if (typeof window === 'undefined') {
+    action();
+    return;
+  }
+  let done = false;
+  const go = () => {
+    if (done) return;
+    done = true;
+    window.removeEventListener('popstate', go);
+    action();
+  };
+  window.addEventListener('popstate', go);
+  setTimeout(go, 350);
+}
+
+function focusLater(ref: { current: unknown }, delay = 60): void {
+  setTimeout(() => (ref.current as { focus?: () => void } | null)?.focus?.(), delay);
+}
+
+/**
+ * More: a small menu under its button for the controls a short or narrow
+ * frame has no room for. It floats over the screen (a transparent modal, so
+ * the list keeps its place and nothing paints over it), and it closes on
+ * Escape (focus back on More), on a tap anywhere else, when the window
+ * changes size, and once an item is used.
+ */
+function MoreMenu({ open, setOpen, buttonRef, children }: {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  buttonRef: { current: View | null };
+  children: ReactNode;
+}) {
+  const { width, height } = useWindowDimensions();
+  const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
+  const size = `${width}x${height}`;
+  const sizeRef = useRef(size);
+  useEffect(() => {
+    if (sizeRef.current === size) return;
+    sizeRef.current = size;
+    setOpen(false);
+  }, [size, setOpen]);
+  useEffect(() => {
+    if (!open) return;
+    const node = buttonRef.current as unknown as { getBoundingClientRect?: () => DOMRect } | null;
+    const box = node?.getBoundingClientRect?.();
+    if (box) setAnchor({ top: box.bottom + 2, right: Math.max(width - box.right, space.xs) });
+  }, [open, width, buttonRef]);
+  return (
+    <>
+      <ChromeButton
+        ref={buttonRef}
+        // The name stays clear of "restart" so nothing that looks for the
+        // Restart button by name can land on More instead.
+        accessibilityLabel="More practice controls"
+        expanded={open}
+        icon={(color) => <MoreIcon color={color} />}
+        label="More"
+        onPress={() => setOpen(!open)}
+        placement="stacked"
+      />
+      {open ? (
+        <Modal
+          accessibilityLabel="More practice controls"
+          animationType="none"
+          onRequestClose={() => {
+            setOpen(false);
+            focusLater(buttonRef, 0);
+          }}
+          transparent
+          visible
+        >
+          {/* A tap outside closes the menu; the scrim is never a focus stop. */}
+          <View
+            onResponderRelease={() => setOpen(false)}
+            onStartShouldSetResponder={() => true}
+            style={styles.menuScrim}
+          />
+          <View nativeID="practice-more" style={[styles.morePanel, anchor ?? styles.morePanelFallback]}>
+            {children}
+          </View>
+        </Modal>
+      ) : null}
+    </>
+  );
+}
 /**
  * After a night is played the screen must refresh from the client. If a
  * refresh is already running (it may have read the client before this night
@@ -61,7 +169,13 @@ function playPracticeWeek(): void {
  * at high zoom, Restart and Exit move behind a More control so the row still
  * fits and the screen keeps its room.
  */
-export function PracticeControls({ inline = false }: { inline?: boolean }) {
+export function PracticeControls({ inline = false, folded = false, onRules }: {
+  inline?: boolean;
+  /** The short-window row: +1 night, +1 week and More (Rules, Restart, Exit). */
+  folded?: boolean;
+  /** Opens the rules; folded rows list Rules under More. */
+  onRules?: () => void;
+}) {
   const { fontScale, width } = useWindowDimensions();
   const {
     bootstrap,
@@ -70,17 +184,42 @@ export function PracticeControls({ inline = false }: { inline?: boolean }) {
     pendingActions,
     refreshData,
   } = usePerGame();
-  const [confirmingReset, setConfirmingReset] = useState(false);
+  const [question, setQuestion] = useState<Question | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [advancing, setAdvancing] = useState(false);
   // State updates land a render later; a second tap in the same frame still
-  // sees the old props. The ref closes the door synchronously.
+  // sees the old props. The ref closes the door synchronously, and stays
+  // closed for a short rest after each advance (a double tap plays once).
   const advancingRef = useRef(false);
+  const readyAtRef = useRef(0);
+  const advancedRef = useRef(false);
+  const restartRef = useRef<View>(null);
+  const exitRef = useRef<View>(null);
+  const moreRef = useRef<View>(null);
+  const askedFromMenuRef = useRef(false);
+  const complete = practiceProgress(mockSeasonStart(), bootstrap?.game.lastSettledDate ?? null).complete;
+
+  // Restart or Exit asks first; an item in More closes the menu as it asks.
+  const askQuestion = (kind: Question) => {
+    askedFromMenuRef.current = moreOpen;
+    setMoreOpen(false);
+    setQuestion(kind);
+  };
+  // Keep playing (or Escape, Back, a tap outside): the question closes and
+  // focus returns to the button that asked it (More, if it was in the menu).
+  const closeQuestion = () => {
+    const asked = question;
+    setQuestion(null);
+    focusLater(askedFromMenuRef.current ? moreRef : asked === 'exit' ? exitRef : restartRef);
+  };
+  useSheetHistory(question !== null, closeQuestion);
+  // The last night is in: the advance buttons have nothing left to play, so
+  // focus moves to Restart rather than falling to the page.
   useEffect(() => {
-    if (!confirmingReset) return;
-    const timer = setTimeout(() => setConfirmingReset(false), RESET_CONFIRM_MS);
-    return () => clearTimeout(timer);
-  }, [confirmingReset]);
+    if (!complete || !advancedRef.current) return;
+    advancedRef.current = false;
+    focusLater(restartRef, 150);
+  }, [complete]);
   if (!bootstrap || !isMockActive() || typeof window === 'undefined') return null;
 
   const layout = chromeLayout(width, fontScale);
@@ -88,13 +227,47 @@ export function PracticeControls({ inline = false }: { inline?: boolean }) {
   const narrow = layout.narrow && !inline;
   const disabled = !isGameplayReady || isRefreshing || pendingActions.size > 0;
   const progress = practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate);
-  const advanceDisabled = disabled || advancing || progress.complete;
+  // While a night plays the buttons go quiet but keep their Tab stop and
+  // focus (aria-disabled), so Enter can play the next night once it is in.
+  const advanceBusy = disabled || advancing;
+
+  const open = bootstrap.positions.filter((position) => position.status === 'active');
+  // Nothing to play for yet: +1 night / +1 week stay quiet (the first move is
+  // adding a player) and a line under them says what they do.
+  const emptyRoster = open.length === 0 && !progress.complete;
+  const hint = emptyRoster && !inline && !folded ? (
+    <Text maxFontSizeMultiplier={1.5} style={styles.hint}>{EMPTY_ROSTER_HINT}</Text>
+  ) : null;
+  const stakes = practiceStakes({
+    progress,
+    players: open.filter((position) => position.side === 'long').length,
+    shorts: open.filter((position) => position.side === 'short').length,
+    score: bootstrap.account.cumulativePnl,
+  });
+  const prompt = question ? practiceQuestion(question, stakes) : null;
+  // Start over / Leave practice: close the question first, then act.
+  const confirmQuestion = () => {
+    afterDialogCloses(question === 'exit' ? leavePractice : restartPractice);
+    setQuestion(null);
+  };
+  const dialog = prompt ? (
+    <ConfirmDialog
+      cancelLabel={prompt.cancelLabel}
+      confirmLabel={prompt.confirmLabel}
+      lines={prompt.lines}
+      onCancel={closeQuestion}
+      onConfirm={confirmQuestion}
+      title={prompt.title}
+      visible
+    />
+  ) : null;
 
   // One night (or week) per tap, and never a second one before the screen has
   // caught up with the first: the client and the screen stay on the same day.
   const advance = async (step: 'night' | 'week') => {
-    if (advancingRef.current) return;
+    if (advancingRef.current || Date.now() < readyAtRef.current) return;
     advancingRef.current = true;
+    advancedRef.current = true;
     setAdvancing(true);
     try {
       if (step === 'week') playPracticeWeek();
@@ -104,64 +277,66 @@ export function PracticeControls({ inline = false }: { inline?: boolean }) {
         await wait(ADVANCE_RETRY_MS);
       }
     } finally {
+      readyAtRef.current = Date.now() + ADVANCE_COOLDOWN_MS;
       advancingRef.current = false;
-      setAdvancing(false);
+      setTimeout(() => setAdvancing(false), ADVANCE_COOLDOWN_MS);
     }
   };
 
-  const stackLabels = compact && width < STACKED_LABEL_MAX_WIDTH;
+  const stackLabels = (compact || folded) && width < STACKED_LABEL_MAX_WIDTH;
+  // +1 night names the game night it plays ("Oct 25"), so a day without
+  // games that it skips is no surprise.
+  const nightDate = !progress.complete && bootstrap.game.nextGameDate
+    ? humanDate(bootstrap.game.nextGameDate)
+    : null;
+  // Folded and narrow: the controls get their own line and share it evenly.
+  const foldFill = folded && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
   const advanceButtons = (
     <>
       <Button
-        accessibilityLabel="Advance one night in practice"
-        disabled={advanceDisabled}
-        label={stackLabels ? '+1\nnight' : '+1 night'}
+        accessibilityLabel={nightDate ? `+1 night: advance one night, to the ${nightDate} games` : '+1 night: advance one night'}
+        disabled={advanceBusy || progress.complete}
+        focusableWhenDisabled={!progress.complete}
+        label={stackLabels ? '+1\nnight' : nightDate ? `+1 night\n${nightDate}` : '+1 night'}
         onPress={() => {
           void advance('night');
         }}
-        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact]}
-        textStyle={styles.advanceText}
+        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, emptyRoster && styles.advanceQuiet]}
+        textStyle={emptyRoster ? styles.advanceTextQuiet : styles.advanceText}
         variant="secondary"
       />
       <Button
-        accessibilityLabel="Advance one week in practice"
-        disabled={advanceDisabled}
+        accessibilityLabel="+1 week: advance one week"
+        disabled={advanceBusy || progress.complete}
+        focusableWhenDisabled={!progress.complete}
         label={stackLabels ? '+1\nweek' : '+1 week'}
         onPress={() => {
           void advance('week');
         }}
-        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact]}
-        textStyle={styles.advanceText}
+        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, emptyRoster && styles.advanceQuiet]}
+        textStyle={emptyRoster ? styles.advanceTextQuiet : styles.advanceText}
         variant="secondary"
       />
     </>
   );
   const secondaryButtons = (
     <>
+      {/* Both lose the whole season, so both ask first (ConfirmDialog says
+          what would be lost). Start over reloads into a fresh season, which
+          restarts the in-memory client and its provider together. */}
       <Button
-        accessibilityLabel={confirmingReset ? 'Confirm restarting practice' : 'Restart practice'}
-        disabled={disabled}
-        label={confirmingReset ? 'Confirm' : 'Restart'}
-        onPress={() => {
-          if (confirmingReset) {
-            setConfirmingReset(false);
-            // Restart the in-memory client and its provider together. An
-            // ordinary refresh must still reject older account snapshots.
-            window.location.reload();
-          } else {
-            setConfirmingReset(true);
-          }
-        }}
-        style={[styles.quiet, narrow && styles.quietNarrow, confirmingReset && styles.armed]}
-        textStyle={confirmingReset ? styles.armedText : undefined}
+        ref={restartRef}
+        accessibilityLabel="Restart practice"
+        label="Restart"
+        onPress={() => askQuestion('restart')}
+        style={[styles.quiet, narrow && styles.quietNarrow]}
         variant="quiet"
       />
       <Button
-        accessibilityLabel="Leave practice and return to the live market"
+        ref={exitRef}
+        accessibilityLabel="Exit practice"
         label="Exit"
-        onPress={() => {
-          window.location.search = '';
-        }}
+        onPress={() => askQuestion('exit')}
         style={[styles.quiet, narrow && styles.quietNarrow]}
         variant="quiet"
       />
@@ -176,6 +351,39 @@ export function PracticeControls({ inline = false }: { inline?: boolean }) {
         <View style={[styles.group, styles.moreRow]}>
           {secondaryButtons}
         </View>
+        {dialog}
+      </View>
+    );
+  }
+
+  // Rules joins More only where the frame folds and the status row has no
+  // room for its own Rules control.
+  const rulesItem = onRules ? (
+    <Button
+      accessibilityLabel="Rules: show the game rules"
+      label="Rules"
+      onPress={() => {
+        setMoreOpen(false);
+        onRules();
+      }}
+      style={styles.quiet}
+      variant="quiet"
+    />
+  ) : null;
+  const menu = (items: ReactNode) => (
+    <MoreMenu buttonRef={moreRef} open={moreOpen} setOpen={setMoreOpen}>
+      {items}
+    </MoreMenu>
+  );
+
+  // A short window: one row with +1 night and +1 week (Restart and Exit once
+  // the season is over), then More. The status row adds the day and Settings.
+  if (folded) {
+    return (
+      <View style={[styles.foldedControls, foldFill && styles.foldedFill]}>
+        {progress.complete ? secondaryButtons : advanceButtons}
+        {menu(progress.complete ? rulesItem : <>{rulesItem}{secondaryButtons}</>)}
+        {dialog}
       </View>
     );
   }
@@ -185,22 +393,10 @@ export function PracticeControls({ inline = false }: { inline?: boolean }) {
       <View style={[styles.controls, styles.controlsNarrow]}>
         <View style={[styles.group, styles.groupFill]}>
           {advanceButtons}
-          <ChromeButton
-            // The name stays clear of "restart" so nothing that looks for the
-            // Restart button by name can land on More instead.
-            accessibilityLabel="More practice controls"
-            expanded={moreOpen}
-            icon={(color) => <MoreIcon color={color} />}
-            label="More"
-            onPress={() => setMoreOpen((open) => !open)}
-            placement="stacked"
-          />
+          {menu(secondaryButtons)}
         </View>
-        {moreOpen ? (
-          <View style={[styles.group, styles.moreRow]}>
-            {secondaryButtons}
-          </View>
-        ) : null}
+        {hint}
+        {dialog}
       </View>
     );
   }
@@ -213,6 +409,8 @@ export function PracticeControls({ inline = false }: { inline?: boolean }) {
       <View style={[styles.group, styles.secondary, inline && styles.secondaryInline]}>
         {secondaryButtons}
       </View>
+      {hint}
+      {dialog}
     </View>
   );
 }
@@ -225,26 +423,19 @@ export function PracticeControls({ inline = false }: { inline?: boolean }) {
  * carries the one "Practice" entry instead.
  */
 export function SimBar() {
-  const { fontScale, width } = useWindowDimensions();
+  const { fontScale, height, width } = useWindowDimensions();
   const { bootstrap } = usePerGame();
   if (!bootstrap || !isMockActive()) return null;
 
   const layout = chromeLayout(width, fontScale);
-  const progress = practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate);
+  // Desktop and short windows carry the controls in the status row, so this
+  // bar is just the frame's bottom edge there. The season's progress sits
+  // beside "Day 16 of 174" in the status row, where the words label it.
+  const inStatusRow = layout.merged || chromeFolded(height);
 
   return (
     <View nativeID="practice-bar" style={styles.bar}>
-      {layout.merged ? null : <PracticeControls />}
-      <View
-        accessibilityLabel={progress.accessibilityLabel}
-        accessibilityRole="progressbar"
-        aria-valuemax={progress.total}
-        aria-valuemin={0}
-        aria-valuenow={progress.day}
-        style={styles.track}
-      >
-        <View style={[styles.fill, { width: `${Math.max(progress.fraction * 100, 0.5)}%` }]} />
-      </View>
+      {inStatusRow ? null : <PracticeControls />}
     </View>
   );
 }
@@ -252,6 +443,8 @@ export function SimBar() {
 const styles = StyleSheet.create({
   bar: {
     backgroundColor: colors.chromeSoft,
+    borderBottomColor: colors.borderStrong,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   controls: {
     flexDirection: 'row',
@@ -260,8 +453,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: space.sm,
     paddingHorizontal: space.lg,
-    paddingTop: 2,
-    paddingBottom: space.xs,
+    paddingBottom: 2,
   },
   controlsNarrow: {
     gap: 6,
@@ -291,6 +483,46 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
     gap: 0,
   },
+  // More's menu floats over the screen, right-aligned under the button.
+  menuScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  morePanel: {
+    position: 'absolute',
+    minWidth: 150,
+    padding: space.xs,
+    gap: 2,
+    alignItems: 'stretch',
+    backgroundColor: colors.background,
+    borderColor: colors.borderStrong,
+    borderWidth: 1,
+    borderRadius: radius.md,
+  },
+  morePanelFallback: {
+    top: 48,
+    right: space.xs,
+  },
+  // Folded (short window): the controls sit in the status row, edge to edge.
+  foldedControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+  },
+  advanceFolded: {
+    minWidth: 0,
+    paddingHorizontal: space.xs,
+  },
+  advanceFill: {
+    flexGrow: 1,
+    flexBasis: 0,
+  },
+  foldedFill: {
+    flexGrow: 1,
+  },
   secondary: {
     marginLeft: 'auto',
     gap: 0,
@@ -319,27 +551,26 @@ const styles = StyleSheet.create({
     color: colors.goldInk,
     textAlign: 'center',
   },
+  // Empty roster: neutral outline, no gold, until there is a player to play.
+  advanceQuiet: {
+    backgroundColor: 'transparent',
+    borderColor: colors.border,
+  },
+  advanceTextQuiet: {
+    color: colors.muted,
+    textAlign: 'center',
+  },
+  hint: {
+    flexBasis: '100%',
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    lineHeight: 16,
+  },
   quiet: {
     paddingHorizontal: space.sm + 2,
   },
   quietNarrow: {
     paddingHorizontal: space.sm,
-  },
-  // Restart's confirm step asks for attention without the loss red: red is
-  // reserved for money going down.
-  armed: {
-    borderColor: colors.goldLine,
-  },
-  armedText: {
-    color: colors.goldInk,
-  },
-  track: {
-    height: 3,
-    backgroundColor: colors.surfaceRaised,
-    overflow: 'hidden',
-  },
-  fill: {
-    height: '100%',
-    backgroundColor: colors.gold,
   },
 });
