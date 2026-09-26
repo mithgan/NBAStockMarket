@@ -98,6 +98,8 @@ test('Scoring reads as three short lines with the example set apart in K, and th
   assert.deepEqual(view.scoring.lines, [
     'Each game he plays, you pay his price and collect his dividend.',
     'His dividend is his net points each game × $40K.',
+    // A bad game's below-zero dividend, where a roster-only player looks (walk 8 T1-01).
+    'A bad game can push his dividend below zero, and you pay that too.',
     'Beat his price and you profit.',
   ]);
   assert.equal(view.scoring.example, 'Example: 3.5 net points = $140K dividend; price $118K; profit +$22K.');
@@ -112,4 +114,12 @@ test('Scoring reads as three short lines with the example set apart in K, and th
   assert.doesNotMatch(meaning('Dividend last season'), /best guide/);
   // The projection basis says so in its line.
   assert.match(perGameRulesPresentation({ ...ruleset, dividendBasis: 'surprise_vs_projection' }).scoring.lines[1], /beat his pregame projection, × \$40K\.$/);
+});
+
+test('Scoring says a bad game can push a dividend below zero, and a roster spot pays it (walk 8 T1-01)', () => {
+  const view = perGameRulesPresentation(rules);
+  assert.ok(view.scoring.lines.includes('A bad game can push his dividend below zero, and you pay that too.'));
+  const scoring = rulesParagraphs(view.explanation).find((paragraph) => paragraph.startsWith('Each game he plays'));
+  assert.ok(scoring?.includes('below zero, and you pay that too'));
+  assert.equal(rulesParagraphs(view.explanation).join(' '), view.explanation);
 });

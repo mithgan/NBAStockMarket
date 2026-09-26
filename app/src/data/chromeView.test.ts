@@ -180,7 +180,9 @@ test('rule wording matches the shared rules copy for both dividend bases', () =>
     const facts = perGameRulesPresentation({ ...rules, dividendBasis }).facts;
     assert.equal(dividendBasisText(dividendBasis), facts.find((fact) => fact.label === 'Dividend basis')?.value);
   }
-  assert.equal(dividendText('raw_net_points', 40_000), 'His net points each game · $40,000\u00a0for\u00a0each\u00a0net\u00a0point');
+  // In K, as the welcome and Scoring say it (walk 8 T1-04).
+  assert.equal(dividendText('raw_net_points', 40_000), 'His net points each game · $40K\u00a0for\u00a0each\u00a0net\u00a0point');
+  assert.equal(dividendText('raw_net_points', 12_500), 'His net points each game · $12.5K\u00a0for\u00a0each\u00a0net\u00a0point');
   assert.equal(shortTermText(7), 'A short runs 7 days, then ends by itself with no fee');
   assert.equal(shortTermText(1), 'A short runs 1 day, then ends by itself with no fee');
   assert.equal(shortTermText(null), 'A short stays open until you close it');
@@ -643,4 +645,71 @@ test('+1 week describes the week; Play to the end says when shorts end; a finish
   assert.equal(statusRowResult(practiceProgress(OPENING_EVE, '2026-04-12'), 7_890_000), null);
   assert.equal(statusRowResult(practiceProgress(OPENING_EVE, OPENING_EVE), 5), null);
   assert.equal(statusRowResult(null, 5), 5);
+});
+
+test('queued presses wait for a practice question, and say so (walk 8 T4-06)', async () => {
+  const { queuedWaitLine } = await import('./chromeView');
+  assert.equal(queuedWaitLine([]), null);
+  assert.equal(queuedWaitLine(['week']), '1 week still queued: it waits until you choose.');
+  assert.equal(queuedWaitLine(['week', 'week']), '2 weeks still queued: they wait until you choose.');
+  assert.equal(queuedWaitLine(['night', 'week', 'week']), '1 night and 2 weeks still queued: they wait until you choose.');
+  // The step already playing is named: the summary changes once when it lands.
+  assert.equal(queuedWaitLine([], 'Nov 4–10'), 'Nov 4–10 is still playing.');
+  assert.equal(queuedWaitLine(['week', 'week'], 'Nov 4–10'), 'Nov 4–10 is still playing. 2 weeks still queued: they wait until you choose.');
+});
+
+test('queued presses can be cancelled, named by their visible words, with a notice (walk 8 T4-N1)', async () => {
+  const { QUEUED_CANCEL_LABEL, queuedCancelName, queuedCancelledNotice } = await import('./chromeView');
+  assert.equal(QUEUED_CANCEL_LABEL, 'Cancel queued');
+  assert.equal(queuedCancelName(['week', 'week']), 'Cancel queued: 2 weeks');
+  assert.equal(queuedCancelName(['night']), 'Cancel queued: 1 night');
+  assert.ok(queuedCancelName(['night', 'week']).startsWith(QUEUED_CANCEL_LABEL));
+  assert.equal(queuedCancelledNotice(['week', 'week'], null), '2 queued weeks cancelled.');
+  assert.equal(queuedCancelledNotice(['week'], 'Oct 21–27'), 'Queued week cancelled. Oct 21–27 still plays.');
+  assert.equal(queuedCancelledNotice(['night', 'week', 'week'], 'Oct 22'), '1 queued night and 2 weeks cancelled. Oct 22 still plays.');
+});
+
+test('the empty-roster hint fits a player who has held shorts before (walk 8 T4-10)', async () => {
+  const { NOBODY_HELD_HINT, practiceHint, practiceHintShort, practiceWeekHint } = await import('./chromeView');
+  const base = { complete: false, emptyRoster: true, playedWithoutRoster: false, justFilled: false, nextGameDate: '2025-10-27' };
+  assert.equal(practiceHint(base), "Add a player first. +1 night plays the next night's games.");
+  assert.equal(practiceHint({ ...base, heldBefore: true }), NOBODY_HELD_HINT);
+  assert.match(NOBODY_HELD_HINT, /roster or shorts now/);
+  assert.equal(practiceHintShort({ ...base, heldBefore: true }), 'Add or short someone');
+  assert.equal(practiceWeekHint(NOBODY_HELD_HINT, 'Oct 27–Nov 2'), 'Nobody on your roster or shorts now: add or short someone before the next week.');
+  // "Play anyway" said this season still wins.
+  assert.equal(practiceHint({ ...base, heldBefore: true, playedWithoutRoster: true }), 'Nobody on your roster: nights play without you');
+});
+
+test('the progress bar is named by how much of the season is played (walk 8 T1-03)', async () => {
+  const { practiceProgress, seasonPlayedLabel } = await import('./chromeView');
+  const start = '2025-10-20';
+  assert.equal(seasonPlayedLabel(practiceProgress(start, start)), 'Season 0% played');
+  assert.equal(seasonPlayedLabel(practiceProgress(start, '2025-10-21')), 'Season 1% played');
+  assert.equal(seasonPlayedLabel(practiceProgress(start, '2025-11-05')), 'Season 9% played');
+  assert.equal(seasonPlayedLabel(practiceProgress(start, '2026-04-11')), 'Season 99% played');
+  assert.equal(seasonPlayedLabel(practiceProgress(start, '2026-04-12')), 'Season 100% played');
+});
+
+test('short rows keep the date before the day count (walk 8 T3-05)', async () => {
+  const { practiceDateDay, practiceProgress } = await import('./chromeView');
+  const start = '2025-10-20';
+  assert.equal(practiceDateDay(practiceProgress(start, start), start), 'Oct\u00a020\u00a0·\u00a0Day\u00a00');
+  assert.equal(practiceDateDay(practiceProgress(start, '2025-11-05'), '2025-11-05', true), 'Nov\u00a05\nDay\u00a016');
+  assert.equal(practiceDateDay(practiceProgress(start, '2026-04-12'), '2026-04-12'), 'Season complete');
+  assert.equal(practiceDateDay(practiceProgress(start, null), null), 'Day 0/174');
+});
+
+test('Settings lists recent notices with their age, and Match device says what it shows (walk 8 T3-I2, T2-I7)', async () => {
+  const { deviceChoiceName, NO_RECENT_NOTICES, noticeAgeText } = await import('./chromeView');
+  const now = new Date(2026, 8, 26, 13, 5, 0).getTime();
+  assert.equal(noticeAgeText(now - 20_000, now), 'Just now');
+  assert.equal(noticeAgeText(now - 4 * 60_000, now), '4 min ago');
+  assert.equal(noticeAgeText(now - 59 * 60_000, now), '59 min ago');
+  assert.equal(noticeAgeText(new Date(2026, 8, 26, 11, 7).getTime(), now), '11:07 AM');
+  assert.equal(noticeAgeText(new Date(2026, 8, 26, 0, 30).getTime(), now), '12:30 AM');
+  assert.equal(noticeAgeText(now + 5_000, now), 'Just now');
+  assert.match(NO_RECENT_NOTICES, /^No notices yet\./);
+  assert.equal(deviceChoiceName('Light'), 'Match device · Light now');
+  assert.equal(deviceChoiceName(null), 'Match device');
 });

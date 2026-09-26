@@ -54,6 +54,13 @@ export const LUCK_EXPLAINER =
 export const PRICE_EXPLAINER =
   "A player's price moves as people add and drop him and as he plays. The price you add him at is locked for as long as you hold him.";
 
+/**
+ * Scoring's word on a bad game, beside what the dividend is: a roster-only
+ * player met "Dividend a game -$56K" with nothing under Scoring to say a
+ * dividend can go below zero (only Shorts did; walk 8 T1-01).
+ */
+export const BAD_GAME_LINE = 'A bad game can push his dividend below zero, and you pay that too.';
+
 /** Why a dividend can be below zero, and who pays it. */
 export const NEGATIVE_DIVIDEND_EXPLAINER =
   'A bad game can make his dividend negative: then a roster spot pays it and a short collects it.';
@@ -91,7 +98,7 @@ export function perGameRulesPresentation(rules: PerGameRuleset, practice: Practi
   // net points are, the example set apart, then the luck line. The
   // explanation below holds the same words in the same order.
   const scoring: ScoringParts = {
-    lines: [PAY_LINE, dividendLine(rules.dividendDollarsPerNetPoint, raw), PROFIT_LINE],
+    lines: [PAY_LINE, dividendLine(rules.dividendDollarsPerNetPoint, raw), BAD_GAME_LINE, PROFIT_LINE],
     netPoints: NET_POINTS_EXPLAINER,
     example: workedExample(rules.dividendDollarsPerNetPoint, raw),
     luck: LUCK_EXPLAINER,
@@ -212,7 +219,7 @@ export function rulesSummary(explanation: string): string | null {
 
 /** Scoring's parts, as the Rules sheet draws them (walk 6 T1-03). */
 export interface ScoringParts {
-  /** Pay his price and collect his dividend; what the dividend is; beat the price and you profit. */
+  /** Pay his price and collect his dividend; what the dividend is; a bad game; beat the price and you profit. */
   lines: string[];
   /** What net points are. */
   netPoints: string;

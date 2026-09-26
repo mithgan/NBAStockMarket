@@ -3,7 +3,7 @@ import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDime
 import Svg, { Circle, Line } from 'react-native-svg';
 
 import type { PerGameRuleset } from '../api/contracts';
-import { appearanceTagUnder, chromeFolded, sheetFloats, sheetNarrow } from '../data/chromeView';
+import { appearanceTagUnder, chromeFolded, deviceChoiceName, NO_RECENT_NOTICES, noticeAgeText, sheetFloats, sheetNarrow } from '../data/chromeView';
 import { perGameRulesPresentation, rulesSummary } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { tapsSettling, unlessSettling } from '../web/tapSettle';
@@ -18,6 +18,7 @@ const DEVICE_BLURB = 'Light while your device is set to light, Navy while it is 
 import { rowMarker } from '../ui/domMarkers';
 import { headingLevel } from '../ui/kit';
 import { reduceMotionChosen, setReduceMotion, useReduceMotionChoice } from '../state/motionPreference';
+import { usePerGame } from '../state/PerGameContext';
 import { keepNoticesUntilClosed, setKeepNoticesUntilClosed, useKeepNotices } from '../state/noticePreference';
 import { cancelSettingsReturn, openRules, returnToSettingsAfterRules } from '../state/uiActions';
 import { useSheetHistory, useSheetShown } from '../web/appHistory';
@@ -122,7 +123,10 @@ export function SettingsSheet({
   const reducedMotion = useReducedMotion();
   const practiceRules = usePracticeRulesContext();
   const rules = ruleset ? perGameRulesPresentation(ruleset, practiceRules) : null;
-  const { choice: chosen, setVariant } = useDesignVariant();
+  const { choice: chosen, setVariant, variant: onScreen } = useDesignVariant();
+  // The last ten notices, newest first, as screen readers heard them, for a
+  // player who missed one or saw it cut short (walk 8 T3-I2, T4-N2).
+  const { recentNotices } = usePerGame();
   // Back closes the sheet; the app behind it is inert while it is open.
   useSheetHistory(visible, onClose);
   const sheetTop = visible ? (floating ? measuredFloatTop() : measuredSheetTop()) : null;
@@ -224,9 +228,10 @@ export function SettingsSheet({
               {CHOICES.map((choice, index) => {
                 const device = choice === 'device';
                 const variant = VARIANTS[device ? DEFAULT_VARIANT : choice];
-                const name = device ? DEVICE_NAME : variant.name;
-                const blurb = device ? DEVICE_BLURB : variant.blurb;
                 const selected = choice === chosen;
+                // Match device in use says which look it gives now (walk 8 T2-I7).
+                const name = device ? (selected ? deviceChoiceName(onScreen.name) : DEVICE_NAME) : variant.name;
+                const blurb = device ? DEVICE_BLURB : variant.blurb;
                 // A small preview of the theme itself: its page, a card with
                 // a line of text, and its gain, loss and accent colours, so
                 // themes can be told apart before trying them. "Match device"
@@ -325,6 +330,23 @@ export function SettingsSheet({
                 </View>
               </Pressable>
             </View>
+            {/* The last ten notices, newest first, whole and as they were
+                heard: a notice missed, or cut to one line at 400% zoom, can
+                be read again here (walk 8 T3-I2, T4-N2). The sheet's body is
+                a focusable scroll region, so arrow keys read down the list. */}
+            <Text accessibilityRole="header" {...headingLevel(4)} style={[styles.subTitle, narrow && styles.gutterNarrow]}>Recent notices</Text>
+            {recentNotices.length === 0 ? (
+              <Text style={[styles.note, styles.recentEmpty, narrow && styles.gutterNarrow]}>{NO_RECENT_NOTICES}</Text>
+            ) : (
+              <View aria-label="Recent notices, newest first" role="list" style={[styles.recentList, narrow && styles.gutterNarrow]}>
+                {recentNotices.map((notice) => (
+                  <View key={notice.id} role="listitem" style={styles.recentItem}>
+                    <Text style={styles.recentText}>{notice.text}</Text>
+                    <Text style={styles.recentAge}>{noticeAgeText(notice.at, Date.now())}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </Section>
 
           {/* The app follows the device's reduced-motion setting; a shared or
@@ -715,6 +737,41 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     paddingHorizontal: space.lg,
     paddingBottom: space.md,
+  },
+  // "Recent notices" under the Notices switch: a heading of its own, quieter
+  // than the section's, over a flat list divided by hairlines.
+  subTitle: {
+    color: colors.text,
+    fontFamily: fonts.body,
+    fontSize: type.body,
+    fontWeight: weight.heavy,
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
+    paddingBottom: space.xs,
+  },
+  recentEmpty: {
+    paddingTop: 0,
+  },
+  recentList: {
+    paddingHorizontal: space.lg,
+  },
+  recentItem: {
+    paddingVertical: space.sm,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  recentText: {
+    color: colors.text,
+    fontFamily: fonts.body,
+    fontSize: type.body,
+    lineHeight: 19,
+  },
+  recentAge: {
+    color: colors.faint,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    lineHeight: 16,
+    marginTop: 2,
   },
   note: {
     color: colors.faint,

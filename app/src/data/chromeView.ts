@@ -11,11 +11,11 @@ import {
   humanDate,
   humanDay,
   humanDaySpan,
+  moneyFine,
   rosterReopensLine,
   signedMoney,
   signedMoneyFine,
 } from '../copy/terms';
-import { formatMoney } from '../format';
 
 /** Length of the practice season: opening-night eve (day 0) to the last night. */
 export const SEASON_TOTAL_DAYS = 174;
@@ -75,6 +75,31 @@ export function keepTogether(phrase: string): string {
 /** "Day 16 of 174", or "Season complete" once the last night is in. */
 export function practiceDayText(progress: PracticeProgress): string {
   return progress.complete ? 'Season complete' : `Day ${progress.day} of ${progress.total}`;
+}
+
+/**
+ * The progress bar's name: "Season 9% played" (walk 8 T1-03). Any night
+ * played is at least 1%, and only a finished season is 100%.
+ */
+export function seasonPlayedLabel(progress: PracticeProgress): string {
+  const pct = progress.complete ? 100
+    : progress.day === 0 ? 0
+      : Math.min(99, Math.max(1, Math.round(progress.fraction * 100)));
+  return `Season ${pct}% played`;
+}
+
+/**
+ * The day where a row is short of room (a phone at 200% or 400% zoom): the
+ * date first, "Oct 20 · Day 0", since the date says where the season is and
+ * "Day 0/174" did not (walk 8 T3-05); the bar beside it shows how far.
+ * `twoLines`: the date over the day, for the narrowest rows.
+ */
+export function practiceDateDay(progress: PracticeProgress, settled: string | null | undefined, twoLines = false): string {
+  if (progress.complete || !settled) return twoLines ? practiceDayTiny(progress) : practiceDayShort(progress);
+  const date = keepTogether(humanDate(settled));
+  const day = keepTogether(`Day ${progress.day}`);
+  // One unbroken phrase: a break at the dot left it alone at a line's end (walk 8 T3-08).
+  return twoLines ? `${date}\n${day}` : `${date}\u00a0·\u00a0${day}`;
 }
 
 /** "Day 16/174": the day count for the narrowest rows. */
@@ -564,11 +589,13 @@ export function dividendBasisText(basis: DividendBasis): string {
 }
 
 /**
- * "His net points each game · $40,000 for each net point", with the rate held
- * together so a narrow sheet breaks at the dot, never inside the rate.
+ * "His net points each game · $40K for each net point", with the rate held
+ * together so a narrow sheet breaks at the dot, never inside the rate. In K
+ * like the welcome and Scoring: "$40,000" here read as another rate (walk 8
+ * T1-04).
  */
 export function dividendText(basis: DividendBasis, dollarsPerNetPoint: number): string {
-  return `${dividendBasisText(basis)} · ${keepTogether(`${formatMoney(dollarsPerNetPoint)} for each net point`)}`;
+  return `${dividendBasisText(basis)} · ${keepTogether(`${moneyFine(dollarsPerNetPoint)} for each net point`)}`;
 }
 
 /**
@@ -732,6 +759,13 @@ export function playedOn(
 export const EMPTY_ROSTER_HINT = "Add a player first. +1 night plays the next night's games.";
 
 /**
+ * The same line for someone who has held players or shorts before and holds
+ * nobody now (every short ended, say): "Add a player first" read as if a
+ * week of shorts had never happened (walk 8 T4-10).
+ */
+export const NOBODY_HELD_HINT = 'Nobody on your roster or shorts now: add or short someone before the next night.';
+
+/**
  * The same line once the first player is in, until the next advance: the
  * line keeps its place, so nothing under the player's finger moves the
  * moment an Add lands (a second tap would otherwise hit the row below).
@@ -788,15 +822,18 @@ export function practiceHint({
   playedWithoutRoster,
   justFilled,
   nextGameDate,
+  heldBefore = false,
 }: {
   complete: boolean;
   emptyRoster: boolean;
   playedWithoutRoster: boolean;
   justFilled: boolean;
   nextGameDate: string | null | undefined;
+  /** A player or short has been held this season (a position of any status). */
+  heldBefore?: boolean;
 }): string | null {
   if (complete) return null;
-  if (emptyRoster) return playedWithoutRoster ? EMPTY_ROSTER_PLAYING_HINT : EMPTY_ROSTER_HINT;
+  if (emptyRoster) return playedWithoutRoster ? EMPTY_ROSTER_PLAYING_HINT : heldBefore ? NOBODY_HELD_HINT : EMPTY_ROSTER_HINT;
   return justFilled ? readyHint(nextGameDate) : null;
 }
 
@@ -808,6 +845,7 @@ export function practiceHint({
  * 129px a 195px row leaves beside Settings.
  */
 export const EMPTY_ROSTER_HINT_SHORT = 'Add a player first';
+export const NOBODY_HELD_HINT_SHORT = 'Add or short someone';
 export const EMPTY_ROSTER_PLAYING_HINT_SHORT = 'No players yet';
 export const READY_HINT_SHORT = 'Ready for +1 night';
 
@@ -820,6 +858,7 @@ export function practiceWeekHint(hint: string | null, weekSpan: string | null): 
   if (hint === null) return null;
   const plays = weekSpan ? `+1 week plays the ${weekSpan} games.` : '+1 week plays the next seven days.';
   if (hint === EMPTY_ROSTER_HINT) return `Add a player first. ${plays}`;
+  if (hint === NOBODY_HELD_HINT) return 'Nobody on your roster or shorts now: add or short someone before the next week.';
   if (hint === EMPTY_ROSTER_PLAYING_HINT) return 'Nobody on your roster: the week plays without you.';
   return `Ready. ${plays}`;
 }
@@ -840,8 +879,35 @@ export function practiceHintShort(input: Parameters<typeof practiceHint>[0]): st
   const full = practiceHint(input);
   if (full === null) return null;
   if (full === EMPTY_ROSTER_HINT) return EMPTY_ROSTER_HINT_SHORT;
+  if (full === NOBODY_HELD_HINT) return NOBODY_HELD_HINT_SHORT;
   if (full === EMPTY_ROSTER_PLAYING_HINT) return EMPTY_ROSTER_PLAYING_HINT_SHORT;
   return READY_HINT_SHORT;
+}
+
+/**
+ * When a kept notice was said, for Settings' Recent notices (walk 8 T3-I2):
+ * "Just now", "4 min ago", then the clock time ("1:05 PM") once it is an
+ * hour old.
+ */
+export function noticeAgeText(at: number, now: number): string {
+  const seconds = Math.max(0, Math.round((now - at) / 1000));
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const date = new Date(at);
+  const hours = date.getHours();
+  return `${hours % 12 === 0 ? 12 : hours % 12}:${String(date.getMinutes()).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`;
+}
+
+/** Settings' Recent notices with none kept yet. */
+export const NO_RECENT_NOTICES = 'No notices yet. Your moves and the nights you play are listed here, newest first.';
+
+/**
+ * "Match device" says which look it gives now ("Match device · Light now"):
+ * "IN USE" alone left the player comparing swatches (walk 8 T2-I7).
+ */
+export function deviceChoiceName(onScreen: string | null): string {
+  return onScreen ? `Match device · ${onScreen} now` : 'Match device';
 }
 
 /**
@@ -873,6 +939,51 @@ export function queuedLine(pressed: 'night' | 'week', playing: string | null, co
   // A second press on a queued button queues one more and says so; it was
   // swallowed without a word (walk 7 T2-06).
   return count > 1 ? `${count} ${pressed}s queued. They play ${when}.` : `Next ${pressed} queued. It plays ${when}.`;
+}
+
+type QueuedStep = 'night' | 'week';
+
+/** "2 weeks", "1 night and 2 weeks" (`queued`: "2 queued weeks"). */
+function queuedPhrase(steps: readonly QueuedStep[], queued = false): string {
+  const nights = steps.filter((step) => step === 'night').length;
+  const weeks = steps.length - nights;
+  const noun = (n: number, word: string) => `${n === 1 ? word : `${word}s`}`;
+  const lead = queued ? 'queued ' : '';
+  if (nights > 0 && weeks > 0) return `${nights} ${lead}${noun(nights, 'night')} and ${weeks} ${noun(weeks, 'week')}`;
+  const total = steps.length;
+  return `${total} ${lead}${noun(total, nights > 0 ? 'night' : 'week')}`;
+}
+
+/**
+ * What a practice question (Restart, Exit, Play to the end) adds while
+ * presses wait behind the one playing: they wait for the answer instead of
+ * playing under it, so the question's summary holds still (walk 8 T4-06:
+ * "Day 14" became "Day 21" while the player read). null with none queued.
+ */
+export function queuedWaitLine(queued: readonly QueuedStep[], playing: string | null = null): string | null {
+  // The step already playing cannot wait: it is named, so the summary
+  // changing once when it lands is no surprise.
+  const now = playing ? `${playing} is still playing.` : null;
+  if (queued.length === 0) return now;
+  const wait = `${queuedPhrase(queued)} still queued: ${queued.length === 1 ? 'it waits' : 'they wait'} until you choose.`;
+  return now ? `${now} ${wait}` : wait;
+}
+
+/** The control that drops what is queued and has not started (walk 8 T4-N1). */
+export const QUEUED_CANCEL_LABEL = 'Cancel queued';
+
+/** Its name: the visible words, then what it drops ("Cancel queued: 2 weeks"). */
+export function queuedCancelName(queued: readonly QueuedStep[]): string {
+  return queued.length === 0 ? QUEUED_CANCEL_LABEL : `${QUEUED_CANCEL_LABEL}: ${queuedPhrase(queued)}`;
+}
+
+/**
+ * The notice once queued presses are cancelled: "2 queued weeks cancelled."
+ * The one playing is not stopped, and says so: "Oct 21–27 still plays."
+ */
+export function queuedCancelledNotice(queued: readonly QueuedStep[], playing: string | null): string {
+  const what = queued.length === 1 ? `Queued ${queued[0]}` : queuedPhrase(queued, true);
+  return `${what} cancelled.${playing ? ` ${playing} still plays.` : ''}`;
 }
 
 /** At most this many presses wait behind the one playing (a steady run of presses still counts each). */

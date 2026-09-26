@@ -30,13 +30,14 @@ import {
   nextGamesText,
   noGamesWords,
   playedBetween,
+  practiceDateDay,
   practiceDayShort,
   CHROME_TINY_DAY_ONE_LINE_MIN_WIDTH,
   practiceDayText,
-  practiceDayTinyText,
   practiceProgress,
   type PracticeProgress,
   resultSpan,
+  seasonPlayedLabel,
   sheetFloats,
   sheetNarrow,
   shortTermText,
@@ -55,7 +56,7 @@ import { useSheetHistory, useSheetShown } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
 import { measuredFloatTop, measuredSheetTop } from './chrome/sheetTop';
-import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, usePracticeRulesContext, useRecentAdvances } from './SimBar';
+import { PRACTICE_HINT_ID, PracticeControls, QueuedCancelButton, usePracticeHint, usePracticeRulesContext, useRecentAdvances, useSpacingFold } from './SimBar';
 import { unlessSettling } from '../web/tapSettle';
 
 /**
@@ -115,6 +116,9 @@ export function PerGameStatusStrip() {
   // row (landscape, 200% zoom) carries its short form (walk 4 T1-09, T3-11).
   const practiceHint = usePracticeHint();
   const practiceHintShort = usePracticeHint(true);
+  // A reader's text spacing can fold a tall window's frame too (walk 8
+  // T3-08); the brand bar then stays, and Settings with it.
+  const spacingFolded = useSpacingFold();
   if (!bootstrap) return null;
 
   const practice = isMockActive();
@@ -122,7 +126,7 @@ export function PerGameStatusStrip() {
   // A short window hides the brand bar (App), so this row carries Settings;
   // in practice it also folds the practice bar into this one row.
   const short = chromeFolded(height);
-  const folded = practice && short && !layout.merged;
+  const folded = practice && (short || spacingFolded) && !layout.merged;
   const foldedFacts = folded && width >= CHROME_FOLDED_FACTS_MIN_WIDTH;
   // Folded, narrow and very short (a phone at 400% zoom): one 44px line, the
   // day count and More, which holds everything else (walk 2 T3-11).
@@ -187,15 +191,24 @@ export function PerGameStatusStrip() {
   // The narrowest rows (a phone at high zoom, a folded row) keep a short day
   // count, "Day 16/174"; the bar after it is the season's progress.
   const shortDay = layout.compact || (folded && !foldedFacts);
+  // A folded narrow row (a phone at 200% or 400% zoom) has no lead line
+  // with the date, so the day says it first: "Oct 20 · Day 0" rather than
+  // "Day 0/174" (walk 8 T3-05); the bar beside it shows how far.
+  const dateFirst = folded && !foldedFacts;
   const dayText = progress
-    ? keepTogether(shortDay ? practiceDayShort(progress) : practiceDayText(progress))
+    ? (dateFirst ? practiceDateDay(progress, lastSettled) : keepTogether(shortDay ? practiceDayShort(progress) : practiceDayText(progress)))
     : null;
   // At season end a full bar only repeats "Season complete", and in the
   // narrowest folded row (a phone at 200% zoom) it pushed Settings onto a
   // line of its own; there the words stand alone and the gear sits beside
   // them (walk 5 T4-15).
   const endFold = folded && !tiny && progress?.complete === true && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
-  const meter = progress && !endFold ? <ProgressMeter progress={progress} tiny={tiny} /> : null;
+  // The short bar where the date joins the day in a narrow folded row, so
+  // Settings keeps its place beside them (at 195px the long bar pushed it
+  // onto a line of its own).
+  const meter = progress && !endFold
+    ? <ProgressMeter progress={progress} tiny={tiny || (dateFirst && width < CHROME_TINY_DAY_ONE_LINE_MIN_WIDTH)} />
+    : null;
   const money = lastNight === null || noGames ? null : <LastNightMoney tight={tight} value={lastNight} />;
   // The narrowest phones single-space the dots, so the first line keeps to
   // one row even with last night at its finer precision.
@@ -246,7 +259,7 @@ export function PerGameStatusStrip() {
     // line with the bar beside it (walk 6 T3-05).
     <View key="day" style={width >= CHROME_TINY_DAY_ONE_LINE_MIN_WIDTH ? styles.dayFact : styles.dayTiny}>
       <Text maxFontSizeMultiplier={1.2} style={[styles.fact, styles.factLabel, styles.tight]}>
-        {practiceDayTinyText(progress, width)}
+        {practiceDateDay(progress, lastSettled, width < CHROME_TINY_DAY_ONE_LINE_MIN_WIDTH)}
       </Text>
       <View style={styles.dayTinyMarks}>
         {meter}
@@ -352,6 +365,9 @@ export function PerGameStatusStrip() {
             {layout.merged ? practiceHint : practiceHintShort}
           </Text>
         ) : null}
+        {/* Presses waiting behind the one playing can be cancelled here, at
+            the end of the facts, so the controls never move (walk 8 T4-N1). */}
+        {practice && layout.merged && !folded ? <QueuedCancelButton /> : null}
       </View>
     );
   } else if (arrangement === 'pair') {
@@ -530,21 +546,24 @@ function LastNightMoney({ tight, value }: { tight: boolean; value: number }) {
 }
 
 /**
- * The season's progress, right after the day count that labels it: an
- * outlined track, gold as far as the season has gone. Long enough and edged
- * so it reads as a progress bar, not as a stray dash beside the words (walk 2
- * T1-03); empty on the opening eve.
+ * The season's progress, right after the day count that labels it: a thin
+ * filled track, gold as far as the season has gone. Outlined, it read as an
+ * empty text box or an off switch at day 0 (walk 8 T1-03); now it is a plain
+ * rule until the first night, then fills. Named by how much is played
+ * ("Season 9% played"), with the day as its value.
  */
 function ProgressMeter({ progress, tiny = false }: { progress: PracticeProgress; tiny?: boolean }) {
   return (
     <View
-      accessibilityLabel={progress.accessibilityLabel}
+      accessibilityLabel={seasonPlayedLabel(progress)}
       accessibilityRole="progressbar"
       aria-valuemax={progress.total}
       aria-valuemin={0}
       aria-valuenow={progress.day}
+      aria-valuetext={`Day ${progress.day} of ${progress.total}`}
       style={[styles.meter, tiny && styles.meterTiny]}
     >
+      <View style={styles.meterTrack} />
       <View style={[styles.meterFill, { width: progress.day === 0 ? 0 : `${Math.max(progress.fraction * 100, 4)}%` }]} />
     </View>
   );
@@ -740,16 +759,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     columnGap: 6,
   },
-  // The track's edge is the controls' 3:1 edge, so it reads in Light too,
-  // where the strong border was cream on cream (walk 2 T1-26).
+  // A thin rule, no visible edge (an outline read as an input; walk 8
+  // T1-03). The edge is transparent, which forced-colors mode draws, so the
+  // bar still shows there.
   meter: {
     width: 44,
     height: 6,
     borderRadius: 3,
     borderWidth: 1,
-    borderColor: colors.controlBorder,
-    backgroundColor: colors.surfaceRaised,
+    borderColor: 'transparent',
     overflow: 'hidden',
+  },
+  // The rail: the theme's text at a quarter strength, so it shows in Light
+  // (not cream on cream; walk 2 T1-26) and the gold fill stands out from it
+  // in every theme (a grey rail matched High contrast's yellow at 1:1).
+  meterTrack: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.text,
+    opacity: 0.25,
   },
   meterTiny: {
     width: 30,

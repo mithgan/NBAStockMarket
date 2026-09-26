@@ -36,8 +36,12 @@ import {
   practiceStakes,
   practiceWeekHint,
   restartHasNothingToDo,
+  QUEUED_CANCEL_LABEL,
+  queuedCancelledNotice,
+  queuedCancelName,
   queuedLabel,
   queuedLine,
+  queuedWaitLine,
   resultSpan,
   runNotice,
   SEASON_TOTAL_DAYS,
@@ -49,8 +53,8 @@ import { rankLine } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
 import { refreshNotice } from '../state/perGameNotices';
 import { openTab } from '../state/uiActions';
-import { colors, fonts, radius, space, type, weight } from '../theme';
-import { Button, ConfirmDialog, settleTaps, visuallyHidden } from '../ui/kit';
+import { colors, fonts, headingStyle, radius, space, type, weight } from '../theme';
+import { Button, ConfirmDialog, headingLevel, settleTaps, visuallyHidden } from '../ui/kit';
 import { useSheetHistory } from '../web/appHistory';
 import { pressedByPointer, unlessSettling } from '../web/tapSettle';
 import { leavePractice, restartPractice } from '../web/practiceSession';
@@ -147,6 +151,9 @@ export function usePracticeHint(short = false): string | null {
     playedWithoutRoster: played,
     justFilled: rosterEmptyOn === settledOn,
     nextGameDate: bootstrap.game.nextGameDate,
+    // Someone was held before (a closed player, an ended short): "Add a
+    // player first" read as if a week of shorts never happened (walk 8 T4-10).
+    heldBefore: bootstrap.positions.length > 0,
   };
   return short ? practiceHintShort(input) : practiceHint(input);
 }
@@ -196,6 +203,80 @@ export function usePracticeRulesContext(): PracticeRulesContext | null {
     ends: humanDate(end),
     days: SEASON_TOTAL_DAYS,
   };
+}
+
+/**
+ * A reader's own text spacing (WCAG 1.4.12: wider letters, words and lines
+ * from their stylesheet) grew the frame to 40% of a 320x640 window, one
+ * Market row at a time (walk 8 T3-08). The app never sets word spacing, so a
+ * non-zero one means those styles are on; then, once the frame takes more
+ * than a third of the window's height, it folds into its one row + More, as
+ * a short window's does. It stays folded for that window size: unfolding
+ * would only grow it again. Without the reader's spacing nothing changes.
+ */
+let spacingFold: string | null = null;
+const spacingListeners = new Set<() => void>();
+
+function setSpacingFold(size: string | null): void {
+  if (size === spacingFold) return;
+  spacingFold = size;
+  spacingListeners.forEach((listener) => listener());
+}
+
+function subscribeSpacingFold(listener: () => void): () => void {
+  spacingListeners.add(listener);
+  return () => {
+    spacingListeners.delete(listener);
+  };
+}
+
+/** Whether the frame is folded for a reader's text spacing (see setSpacingFold). */
+export function useSpacingFold(): boolean {
+  return useSyncExternalStore(subscribeSpacingFold, () => spacingFold !== null, () => false);
+}
+
+/** Watches for a reader's text spacing and the frame's height (mounted once, by SimBar). */
+function useSpacingFoldWatch(): void {
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return undefined;
+    const check = () => {
+      const screen = document.getElementById('app-screen');
+      if (!screen) return;
+      const size = `${window.innerWidth}x${window.innerHeight}`;
+      const spaced = parseFloat(getComputedStyle(screen).wordSpacing) > 0;
+      if (!spaced) {
+        setSpacingFold(null);
+        return;
+      }
+      if (spacingFold === size) return;
+      if (spacingFold !== null) {
+        // A new window size: unfold, and look again once it has laid out.
+        setSpacingFold(null);
+        return;
+      }
+      if (screen.getBoundingClientRect().top > window.innerHeight / 3) setSpacingFold(size);
+    };
+    const observers: Array<{ disconnect: () => void }> = [];
+    if (typeof ResizeObserver !== 'undefined') {
+      const resize = new ResizeObserver(check);
+      const screen = document.getElementById('app-screen');
+      if (screen) resize.observe(screen);
+      observers.push(resize);
+    }
+    if (typeof MutationObserver !== 'undefined') {
+      // A reader's stylesheet arrives as a new style element.
+      const styles = new MutationObserver(check);
+      styles.observe(document.head, { childList: true });
+      observers.push(styles);
+    }
+    window.addEventListener('resize', check);
+    const first = setTimeout(check, 0);
+    return () => {
+      clearTimeout(first);
+      window.removeEventListener('resize', check);
+      observers.forEach((observer) => observer.disconnect());
+    };
+  }, []);
 }
 
 /** The hint line's DOM id: +1 night points at it (aria-describedby). */
@@ -311,9 +392,123 @@ function focusAfterClose(ref: { current: unknown }): void {
   afterDialogCloses(() => focusLater(ref, 30));
 }
 
+/**
+ * The presses waiting behind the one playing, as the mounted controls hold
+ * them, so the practice question can say that they wait for its answer
+ * (walk 8 T4-06).
+ */
+type QueuedPresses = ReadonlyArray<'night' | 'week'>;
+const NO_QUEUE: QueuedPresses = [];
+let queuedPresses: QueuedPresses = NO_QUEUE;
+/** The nights playing now ("Nov 4–10"), which cannot wait. */
+let playingNow: string | null = null;
+const queueListeners = new Set<() => void>();
+
+function publishQueued(next: QueuedPresses): void {
+  if (next === queuedPresses) return;
+  queuedPresses = next;
+  queueListeners.forEach((listener) => listener());
+}
+
+function publishPlaying(next: string | null): void {
+  if (next === playingNow) return;
+  playingNow = next;
+  queueListeners.forEach((listener) => listener());
+}
+
+function subscribeQueued(listener: () => void): () => void {
+  queueListeners.add(listener);
+  return () => {
+    queueListeners.delete(listener);
+  };
+}
+
+/** The mounted controls' Cancel queued, for the wide status row (QueuedCancelButton). */
+let cancelQueuedFromRow: (() => void) | null = null;
+
+/**
+ * Cancel queued on a wide screen, drawn by the status row at the end of its
+ * facts (walk 8 T4-N1). In the controls' own row it pushed +1 night and +1
+ * week 150px left, out from under the pointer about to press again.
+ */
+export function QueuedCancelButton() {
+  const queued = useSyncExternalStore(subscribeQueued, () => queuedPresses, () => NO_QUEUE);
+  if (queued.length === 0) return null;
+  return (
+    <Button
+      accessibilityLabel={queuedCancelName(queued)}
+      label={QUEUED_CANCEL_LABEL}
+      onPress={() => cancelQueuedFromRow?.()}
+      // No taller than the facts' first line, so the row keeps its height.
+      style={[styles.quiet, styles.quietEdge, styles.cancelLine, styles.cancelInFacts]}
+      textStyle={styles.cancelLineText}
+      variant="quiet"
+    />
+  );
+}
+
+/** A tap sooner than this after a question opens is the opening tap's second click. */
+const QUESTION_TAP_GUARD_MS = 400;
+/** …except on the button a player aims at deliberately (as ConfirmDialog does). */
+const QUESTION_AIMED_GUARD_MS = 150;
+
+/**
+ * "Play with nobody on your roster?" with a quiet way out: on a phone there
+ * is no Escape, and the only exit was a tap on the dimmed page, found by
+ * accident (walk 8 T1-05). Open market stays the default (gold, focused
+ * first); Play anyway plays; Not now closes and changes nothing, as Escape,
+ * Back and a tap outside do. ConfirmDialog holds two answers, so this draws
+ * its three the same way: stacked on a phone, the default on top, and in a
+ * row on a wide screen, the default on the right.
+ */
+function EmptyRosterQuestion({ title, lines, onMarket, onPlay, onNotNow }: {
+  title: string;
+  lines: string[];
+  onMarket: () => void;
+  onPlay: () => void;
+  onNotNow: () => void;
+}) {
+  const { width } = useWindowDimensions();
+  const openedAt = useRef(Date.now());
+  const guard = (fn: () => void, ms = QUESTION_TAP_GUARD_MS) => () => {
+    if (Date.now() - openedAt.current < ms) return;
+    fn();
+  };
+  const marketRef = useRef<View>(null);
+  useEffect(() => {
+    (marketRef.current as unknown as { focus?: () => void } | null)?.focus?.();
+  }, []);
+  const stacked = width < EMPTY_QUESTION_ROW_MIN_WIDTH;
+  return (
+    <Modal accessibilityLabel={[title, ...lines].join(' ')} animationType="none" onRequestClose={onNotNow} transparent visible>
+      <View style={styles.questionLayer}>
+        <View onResponderRelease={guard(onNotNow)} onStartShouldSetResponder={() => true} style={styles.questionScrim} />
+        <View style={styles.questionPanel}>
+          <Text accessibilityRole="header" {...headingLevel(2)} style={styles.questionTitle}>{title}</Text>
+          {/* Spoken once, in the dialog's name. */}
+          {lines.map((line) => (
+            <Text key={line} accessibilityElementsHidden aria-hidden importantForAccessibility="no" style={styles.questionLine}>{line}</Text>
+          ))}
+          {/* In Tab order from the default: Open market, Play anyway, Not now. */}
+          <View style={[styles.questionButtons, stacked ? styles.questionButtonsStacked : styles.questionButtonsRow]}>
+            <Button ref={marketRef} label="Open market" onPress={guard(onMarket)} steady variant="primary" />
+            <Button label="Play anyway" onPress={guard(onPlay, QUESTION_AIMED_GUARD_MS)} steady variant="secondary" />
+            <Button label="Not now" onPress={guard(onNotNow)} steady style={styles.questionNotNow} variant="quiet" />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/** From this width the empty-roster question's three answers share a row. */
+const EMPTY_QUESTION_ROW_MIN_WIDTH = 480;
+
 /** The practice question's dialog, drawn from SimBar so it outlives the controls. */
 function PracticeQuestionHost() {
   const asked = useSyncExternalStore(subscribeQuestion, () => askedQuestion, () => null);
+  const queued = useSyncExternalStore(subscribeQueued, () => queuedPresses, () => NO_QUEUE);
+  const playingDates = useSyncExternalStore(subscribeQueued, () => playingNow, () => null);
   const { bootstrap } = usePerGame();
   // Keep playing (or Escape, Back, a tap outside): the question closes and
   // focus returns to the control that asked it.
@@ -373,14 +568,20 @@ function PracticeQuestionHost() {
     setAskedQuestion(null);
     afterDialogCloses(() => openTab('market', { focusScreen }));
   };
+  if (empty) {
+    return <EmptyRosterQuestion lines={prompt.lines} onMarket={openMarket} onNotNow={close} onPlay={confirm} title={prompt.title} />;
+  }
+  // Presses queued before the question wait for its answer (the controls
+  // hold them while it is open), and it says so (walk 8 T4-06).
+  const waiting = queuedWaitLine(queued, playingDates);
   return (
     <ConfirmDialog
       cancelLabel={prompt.cancelLabel}
       confirmLabel={prompt.confirmLabel}
       // Nothing is lost by playing on: a plain button, not a red one.
-      confirmTone={empty || asked.kind === 'play-to-end' ? 'neutral' : 'danger'}
-      lines={prompt.lines}
-      onCancel={empty ? openMarket : close}
+      confirmTone={asked.kind === 'play-to-end' ? 'neutral' : 'danger'}
+      lines={waiting ? [...prompt.lines, waiting] : prompt.lines}
+      onCancel={close}
       onConfirm={confirm}
       onDismiss={close}
       title={prompt.title}
@@ -418,6 +619,24 @@ function MoreMenu({ open, setOpen, buttonRef, children, footer = null }: {
 }) {
   const { width, height } = useWindowDimensions();
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
+  // The scroll area is never a stop of its own: at 400% zoom Tab landed on
+  // it, unnamed and with the browser's thin ring, between Settings and +1
+  // night (walk 8 T3-02). It leaves the Tab order, and when the modal's
+  // focus trap wraps onto it (the trap focuses the first element that takes
+  // focus) it hands focus on to the first item. It already scrolls to follow
+  // focus from item to item.
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const node = (scrollRef.current as unknown as { getScrollableNode?: () => unknown } | null)?.getScrollableNode?.() as HTMLElement | undefined;
+    if (!node?.setAttribute || !node.addEventListener) return undefined;
+    node.setAttribute('tabindex', '-1');
+    const onFocus = (event: FocusEvent) => {
+      if (event.target === node) node.querySelector<HTMLElement>('[role="button"]')?.focus();
+    };
+    node.addEventListener('focus', onFocus);
+    return () => node.removeEventListener('focus', onFocus);
+  }, [open]);
   // Back closes the menu first, like any sheet, rather than changing the tab
   // under it or leaving the app (walk 2 T4-21). While it is open the page
   // behind it is inert and its scrim covers the tabs, so no tab can change
@@ -518,7 +737,7 @@ function MoreMenu({ open, setOpen, buttonRef, children, footer = null }: {
               },
             ]}
           >
-            <ScrollView contentContainerStyle={styles.moreItems} style={styles.moreScroll}>
+            <ScrollView ref={scrollRef} contentContainerStyle={styles.moreItems} style={styles.moreScroll}>
               {children}
             </ScrollView>
             {footer}
@@ -639,6 +858,20 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       setMenuOpenHint(hintShort);
     } else if (noticeSeq !== menuSeq.current && message) setMenuNotice(message);
   }, [moreOpen, noticeSeq, message]);
+  // The result pinned under More's items shortens the scroll area from the
+  // bottom; the keyboard's item (+1 week, low in the list) then sat half
+  // under it (walk 8 T3-15). It scrolls up into view above the result. A
+  // tapped item is left where the finger is.
+  useEffect(() => {
+    if (!menuNotice || typeof document === 'undefined' || typeof requestAnimationFrame === 'undefined') return undefined;
+    const frame = requestAnimationFrame(() => {
+      const panel = document.getElementById(MORE_PANEL_ID);
+      const active = document.activeElement as HTMLElement | null;
+      if (!panel || !active || !panel.contains(active) || !active.matches?.(':focus-visible')) return;
+      active.scrollIntoView?.({ block: 'nearest' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [menuNotice]);
   // The run the presses belong to, while one plays (see PracticeRun), and a
   // finished run of two or more steps waiting for its notice.
   const runRef = useRef<PracticeRun | null>(null);
@@ -688,6 +921,24 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // its turn too (walk 7 T2-04: the confirm did nothing right after a night).
   const endQueuedRef = useRef(false);
   const [endQueued, setEndQueued] = useState(false);
+  // Every change to the queue goes through here, so the practice question
+  // (drawn by SimBar) can say what waits for its answer (walk 8 T4-06).
+  const setQueue = (next: Array<'night' | 'week'>) => {
+    queuedSteps.current = next;
+    setQueued(next);
+    publishQueued(next.length === 0 ? NO_QUEUE : next);
+  };
+  // Controls that unmount (a rotation) take their queue with them.
+  useEffect(() => () => {
+    publishQueued(NO_QUEUE);
+    publishPlaying(null);
+  }, []);
+  // A question on screen (Restart, Exit, Play to the end) holds the queue:
+  // presses made before it wait for the answer instead of playing under it
+  // and rewriting its summary (walk 8 T4-06). The one already playing
+  // finishes. `questionComing`: asked from More, it opens a moment later.
+  const questionOpen = useSyncExternalStore(subscribeQuestion, () => askedQuestion !== null, () => false);
+  const questionComing = useRef(false);
   const sayBusy = (line: string) => {
     // The same words twice still count as news for the live region.
     setBusyLine((current) => (current === line ? `${line} ` : line));
@@ -699,8 +950,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     // already ignored), up to MAX_QUEUED_PRESSES, and the pressed button
     // counts them ("+1 week" over "×2 queued"): a second press on a queued
     // button was swallowed without a word (walk 7 T2-06).
-    if (queuedSteps.current.length < MAX_QUEUED_PRESSES) queuedSteps.current = [...queuedSteps.current, pressed];
-    setQueued(queuedSteps.current);
+    setQueue(queuedSteps.current.length < MAX_QUEUED_PRESSES ? [...queuedSteps.current, pressed] : queuedSteps.current);
     const step = queuedSteps.current.includes(pressed) ? pressed : queuedSteps.current[0];
     sayBusy(queuedLine(step, playingDate, queuedSteps.current.filter((entry) => entry === step).length));
   };
@@ -775,6 +1025,41 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     observer.observe(screen, { attributes: true, attributeFilter: ['aria-label'] });
     return () => observer.disconnect();
   }, [held]);
+  // The queue's line under the buttons (Cancel queued) gives its place to
+  // the held "Oct 21 games in." line when the queue empties, at the same
+  // height, rather than going and moving the screen up by itself (walk 7
+  // T1-14). The next press lets both go.
+  const [lineFloor, setLineFloor] = useState(0);
+  const hadQueue = useRef(false);
+  useLayoutEffect(() => {
+    const had = hadQueue.current;
+    hadQueue.current = queued.length > 0;
+    if (had && queued.length === 0 && hintText === null && !complete) setHeld(true);
+  }, [queued, hintText, complete]);
+  useLayoutEffect(() => {
+    if (!held && queued.length === 0) setLineFloor(0);
+  }, [held, queued.length]);
+  // Presses queued behind the one playing can be dropped where they show
+  // (walk 8 T4-N1): the one playing finishes, and the notice says so.
+  const cancelQueued = () => {
+    const dropped = queuedSteps.current;
+    if (dropped.length === 0) return;
+    const byKeyboard = !pressedByPointer();
+    setQueue([]);
+    notify(queuedCancelledNotice(dropped, playingDateRef.current));
+    // Keyboard focus goes back to the button the presses were made on (the
+    // Cancel control leaves with the queue).
+    if (byKeyboard) focusLater(dropped[dropped.length - 1] === 'night' ? nightRef : weekRef, 30);
+  };
+  const cancelRef = useRef(cancelQueued);
+  cancelRef.current = cancelQueued;
+  useEffect(() => {
+    const run = () => cancelRef.current();
+    cancelQueuedFromRow = run;
+    return () => {
+      if (cancelQueuedFromRow === run) cancelQueuedFromRow = null;
+    };
+  }, []);
   const lastSettledNow = bootstrap?.game.lastSettledDate ?? null;
   const heldText = held && lastSettledNow
     ? gamesInLine(resultSpan(advances, lastSettledNow)?.label ?? humanDate(lastSettledNow))
@@ -821,7 +1106,11 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       return;
     }
     setMoreOpen(false);
-    afterDialogCloses(() => setAskedQuestion({ kind, fromMenu: true }));
+    questionComing.current = true;
+    afterDialogCloses(() => {
+      questionComing.current = false;
+      setAskedQuestion({ kind, fromMenu: true });
+    });
   };
   // The last night is in: the advance buttons have nothing left to play, so
   // focus moves to Restart rather than falling to the page.
@@ -835,24 +1124,22 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // season is over.
   const busyNow = !isGameplayReady || isRefreshing || pendingActions.size > 0 || advancing;
   useEffect(() => {
-    if (busyNow) return;
+    if (busyNow || questionOpen || questionComing.current) return;
     if (endQueuedRef.current) {
       // The rest of the season plays now; presses queued before it have
       // nothing left to play.
       endQueuedRef.current = false;
       setEndQueued(false);
-      queuedSteps.current = [];
-      setQueued([]);
+      setQueue([]);
       if (!complete) playToEndRef.current?.();
       return;
     }
     if (queuedSteps.current.length === 0) return;
     const [step, ...rest] = queuedSteps.current;
-    queuedSteps.current = complete ? [] : rest;
-    setQueued(queuedSteps.current);
+    setQueue(complete ? [] : rest);
     if (!complete) pressRef.current?.(step, true);
     else runRef.current = null;
-  }, [busyNow, complete, endQueued, queued]);
+  }, [busyNow, complete, endQueued, queued, questionOpen]);
   if (!bootstrap || !isMockActive() || typeof window === 'undefined') return null;
 
   const layout = chromeLayout(width, fontScale);
@@ -872,8 +1159,37 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   const emptyRoster = open.length === 0 && !progress.complete;
   const asksFirst = asksBeforeEmptyNight(emptyRoster, playedAnyway);
   const lineText = hintText ?? heldText;
-  const hint = lineText && !inline && !folded ? (
-    <Text maxFontSizeMultiplier={1.5} nativeID={hintText ? PRACTICE_HINT_ID : undefined} style={styles.hint}>{lineText}</Text>
+  // Cancel queued: where the queue shows (walk 8 T4-N1). Under the buttons
+  // on a phone, in More in a folded row; a wide screen's status row draws it
+  // after its facts (QueuedCancelButton).
+  const cancelButton = (placement: 'line' | 'menu') => (queued.length === 0 ? null : (
+    <Button
+      accessibilityLabel={queuedCancelName(queued)}
+      label={QUEUED_CANCEL_LABEL}
+      onPress={cancelQueued}
+      style={[styles.quiet, placement !== 'menu' && styles.quietEdge, placement === 'line' && styles.cancelLine]}
+      textStyle={placement === 'line' ? styles.cancelLineText : undefined}
+      variant="quiet"
+    />
+  ));
+  const hint = inline || folded ? null : queued.length > 0 ? (
+    <View
+      onLayout={(event) => {
+        const next = Math.round(event.nativeEvent.layout.height);
+        setLineFloor((current) => Math.max(current, next));
+      }}
+      style={styles.hintRow}
+    >
+      {cancelButton('line')}
+    </View>
+  ) : lineText ? (
+    <Text
+      maxFontSizeMultiplier={1.5}
+      nativeID={hintText ? PRACTICE_HINT_ID : undefined}
+      style={[styles.hint, !hintText && lineFloor > 0 && { minHeight: lineFloor }]}
+    >
+      {lineText}
+    </Text>
   ) : null;
   // "Next week queued. It plays once Oct 21–27 is in." for screen readers,
   // after a press that landed mid-play (the button shows it too).
@@ -914,6 +1230,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       : from ? weekSpanLabel(from, practiceSeasonEnd(mockSeasonStart())) : null;
     playingDateRef.current = date;
     setPlaying({ step, date });
+    publishPlaying(date);
     let stepIn = false;
     try {
       // "Playing Oct 21…" paints before the night's heavy work (walk 5 T4-11).
@@ -940,6 +1257,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       advancingRef.current = false;
       playingDateRef.current = null;
       setPlaying(null);
+      publishPlaying(null);
       if (queuedSteps.current.length === 0 && !endQueuedRef.current) {
         // Nothing waits behind it: the run is over for now, and a run of two
         // or more steps gets one notice for all of it (in the render that
@@ -972,6 +1290,8 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     }
     const end = practiceSeasonEnd(mockSeasonStart());
     const from = bootstrap.game.lastSettledDate ?? null;
+    // Presses that waited for its question are part of the rest of the season.
+    setQueue([]);
     advancingRef.current = true;
     advancedRef.current = true;
     runRef.current = null;
@@ -1001,8 +1321,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     if (asksFirst) {
       runRef.current = null;
       landedRun.current = null;
-      queuedSteps.current = [];
-      setQueued([]);
+      setQueue([]);
       askQuestion(step === 'night' ? 'empty-night' : 'empty-week');
     } else void advance(step, queuedPress);
   };
@@ -1225,6 +1544,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
             {hintNote}
           </View>
           {progress.complete ? null : advanceButtons}
+          {cancelButton('menu')}
           {busyAnnouncer}
           {rulesItem}
           {playToEndButton(false, true)}
@@ -1241,7 +1561,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     return (
       <View style={[styles.foldedControls, foldFill && styles.foldedFill]}>
         {progress.complete ? secondaryButtons() : advanceButtons}
-        {menu(progress.complete ? rulesItem : <>{rulesItem}{playToEndButton(false, true)}{secondaryButtons(true)}</>)}
+        {menu(progress.complete ? rulesItem : <>{cancelButton('menu')}{rulesItem}{playToEndButton(false, true)}{secondaryButtons(true)}</>)}
         {busyAnnouncer}
       </View>
     );
@@ -1292,13 +1612,15 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
 export function SimBar() {
   const { fontScale, height, width } = useWindowDimensions();
   const { bootstrap } = usePerGame();
+  useSpacingFoldWatch();
+  const spacingFolded = useSpacingFold();
   if (!bootstrap || !isMockActive()) return null;
 
   const layout = chromeLayout(width, fontScale);
   // Desktop and short windows carry the controls in the status row, so this
   // bar is just the frame's bottom edge there. The season's progress sits
   // beside "Day 16 of 174" in the status row, where the words label it.
-  const inStatusRow = layout.merged || chromeFolded(height);
+  const inStatusRow = layout.merged || chromeFolded(height) || spacingFolded;
 
   return (
     <View nativeID="practice-bar" style={styles.bar}>
@@ -1507,6 +1829,76 @@ const styles = StyleSheet.create({
   advanceTextBusyStacked: {
     fontSize: 10,
     letterSpacing: 0,
+  },
+  // The queue's line: Cancel queued, compact, where the hint line sits.
+  hintRow: {
+    flexBasis: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cancelLine: {
+    minHeight: 32,
+    paddingHorizontal: space.sm,
+  },
+  cancelInFacts: {
+    minHeight: 24,
+    paddingVertical: 0,
+  },
+  cancelLineText: {
+    fontSize: type.caption,
+  },
+  // The empty-roster question (EmptyRosterQuestion), drawn as ConfirmDialog is.
+  questionLayer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: space.lg,
+  },
+  questionScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  questionPanel: {
+    width: '100%',
+    maxWidth: 420,
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  questionTitle: {
+    ...headingStyle,
+    letterSpacing: 0,
+  },
+  questionLine: {
+    color: colors.text,
+    fontSize: type.body,
+    lineHeight: 19,
+  },
+  questionButtons: {
+    gap: space.sm,
+    marginTop: space.sm,
+  },
+  // Stacked on a phone: the default on top, Not now last.
+  questionButtonsStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  // A row on a wide screen, the default on the right (its first in Tab order).
+  questionButtonsRow: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+  },
+  // A quiet way out with a 3:1 control edge, so it reads as a button.
+  questionNotNow: {
+    borderColor: colors.controlBorder,
   },
   hint: {
     flexBasis: '100%',
