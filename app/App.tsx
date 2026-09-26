@@ -40,11 +40,15 @@ import { ThemeProvider, useDesignVariant } from './src/theme/ThemeProvider';
 import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
 import { useKeepNotices } from './src/state/noticePreference';
 import { brandFontReady, installGlobalWebStyles } from './src/web/globalStyles';
+import { applyVariant } from './src/theme/applyVariant';
+import { startingVariant } from './src/theme/ThemeProvider';
 import { installFocusInView } from './src/web/focusInView';
 import { ignoreHeldKeys } from './src/web/keyRepeat';
 import { treatmentNavigation } from './src/web/treatmentNavigation';
 
 installGlobalWebStyles();
+// The page is in the player's look before the first render (walk 11 T4-09).
+applyVariant(startingVariant());
 ignoreHeldKeys();
 installFocusInView();
 

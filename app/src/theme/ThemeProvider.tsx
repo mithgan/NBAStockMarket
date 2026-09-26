@@ -1,10 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { useColorScheme } from 'react-native';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Appearance, useColorScheme } from 'react-native';
 
 import { applyVariant } from './applyVariant';
-import { isAppearanceChoice, restoreSavedVariant, type AppearanceChoice } from './variantPersistence';
-import { DEFAULT_VARIANT, VARIANTS, type DesignVariant, type VariantId } from './variants';
+import { isAppearanceChoice, resolveVariant, restoreSavedVariant, type AppearanceChoice } from './variantPersistence';
+import { VARIANTS, type DesignVariant, type VariantId } from './variants';
 
 const STORAGE_KEY = 'nba-stock-market.design-variant';
 
@@ -48,6 +48,16 @@ function savedChoiceNow(): AppearanceChoice {
   }
 }
 
+/**
+ * The look the app opens in, known before anything renders (web): the saved
+ * choice, else the device's. App applies it as the page's styles install, so
+ * the first frame is already in it (walk 11 T4-09: a light device blinked
+ * navy, the styles' seeded default, before its cream loading screen).
+ */
+export function startingVariant(): VariantId {
+  return resolveVariant(savedChoiceNow(), prefersMoreContrast(), Appearance.getColorScheme());
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   // A new player starts on "Match device": the app follows the phone or
   // computer's light or dark setting as it changes, and its ask for more
@@ -59,9 +69,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [choice, setChoice] = useState<AppearanceChoice>(savedChoiceNow);
   const scheme = useColorScheme();
   const moreContrast = useSyncExternalStore(subscribeMoreContrast, prefersMoreContrast, () => false);
-  const variantId: VariantId = choice !== 'device'
-    ? choice
-    : moreContrast ? 'contrast' : scheme === 'light' ? 'light' : DEFAULT_VARIANT;
+  const variantId: VariantId = resolveVariant(choice, moreContrast, scheme);
 
   const selectionRevision = useRef(0);
 
@@ -80,7 +88,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  useEffect(() => {
+  // Before the browser paints: a change of look never shows a frame of the old one.
+  useLayoutEffect(() => {
     applyVariant(variantId);
   }, [variantId]);
 

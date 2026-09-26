@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 
 import { DEFAULT_VARIANT, VARIANTS } from './variants';
+import { isAppearanceChoice, resolveVariant } from './variantPersistence';
 
 const html = readFileSync(resolve(__dirname, '../../public/index.html'), 'utf8');
 const script = html.match(/<script id="theme-prepaint">([\s\S]*?)<\/script>/)?.[1] ?? '';
@@ -42,4 +43,16 @@ test('before the app loads, the page picks the look ThemeProvider will', () => {
   assert.equal(prepaint({ saved: null, light: true }), VARIANTS.light.palette.background);
   assert.equal(prepaint({ saved: null }), VARIANTS[DEFAULT_VARIANT].palette.background);
   assert.equal(prepaint({ saved: 'not-a-look' }), VARIANTS[DEFAULT_VARIANT].palette.background);
+});
+
+test('the prepaint and the app resolve the same look, so nothing blinks as it starts (walk 11 T4-09)', () => {
+  for (const saved of [null, 'device', 'dark', 'light', 'contrast', 'grain', 'not-a-look']) {
+    for (const light of [true, false]) {
+      for (const moreContrast of [true, false]) {
+        const choice = isAppearanceChoice(saved) ? saved : 'device';
+        const id = resolveVariant(choice, moreContrast, light ? 'light' : 'dark');
+        assert.equal(prepaint({ saved, light, moreContrast }), VARIANTS[id].palette.background, `${saved} light=${light} contrast=${moreContrast}`);
+      }
+    }
+  }
 });
