@@ -507,7 +507,8 @@ test('value against results compares like with like: last season beside what the
   assert.equal(value.players, 4);
   assert.equal(
     value.text,
-    "On last season's numbers, the 6 games your picks played would have made +$160K. They made -$190K before fees. A few weeks is mostly luck.",
+    "On last season's numbers, the 6 games your picks played would have made +$160K. They made -$190K before fees. "
+      + 'Players usually pay out less than last season; beating their price is what scores. A few nights is mostly luck.',
   );
   // The made half reconciles with the score: the positions' results plus fees.
   const breakdown = scoreBreakdown(
@@ -526,7 +527,7 @@ test('value against results names its base when a rookie has no last season, and
   const { pickValue } = await import('./rosterView');
   const positions = [
     position({ positionId: 'a', playerId: 'a', lockedGameCost: 100_000 }),
-    position({ positionId: 'k', playerId: 'k', lockedGameCost: 90_000 }),
+    position({ positionId: 'k', playerId: 'k', playerName: 'Kon Knueppel', lockedGameCost: 90_000 }),
   ];
   const prior: Record<string, number | null> = { a: 130_000, k: null };
   const games = [
@@ -534,20 +535,27 @@ test('value against results names its base when a rookie has no last season, and
     result({ positionId: 'a', playerId: 'a', gameId: 'a2', eventCursor: 2, gameDate: '2025-10-23', dividendDollars: 100_000, netPnl: 0 }),
     result({ positionId: 'k', playerId: 'k', gameId: 'k1', eventCursor: 3, lockedGameCost: 90_000, dividendDollars: 190_000, netPnl: 100_000 }),
   ];
-  // The rookie's game is left out of both halves, and the words say so (no "before fees": not every game).
+  // The rookie's game is left out of both halves, and the words name it and
+  // what it made, so the figures square with the score (walk 6 T4-04).
+  const withRookie = pickValue(positions, (id) => prior[id] ?? null, games, { fees: -500 });
   assert.equal(
-    pickValue(positions, (id) => prior[id] ?? null, games, { fees: -500 })?.text,
-    "On last season's numbers, 2 of the 3 games your picks played would have made +$60K. Those 2 made -$20K. A few weeks is mostly luck.",
+    withRookie?.text,
+    "On last season's numbers, 2 of the 3 games your picks played would have made +$60K. Those 2 made -$20K. "
+      + '1 game by Kon Knueppel (no last season) is left out: +$100K. '
+      + 'Players usually pay out less than last season; beating their price is what scores. A few nights is mostly luck.',
   );
-  // One game: "the 1 game", "It made".
+  assert.equal(withRookie?.leftOut, 100_000);
+  // One game: "the 1 game", "It made", and one night's caution (walk 6 T1-05).
   assert.equal(
     pickValue(positions.slice(0, 1), (id) => prior[id] ?? null, games.slice(0, 1), { fees: -250 })?.text,
-    "On last season's numbers, the 1 game your pick played would have made +$30K. It made -$20K before fees. A few weeks is mostly luck.",
+    "On last season's numbers, the 1 game your pick played would have made +$30K. It made -$20K before fees. "
+      + 'Players usually pay out less than last season; beating their price is what scores. One night is mostly luck.',
   );
   // No fees on record (a live account before its first move fee): nothing to be "before".
   assert.equal(
     pickValue(positions.slice(0, 1), (id) => prior[id] ?? null, games.slice(0, 2))?.text,
-    "On last season's numbers, the 2 games your pick played would have made +$60K. They made -$20K. A few weeks is mostly luck.",
+    "On last season's numbers, the 2 games your pick played would have made +$60K. They made -$20K. "
+      + 'Players usually pay out less than last season; beating their price is what scores. A few nights is mostly luck.',
   );
 });
 
@@ -569,22 +577,66 @@ test('value against results is hidden with nothing to compare: before games, or 
   assert.equal(corrected?.soFar, 15_000);
 });
 
-test('value against results uses the price you locked, and calls the gap luck only while the games are few', async () => {
-  const { EARLY_GAMES_EACH, pickValue } = await import('./rosterView');
+test('value against results uses the price you locked, and calls the gap luck only while the sample is small (walk 6 T1-05)', async () => {
+  const { pickValue } = await import('./rosterView');
   const held = [position({ positionId: 'a', playerId: 'a', lockedGameCost: 100_000 })];
+  // One game every other day from Oct 21.
   const games = (count: number) => Array.from({ length: count }, (_, index) => result({
     positionId: 'a',
     playerId: 'a',
     gameId: `a${index}`,
     eventCursor: index + 1,
+    gameDate: new Date(Date.UTC(2025, 9, 21 + 2 * index)).toISOString().slice(0, 10),
     dividendDollars: 110_000,
     netPnl: 10_000,
   }));
   // Last season paid $90K against the $100K locked (today's market price plays no part).
-  const early = pickValue(held, () => 90_000, games(EARLY_GAMES_EACH - 1), { fees: -250 });
-  assert.equal(early?.text, "On last season's numbers, the 19 games your pick played would have made -$190K. They made +$190K before fees. A few weeks is mostly luck.");
-  const later = pickValue(held, () => 90_000, games(EARLY_GAMES_EACH), { fees: -250, over: true });
-  assert.equal(later?.text, "On last season's numbers, the 20 games your pick played would have made -$200K. They made +$200K before fees. Last season is a guide, not a promise.");
+  const early = pickValue(held, () => 90_000, games(10), { fees: -250 });
+  assert.equal(early?.text, "On last season's numbers, the 10 games your pick played would have made -$100K. They made +$100K before fees. "
+    + 'Players usually pay out less than last season; beating their price is what scores. A few weeks is mostly luck.');
+  // After about a month the caution goes; the plain truth stays.
+  const later = pickValue(held, () => 90_000, games(20), { fees: -250, over: true });
+  assert.equal(later?.text, "On last season's numbers, the 20 games your pick played would have made -$200K. They made +$200K before fees. "
+    + 'Players usually pay out less than last season; beating their price is what scores.');
+});
+
+test('the luck caution scales to the nights played and is gone after about a month (walk 6 T1-05)', async () => {
+  const { luckLine } = await import('./rosterView');
+  assert.equal(luckLine([]), null);
+  assert.equal(luckLine(['2025-10-21', '2025-10-21']), 'One night is mostly luck.');
+  assert.equal(luckLine(['2025-10-21', '2025-10-23']), 'A few nights is mostly luck.');
+  // +1 week from the start: Oct 21 to Oct 27.
+  assert.equal(luckLine(['2025-10-21', '2025-10-24', '2025-10-27']), 'One week is mostly luck.');
+  assert.equal(luckLine(['2025-10-21', '2025-11-03']), 'A few weeks is mostly luck.');
+  assert.equal(luckLine(['2025-10-21', '2025-11-20']), 'A few weeks is mostly luck.');
+  assert.equal(luckLine(['2025-10-21', '2025-11-21']), null);
+});
+
+test('the season card names the games left out with what they made, so the line squares with the score (walk 6 T4-04)', async () => {
+  const { pickValue } = await import('./rosterView');
+  const positions = [
+    position({ positionId: 'k', playerId: 'k', playerName: 'Kon Knueppel', lockedGameCost: 100_000 }),
+    position({ positionId: 'g', playerId: 'g', playerName: 'Collin Gillespie', lockedGameCost: 50_000 }),
+    position({ positionId: 'f', playerId: 'f', playerName: 'Cooper Flagg', lockedGameCost: 80_000 }),
+    position({ positionId: 'x', playerId: 'x', playerName: 'Ace Bailey', lockedGameCost: 60_000 }),
+  ];
+  const prior: Record<string, number | null> = { k: null, g: 70_000, f: null, x: null };
+  const games = [
+    result({ positionId: 'k', playerId: 'k', gameId: 'k1', eventCursor: 1, lockedGameCost: 100_000, dividendDollars: 60_000, netPnl: -40_000 }),
+    result({ positionId: 'g', playerId: 'g', gameId: 'g1', eventCursor: 2, lockedGameCost: 50_000, dividendDollars: 60_000, netPnl: 10_000 }),
+    result({ positionId: 'f', playerId: 'f', gameId: 'f1', eventCursor: 3, lockedGameCost: 80_000, dividendDollars: 70_000, netPnl: -10_000 }),
+  ];
+  const two = pickValue(positions, (id) => prior[id] ?? null, games);
+  assert.equal(two?.text, "On last season's numbers, 1 of the 3 games your picks played would have made +$20K. That game made +$10K. "
+    + '2 games by Kon Knueppel and Cooper Flagg (no last season) are left out: -$50K. '
+    + 'Players usually pay out less than last season; beating their price is what scores. One night is mostly luck.');
+  // What the compared games made plus the games left out is the score before fees.
+  assert.equal((two?.soFar ?? 0) + (two?.leftOut ?? 0), -40_000);
+  const three = pickValue(positions, (id) => prior[id] ?? null, [
+    ...games,
+    result({ positionId: 'x', playerId: 'x', gameId: 'x1', eventCursor: 4, lockedGameCost: 60_000, dividendDollars: 60_000, netPnl: 0 }),
+  ]);
+  assert.match(three?.text ?? '', /3 games by 3 players \(no last season\) are left out: -\$50K\./);
 });
 
 test('the season card says what the moves were and what they cost (walk 5 T1-13)', async () => {
@@ -623,4 +675,90 @@ test('a touch on the score chart selects a night only on a tap or a mostly sidew
   // A tap lifts close to where it landed.
   assert.equal(chartTouchIsTap(3, -4), true);
   assert.equal(chartTouchIsTap(0, 25), false);
+});
+
+test('the score split reads in K like the score, and its parts add up to the score as shown (walk 6 T4-09, T2-08)', async () => {
+  const { fineValue, shownParts } = await import('./rosterView');
+  const { signedMoney } = await import('../copy/terms');
+  const split = (values: number[]) => values.map((value, index) => ({ key: String(index), value }));
+  const read = (values: number[], score: number) => shownParts(split(values), score).map((part) => signedMoney(part.value));
+  // T4-09, Day 14: exact dollars kicked in beside the same figure in K.
+  assert.deepEqual(read([148_449, 0, 755_467, -2_250], 901_666), ['+$148.4K', '$0', '+$755.5K', '-$2.25K']);
+  assert.equal(signedMoney(901_666), '+$901.7K');
+  // T2-08, Nov 4: "Roster +$977,980 · Closed −$12,796 · Fees −$4,750" under +$960.4K.
+  assert.deepEqual(read([977_980, 0, -12_796, -4_750], 960_434), ['+$978K', '$0', '-$12.8K', '-$4.75K']);
+  // Rounded each on its own the parts would read +$2.23M under +$2.24M:
+  // the parts nearest a rounding edge round the other way.
+  const dec = shownParts(split([2_254_300, 0, -12_796, -5_000]), 2_236_504);
+  assert.deepEqual(dec.map((part) => signedMoney(part.value)), ['+$2.26M', '$0', '-$12.7K', '-$5K']);
+  const sum = dec.reduce((total, part) => total + part.value, 0);
+  assert.ok(Math.abs(sum - fineValue(2_236_504)) <= 5_000);
+  // A fee never moves; $0 stays $0.
+  assert.equal(dec[3].value, -5_000);
+  assert.equal(dec[1].value, 0);
+  assert.equal(fineValue(148_449), 148_400);
+  assert.equal(fineValue(-1_052_100), -1_050_000);
+});
+
+test('the season card reads millions one way, and says the exact final when rounding hides a part (walk 6 T3-12, T1-10)', async () => {
+  const { exactFinalLine, shownParts } = await import('./rosterView');
+  const { signedMoney } = await import('../copy/terms');
+  const parts = (roster: number, fees: number) => [
+    { key: 'roster' as const, label: 'Roster', value: roster },
+    { key: 'shorts' as const, label: 'Shorts', value: 0 },
+    { key: 'closed' as const, label: 'Closed', value: 0 },
+    { key: 'fees' as const, label: 'Fees', value: fees },
+  ];
+  // T3-12: "+$5.5M" headline beside "Roster +$5.505M": now both +$5.5M.
+  const one = shownParts(parts(5_505_100, -250), 5_504_850);
+  assert.equal(signedMoney(5_504_850), '+$5.5M');
+  assert.equal(signedMoney(one[0].value), '+$5.5M');
+  assert.equal(exactFinalLine(one, 5_504_850), 'Exactly +$5,504,850, fees -$250 included.');
+  // T1-10: Final +$4.13M, Roster +$4.13M, Fees -$750.
+  const two = shownParts(parts(4_130_500, -750), 4_129_750);
+  assert.equal(signedMoney(two[0].value), '+$4.13M');
+  assert.equal(exactFinalLine(two, 4_129_750), 'Exactly +$4,129,750, fees -$750 included.');
+  // Every part moves the score as shown: no exact line.
+  assert.equal(exactFinalLine(shownParts(parts(148_449, -2_250), 146_199), 146_199), null);
+});
+
+test('the season card has one spoken summary with its place in words (walk 6 T3-07)', async () => {
+  const { finalSummary, spokenPlace } = await import('./rosterView');
+  assert.equal(spokenPlace(1, 5), 'first of 5');
+  assert.equal(spokenPlace(2, 5), 'second of 5');
+  assert.equal(spokenPlace(14, 20), '14th of 20');
+  assert.equal(spokenPlace(3, null), 'third place');
+  assert.equal(
+    finalSummary(4_950_000, { rank: 1, of: 5 }, [
+      { key: 'roster', label: 'Roster', value: 4_950_000 },
+      { key: 'shorts', label: 'Shorts', value: 0 },
+      { key: 'closed', label: 'Closed', value: 0 },
+      { key: 'fees', label: 'Fees', value: -500 },
+    ]),
+    'Final score +$4.95 million, first of 5. Roster +$4.95 million, shorts $0, closed $0, fees -$500.',
+  );
+  assert.equal(finalSummary(-220_300, null, null), 'Final score -$220.3 thousand.');
+});
+
+test('at season end the row tags read in the past tense (walk 6 T1-10c)', async () => {
+  const { verdictTag } = await import('./rosterView');
+  assert.deepEqual(verdictTag('profit', true), { label: 'Paid off', tone: 'green' });
+  assert.deepEqual(verdictTag('loss', true), { label: 'Lost money', tone: 'red' });
+  assert.deepEqual(verdictTag('even', true), { label: 'Broke even', tone: 'neutral' });
+  assert.deepEqual(verdictTag('profit'), { label: 'Paying off', tone: 'green' });
+});
+
+test('the welcome says what a player earns, from the ruleset rate (walk 6 T1-02)', async () => {
+  const { earnLine } = await import('./rosterView');
+  assert.equal(earnLine(40_000), "Each game a player's stat line becomes a dividend, $40K per net point.");
+  assert.equal(earnLine(null), "Each game a player's stat line becomes a dividend.");
+});
+
+test('the first-night tip retires once Results is used or a week on (walk 6 T1-17)', async () => {
+  const { tipRetired } = await import('./rosterView');
+  assert.equal(tipRetired('2025-10-21', '2025-10-21', false), false);
+  assert.equal(tipRetired('2025-10-21', '2025-10-27', false), false);
+  assert.equal(tipRetired('2025-10-21', '2025-10-28', false), true);
+  assert.equal(tipRetired('2025-10-21', '2025-10-21', true), true);
+  assert.equal(tipRetired(null, '2025-10-21', false), false);
 });

@@ -158,7 +158,8 @@ export function ScoreHeader({
 
   return (
     <View style={styles.header}>
-      <Text accessibilityRole="header" {...headingLevel(2)}>
+      {/* Drawn in capitals, named in sentence case (walk 6 T3-09). */}
+      <Text accessibilityLabel={title} accessibilityRole="header" {...headingLevel(2)}>
         <Label>{title}</Label>
       </Text>
       {/* One sentence for screen readers (walk 4 T3-12); the drawn figures
@@ -190,17 +191,20 @@ export function ScoreHeader({
  * visibly add up to the score above them. The score block shows it while the
  * season runs; at the season's end the result card carries it (walk 4 T2-07).
  */
-export function ScoreParts({ title, parts, precision, variant }: {
+export function ScoreParts({ title, parts, precision, variant, hidden = false }: {
   /** Names the split for screen readers: "Your score by source: …". */
   title: string;
+  /** The season card speaks the split in its one summary, so the drawn split is hidden from screen readers. */
+  hidden?: boolean;
   parts: readonly BreakdownPart[];
   precision: PartPrecision;
   variant: 'compact' | 'narrow' | 'panel';
 }) {
   return (
     <View
-      accessibilityLabel={`${title} by source: ${parts.map((part) => `${part.label} ${formatAt(part.value, precision, true)}`).join(', ')}`}
-      accessible
+      accessibilityLabel={hidden ? undefined : `${title} by source: ${parts.map((part) => `${part.label} ${formatAt(part.value, precision, true)}`).join(', ')}`}
+      accessible={!hidden}
+      aria-hidden={hidden || undefined}
       style={[styles.parts, variant === 'compact' && styles.partsGrid]}
     >
       {parts.map((part) => (

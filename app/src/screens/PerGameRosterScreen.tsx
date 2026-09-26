@@ -45,13 +45,14 @@ import {
   signedMoneyCompact,
   unbrokenName,
 } from '../copy/terms';
-import { keepTogether, practiceProgress } from '../data/chromeView';
+import { chromeFolded, keepTogether, practiceProgress } from '../data/chromeView';
 import { isSeasonOver } from '../data/marketView';
 import { recentEarnings, scoreBreakdown, seasonSummary } from '../data/perGameMetrics';
 import {
   breakdownParts,
-  breakdownPrecision,
   closedRows,
+  earnLine,
+  exactFinalLine,
   feeMoves,
   movesLine,
   pickValue,
@@ -59,7 +60,9 @@ import {
   rosterRowView,
   rowLayout,
   shortEndsNext,
+  shownParts,
   slotLine,
+  tipRetired,
   type ClosedRow,
   type RowLayout,
 } from '../data/rosterView';
@@ -79,20 +82,43 @@ const DOUBLE_TAP_MS = 400;
 /** Phone lists narrower than this leave out Profit a game (see `StackedFigures`). */
 const NARROW_LIST_MAX_WIDTH = 380;
 
-/**
- * The welcome stays hidden for the rest of this practice season once the
- * player closes it. Practice itself lives in memory and starts over on
- * reload, and so does this.
- */
-let welcomeHidden = false;
+const WELCOME_HIDDEN_KEY = 'nba-stock-market:welcome-hidden';
+const TIP_DONE_KEY = 'nba-stock-market:first-night-tip-done';
+
+/** A flag kept for this tab's visit (web sessionStorage); false when storage is unavailable. */
+function visitFlag(key: string): boolean {
+  try {
+    return Platform.OS === 'web' && window.sessionStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setVisitFlag(key: string): void {
+  try {
+    if (Platform.OS === 'web') window.sessionStorage.setItem(key, '1');
+  } catch {}
+}
 
 /**
- * The first-night tip (walk 5 T1-N4): the settled night it first showed on,
- * and whether it is done for this visit (hidden with ×, or a later night
- * has settled). Like the welcome it lives in memory until a reload, so a
- * new season does not bring it back.
+ * The welcome stays hidden for the rest of this visit once the player closes
+ * it (walk 6 T1-07): Restart and "Play another season" load a new page, so
+ * the choice is kept in the tab's session, like the seasons list.
  */
-const firstNightTip: { shownOn: string | null; done: boolean } = { shownOn: null, done: false };
+let welcomeHidden = visitFlag(WELCOME_HIDDEN_KEY);
+
+/**
+ * The first-night tip (walk 5 T1-N4): whether it is done for this visit
+ * (hidden with ×, its Results used, or the season's first week of game
+ * nights over; walk 6 T1-17). Kept for the visit like the welcome, so a new
+ * season does not bring it back.
+ */
+const firstNightTip: { done: boolean } = { done: visitFlag(TIP_DONE_KEY) };
+
+function retireFirstNightTip(): void {
+  firstNightTip.done = true;
+  setVisitFlag(TIP_DONE_KEY);
+}
 
 type FocusTarget = {
   focus?: (options?: { preventScroll?: boolean }) => void;
@@ -137,6 +163,7 @@ function PositionRow({
   onConfirmOpen,
   onConfirmClose,
   actionRef,
+  profileRef,
   marketPrice,
 }: {
   position: PerGamePosition;
@@ -150,6 +177,8 @@ function PositionRow({
   onConfirmOpen: (position: PerGamePosition) => void;
   onConfirmClose: (position: PerGamePosition, outcome: ConfirmOutcome) => void;
   actionRef: (node: View | null) => void;
+  /** The row's name button, where focus lands after a move adds him (walk 6 T2-06, T3-03). */
+  profileRef: (node: View | null) => void;
   /** His price a game in the market today, when he is listed. */
   marketPrice: number | null;
 }) {
@@ -184,8 +213,9 @@ function PositionRow({
 
   const settled = bootstrap?.settledResults;
   const view = useMemo(
-    () => rosterRowView(position, settled ?? [], nextGameDate),
-    [nextGameDate, position, settled],
+    // At season end the tags read in the past tense (walk 6 T1-10c).
+    () => rosterRowView(position, settled ?? [], nextGameDate, seasonOver),
+    [nextGameDate, position, seasonOver, settled],
   );
   const short = position.side === 'short';
   const verb = closeVerb(position.side);
@@ -319,6 +349,7 @@ function PositionRow({
     />
   ) : null;
   const profileProps = {
+    ref: profileRef,
     accessibilityLabel: profileLabel,
     accessibilityRole: 'button' as const,
     onPress: () => {
@@ -384,12 +415,14 @@ function PositionRow({
  * price, one tap, as the market's Short button would. Unavailable (with the
  * reason in its name) while roster moves are locked or the shorts are full.
  */
-function ShortAgainButton({ row, price, quoteVersion, reason, onShorted, column = false }: {
+function ShortAgainButton({ row, price, quoteVersion, reason, notice = null, onShorted, column = false }: {
   row: ClosedRow;
   price: number;
   quoteVersion: number;
   /** Why it cannot be pressed right now, or null. */
   reason: string | null;
+  /** What a tap while it is unavailable says (as LOCKED does: when moves reopen); defaults to `reason`. */
+  notice?: string | null;
   onShorted: (playerId: string) => void;
   /**
    * The roster table's action column: as wide as Drop and Close above it,
@@ -398,7 +431,7 @@ function ShortAgainButton({ row, price, quoteVersion, reason, onShorted, column 
    */
   column?: boolean;
 }) {
-  const { bootstrap, openPosition, pendingActions } = usePerGame();
+  const { bootstrap, notify, openPosition, pendingActions } = usePerGame();
   const pending = pendingActions.has(`position:short:${row.playerId}`) || pendingActions.has(`queued:position:short:${row.playerId}`);
   const fee = bootstrap?.ruleset.transactionFeeDollars ?? 0;
   const name = `Short ${row.name} again at ${perGame(price)}${fee > 0 ? `, ${exactMoney(fee)} fee` : ''}`;
@@ -409,6 +442,10 @@ function ShortAgainButton({ row, price, quoteVersion, reason, onShorted, column 
       disabled={reason !== null || pending}
       focusableWhenDisabled
       label={pending ? (column ? 'Wait' : 'Shorting…') : 'Short again'}
+      // A tap while it is unavailable says why and when, like LOCKED (walk 6 T1-15).
+      onDisabledPress={() => {
+        if (reason !== null && !pending) notify(notice ?? reason);
+      }}
       style={column ? styles.columnButton : undefined}
       textStyle={column ? styles.columnButtonText : undefined}
       width={column ? ACTION_WIDTH : undefined}
@@ -432,7 +469,9 @@ export function PerGameRosterScreen({
   onOpenMarket: (side: PerGamePosition['side']) => void;
 }) {
   const { bootstrap, closePosition, notify, openPosition, pendingActions } = usePerGame();
-  const { width, fontScale } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
+  // A phone on its side: the folded frame already says when moves reopen.
+  const shortWindow = chromeFolded(height);
   // Sent from a full Market to make room for a player: a slim banner keeps
   // the errand in view and offers him the moment there is room (walk 3 T2-07).
   const [making, setMaking] = useState<{ side: PerGamePosition['side']; playerId: string; playerName: string } | null>(null);
@@ -451,6 +490,8 @@ export function PerGameRosterScreen({
   const [pinnedLong, setPinnedLong] = useState(0);
   const [pinnedShort, setPinnedShort] = useState(0);
   const actionRefs = useRef(new Map<string, View>());
+  // Each row's name button: after a move adds a player, focus lands on his name.
+  const profileRefs = useRef(new Map<string, View>());
   const rosterHeading = useRef<Text>(null);
   const shortsHeading = useRef<Text>(null);
   const latest = useRef(bootstrap);
@@ -510,18 +551,23 @@ export function PerGameRosterScreen({
   // games have settled, until the next night settles or it is hidden.
   const lastSettledDate = bootstrap?.game.lastSettledDate ?? null;
   const hasGames = bootstrap?.ledger.items.some((entry) => entry.gameDate !== null) ?? false;
+  // The season's first game night: the tip's week counts from it, not from
+  // the first visit to this screen (walk 6 T1-17).
+  const firstGameDate = useMemo(() => (bootstrap?.ledger.items ?? []).reduce<string | null>(
+    (first, entry) => (entry.gameDate && (first === null || entry.gameDate < first) ? entry.gameDate : first),
+    null,
+  ), [bootstrap?.ledger.items]);
   const [tipClosed, setTipClosed] = useState(firstNightTip.done);
   const tipEligible = isMockActive() && !seasonOver && hasGames && !tipClosed;
-  const tipOpen = tipEligible && (firstNightTip.shownOn === null || firstNightTip.shownOn === lastSettledDate);
+  // Through the first week of game nights (walk 6 T1-17).
+  const tipOpen = tipEligible && !tipRetired(firstGameDate, lastSettledDate, false);
   useEffect(() => {
     if (!tipEligible) return;
-    if (firstNightTip.shownOn === null) {
-      firstNightTip.shownOn = lastSettledDate;
-    } else if (firstNightTip.shownOn !== lastSettledDate) {
-      firstNightTip.done = true;
+    if (tipRetired(firstGameDate, lastSettledDate, false)) {
+      retireFirstNightTip();
       setTipClosed(true);
     }
-  }, [lastSettledDate, tipEligible]);
+  }, [firstGameDate, lastSettledDate, tipEligible]);
 
   const onConfirmOpen = useCallback((position: PerGamePosition) => {
     setConfirmingId(position.positionId);
@@ -538,21 +584,19 @@ export function PerGameRosterScreen({
     // holds focus, so it is not lost when the row goes.
     if (makingRef.current?.side === position.side) {
       focusElement(position.side === 'long' ? rosterHeading.current : shortsHeading.current, { preventScroll: true });
-      void closePosition(position).then((ok) => {
+      // One message for the move and its errand (walk 6 T3-11): the drop's
+      // notice ends "Room made for Kawhi Leonard.", and the banner's own
+      // "Room made" line is not announced again.
+      void closePosition(position, { also: `Room made for ${makingRef.current.playerName}.` }).then((ok) => {
         if (ok) setTimeout(() => focusElement(errandAddRef.current), 150);
       });
       return;
     }
-    // Focus moves on before the row goes: to the next row's button, or to
-    // the list's heading when this was the last row.
-    const list = (latest.current?.positions ?? []).filter(
-      (row) => row.status === 'active' && row.side === position.side,
-    );
-    const index = list.findIndex((row) => row.positionId === position.positionId);
-    const next = index >= 0 ? list[index + 1] : undefined;
-    focusElement(next
-      ? actionRefs.current.get(next.positionId)
-      : (position.side === 'long' ? rosterHeading.current : shortsHeading.current));
+    // Focus moves on before the row goes, to the list's heading: somewhere
+    // neutral, never the next player's Drop, where one more Enter would open
+    // a question about a player you never meant to touch (walk 6 T2-05,
+    // T3-03). The notice then says who went.
+    focusElement(position.side === 'long' ? rosterHeading.current : shortsHeading.current, { preventScroll: true });
     void closePosition(position);
   }, [closePosition]);
   // Sent here to make room ("Choose who to drop" in a full Market): bring the
@@ -581,15 +625,23 @@ export function PerGameRosterScreen({
     if (node) actionRefs.current.set(positionId, node);
     else actionRefs.current.delete(positionId);
   }, []);
-  // After "Short again", focus lands on the new short's Close button.
-  const onShorted = useCallback((playerId: string) => {
+  const profileRef = useCallback((positionId: string) => (node: View | null) => {
+    if (node) profileRefs.current.set(positionId, node);
+    else profileRefs.current.delete(positionId);
+  }, []);
+  // After a move adds a player ("Short again", the errand's Add), focus lands
+  // on his new row's name, never its Close (walk 6 T2-05, T2-06, T3-03); the
+  // list's heading when the row is not there.
+  const focusNewRow = useCallback((side: PerGamePosition['side'], playerId: string) => {
     setTimeout(() => {
       const fresh = (latest.current?.positions ?? []).find(
-        (row) => row.status === 'active' && row.side === 'short' && row.playerId === playerId,
+        (row) => row.status === 'active' && row.side === side && row.playerId === playerId,
       );
-      focusElement(fresh ? actionRefs.current.get(fresh.positionId) : shortsHeading.current);
+      const heading = side === 'long' ? rosterHeading.current : shortsHeading.current;
+      focusElement((fresh ? profileRefs.current.get(fresh.positionId) : null) ?? heading);
     }, 60);
   }, []);
+  const onShorted = useCallback((playerId: string) => focusNewRow('short', playerId), [focusNewRow]);
 
   if (!bootstrap) return null;
   const profilePosition = profileId
@@ -632,6 +684,7 @@ export function PerGameRosterScreen({
   const showWelcome = openingEve && !welcomeClosed;
   const hideWelcome = () => {
     welcomeHidden = true;
+    setVisitFlag(WELCOME_HIDDEN_KEY);
     setWelcomeClosed(true);
     focusElement(rosterHeading.current, { preventScroll: true });
   };
@@ -647,11 +700,19 @@ export function PerGameRosterScreen({
   const lockLine = rosterLocked ? `${rosterReopensLine(rosterLockDate)}.` : null;
   // Why Drop and Close are unavailable, in words on the screen (not only in a
   // hint react-native-web drops).
-  const actionNote = seasonOver ? 'The season is over. Your roster is final.' : lockLine ?? undefined;
-  const parts = bootstrap.ledger.items.length > 0 ? breakdownParts(breakdown) : null;
-  // One precision for every figure in the statement, the least at which the
-  // parts, as shown, add up to the hero figure.
-  const precision = parts ? breakdownPrecision(parts.map((part) => part.value), score) : 'fine';
+  // In a short window the folded frame already says "Moves reopen…", so the
+  // list's header does not repeat it (walk 6 T1-08).
+  const actionNote = seasonOver ? 'The season is over. Your roster is final.' : shortWindow ? undefined : lockLine ?? undefined;
+  // The split in the app's one money format, the same as the score above it
+  // (walk 6 T2-08, T4-09, T3-12): never exact dollars or a third decimal; the
+  // parts nearest a rounding edge round the other way when needed, so the
+  // parts as shown add up to the score as shown. Each list's total repeats
+  // its part exactly.
+  const parts = bootstrap.ledger.items.length > 0 ? shownParts(breakdownParts(breakdown), score) : null;
+  const shownPart = (key: 'roster' | 'shorts' | 'closed' | 'fees', fallback: number) => (
+    parts?.find((part) => part.key === key)?.value ?? fallback
+  );
+  const precision = 'fine' as const;
   const unplayed = closed.filter((row) => row.unplayed).length;
   // "4 (3 adds, 1 short) · $1K in fees" (walk 5 T1-13).
   const movesText = movesLine(bootstrap.ledger.items, bootstrap.positions, breakdown.fees);
@@ -670,6 +731,7 @@ export function PerGameRosterScreen({
       key={position.positionId}
       actionRef={actionRef(position.positionId)}
       confirming={confirmingId === position.positionId}
+      profileRef={profileRef(position.positionId)}
       layout={layout}
       marketPrice={market.get(position.playerId)?.currentGameCost ?? null}
       narrow={narrow}
@@ -706,6 +768,7 @@ export function PerGameRosterScreen({
       <ShortAgainButton
         column={layout === 'table'}
         onShorted={onShorted}
+        notice={lockLine ? `${rosterReopensLine(rosterLockDate)}. Moves pause while those games are played.` : null}
         price={listed.currentGameCost}
         quoteVersion={listed.quoteVersion}
         reason={shortReason}
@@ -734,11 +797,17 @@ export function PerGameRosterScreen({
             so the change is announced; only the sentence is announced, the
             buttons are read as focus reaches them (walk 4 T3-10). */}
         <View style={styles.errandHead}>
-          <Text ref={errandTextRef} accessibilityLiveRegion="polite" style={styles.errandText}>
-            {room
-              ? `Room made for ${makingFor.playerName}.`
-              : `Making room for ${makingFor.playerName}: ${side === 'long' ? 'drop a player' : 'close a short'} below.`}
-          </Text>
+          {/* Two elements, so the change to "Room made" is never announced:
+              the drop's notice already says it (walk 6 T3-11). */}
+          {room ? (
+            <Text key="made" ref={errandTextRef} style={styles.errandText}>
+              {`Room made for ${makingFor.playerName}.`}
+            </Text>
+          ) : (
+            <Text key="making" ref={errandTextRef} accessibilityLiveRegion="polite" style={styles.errandText}>
+              {`Making room for ${makingFor.playerName}: ${side === 'long' ? 'drop a player' : 'close a short'} below.`}
+            </Text>
+          )}
           {room ? null : <Button label="Cancel" onPress={() => setMaking(null)} style={styles.errandCancel} variant="quiet" />}
         </View>
         {room ? (
@@ -757,13 +826,23 @@ export function PerGameRosterScreen({
                     side,
                     expectedQuoteVersion: listed.quoteVersion,
                   }).then((ok) => {
-                    if (ok) setMaking(null);
+                    if (!ok) return;
+                    setMaking(null);
+                    focusNewRow(side, makingFor.playerId);
                   });
                 }}
                 variant="primary"
               />
             ) : null}
-            <Button label="Not now" onPress={() => setMaking(null)} variant="quiet" />
+            <Button
+              label="Not now"
+              onPress={() => {
+                setMaking(null);
+                // The banner (and this button) goes: focus the list's heading, not the page.
+                focusElement(side === 'long' ? rosterHeading.current : shortsHeading.current, { preventScroll: true });
+              }}
+              variant="quiet"
+            />
           </View>
         ) : null}
       </View>
@@ -771,6 +850,7 @@ export function PerGameRosterScreen({
   };
   const opening = showWelcome ? (
     <WelcomeCard
+      earn={earnLine(bootstrap.ruleset.dividendDollarsPerNetPoint)}
       feeDollars={fee}
       hasPlayers={active.length > 0}
       nextGameDate={bootstrap.game.nextGameDate}
@@ -782,12 +862,18 @@ export function PerGameRosterScreen({
     />
   ) : tipOpen ? (
     <FirstNightTip
+      // A short window (a phone on its side): Results at the end of the
+      // tip's line, so the tip keeps to about one line (walk 6 T1-08).
+      inline={shortWindow}
       onHide={() => {
-        firstNightTip.done = true;
+        retireFirstNightTip();
         setTipClosed(true);
         focusElement(rosterHeading.current, { preventScroll: true });
       }}
       onOpenResults={() => {
+        // Used: its job is done (walk 6 T1-17).
+        retireFirstNightTip();
+        setTipClosed(true);
         openTab('plays');
       }}
     />
@@ -803,6 +889,7 @@ export function PerGameRosterScreen({
       onPlayAgain={practice
         ? () => restartPractice(seasonResultLine(bootstrap.account.cumulativePnl, rankLine(bootstrap.leaderboard)))
         : undefined}
+      exactLine={parts ? exactFinalLine(parts, score) : null}
       movesText={movesText}
       parts={parts}
       precision={precision}
@@ -860,7 +947,7 @@ export function PerGameRosterScreen({
           precision={precision}
           sticky={sticky && longs.length > 0}
           title={sideHeading('long')}
-          total={longs.length > 0 ? breakdown.roster : undefined}
+          total={longs.length > 0 ? shownPart('roster', breakdown.roster) : undefined}
           totalInset={totalInset}
           totalLabel="Roster total"
         />
@@ -900,7 +987,7 @@ export function PerGameRosterScreen({
           precision={precision}
           sticky={sticky && shorts.length > 0}
           title={sideHeading('short')}
-          total={shorts.length > 0 ? breakdown.shorts : undefined}
+          total={shorts.length > 0 ? shownPart('shorts', breakdown.shorts) : undefined}
           totalInset={totalInset}
           totalLabel="Shorts total"
         />
@@ -930,12 +1017,12 @@ export function PerGameRosterScreen({
         actionFor={shortAgain}
         precision={precision}
         rows={closed}
-        total={breakdown.closed}
+        total={shownPart('closed', breakdown.closed)}
         totalInset={totalInset}
       />
       <FeesLine
         feeEach={fee}
-        fees={breakdown.fees}
+        fees={shownPart('fees', breakdown.fees)}
         moves={feeMoves(bootstrap.ledger.items)}
         precision={precision}
         totalInset={totalInset}

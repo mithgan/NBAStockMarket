@@ -1,8 +1,9 @@
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { exactMoney, humanDate, signedMoney, signedMoneyFine } from '../../copy/terms';
+import { exactMoney, humanDate, signedMoneyFine } from '../../copy/terms';
+import { keepTogether } from '../../data/chromeView';
 import type { SeasonSummary } from '../../data/perGameMetrics';
-import type { BreakdownPart, PartPrecision } from '../../data/rosterView';
+import { finalSummary, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
 import { colors, control, fonts, headingStyle, radius, space, type, weight } from '../../theme';
 import { Button, headingLevel, Label, Money, tapsSettling } from '../../ui/kit';
 import { ScoreParts } from './ScoreHeader';
@@ -21,11 +22,14 @@ export function WelcomeCard({
   hasPlayers,
   nextGameDate,
   feeDollars,
+  earn,
   onOpenMarket,
   onOpenRules,
   onHide,
 }: {
   hasPlayers: boolean;
+  /** What a player earns, in one plain line (`earnLine`, walk 6 T1-02). */
+  earn: string;
   nextGameDate: string | null;
   feeDollars: number;
   onOpenMarket: () => void;
@@ -41,7 +45,7 @@ export function WelcomeCard({
   const tiny = useWindowDimensions().width < 200;
   const copy = hasPlayers
     ? `Press +1 night to play ${games}. You can keep adding players until then.`
-    : `Pick players you think will earn more than their price a game, then press +1 night to play ${games}.${fee} Practice isn't saved: reloading starts a new season.`;
+    : `${earn} Pick players whose dividend should beat their price, then press +1 night to play ${games}.${fee} Practice isn't saved: reloading starts a new season.`;
   return (
     <View style={[styles.band, tiny && styles.bandTiny]}>
       <View style={[styles.headRow, tiny && styles.headRowTiny]}>
@@ -84,15 +88,23 @@ export function WelcomeCard({
  * where each game's math is. One line and a way to Results; × hides it, and
  * it goes by itself after the next night.
  */
-export function FirstNightTip({ onOpenResults, onHide }: { onOpenResults: () => void; onHide: () => void }) {
+export function FirstNightTip({ onOpenResults, onHide, inline = false }: {
+  onOpenResults: () => void;
+  onHide: () => void;
+  /** A short window (a phone on its side): Results at the end of the words' line, not on a line of its own. */
+  inline?: boolean;
+}) {
   const tiny = useWindowDimensions().width < 200;
+  const results = <Button accessibilityLabel="Results: each game's math" label="Results" onPress={onOpenResults} />;
+  const beside = inline && !tiny;
   return (
     <View style={[styles.band, styles.tipBand, tiny && styles.bandTiny]}>
-      <View style={[styles.headRow, tiny && styles.headRowTiny]}>
+      <View style={[styles.headRow, beside && styles.tipRowInline, tiny && styles.headRowTiny]}>
         <Text style={[styles.headText, styles.tipText]}>
           <Text style={styles.tipTag}>PAYING OFF</Text>
           {" means his dividends beat your price so far. Results shows each game's math."}
         </Text>
+        {beside ? results : null}
         <Pressable
           accessibilityLabel="Hide this tip"
           accessibilityRole="button"
@@ -103,9 +115,7 @@ export function FirstNightTip({ onOpenResults, onHide }: { onOpenResults: () => 
           <Text style={styles.hideGlyph}>×</Text>
         </Pressable>
       </View>
-      <View style={[styles.tipActions, tiny && styles.actionsTiny]}>
-        <Button accessibilityLabel="Results: each game's math" label="Results" onPress={onOpenResults} />
-      </View>
+      {beside ? null : <View style={[styles.tipActions, tiny && styles.actionsTiny]}>{results}</View>}
     </View>
   );
 }
@@ -124,11 +134,17 @@ export function SeasonCompleteCard({
   precision = 'fine',
   variant = 'compact',
   valueLine = null,
+  exactLine = null,
   movesText,
   onPlayAgain,
   onOpenPlayer,
 }: {
   summary: SeasonSummary;
+  /**
+   * The final score exactly, when rounding hides a part ("Exactly
+   * +$4,129,750, fees -$750 included."; `exactFinalLine`); null otherwise.
+   */
+  exactLine?: string | null;
   /** What the moves were, from `movesLine`: "4 (3 adds, 1 short) · $1K in fees". */
   movesText?: string;
   /** What the moves cost in all (the Fees part of the score). */
@@ -161,10 +177,15 @@ export function SeasonCompleteCard({
   const moves = movesText ?? (`${summary.moves}${split ? '' : ` · fees ${signedMoneyFine(fees)}`}`
     + (summary.shortsMade > 0 ? ` · ${summary.shortsMade} ${summary.shortsMade === 1 ? 'short' : 'shorts'}` : ''));
   const spokenMoves = `Moves ${moves.replace(/ · /g, ', ')}`;
-  const spoken = [
-    `Final score ${signedMoney(summary.finalScore)}`,
-    place ? `finished ${place.replace('#', 'number ')}` : null,
-  ].filter(Boolean).join(', ');
+  // One spoken summary, like the score block's in season (walk 6 T3-07):
+  // "Final score +$4.95 million, first of 5. Roster +$4.95 million, shorts
+  // $0, closed $0, fees -$500." The drawn split repeats it, so it is hidden
+  // from screen readers.
+  const spoken = finalSummary(
+    summary.finalScore,
+    summary.rank !== null ? { rank: summary.rank, of: summary.of } : null,
+    split,
+  );
   const movesLine = (
     <View
       accessibilityLabel={onOpenPlayer ? spokenMoves : undefined}
@@ -182,12 +203,14 @@ export function SeasonCompleteCard({
       <View accessible accessibilityLabel={spoken} style={styles.finalFacts}>
         <View style={styles.finalScoreRow}>
           <Money size="display" value={summary.finalScore} />
-          {place ? <Text style={styles.place}>{place}</Text> : null}
+          {/* "#2 of 5" never breaks across lines (walk 6 T1-10a). */}
+          {place ? <Text style={styles.place}>{keepTogether(place)}</Text> : null}
         </View>
       </View>
       {split || valueLine ? (
         <View style={styles.split}>
-          {split ? <ScoreParts parts={split} precision={precision} title="Final score" variant={variant} /> : null}
+          {split ? <ScoreParts hidden parts={split} precision={precision} title="Final score" variant={variant} /> : null}
+          {split && exactLine ? <Text style={styles.valueLine}>{exactLine}</Text> : null}
           {valueLine ? <Text style={styles.valueLine}>{valueLine}</Text> : null}
         </View>
       ) : null}
@@ -262,7 +285,8 @@ export function SeasonSoFar({ summary, fees, movesText }: {
   if (lines.length === 0) return null;
   return (
     <View style={styles.soFar}>
-      <Text accessibilityRole="header" {...headingLevel(2)} style={styles.soFarTitle}>Season so far</Text>
+      {/* Drawn in capitals, named in sentence case (walk 6 T3-09). */}
+      <Text accessibilityLabel="Season so far" accessibilityRole="header" {...headingLevel(2)} style={styles.soFarTitle}>Season so far</Text>
       {lines.map((line) => (
         <View
           key={line.label}
@@ -358,6 +382,10 @@ const styles = StyleSheet.create({
   tipTag: {
     fontFamily: fonts.display,
     fontWeight: weight.heavy,
+  },
+  // Inline: the words, Results and × on one line, centred on each other.
+  tipRowInline: {
+    alignItems: 'center',
   },
   tipActions: {
     marginTop: space.xs,

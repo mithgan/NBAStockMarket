@@ -23,6 +23,7 @@ import {
   signedMoney,
   signedMoneyFine,
   moneyCompact,
+  ordinalWords,
   signedMoneyCompact,
 } from '../copy/terms';
 import type { PnlPoint } from '../state/perGameState';
@@ -68,17 +69,21 @@ export function rowLayout(listWidth: number, windowWidth: number, fontScale: num
 // ---------------------------------------------------------------------------
 // Rows
 
-/** The one-glance answer to "is he paying for himself?", as a Tag. */
-export function verdictTag(verdict: ValueVerdict): { label: string; tone: TagTone } {
+/**
+ * The one-glance answer to "is he paying for himself?", as a Tag. Once the
+ * season is over (`over`) it reads in the past tense, "Paid off" / "Lost
+ * money" (walk 6 T1-10c): nothing is still happening.
+ */
+export function verdictTag(verdict: ValueVerdict, over = false): { label: string; tone: TagTone } {
   switch (verdict) {
     case 'profit':
-      return { label: 'Paying off', tone: 'green' };
+      return { label: over ? 'Paid off' : 'Paying off', tone: 'green' };
     case 'loss':
-      return { label: 'Losing money', tone: 'red' };
+      return { label: over ? 'Lost money' : 'Losing money', tone: 'red' };
     case 'even':
-      return { label: 'Break-even', tone: 'neutral' };
+      return { label: over ? 'Broke even' : 'Break-even', tone: 'neutral' };
     default:
-      return { label: 'No games yet', tone: 'neutral' };
+      return { label: over ? 'No games' : 'No games yet', tone: 'neutral' };
   }
 }
 
@@ -151,13 +156,14 @@ export function rosterRowView(
   position: PerGamePosition,
   results: readonly PerGameSettledResult[],
   nextGameDate: string | null = null,
+  over = false,
 ): RosterRowView {
   const summary = positionValue(results, position.positionId);
   const verdict = valueVerdict(summary);
   return {
     summary,
     verdict,
-    tag: verdictTag(verdict),
+    tag: verdictTag(verdict, over),
     games: gamesLine(summary),
     expiry: expiryLine(position, nextGameDate),
   };
@@ -189,6 +195,39 @@ export function rankLine(leaderboard: readonly PerGameLeaderboardRow[] | undefin
  */
 export const EARLY_GAMES_EACH = 20;
 
+/** After this many days of games (about a month) the value line drops its luck caution. */
+export const LUCK_MAX_DAYS = 31;
+
+/** The systematic part of the gap, said plainly (walk 6 T2-16): prices sit below last season's dividends. */
+export const LAST_SEASON_TRUTH = 'Players usually pay out less than last season; beating their price is what scores.';
+
+function dayIndex(isoDate: string): number {
+  return Math.round(Date.parse(`${isoDate.slice(0, 10)}T00:00:00Z`) / 86_400_000);
+}
+
+/**
+ * A short sample's caution, scaled to what was played (walk 6 T1-05): "One
+ * night is mostly luck." after one night, "A few nights…" inside a week, "One
+ * week…", then "A few weeks…", and nothing after about a month.
+ */
+export function luckLine(gameDates: readonly string[]): string | null {
+  const nights = [...new Set(gameDates.map((date) => date.slice(0, 10)))].sort();
+  if (nights.length === 0) return null;
+  if (nights.length === 1) return 'One night is mostly luck.';
+  const days = dayIndex(nights.at(-1)!) - dayIndex(nights[0]) + 1;
+  if (days < 7) return 'A few nights is mostly luck.';
+  if (days <= 8) return 'One week is mostly luck.';
+  if (days <= LUCK_MAX_DAYS) return 'A few weeks is mostly luck.';
+  return null;
+}
+
+/** "Kon Knueppel", "Kon Knueppel and Cooper Flagg", "3 players". */
+function whoPlayed(names: readonly string[]): string {
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.length} players`;
+}
+
 export interface PickValue {
   /**
    * What the compared games would have made on last season's numbers: for
@@ -206,9 +245,13 @@ export interface PickValue {
   players: number;
   /** Compared games a position, on average. */
   gamesEach: number;
+  /** What the games left out (players with no last season) made. */
+  leftOut: number;
   /**
    * "On last season's numbers, the 12 games your picks played would have
-   * made +$120K. They made -$85K before fees. A few weeks is mostly luck."
+   * made +$120K. They made -$85K before fees. Players usually pay out less
+   * than last season; beating their price is what scores. A few weeks is
+   * mostly luck."
    */
   text: string;
 }
@@ -227,6 +270,14 @@ export interface PickValue {
  * so the base never silently changes. Null when there is nothing to compare
  * (no games yet, or no last season for anyone who played).
  *
+ * The gap is mostly not luck (walk 6 T2-16, T1-05, T4-04): a player's price
+ * sits between his worth and last season's dividend, and players usually pay
+ * out less than last season, so the line says that plainly. A luck caution
+ * stays only while the sample is small, scaled to the nights played
+ * (`luckLine`), and the games left out are named with what they made
+ * ("82 games by Kon Knueppel (no last season) are left out: -$1.85M."), so
+ * the made figures square with the score.
+ *
  * `over`: the season has ended; "They made" reads right either way, so it
  * changes nothing now (kept so callers need not change).
  * `fees`: the Fees part; "before fees" is said only when fees moved the score
@@ -239,20 +290,30 @@ export function pickValue(
   { fees = 0 }: { over?: boolean; fees?: number } = {},
 ): PickValue | null {
   const sides = new Map(positions.map((position) => [position.positionId, position.side]));
+  const names = new Map(positions.map((position) => [position.playerId, position.playerName]));
   let byLastSeason = 0;
   let soFar = 0;
+  let leftOut = 0;
   let games = 0;
   let allGames = 0;
   const compared = new Set<string>();
   const playedFor = new Set<string>();
+  const dates: string[] = [];
+  // Players with no last season, in the order they first played for you.
+  const unrated: string[] = [];
   for (const result of currentResults(results)) {
     const side = sides.get(result.positionId);
     if (!side) continue;
     if (result.status !== 'settled' || result.netPnl === null || result.dividendDollars === null) continue;
     allGames += 1;
     playedFor.add(result.positionId);
+    if (result.gameDate) dates.push(result.gameDate);
     const prior = lastSeasonDividend(result.playerId);
-    if (prior === null) continue;
+    if (prior === null) {
+      leftOut += result.netPnl;
+      if (!unrated.includes(result.playerId)) unrated.push(result.playerId);
+      continue;
+    }
     const edge = prior - result.lockedGameCost;
     byLastSeason += side === 'long' ? edge : -edge;
     soFar += result.netPnl;
@@ -262,14 +323,17 @@ export function pickValue(
   if (games === 0) return null;
   const players = compared.size;
   const gamesEach = games / players;
-  const lesson = gamesEach < EARLY_GAMES_EACH ? 'A few weeks is mostly luck.' : 'Last season is a guide, not a promise.';
   const everyGame = games === allGames;
   const played = `your ${playedFor.size === 1 ? 'pick' : 'picks'} played`;
   const base = everyGame
     ? games === 1 ? `the 1 game ${played}` : `the ${games} games ${played}`
     : `${games} of the ${allGames} games ${played}`;
-  const they = everyGame ? (games === 1 ? 'It' : 'They') : `Those ${games}`;
+  const they = everyGame ? (games === 1 ? 'It' : 'They') : games === 1 ? 'That game' : `Those ${games}`;
   const beforeFees = everyGame && Math.round(fees) !== 0 ? ' before fees' : '';
+  const skipped = allGames - games;
+  const left = everyGame ? null
+    : `${skipped} ${skipped === 1 ? 'game' : 'games'} by ${whoPlayed(unrated.map((id) => names.get(id) ?? 'a player'))} `
+      + `(no last season) ${skipped === 1 ? 'is' : 'are'} left out: ${signedMoney(leftOut)}.`;
   return {
     byLastSeason,
     soFar,
@@ -277,10 +341,16 @@ export function pickValue(
     allGames,
     players,
     gamesEach,
+    leftOut,
     // Both halves are totals over the same games, in the score's own format,
-    // so "They made" plus the Fees part reads as the score.
-    text: `On last season's numbers, ${base} would have made ${signedMoney(byLastSeason)}. `
-      + `${they} made ${signedMoney(soFar)}${beforeFees}. ${lesson}`,
+    // so "They made" (plus the games left out) and the Fees part read as the score.
+    text: [
+      `On last season's numbers, ${base} would have made ${signedMoney(byLastSeason)}.`,
+      `${they} made ${signedMoney(soFar)}${beforeFees}.`,
+      left,
+      LAST_SEASON_TRUTH,
+      luckLine(dates),
+    ].filter(Boolean).join(' '),
   };
 }
 
@@ -514,6 +584,138 @@ export function breakdownPrecision(values: readonly number[], score: number): Pa
     if (signedMoney(sum) === hero) return precision;
   }
   return 'exact';
+}
+
+/** The step `moneyFine` rounds an amount to: $1 under $1K, $10 under $10K, $100 in K, $10K in M. */
+export function fineStep(amount: number): number {
+  const abs = Math.abs(Math.round(amount));
+  if (abs < 1_000) return 1;
+  if (abs < 9_995) return 10;
+  if (abs < 999_950) return 100;
+  return 10_000;
+}
+
+/** An amount as `moneyFine` shows it, back in dollars: 148,449 reads "$148.4K", so 148,400. */
+export function fineValue(amount: number): number {
+  const match = /^(-?)\$([\d.]+)([KM]?)$/.exec(moneyFine(amount));
+  if (!match) return Math.round(amount);
+  const scale = match[3] === 'M' ? 1_000_000 : match[3] === 'K' ? 1_000 : 1;
+  return (match[1] ? -1 : 1) * Math.round(Number(match[2]) * scale);
+}
+
+/**
+ * The score's parts as the screen shows them (walk 6 T2-08, T4-09, T3-12):
+ * every part in the app's one money format (`moneyFine`: K from $1,000, two
+ * decimals in millions), the same as the score above them, never exact
+ * dollars and never a third decimal. When the parts, rounded each on its own,
+ * would not add up to the score as shown (to within half its last digit),
+ * the parts nearest a rounding edge round the other way (largest remainder),
+ * each by one step at most and never away from $0 or across it; an amount
+ * the format already shows exactly (fees under $10K) never moves. Returns each part's shown value, which
+ * the section totals repeat, so a part and its list's total read alike.
+ */
+export function shownParts<T extends { value: number }>(parts: readonly T[], score: number): T[] {
+  const natural = parts.map((part) => fineValue(part.value));
+  const hero = fineValue(score);
+  const tolerance = fineStep(score) / 2;
+  const shown = [...natural];
+  const gap = () => hero - shown.reduce((sum, value) => sum + value, 0);
+  const moved = new Set<number>();
+  while (Math.abs(gap()) > tolerance) {
+    const need = gap();
+    const direction = Math.sign(need);
+    let best = -1;
+    let bestMiss = Number.POSITIVE_INFINITY;
+    parts.forEach((part, index) => {
+      if (moved.has(index)) return;
+      const value = Math.round(part.value);
+      const step = fineStep(value);
+      const next = shown[index] + direction * step;
+      const miss = Math.abs(next - value);
+      // The other rounding of the same amount only, never its sign or $0.
+      if (value === 0 || shown[index] === value || miss >= step || Math.sign(next) !== Math.sign(value)) return;
+      // Only a step that brings the sum closer to the score.
+      if (Math.abs(need - direction * step) >= Math.abs(need)) return;
+      if (miss < bestMiss) {
+        best = index;
+        bestMiss = miss;
+      }
+    });
+    if (best < 0) return parts.map((part, index) => ({ ...part, value: natural[index] }));
+    shown[best] += direction * fineStep(parts[best].value);
+    moved.add(best);
+  }
+  return parts.map((part, index) => ({ ...part, value: shown[index] }));
+}
+
+/**
+ * The season card's exact final score, when rounding hides a part (walk 6
+ * T1-10: "+$4.13M" final beside "Roster +$4.13M" and "Fees -$750", so the
+ * fees seemed to vanish): "Exactly +$4,129,750, fees -$750 included." Null
+ * when every part visibly moves the score.
+ */
+export function exactFinalLine(parts: readonly BreakdownPart[], score: number): string | null {
+  const half = fineStep(score) / 2;
+  const hidden = parts.filter((part) => Math.round(part.value) !== 0 && Math.abs(part.value) < half);
+  if (hidden.length === 0) return null;
+  const named = hidden.map((part) => `${part.label.toLowerCase()} ${signedMoney(part.value)}`);
+  return `Exactly ${exactSignedMoney(score)}, ${named.join(' and ')} included.`;
+}
+
+// ---------------------------------------------------------------------------
+// Season card, welcome and first-night tip
+
+/**
+ * Spoken places (walk 6 T3-07), in the words Leaders and the notices use:
+ * "first of 5", "14th of 20", "third place" without a field size.
+ */
+export function spokenPlace(rank: number, of: number | null): string {
+  return of === null ? `${ordinalWords(rank)} place` : `${ordinalWords(rank)} of ${of}`;
+}
+
+/** Money for a spoken sentence: "+$4.95 million", "-$220.3 thousand", "$250". */
+export function spokenMoney(text: string): string {
+  return text.replace(/M$/, ' million').replace(/K$/, ' thousand');
+}
+
+/**
+ * The season card's one spoken summary (walk 6 T3-07): "Final score +$4.95
+ * million, first of 5. Roster +$4.95 million, shorts $0, closed $0, fees
+ * -$500." `parts` are the shown parts, so the words match the figures.
+ */
+export function finalSummary(
+  score: number,
+  place: { rank: number; of: number | null } | null,
+  parts: readonly BreakdownPart[] | null,
+): string {
+  const head = `Final score ${spokenMoney(signedMoney(score))}${place ? `, ${spokenPlace(place.rank, place.of)}` : ''}.`;
+  if (!parts || parts.length === 0) return head;
+  const split = parts.map((part, index) => `${index === 0 ? part.label : part.label.toLowerCase()} ${spokenMoney(signedMoney(part.value))}`);
+  return `${head} ${split.join(', ')}.`;
+}
+
+/**
+ * What a player earns, in one plain line for the welcome (walk 6 T1-02): "Each
+ * game a player's stat line becomes a dividend, $40K per net point."
+ */
+export function earnLine(dollarsPerNetPoint: number | null | undefined): string {
+  const rate = dollarsPerNetPoint && dollarsPerNetPoint > 0 ? `, ${moneyCompact(dollarsPerNetPoint)} per net point` : '';
+  return `Each game a player's stat line becomes a dividend${rate}.`;
+}
+
+/** The first-night tip stays up to a week of game nights (walk 6 T1-17). */
+export const TIP_DAYS = 7;
+
+/**
+ * Whether the first-night tip is done (walk 6 T1-17): once its Results button
+ * has been used, or once the season's first week of game nights is over
+ * (`firstGameDate`: the first night your players played). × still hides it
+ * early.
+ */
+export function tipRetired(firstGameDate: string | null, lastSettledDate: string | null, usedResults: boolean): boolean {
+  if (usedResults) return true;
+  if (!firstGameDate || !lastSettledDate) return false;
+  return dayIndex(lastSettledDate) - dayIndex(firstGameDate) >= TIP_DAYS;
 }
 
 // ---------------------------------------------------------------------------
