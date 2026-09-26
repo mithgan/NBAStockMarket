@@ -185,6 +185,11 @@ export type ButtonProps = {
    * screen-reader user can reach it and hear why it is disabled.
    */
   focusableWhenDisabled?: boolean;
+  /**
+   * A press while disabled (focusable disabled buttons only), to say why it
+   * did nothing: "Roster reopens after Oct 22."
+   */
+  onDisabledPress?: () => void;
   accessibilityLabel?: string;
   accessibilityHint?: string;
   width?: number;
@@ -223,6 +228,7 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
   variant = 'secondary',
   disabled = false,
   focusableWhenDisabled = false,
+  onDisabledPress,
   accessibilityLabel,
   accessibilityHint,
   width,
@@ -253,6 +259,7 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
       disabled={hardDisabled}
       onPress={() => {
         if (!disabled) onPress();
+        else onDisabledPress?.();
       }}
       style={(state) => {
         const { pressed } = state;

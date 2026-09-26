@@ -68,6 +68,8 @@ interface PerGameContextValue {
   openPosition: (intent: PerGameOpenPositionIntent) => Promise<boolean>;
   closePosition: (position: PerGamePosition) => Promise<boolean>;
   dismissNotice: () => void;
+  /** A short informational notice (clears itself), e.g. why a LOCKED button did nothing. */
+  notify: (text: string) => void;
   confirmLocalTransition: () => Promise<false>;
 }
 
@@ -323,6 +325,7 @@ export function PerGameProvider({
   }, [apiClient, runPositionAction]);
 
   const dismissNotice = useCallback(() => setMessage(null), []);
+  const notify = useCallback((text: string) => say(text, 'success'), [say]);
   const confirmLocalTransition = useCallback(async (): Promise<false> => false, []);
   const isGameplayReady = Boolean(bootstrap && !isLoading && !serverError);
 
@@ -349,12 +352,14 @@ export function PerGameProvider({
     openPosition,
     closePosition,
     dismissNotice,
+    notify,
     confirmLocalTransition,
   }), [
     bootstrap,
     closePosition,
     confirmLocalTransition,
     dismissNotice,
+    notify,
     isGameplayReady,
     isLoading,
     isRefreshing,

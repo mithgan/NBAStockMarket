@@ -126,7 +126,7 @@ function PositionRow({
   /** His price a game in the market today, when he is listed. */
   marketPrice: number | null;
 }) {
-  const { bootstrap, pendingActions } = usePerGame();
+  const { bootstrap, notify, pendingActions } = usePerGame();
   const actionKey = `position:${position.side}:${position.playerId}`;
   const pending = pendingActions.has(actionKey);
   const locked = pendingActions.has('account-mutation');
@@ -211,6 +211,11 @@ function PositionRow({
     now: marketPrice,
   };
   const onActionPress = () => {
+    // LOCKED answers a tap with why and when (a silent button teaches nothing).
+    if (rosterLocked) {
+      notify(`${rosterReopensLine(rosterLockDate)}. Moves pause while those games are played.`);
+      return;
+    }
     if (disabled) return;
     if (!confirming) {
       onConfirmOpen(position);
@@ -583,9 +588,12 @@ export function PerGameRosterScreen({
     <SeasonCompleteCard onPlayAgain={practice ? restartPractice : undefined} summary={season} />
   ) : null;
 
+  // The welcome and the season's result lead the screen: on a phone above the
+  // score, on a desktop at the top of the score column, which is otherwise
+  // mostly empty before the first games.
   const summary = (
     <>
-      {wide ? null : opening}
+      {opening}
       <ScoreHeader
         nextGameDate={bootstrap.game.nextGameDate}
         parts={parts}
@@ -612,7 +620,6 @@ export function PerGameRosterScreen({
   );
   const lists = (
     <>
-      {wide ? opening : null}
       <View style={styles.section}>
         <SectionHead
           count={`${longSlots.used} of ${longSlots.limit}`}

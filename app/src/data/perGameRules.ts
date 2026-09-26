@@ -24,7 +24,7 @@ function workedExample(rate: number, raw: boolean): string {
 
 /** Why prices move, and why yours does not. */
 export const PRICE_EXPLAINER =
-  "A player's price can change from game to game. The price you add him at is locked for as long as you hold him.";
+  "A player's price moves as people add and drop him and as he plays. The price you add him at is locked for as long as you hold him.";
 
 /** Why a dividend can be below zero, and who pays it. */
 export const NEGATIVE_DIVIDEND_EXPLAINER =

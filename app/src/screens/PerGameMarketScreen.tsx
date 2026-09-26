@@ -156,7 +156,7 @@ function MarketRow({
   watched: boolean;
   onToggleWatch: (playerId: string) => void;
 }) {
-  const { bootstrap, closePosition, openPosition, pendingActions } = usePerGame();
+  const { bootstrap, closePosition, notify, openPosition, pendingActions } = usePerGame();
   const { player, position, side } = row;
   const actionKey = `position:${side}:${player.playerId}`;
   const pending = pendingActions.has(actionKey);
@@ -299,6 +299,10 @@ function MarketRow({
           // second tap in the same spot does nothing.
           disabled={resting && !fullOffer}
           focusableWhenDisabled
+          // LOCKED answers a tap with why and when, as on the Roster.
+          onDisabledPress={rosterLocked
+            ? () => notify(`${rosterReopensLine(bootstrap?.ruleset.rosterLockGameDate ?? null)}. Moves pause while those games are played.`)
+            : undefined}
           label={actionWord({
             side,
             held: position !== null,
