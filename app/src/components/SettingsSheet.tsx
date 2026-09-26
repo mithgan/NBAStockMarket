@@ -38,8 +38,15 @@ function SettingsIcon({ color }: { color: string }) {
 }
 
 export function SettingsButton({ onPress }: { onPress: () => void }) {
+  // The icon's name on hover, for a mouse user who cannot tell the sliders
+  // mean Settings (walk 5 T2-21). react-native-web has no title prop.
+  const ref = useRef<View | null>(null);
+  useEffect(() => {
+    (ref.current as unknown as { setAttribute?: (name: string, value: string) => void } | null)?.setAttribute?.('title', 'Settings');
+  }, []);
   return (
     <Pressable
+      ref={ref}
       accessibilityLabel="Settings"
       accessibilityRole="button"
       onPress={onPress}

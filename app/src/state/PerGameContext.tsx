@@ -255,7 +255,7 @@ export function PerGameProvider({
     // double tap on "Short again" re-shorted the next player). A repeat on
     // the same spot is ignored for 1.2 s; a tap elsewhere (the next row's
     // Add, for a player adding several in a row) waits only a moment.
-    settleTaps(250, 1200);
+    settleTaps(250, 1200, 'list');
     let reconciliationReason: ReconciliationReason | null = null;
     const actionSnapshot = bootstrapRef.current;
     try {

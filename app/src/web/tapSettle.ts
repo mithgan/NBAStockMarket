@@ -20,6 +20,13 @@ const SPOT_RADIUS = 40;
 const POINTER_FRESH_MS = 300;
 
 let quietUntil = 0;
+/**
+ * A quiet period that only matters to things that can move with a list
+ * (rows and their buttons): a money move or an answered question reflows
+ * the list, but the frame's +1 night / +1 week stay where they are, so a
+ * press there is meant (walk 5 T2-12: +1 week 0.1 s after an Add vanished).
+ */
+let listQuietUntil = 0;
 let spot: { x: number; y: number; until: number } | null = null;
 let lastPointer: { x: number; y: number; at: number } | null = null;
 
@@ -30,7 +37,7 @@ export function notePointer(x: number, y: number): void {
   // quieted spot is released, so a later deliberate tap there (Short, then
   // Roster side, then Add in the same place) is not taken for a repeat (walk
   // 4 T3 note). Inside the short quiet it is part of the same flurry.
-  if (spot && Date.now() >= quietUntil && Math.hypot(x - spot.x, y - spot.y) > SPOT_RADIUS) spot = null;
+  if (spot && Date.now() >= Math.max(quietUntil, listQuietUntil) && Math.hypot(x - spot.x, y - spot.y) > SPOT_RADIUS) spot = null;
 }
 
 /**
@@ -67,17 +74,23 @@ function currentPointer(): { x: number; y: number } | null {
  * Start (or extend) the quiet period. With `sameSpotMs`, a pointer press also
  * quiets the spot it was made on for that long.
  */
-export function settleTaps(ms = SETTLE_MS, sameSpotMs = 0): void {
+export function settleTaps(ms = SETTLE_MS, sameSpotMs = 0, scope: 'all' | 'list' = 'all'): void {
   const now = Date.now();
-  quietUntil = Math.max(quietUntil, now + ms);
+  if (scope === 'all') quietUntil = Math.max(quietUntil, now + ms);
+  else listQuietUntil = Math.max(listQuietUntil, now + ms);
   const at = sameSpotMs > 0 ? currentPointer() : null;
   if (at) spot = { x: at.x, y: at.y, until: now + sameSpotMs };
 }
 
-/** True while the quiet period lasts, or while a repeat lands on a quieted spot. */
-export function tapsSettling(): boolean {
+/**
+ * True while the quiet period lasts, or while a repeat lands on a quieted
+ * spot. A `steady` control (it never moves when a list reflows) skips the
+ * list-only quiet.
+ */
+export function tapsSettling(steady = false): boolean {
   const now = Date.now();
   if (now < quietUntil) return true;
+  if (!steady && now < listQuietUntil) return true;
   if (!spot || now >= spot.until) return false;
   const at = currentPointer();
   return at !== null && Math.hypot(at.x - spot.x, at.y - spot.y) <= SPOT_RADIUS;

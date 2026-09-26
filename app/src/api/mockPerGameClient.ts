@@ -361,18 +361,21 @@ export class MockPerGameApiClient {
    * A believable NBA schedule for one player (walk 4 T1-08: four nights in a
    * row for one, a single game in ten days for another). Never three nights
    * running (after a back-to-back he rests), never more than three days
-   * without a game, otherwise a little over half of the game nights. About
-   * three or four games a week, like a real team. One roll every night, so
-   * a pinned seed stays reproducible.
+   * without a game, otherwise about half of the game nights, and never more
+   * than 82 in a season: three games a week or so, like a real team. One
+   * roll every night, so a pinned seed stays reproducible.
    */
   private playsTonight(playerId: string, date: string): boolean {
     const roll = this.rng();
+    // An NBA team plays 82 games; nobody plays more (walk 5 T2-17 counted
+    // 84-90 for players held all season).
+    if ((this.trendsByPlayer[playerId]?.length ?? 0) >= 82) return false;
     const recent = this.recentGamesByPlayer.get(playerId) ?? [];
     const last = recent[recent.length - 1];
     const before = recent[recent.length - 2];
     const backToBack = last !== undefined && before !== undefined
       && addDays(before, 1) === last && addDays(last, 1) === date;
-    const plays = backToBack ? false : last === undefined || addDays(last, 3) <= date ? true : roll < 0.62;
+    const plays = backToBack ? false : last === undefined || addDays(last, 3) <= date ? true : roll < 0.54;
     if (plays) this.recentGamesByPlayer.set(playerId, [...recent.slice(-1), date]);
     return plays;
   }

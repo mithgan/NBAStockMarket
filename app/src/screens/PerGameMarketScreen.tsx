@@ -1122,13 +1122,25 @@ export function PerGameMarketScreen({
           {sortToggle}
         </View>
       )}
-      {reversed && (!folded || controlsOpen) ? (
+      {/* On a tall desktop the unusual-order note takes the explainer's own
+          slot, which always keeps a button's height, so pressing a column
+          header again never pushes the table down under the pointer (walk 5
+          T2-02: the header moved 44px and a third click missed). */}
+      {wide && roomy ? (
+        <View style={[styles.explainerWide, styles.explainerSlot]}>
+          {reversed ? (
+            <View style={styles.flipNote}>
+              <Text maxFontSizeMultiplier={1.4} style={styles.flipText}>{flippedSortNote(sort).text}</Text>
+              <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="quiet" />
+            </View>
+          ) : sideExplainer}
+        </View>
+      ) : reversed && (!folded || controlsOpen) ? (
         <View style={[styles.flipNote, wide && styles.flipNoteWide]}>
           <Text maxFontSizeMultiplier={1.4} style={styles.flipText}>{flippedSortNote(sort).text}</Text>
           <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="quiet" />
         </View>
       ) : null}
-      {wide && roomy ? <View style={styles.explainerWide}>{sideExplainer}</View> : null}
       {wide ? (
         <MarketColumnHeader
           // No button column at season end, so the labels line up with quiet rows.
@@ -1431,6 +1443,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingBottom: space.md,
     marginTop: -space.xs,
+  },
+  explainerSlot: {
+    // A quiet button's height, whichever it holds (sentence or order note).
+    minHeight: control.height + space.md,
+    justifyContent: 'center',
   },
   searchWide: {
     flexGrow: 1,

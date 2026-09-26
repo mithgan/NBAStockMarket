@@ -198,6 +198,9 @@ export function PerGameStatusStrip() {
     <Text key="lead" maxFontSizeMultiplier={1.5} style={[styles.lead, tight && styles.tight]}>
       <Text style={styles.practiceWord}>{PRACTICE_LABEL}</Text>
       {settledDate && (!named || arrangement === 'pair') ? `${dot}${named ? resultDate : settledDate}` : null}
+      {/* A wide row has room to say where the season is today, not only which
+          nights the figure beside it covers (walk 5 T2-07). */}
+      {settledDate && named && arrangement === 'wide' ? `${dot}${settledDate}` : null}
       {arrangement === 'wide' && dayText ? <Text style={styles.leadMuted}>{`${dot}${dayText}`}</Text> : null}
       {arrangement === 'pair' && named ? (
         // The words at the facts' size, so "Oct 22: none of your players

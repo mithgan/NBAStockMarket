@@ -200,6 +200,11 @@ export type ButtonProps = {
    * "not available now; press to learn why" (LOCKED, FULL; walk 4 T2-03).
    */
   done?: boolean;
+  /**
+   * A control that never moves when a list reflows (the frame's +1 night):
+   * the quiet after a move in a list does not swallow its press.
+   */
+  steady?: boolean;
   accessibilityLabel?: string;
   accessibilityHint?: string;
   width?: number;
@@ -240,6 +245,7 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
   focusableWhenDisabled = false,
   onDisabledPress,
   done = false,
+  steady = false,
   accessibilityLabel,
   accessibilityHint,
   width,
@@ -270,7 +276,7 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
       disabled={hardDisabled}
       onPress={() => {
         // The second tap of a double tap on a confirm that just folded away.
-        if (tapsSettling()) return;
+        if (tapsSettling(steady)) return;
         if (!disabled) onPress();
         else onDisabledPress?.();
       }}
@@ -341,12 +347,20 @@ const CONFIRM_TAP_GUARD_MS = 400;
 // for a moment the next taps are ignored (see web/tapSettle).
 export { settleTaps, tapsSettling } from '../web/tapSettle';
 
-function useTapGuard() {
+/**
+ * The costly choice sits away from where the opening tap landed, so a press
+ * on it is aimed; it only ignores a press in the first instant (a stray
+ * second finger). A quick, deliberate click at 0.2-0.4 s used to vanish
+ * (walk 5 T2-20).
+ */
+const CONFIRM_AIMED_GUARD_MS = 150;
+
+function useTapGuard(ms = CONFIRM_TAP_GUARD_MS) {
   const openedAt = useRef(Date.now());
   return useCallback((fn: () => void) => () => {
-    if (Date.now() - openedAt.current < CONFIRM_TAP_GUARD_MS) return;
+    if (Date.now() - openedAt.current < ms) return;
     fn();
-  }, []);
+  }, [ms]);
 }
 
 function focusNode(ref: { current: unknown }) {
@@ -387,7 +401,10 @@ export function ConfirmStrip({
   onCancel: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
+  // Keep sits where Drop was: the second tap of a double tap lands there
+  // and is ignored, so the question stays open. The costly button is aimed.
   const guard = useTapGuard();
+  const aimed = useTapGuard(CONFIRM_AIMED_GUARD_MS);
   const stripRef = useRef<View>(null);
   const keepRef = useRef<View>(null);
   useEffect(() => {
@@ -447,8 +464,8 @@ export function ConfirmStrip({
         <Button
           accessibilityLabel={confirmAccessibilityLabel}
           label={confirmLabel}
-          onPress={guard(() => {
-            settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS);
+          onPress={aimed(() => {
+            settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list');
             onConfirm();
           })}
           variant="danger"
@@ -457,7 +474,7 @@ export function ConfirmStrip({
           ref={keepRef}
           label={cancelLabel}
           onPress={guard(() => {
-            settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS);
+            settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list');
             onCancel();
           })}
           variant="secondary"
@@ -537,6 +554,7 @@ function ConfirmDialogBody({
   confirmTone: 'danger' | 'neutral';
 }) {
   const guard = useTapGuard();
+  const aimed = useTapGuard(CONFIRM_AIMED_GUARD_MS);
   const cancelRef = useRef<View>(null);
   useEffect(() => {
     focusNode(cancelRef);
@@ -560,7 +578,7 @@ function ConfirmDialogBody({
           <Text key={line} accessibilityElementsHidden aria-hidden importantForAccessibility="no" style={styles.dialogLine}>{line}</Text>
         ))}
         <View style={styles.dialogButtons}>
-          <Button label={confirmLabel} onPress={guard(onConfirm)} variant={confirmTone === 'danger' ? 'danger' : 'secondary'} />
+          <Button label={confirmLabel} onPress={aimed(onConfirm)} variant={confirmTone === 'danger' ? 'danger' : 'secondary'} />
           <Button ref={cancelRef} label={cancelLabel} onPress={guard(onCancel)} variant="primary" />
         </View>
       </View>

@@ -530,8 +530,15 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   useEffect(() => () => {
     if (busyLineTimer.current) clearTimeout(busyLineTimer.current);
   }, []);
+  // A press while your last move is still being saved (an Add a moment
+  // ago) is not dropped: it waits, and plays once the move is in (walk 5
+  // T2-12: +1 week 0.1 s after an Add did nothing and said nothing).
+  const queuedStep = useRef<'night' | 'week' | null>(null);
   const sayStillPlaying = (pressed: 'night' | 'week') => {
-    if (!playing) return;
+    if (!playing) {
+      if (pendingActions.size > 0) queuedStep.current = pressed;
+      return;
+    }
     setPressedWhileBusy(true);
     const line = stillPlayingLine(playing.date, pressed);
     // The same words twice still count as news for the live region.
@@ -602,6 +609,13 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     advancedRef.current = false;
     focusLater(restartRef, 150);
   }, [complete]);
+  // Play a press that waited for a move to be saved.
+  useEffect(() => {
+    if (pendingActions.size > 0 || !queuedStep.current) return;
+    const step = queuedStep.current;
+    queuedStep.current = null;
+    advanceRef.current?.(step);
+  }, [pendingActions.size]);
   if (!bootstrap || !isMockActive() || typeof window === 'undefined') return null;
 
   const layout = chromeLayout(width, fontScale);
@@ -700,6 +714,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         focusableWhenDisabled={!progress.complete}
         label={nightLabel}
         onDisabledPress={() => sayStillPlaying('night')}
+        steady
         onPress={() => {
           if (asksFirst) askQuestion('empty-night');
           else void advance('night');
@@ -716,6 +731,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         focusableWhenDisabled={!progress.complete}
         label={playingWeek ? busyLabel(false) : stackLabels ? '+1\nweek' : '+1 week'}
         onDisabledPress={() => sayStillPlaying('week')}
+        steady
         onPress={() => {
           if (asksFirst) askQuestion('empty-week');
           else void advance('week');
@@ -742,8 +758,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         // say it (walk 3 T1-11, T4-04).
         label={progress.complete ? 'Play another season' : 'Restart'}
         onPress={() => askQuestion(progress.complete ? 'play-again' : 'restart')}
-        style={[styles.quiet, narrow && styles.quietNarrow]}
-        variant="quiet"
+        // At season end it is the way on, so it looks like one (it read as a
+        // disabled grey slab on Results and Leaders; walk 5 T2-09).
+        style={progress.complete ? undefined : [styles.quiet, narrow && styles.quietNarrow]}
+        variant={progress.complete ? 'primary' : 'quiet'}
       />
       {/* Exit only where there is a live market to go to (walk 4 T2-10). */}
       {liveMarketToExitTo() ? (
