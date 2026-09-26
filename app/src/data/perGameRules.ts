@@ -52,6 +52,8 @@ export function perGameRulesPresentation(rules: PerGameRuleset) {
       { term: 'Dividend', meaning: 'What he pays out for one game: his net points times the dividend rate. It can be below zero.' },
       { term: 'Profit', meaning: 'Dividend minus price for a roster spot; price minus dividend for a short.' },
       { term: 'Short', meaning: 'A bet that he comes in under his price. It lasts a set number of days.' },
+      { term: 'Dividend last season', meaning: 'What he paid out a game last season: the market\'s best guide to what he is worth.' },
+      { term: 'Value', meaning: "Last season's dividend minus his price today. Green means he paid out more than he costs now." },
       { term: 'Net points', meaning: 'His box score in one number. Scoring and hustle add; turnovers, misses and minutes take away.' },
       { term: 'Roster lock', meaning: "Some nights, moves pause while that night's games are played." },
     ],
