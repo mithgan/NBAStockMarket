@@ -27,7 +27,43 @@ let quietUntil = 0;
  * press there is meant (walk 5 T2-12: +1 week 0.1 s after an Add vanished).
  */
 let listQuietUntil = 0;
-let spot: { x: number; y: number; until: number; at: number; holdThroughScroll: boolean } | null = null;
+/** A scroll position under a quieted spot (`el` null: the page itself). */
+type ScrollMark = { el: Element | null; top: number; left: number };
+let spot: {
+  x: number;
+  y: number;
+  until: number;
+  at: number;
+  holdThroughScroll: boolean;
+  /** Where the lists under the spot stood: a list moved since is a scroll. */
+  marks: ScrollMark[];
+} | null = null;
+
+/** The scroll positions of everything under a point that can scroll. */
+function scrollMarks(x: number, y: number): ScrollMark[] {
+  if (typeof document === 'undefined' || typeof document.elementFromPoint !== 'function') return [];
+  const marks: ScrollMark[] = [{ el: null, top: window.scrollY ?? 0, left: window.scrollX ?? 0 }];
+  for (let el = document.elementFromPoint(x, y); el; el = el.parentElement) {
+    if (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) {
+      marks.push({ el, top: el.scrollTop, left: el.scrollLeft });
+    }
+  }
+  return marks;
+}
+
+function markNow(mark: ScrollMark): ScrollMark {
+  return mark.el
+    ? { el: mark.el, top: mark.el.scrollTop, left: mark.el.scrollLeft }
+    : { el: null, top: window.scrollY ?? 0, left: window.scrollX ?? 0 };
+}
+
+function marksMoved(marks: ScrollMark[]): boolean {
+  return marks.some((mark) => {
+    if (mark.el && !mark.el.isConnected) return false;
+    const now = markNow(mark);
+    return Math.abs(now.top - mark.top) > 1 || Math.abs(now.left - mark.left) > 1;
+  });
+}
 /**
  * A scroll this long after a tap moved the page on purpose (a screen reader,
  * switch access or the app's own scroll into view for the next control): the
@@ -91,7 +127,10 @@ export function noteScrollGesture(): void {
  * spot of the press that switched screens (walk 8 T4-01).
  */
 export function notePageScroll(): void {
-  if (spot && !spot.holdThroughScroll && Date.now() - spot.at > SCROLL_RELEASES_AFTER_MS) spot = null;
+  if (!spot || spot.holdThroughScroll) return;
+  if (Date.now() - spot.at > SCROLL_RELEASES_AFTER_MS) spot = null;
+  // The tap's own scroll is where the lists stand now.
+  else spot.marks = spot.marks.map(markNow);
 }
 
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
@@ -143,7 +182,7 @@ export function settleTaps(ms = SETTLE_MS, sameSpotMs = 0, scope: 'all' | 'list'
   if (scope === 'all') quietUntil = Math.max(quietUntil, now + ms);
   else listQuietUntil = Math.max(listQuietUntil, now + ms);
   const at = sameSpotMs > 0 ? currentPointer() : null;
-  if (at) spot = { x: at.x, y: at.y, until: now + sameSpotMs, at: now, holdThroughScroll };
+  if (at) spot = { x: at.x, y: at.y, until: now + sameSpotMs, at: now, holdThroughScroll, marks: scrollMarks(at.x, at.y) };
 }
 
 /**
@@ -156,6 +195,14 @@ export function tapsSettling(steady = false): boolean {
   if (now < quietUntil) return true;
   if (!steady && now < listQuietUntil) return true;
   if (!spot || now >= spot.until) return false;
+  // A list that moved a while after the tap was scrolled on purpose, even
+  // if the browser has not said so yet: its scroll event comes a frame
+  // late, after a click that scrolled its own button into view (voice
+  // control, automation: the next Add was taken for a repeat).
+  if (!spot.holdThroughScroll && now - spot.at > SCROLL_RELEASES_AFTER_MS && marksMoved(spot.marks)) {
+    spot = null;
+    return false;
+  }
   const at = currentPointer();
   return at !== null && Math.hypot(at.x - spot.x, at.y - spot.y) <= SPOT_RADIUS;
 }
