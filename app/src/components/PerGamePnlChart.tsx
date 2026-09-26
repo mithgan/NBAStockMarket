@@ -3,11 +3,12 @@ import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle, ClipPath, Defs, G, Line, Path, Rect } from 'react-native-svg';
 
 import type { PerGameLedgerEntry } from '../api/contracts';
-import { humanDay, signedMoney } from '../copy/terms';
+import { humanDay } from '../copy/terms';
 import {
   axisLabelIndexes,
-  axisMoney,
+  axisMark,
   chartSummary,
+  formatAt,
   hasNights,
   nearestIndex,
   nightlySeries,
@@ -18,11 +19,19 @@ import {
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { buildPnlSeries, pnlChartDomain } from '../state/perGameState';
 import { colors, fonts, space, type, weight } from '../theme';
-import { headingLevel, Label, Money } from '../ui/kit';
+import { headingLevel, Label } from '../ui/kit';
+import { FineMoney } from './roster/FineMoney';
 import { usePlotPointer, type PlotIntent } from './roster/usePlotPointer';
 
-/** Room at the left of the plot for the value marks: $0, the high and the low. */
+/**
+ * Room at the left of the plot for the value marks: $0, the high and the low.
+ * The least room: the gutter grows to the widest mark as drawn, so wider text
+ * (a user's text spacing, a large font) never cuts "-$334K" to "-$334"
+ * (walk 7 T3-06).
+ */
 const GUTTER = 52;
+/** Clear air between a value mark's words and the plot. */
+const GUTTER_GAP = 6;
 const INSET_RIGHT = 6;
 const INSET_Y = 8;
 const AXIS_LABEL_WIDTH = 64;
@@ -52,17 +61,30 @@ export function PerGamePnlChart({
   const domain = useMemo(() => pnlChartDomain(series), [series]);
   const [width, setWidth] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
+  // The value marks' drawn widths, by kind: the gutter fits the widest.
+  const [markWidths, setMarkWidths] = useState<Record<string, number>>({});
+  const onMarkLayout = useCallback((kind: string, room: number) => {
+    setMarkWidths((current) => (Math.abs((current[kind] ?? 0) - room) < 0.5 ? current : { ...current, [kind]: room }));
+  }, []);
   const reducedMotion = useReducedMotion();
   const clipId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
 
-  const span = Math.max(width - GUTTER - INSET_RIGHT, 0);
-  const xs = useMemo(() => series.map((_, index) => (
-    GUTTER + (index / Math.max(series.length - 1, 1)) * span
-  )), [series, span]);
   const yOf = useCallback((value: number) => (
     INSET_Y + ((domain.maximum - value) / (domain.maximum - domain.minimum)) * (plotHeight - INSET_Y * 2)
   ), [domain.maximum, domain.minimum, plotHeight]);
   const zeroY = INSET_Y + domain.zeroRatio * (plotHeight - INSET_Y * 2);
+  const ticks = useMemo(
+    () => valueTicks(series.map((night) => night.cumulativePnl), yOf, { height: plotHeight }),
+    [plotHeight, series, yOf],
+  );
+  // Only the marks drawn now count: a low that is gone no longer widens it.
+  const gutter = Math.max(GUTTER, ...ticks.map((tick) => (
+    markWidths[tick.kind] ? Math.ceil(markWidths[tick.kind]) + GUTTER_GAP : 0
+  )));
+  const span = Math.max(width - gutter - INSET_RIGHT, 0);
+  const xs = useMemo(() => series.map((_, index) => (
+    gutter + (index / Math.max(series.length - 1, 1)) * span
+  )), [gutter, series, span]);
   const linePath = series.map((point, index) => (
     `${index === 0 ? 'M' : 'L'} ${xs[index].toFixed(1)} ${yOf(point.cumulativePnl).toFixed(1)}`
   )).join(' ');
@@ -154,9 +176,8 @@ export function PerGamePnlChart({
   const shownIndex = readIndex ?? last;
   const end = series[last];
   const endUp = end.cumulativePnl >= 0;
-  const ticks = valueTicks(series.map((night) => night.cumulativePnl), yOf, { height: plotHeight });
   const axisLabels = placeAxisLabels(xs, axisLabelIndexes(series, width), width, AXIS_LABEL_WIDTH);
-  const revealX = GUTTER + revealed * span + 4;
+  const revealX = gutter + revealed * span + 4;
 
   return (
     <View style={styles.container}>
@@ -219,7 +240,7 @@ export function PerGamePnlChart({
                 stroke={tick.kind === 'zero' ? colors.borderStrong : colors.border}
                 strokeDasharray={tick.kind === 'zero' ? '4 4' : '1 4'}
                 strokeWidth={1}
-                x1={GUTTER - 2}
+                x1={gutter - 2}
                 x2={width}
                 y1={tick.y}
                 y2={tick.y}
@@ -261,9 +282,10 @@ export function PerGamePnlChart({
           <Text
             key={tick.kind}
             maxFontSizeMultiplier={1.3}
+            onLayout={(event) => onMarkLayout(tick.kind, event.nativeEvent.layout.width)}
             style={[styles.tickLabel, { top: Math.min(Math.max(tick.labelY - 7, 0), plotHeight - 14) }]}
           >
-            {tick.kind === 'zero' ? '$0' : axisMoney(tick.value)}
+            {tick.kind === 'zero' ? '$0' : axisMark(tick.value)}
           </Text>
         ))}
       </View>
@@ -309,10 +331,10 @@ function readingText(point: NightPoint, previous: NightPoint | undefined): strin
   if (point.kind === 'start') return 'Start: everyone begins at $0';
   const { when, fees } = readingParts(point, previous);
   if (point.kind !== 'night') {
-    return `${when}: fees ${signedMoney(point.change)}, score ${signedMoney(point.cumulativePnl)}`;
+    return `${when}: fees ${fineSigned(point.change)}, score ${fineSigned(point.cumulativePnl)}`;
   }
-  const feeText = fees !== 0 ? `, fees ${signedMoney(fees)}` : '';
-  return `${when}: that night ${signedMoney(point.change)}${feeText}, score ${signedMoney(point.cumulativePnl)}`;
+  const feeText = fees !== 0 ? `, fees ${fineSigned(fees)}` : '';
+  return `${when}: that night ${fineSigned(point.change)}${feeText}, score ${fineSigned(point.cumulativePnl)}`;
 }
 
 /** The heading while a night is being read: its date, then each figure after its label. */
@@ -329,7 +351,7 @@ function Reading({ point, previous }: { point: NightPoint; previous: NightPoint 
   const figure = (caption: string, value: number) => (
     <View key={caption} style={styles.readingPair}>
       <Text style={styles.readingCaption}>{caption}</Text>
-      <Money size="body" value={value} />
+      <FineMoney size="body" value={value} />
     </View>
   );
   return (
@@ -342,6 +364,11 @@ function Reading({ point, previous }: { point: NightPoint; previous: NightPoint 
       </View>
     </View>
   );
+}
+
+/** A reading's figures in the Roster's one millions precision (walk 7 T4-14). */
+function fineSigned(amount: number): string {
+  return formatAt(amount, 'fine', true);
 }
 
 const styles = StyleSheet.create({
@@ -410,10 +437,11 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
   },
+  // Its own width, on one line: the gutter is sized to it, never the reverse.
   tickLabel: {
     position: 'absolute',
     left: 0,
-    width: GUTTER - 4,
+    ...({ whiteSpace: 'nowrap' } as object),
     color: colors.faint,
     fontFamily: fonts.display,
     fontSize: type.label,

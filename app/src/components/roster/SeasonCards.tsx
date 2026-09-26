@@ -1,11 +1,13 @@
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { exactMoney, humanDate, signedMoneyFine } from '../../copy/terms';
+import { exactMoney, humanDate } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
 import type { SeasonSummary } from '../../data/perGameMetrics';
-import { finalSummary, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
+import { finalSummary, formatAt, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
 import { colors, control, fonts, headingStyle, radius, space, type, weight } from '../../theme';
-import { Button, headingLevel, Label, Money, tapsSettling } from '../../ui/kit';
+import { Button, headingLevel, Label, tapsSettling, visuallyHidden } from '../../ui/kit';
+import { FineMoney } from './FineMoney';
 import { ScoreParts } from './ScoreHeader';
 
 /** The welcome's heading: a new practice season moves keyboard focus here. */
@@ -85,38 +87,60 @@ export function WelcomeCard({
 /**
  * How to read your first night (walk 5 T1-N4), in the welcome's place once
  * your first games have settled: the one tag a new fan meets everywhere, and
- * where each game's math is. One line and a way to Results; × hides it, and
- * it goes by itself after the next night.
+ * where each game's math is. The words, Results and × share one line, so the
+ * tip stays slim and your players start higher (walk 7 T1-10). At 400% zoom
+ * (about 100px wide) Results takes the line under the words, and × stays
+ * beside them, never on a row of its own above them (walk 7 T3-09). × hides
+ * it, and it goes by itself after the first week.
  */
-export function FirstNightTip({ onOpenResults, onHide, inline = false }: {
+export function FirstNightTip({ onOpenResults, onHide }: {
   onOpenResults: () => void;
   onHide: () => void;
-  /** A short window (a phone on its side): Results at the end of the words' line, not on a line of its own. */
-  inline?: boolean;
 }) {
   const tiny = useWindowDimensions().width < 200;
   const results = <Button accessibilityLabel="Results: each game's math" label="Results" onPress={onOpenResults} />;
-  const beside = inline && !tiny;
   return (
     <View style={[styles.band, styles.tipBand, tiny && styles.bandTiny]}>
-      <View style={[styles.headRow, beside && styles.tipRowInline, tiny && styles.headRowTiny]}>
+      <View style={[styles.headRow, styles.tipRowInline]}>
         <Text style={[styles.headText, styles.tipText]}>
           <Text style={styles.tipTag}>PAYING OFF</Text>
           {" means his dividends beat your price so far. Results shows each game's math."}
         </Text>
-        {beside ? results : null}
+        {tiny ? null : results}
         <Pressable
           accessibilityLabel="Hide this tip"
           accessibilityRole="button"
           hitSlop={4}
           onPress={onHide}
-          style={({ pressed }) => [styles.hide, tiny && styles.hideTiny, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.hide, styles.tipHide, pressed && styles.pressed]}
         >
           <Text style={styles.hideGlyph}>×</Text>
         </Pressable>
       </View>
-      {beside ? null : <View style={[styles.tipActions, tiny && styles.actionsTiny]}>{results}</View>}
+      {tiny ? <View style={[styles.tipActions, styles.actionsTiny]}>{results}</View> : null}
     </View>
+  );
+}
+
+/**
+ * Drawn figures heard as one sentence: the sentence is visually hidden text,
+ * which screen readers reach in reading mode as well as by focus, and the
+ * drawn pieces are hidden from them (the score block's pattern). A name on a
+ * role-less box is not read in reading mode, so the pieces were heard instead
+ * ("+$4.95M", "number 1 of 5"; walk 7 T3-10). Without `text` the pieces are
+ * read as drawn.
+ */
+function SpokenAs({ text, style, children }: {
+  text: string | null;
+  style?: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  if (text === null) return <View style={style}>{children}</View>;
+  return (
+    <>
+      <Text style={visuallyHidden}>{text}</Text>
+      <View aria-hidden style={style}>{children}</View>
+    </>
   );
 }
 
@@ -168,13 +192,13 @@ export function SeasonCompleteCard({
   const place = summary.rank !== null && summary.of !== null ? `#${summary.rank} of ${summary.of}` : null;
   const split = parts && parts.length > 0 ? parts : null;
   const players = [
-    summary.best ? { label: 'Best', name: summary.best.name, total: signedMoneyFine(summary.best.total) } : null,
-    summary.worst ? { label: 'Worst', name: summary.worst.name, total: signedMoneyFine(summary.worst.total) } : null,
+    summary.best ? { label: 'Best', name: summary.best.name, total: fineSigned(summary.best.total) } : null,
+    summary.worst ? { label: 'Worst', name: summary.worst.name, total: fineSigned(summary.worst.total) } : null,
   ].filter((line): line is { label: string; name: string; total: string } => line !== null);
   // Read the way Season so far read it all season: moves, then fees (unless
   // the split above already names the fees).
   // What the moves were and what they cost (walk 5 T1-13), not a bare count.
-  const moves = movesText ?? (`${summary.moves}${split ? '' : ` · fees ${signedMoneyFine(fees)}`}`
+  const moves = movesText ?? (`${summary.moves}${split ? '' : ` · fees ${fineSigned(fees)}`}`
     + (summary.shortsMade > 0 ? ` · ${summary.shortsMade} ${summary.shortsMade === 1 ? 'short' : 'shorts'}` : ''));
   const spokenMoves = `Moves ${moves.replace(/ · /g, ', ')}`;
   // One spoken summary, like the score block's in season, with places in
@@ -182,27 +206,28 @@ export function SeasonCompleteCard({
   // of 5. Roster +$4.95M, shorts $0, closed $0, fees -$500." The drawn split
   // repeats it, so it is hidden from screen readers.
   const spoken = finalSummary(summary.finalScore, place, split);
+  // Drawn as a label and its figures; heard as one sentence (a name on a
+  // role-less box is skipped by screen readers in reading mode, walk 7 T3-10).
   const movesLine = (
-    <View
-      accessibilityLabel={onOpenPlayer ? spokenMoves : undefined}
-      accessible={onOpenPlayer ? true : undefined}
-      style={styles.finalLine}
-    >
+    <SpokenAs style={[styles.finalLine, onOpenPlayer && styles.movesLine]} text={onOpenPlayer ? spokenMoves : null}>
       <Text style={styles.finalLabel}>Moves</Text>
       <Text style={styles.finalText}>{moves}</Text>
-    </View>
+    </SpokenAs>
   );
   return (
     <View style={[styles.band, styles.finalBand]}>
       <Label tone="gold">Season complete</Label>
       <Text accessibilityRole="header" {...headingLevel(2)} style={styles.title}>Your final result</Text>
-      <View accessible accessibilityLabel={spoken} style={styles.finalFacts}>
+      {/* The one sentence is text screen readers reach in reading mode, and
+          the drawn figures are hidden from them, as in the score block
+          (walk 7 T3-10): never "+$4.95M", "number 1 of 5" as loose pieces. */}
+      <SpokenAs style={styles.finalFacts} text={spoken}>
         <View style={styles.finalScoreRow}>
-          <Money size="display" value={summary.finalScore} />
+          <FineMoney size="display" value={summary.finalScore} />
           {/* "#2 of 5" never breaks across lines (walk 6 T1-10a). */}
           {place ? <Text style={styles.place}>{keepTogether(place)}</Text> : null}
         </View>
-      </View>
+      </SpokenAs>
       {split || valueLine ? (
         <View style={styles.split}>
           {split ? <ScoreParts hidden parts={split} precision={precision} title="Final score" variant={variant} /> : null}
@@ -212,10 +237,9 @@ export function SeasonCompleteCard({
       ) : null}
       {onOpenPlayer ? null : (
         // Without profiles to open, Best, Worst and Moves are read as one group.
-        <View
-          accessible
-          accessibilityLabel={[...players.map((line) => `${line.label} ${line.name} ${line.total}`), spokenMoves].join(', ')}
+        <SpokenAs
           style={styles.finalFacts}
+          text={[...players.map((line) => `${line.label} ${line.name} ${line.total}`), spokenMoves].join(', ')}
         >
           {players.map((line) => (
             <View key={line.label} style={styles.finalLine}>
@@ -224,7 +248,7 @@ export function SeasonCompleteCard({
             </View>
           ))}
           {movesLine}
-        </View>
+        </SpokenAs>
       )}
       {onOpenPlayer ? (
         <>
@@ -249,7 +273,9 @@ export function SeasonCompleteCard({
               <Text style={styles.playerOpen}>›</Text>
             </Pressable>
           ))}
-          <View style={styles.finalFacts}>{movesLine}</View>
+          {/* Moves sits on the rows' own spacing: Best, Worst and Moves read
+              as one even list (walk 7 T2-09). */}
+          {movesLine}
         </>
       ) : null}
       {onPlayAgain ? (
@@ -272,10 +298,10 @@ export function SeasonSoFar({ summary, fees, movesText }: {
   movesText?: string;
 }) {
   const lines = [
-    summary.best ? { label: 'Best so far', text: `${summary.best.name} ${signedMoneyFine(summary.best.total)}` } : null,
-    summary.worst ? { label: 'Worst so far', text: `${summary.worst.name} ${signedMoneyFine(summary.worst.total)}` } : null,
+    summary.best ? { label: 'Best so far', text: `${summary.best.name} ${fineSigned(summary.best.total)}` } : null,
+    summary.worst ? { label: 'Worst so far', text: `${summary.worst.name} ${fineSigned(summary.worst.total)}` } : null,
     summary.moves > 0
-      ? { label: 'Moves', text: movesText ?? `${summary.moves} · fees ${signedMoneyFine(fees)}` }
+      ? { label: 'Moves', text: movesText ?? `${summary.moves} · fees ${fineSigned(fees)}` }
       : null,
   ].filter((line): line is { label: string; text: string } => line !== null);
   if (lines.length === 0) return null;
@@ -284,18 +310,22 @@ export function SeasonSoFar({ summary, fees, movesText }: {
       {/* Drawn in capitals, named in sentence case (walk 6 T3-09). */}
       <Text accessibilityLabel="Season so far" accessibilityRole="header" {...headingLevel(2)} style={styles.soFarTitle}>Season so far</Text>
       {lines.map((line) => (
-        <View
+        <SpokenAs
           key={line.label}
-          accessible
-          accessibilityLabel={`${line.label}: ${line.text.replace(/ · /g, ', ')}`}
           style={styles.finalLine}
+          text={`${line.label}: ${line.text.replace(/ · /g, ', ')}`}
         >
           <Text style={styles.finalLabel}>{line.label}</Text>
           <Text style={styles.finalText}>{line.text}</Text>
-        </View>
+        </SpokenAs>
       ))}
     </View>
   );
+}
+
+/** Signed money in the Roster's one millions precision ("+$5.50M" beside "+$4.95M", walk 7 T4-14). */
+function fineSigned(amount: number): string {
+  return formatAt(amount, 'fine', true);
 }
 
 const styles = StyleSheet.create({
@@ -383,6 +413,10 @@ const styles = StyleSheet.create({
   tipRowInline: {
     alignItems: 'center',
   },
+  // Centred on the words, so it needs none of the corner's pull-up.
+  tipHide: {
+    marginTop: 0,
+  },
   tipActions: {
     marginTop: space.xs,
     flexDirection: 'row',
@@ -454,6 +488,13 @@ const styles = StyleSheet.create({
     marginHorizontal: -space.sm,
     paddingHorizontal: space.sm,
     borderRadius: radius.sm,
+  },
+  // Moves under Best and Worst: the same row height, so the three sit on
+  // one even rhythm (walk 7 T2-09).
+  movesLine: {
+    minHeight: control.height,
+    flexWrap: 'nowrap',
+    alignItems: 'center',
   },
   playerFacts: {
     flex: 1,

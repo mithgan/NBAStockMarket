@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { exactMoney, gamesCount, unbrokenName } from '../../copy/terms';
+import { gamesCount, unbrokenName } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
-import { formatAt, type ClosedRow, type PartPrecision } from '../../data/rosterView';
+import { feesDetail, formatAt, holdDots, type ClosedRow, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { Button } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -58,7 +58,8 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
             <View accessible accessibilityLabel={label} style={styles.facts}>
               <View style={styles.copy}>
                 <Text style={styles.name}>{unbrokenName(row.name)}</Text>
-                <Text style={styles.detail}>{bindDates(row.how)} · {keepTogether(gamesCount(row.games))}</Text>
+                {/* A wrap never leaves a "·" at a line's end (walk 7 T1-12). */}
+                <Text style={styles.detail}>{holdDots(`${bindDates(row.how)} · ${keepTogether(gamesCount(row.games))}`)}</Text>
               </View>
               <View style={[styles.money, { marginRight: table ? 0 : totalInset }]}>
                 <FineMoney precision={precision} value={row.total} />
@@ -92,33 +93,30 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
  * including the players dropped before they played (whose only effect on the
  * score was their fees).
  */
-export function FeesLine({ fees, moves, feeEach = 0, unplayed = 0, unplayedShorts = 0, totalInset = 0, precision = 'fine' }: {
+export function FeesLine({ fees, moves, feeEach = 0, unplayed = [], unplayedShorts = [], totalInset = 0, precision = 'fine' }: {
   fees: number;
   moves: number;
-  /** Of `unplayed`, how many were shorts (closed, not dropped). */
-  unplayedShorts?: number;
+  /** Shorts closed before he played, by name. */
+  unplayedShorts?: readonly string[];
   /** The fee for one move, said once: "$250 each". */
   feeEach?: number;
-  /** Closed positions that never played a game for you. */
-  unplayed?: number;
+  /** Players dropped before they played a game for you, by name (walk 7 T2-18). */
+  unplayed?: readonly string[];
   totalInset?: number;
   precision?: PartPrecision;
 }) {
   if (moves === 0) return null;
   // Moves, not "roster moves": shorts opened and closed cost the same fee.
-  const detail = `${moves} ${moves === 1 ? 'move' : 'moves'}`
-    + (feeEach > 0 ? ` · ${exactMoney(feeEach)} each` : '')
-    + (unplayed - unplayedShorts > 0 ? ` · ${unplayed - unplayedShorts} dropped before playing` : '')
-    + (unplayedShorts > 0 ? ` · ${unplayedShorts} ${unplayedShorts === 1 ? 'short' : 'shorts'} closed before playing` : '');
+  const detail = feesDetail({ moves, feeEach, dropped: unplayed, closedShorts: unplayedShorts });
   return (
     <View
       accessible
-      accessibilityLabel={`Fees, ${detail}, ${formatAt(fees, precision, true)}`}
+      accessibilityLabel={`Fees, ${detail.replace(/ \u00b7 /g, ', ')}, ${formatAt(fees, precision, true)}`}
       style={[styles.row, styles.fees]}
     >
       <View style={styles.copy}>
         <Text style={styles.name}>Fees</Text>
-        <Text style={styles.detail}>{detail}</Text>
+        <Text style={styles.detail}>{holdDots(detail)}</Text>
       </View>
       <View style={{ marginRight: totalInset }}>
         <FineMoney precision={precision} value={fees} />

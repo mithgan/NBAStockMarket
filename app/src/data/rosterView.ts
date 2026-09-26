@@ -19,6 +19,7 @@ import {
   exactMoney,
   exactSignedMoney,
   humanDate,
+  humanDaySpan,
   moneyFine,
   signedMoney,
   signedMoneyFine,
@@ -202,6 +203,13 @@ export const LUCK_MAX_DAYS = 31;
 /** The systematic part of the gap, said plainly (walk 6 T2-16): prices sit below last season's dividends. */
 export const LAST_SEASON_TRUTH = 'Players usually pay out less than last season; beating their price is what scores.';
 
+/**
+ * When the games made more than last season's numbers, the caution above
+ * would explain a gap that is not there (walk 7 T4-12), so the line says what
+ * happened instead.
+ */
+export const LAST_SEASON_BEATEN = "Your picks did better than last season's numbers suggested.";
+
 function dayIndex(isoDate: string): number {
   return Math.round(Date.parse(`${isoDate.slice(0, 10)}T00:00:00Z`) / 86_400_000);
 }
@@ -345,13 +353,14 @@ export function pickValue(
     leftOut,
     // Both halves are totals over the same games, in the score's own format,
     // so "They made" (plus the games left out) and the Fees part read as the score.
-    text: [
+    text: twoDecimalMillions([
       `On last season's numbers, ${base} would have made ${signedMoney(byLastSeason)}.`,
       `${they} made ${signedMoney(soFar)}${beforeFees}.`,
       left,
-      LAST_SEASON_TRUTH,
+      // "Pay out less" only where it explains the gap (walk 7 T4-12).
+      Math.round(soFar) > Math.round(byLastSeason) ? LAST_SEASON_BEATEN : LAST_SEASON_TRUTH,
       luckLine(dates),
-    ].filter(Boolean).join(' '),
+    ].filter(Boolean).join(' ')),
   };
 }
 
@@ -514,6 +523,46 @@ export function closedRows(
 }
 
 /**
+ * Never end a wrapped line on a lone "·" (walk 7 T1-12): each dot holds on to
+ * the words after it, so a narrow row breaks before the dot, not after it.
+ */
+export function holdDots(text: string): string {
+  return text.replace(/ \u00b7 /g, ' \u00b7\u00a0');
+}
+
+/** "Derrick White", "Derrick White and Jalen Duren", "A, B and C", "A, B and 3 more". */
+export function namesList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  if (names.length === 3) return `${names[0]}, ${names[1]} and ${names[2]}`;
+  return `${names[0]}, ${names[1]} and ${names.length - 2} more`;
+}
+
+/**
+ * The Fees line's words: the moves, the fee each, and who was dropped or
+ * whose short was closed before playing, by name, so every paid move can be
+ * traced on the Roster (walk 7 T2-18): "13 moves · $250 each · 1 dropped
+ * before playing (Derrick White)".
+ */
+export function feesDetail({ moves, feeEach, dropped, closedShorts }: {
+  moves: number;
+  feeEach: number;
+  /** Players dropped before they played a game for you. */
+  dropped: readonly string[];
+  /** Shorts closed before he played. */
+  closedShorts: readonly string[];
+}): string {
+  return [
+    `${moves} ${moves === 1 ? 'move' : 'moves'}`,
+    feeEach > 0 ? `${exactMoney(feeEach)} each` : null,
+    dropped.length > 0 ? `${dropped.length} dropped before playing (${namesList(dropped)})` : null,
+    closedShorts.length > 0
+      ? `${closedShorts.length} ${closedShorts.length === 1 ? 'short' : 'shorts'} closed before playing (${namesList(closedShorts)})`
+      : null,
+  ].filter(Boolean).join(' \u00b7 ');
+}
+
+/**
  * Label for the header's week figure, `recentEarnings().week`: what your
  * players made in the seven calendar days ending on the last settled day,
  * games only. Practice's +1 week moves the clock exactly seven days and its
@@ -521,6 +570,26 @@ export function closedRows(
  * two agree to the dollar whatever the size of the roster.
  */
 export const WEEK_LABEL = 'Games, last 7 days';
+
+/**
+ * The week figure's label in the days it covers (walk 7 T1-13, T3-14), the
+ * way the notices and the status row name games: "Oct 21 games" after the
+ * first night, "Oct 22–28 games" once a week has gone by. The seven calendar
+ * days end on the last settled day (`recentEarnings`) and start no earlier
+ * than your first game night, so the words never promise days you had no
+ * players in. `spoken` reads the dash as "to". WEEK_LABEL without dates.
+ */
+export function weekLabel(
+  firstGameDate: string | null | undefined,
+  lastSettledDate: string | null | undefined,
+): { label: string; spoken: string } {
+  if (!lastSettledDate) return { label: WEEK_LABEL, spoken: WEEK_LABEL.toLowerCase() };
+  const last = lastSettledDate.slice(0, 10);
+  const weekStart = new Date((dayIndex(last) - 6) * 86_400_000).toISOString().slice(0, 10);
+  const first = firstGameDate && firstGameDate.slice(0, 10) > weekStart ? firstGameDate.slice(0, 10) : weekStart;
+  const label = `${humanDaySpan(first <= last ? first : last, last)} games`;
+  return { label, spoken: label.replace('\u2013', ' to ') };
+}
 
 /** A heavy display figure is about this many ems wide per character. */
 const HERO_EM_PER_CHAR = 0.62;
@@ -555,6 +624,16 @@ function shownValue(amount: number, precision: PartPrecision): number {
   return sign * Math.round(abs / (precision === 'fine3' ? 1_000 : 10_000)) * (precision === 'fine3' ? 1_000 : 10_000);
 }
 
+/**
+ * One precision for millions on the Roster (walk 7 T4-14): always two
+ * decimals, so "+$1.60M" sits beside "+$1.61M" (not "+$1.6M", which looked
+ * $10K away) and "-$28.64M" beside "-$9.85M". K and dollar amounts are left
+ * as they are.
+ */
+export function twoDecimalMillions(text: string): string {
+  return text.replace(/\$(\d+)(?:\.(\d))?M\b/g, (_, whole: string, tenth: string | undefined) => `$${whole}.${(tenth ?? '').padEnd(2, '0')}M`);
+}
+
 function trimZeros(value: string): string {
   return value.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
 }
@@ -569,7 +648,7 @@ export function formatAt(amount: number, precision: PartPrecision, signed: boole
     if (rounded < 0) return `-${text}`;
     return signed ? `+${text}` : text;
   }
-  return signed ? signedMoneyFine(amount) : moneyFine(amount);
+  return twoDecimalMillions(signed ? signedMoneyFine(amount) : moneyFine(amount));
 }
 
 /**
@@ -682,19 +761,23 @@ export function finalSummary(
   place: string | null,
   parts: readonly BreakdownPart[] | null,
 ): string {
-  const head = `Final score ${signedMoney(score)}${place ? `, ${spokenRanks(place)}` : ''}.`;
+  const head = `Final score ${formatAt(score, 'fine', true)}${place ? `, ${spokenRanks(place)}` : ''}.`;
   if (!parts || parts.length === 0) return head;
-  const split = parts.map((part, index) => `${index === 0 ? part.label : part.label.toLowerCase()} ${signedMoney(part.value)}`);
+  const split = parts.map((part, index) => `${index === 0 ? part.label : part.label.toLowerCase()} ${formatAt(part.value, 'fine', true)}`);
   return `${head} ${split.join(', ')}.`;
 }
 
 /**
- * What a player earns, in one plain line for the welcome (walk 6 T1-02): "Each
- * game a player's stat line becomes a dividend, $40K per net point."
+ * What a player earns, in one plain line for the welcome (walk 6 T1-02), each
+ * word said before it is used (walk 7 T1-03): "Each game a player plays, you
+ * pay his price and collect his dividend: $40K for every net point, his box
+ * score in one number."
  */
 export function earnLine(dollarsPerNetPoint: number | null | undefined): string {
-  const rate = dollarsPerNetPoint && dollarsPerNetPoint > 0 ? `, ${moneyCompact(dollarsPerNetPoint)} per net point` : '';
-  return `Each game a player's stat line becomes a dividend${rate}.`;
+  const rate = dollarsPerNetPoint && dollarsPerNetPoint > 0
+    ? `: ${moneyCompact(dollarsPerNetPoint)} for every net point, his box score in one number`
+    : ', his box score in money';
+  return `Each game a player plays, you pay his price and collect his dividend${rate}.`;
 }
 
 /** The first-night tip stays up to a week of game nights (walk 6 T1-17). */
@@ -848,9 +931,9 @@ export function chartSummary(series: readonly NightPoint[]): string {
   const span = nights.length === 1
     ? `after ${nights[0].label}`
     : `from ${nights[0].label} to ${nights.at(-1)!.label}`;
-  return `Your score by night ${span}: started at $0, now ${signedMoney(end.cumulativePnl)}. `
+  return twoDecimalMillions(`Your score by night ${span}: started at $0, now ${signedMoney(end.cumulativePnl)}. `
     + `Best ${signedMoney(best.cumulativePnl)} ${best.kind === 'now' ? 'now' : `after ${best.label}`}, `
-    + `lowest ${signedMoney(worst.cumulativePnl)} ${worst.kind === 'now' ? 'now' : `after ${worst.label}`}.`;
+    + `lowest ${signedMoney(worst.cumulativePnl)} ${worst.kind === 'now' ? 'now' : `after ${worst.label}`}.`);
 }
 
 export interface AxisLabel {
@@ -910,6 +993,16 @@ export function axisMoney(value: number): string {
   else if (abs >= 1_000) body = `$${trim((abs / 1_000).toPrecision(3))}K`;
   else body = `$${abs}`;
   return `${sign}${body}`;
+}
+
+/**
+ * A value mark as drawn: millions in the Roster's one precision (two
+ * decimals, so the chart's "+$1.60M" matches the score above it; walk 7
+ * T4-14), smaller amounts as `axisMoney` ("-$334K"). The gutter is sized to
+ * the mark (PerGamePnlChart), so the longer millions never cut.
+ */
+export function axisMark(value: number): string {
+  return Math.abs(Math.round(value)) >= 999_950 ? formatAt(value, 'fine', true) : axisMoney(value);
 }
 
 /** Half a value mark's height: its words are about 14px tall. */

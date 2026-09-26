@@ -592,12 +592,13 @@ test('value against results uses the price you locked, and calls the gap luck on
   }));
   // Last season paid $90K against the $100K locked (today's market price plays no part).
   const early = pickValue(held, () => 90_000, games(10), { fees: -250 });
+  // He beat the guide, so the line says so rather than "pay out less" (walk 7 T4-12).
   assert.equal(early?.text, "On last season's numbers, the 10 games your pick played would have made -$100K. They made +$100K before fees. "
-    + 'Players usually pay out less than last season; beating their price is what scores. A few weeks is mostly luck.');
+    + "Your picks did better than last season's numbers suggested. A few weeks is mostly luck.");
   // After about a month the caution goes; the plain truth stays.
   const later = pickValue(held, () => 90_000, games(20), { fees: -250, over: true });
   assert.equal(later?.text, "On last season's numbers, the 20 games your pick played would have made -$200K. They made +$200K before fees. "
-    + 'Players usually pay out less than last season; beating their price is what scores.');
+    + "Your picks did better than last season's numbers suggested.");
 });
 
 test('the luck caution scales to the nights played and is gone after about a month (walk 6 T1-05)', async () => {
@@ -709,10 +710,11 @@ test('the season card reads millions one way, and says the exact final when roun
     { key: 'closed' as const, label: 'Closed', value: 0 },
     { key: 'fees' as const, label: 'Fees', value: fees },
   ];
-  // T3-12: "+$5.5M" headline beside "Roster +$5.505M": now both +$5.5M.
+  // T3-12: "+$5.5M" headline beside "Roster +$5.505M": now both +$5.50M
+  // (millions keep two decimals everywhere, walk 7 T4-14).
   const one = shownParts(parts(5_505_100, -250), 5_504_850);
-  assert.equal(signedMoney(5_504_850), '+$5.5M');
-  assert.equal(signedMoney(one[0].value), '+$5.5M');
+  assert.equal(signedMoney(5_504_850), '+$5.50M');
+  assert.equal(signedMoney(one[0].value), '+$5.50M');
   assert.equal(exactFinalLine(one, 5_504_850), 'Exactly +$5,504,850, fees -$250 included.');
   // T1-10: Final +$4.13M, Roster +$4.13M, Fees -$750.
   const two = shownParts(parts(4_130_500, -750), 4_129_750);
@@ -752,10 +754,46 @@ test('at season end the row tags read in the past tense (walk 6 T1-10c)', async 
   assert.deepEqual(verdictTag('profit'), { label: 'Paying off', tone: 'green' });
 });
 
-test('the welcome says what a player earns, from the ruleset rate (walk 6 T1-02)', async () => {
+test('the welcome says what a player earns, from the ruleset rate, each word before it is used (walk 6 T1-02, walk 7 T1-03)', async () => {
   const { earnLine } = await import('./rosterView');
-  assert.equal(earnLine(40_000), "Each game a player's stat line becomes a dividend, $40K per net point.");
-  assert.equal(earnLine(null), "Each game a player's stat line becomes a dividend.");
+  const line = earnLine(40_000);
+  assert.equal(line, 'Each game a player plays, you pay his price and collect his dividend: $40K for every net point, his box score in one number.');
+  // Price and dividend are said before the welcome asks for a dividend that beats a price.
+  assert.ok(line.indexOf('price') < line.indexOf('net point'));
+  assert.equal(earnLine(null), 'Each game a player plays, you pay his price and collect his dividend, his box score in money.');
+});
+
+test('the week figure is labelled by the days it covers, from the first game night (walk 7 T1-13, T3-14)', async () => {
+  const { weekLabel } = await import('./rosterView');
+  // The first night: its own date, as the notice and the status row say it.
+  assert.deepEqual(weekLabel('2025-10-21', '2025-10-21'), { label: 'Oct 21 games', spoken: 'Oct 21 games' });
+  // Three nights in: from the first game night, never days before it.
+  assert.deepEqual(weekLabel('2025-10-21', '2025-10-23'), { label: 'Oct 21\u201323 games', spoken: 'Oct 21 to 23 games' });
+  // A week on: the seven calendar days that recentEarnings sums.
+  assert.deepEqual(weekLabel('2025-10-21', '2025-10-28'), { label: 'Oct 22\u201328 games', spoken: 'Oct 22 to 28 games' });
+  assert.deepEqual(weekLabel('2025-10-21', '2025-11-03'), { label: 'Oct 28\u2013Nov 3 games', spoken: 'Oct 28 to Nov 3 games' });
+  // No dates yet: the calendar words.
+  assert.equal(weekLabel(null, null).label, 'Games, last 7 days');
+});
+
+test('the last-season line says players pay out less only when the picks made less (walk 7 T4-12)', async () => {
+  const { pickValue, LAST_SEASON_BEATEN, LAST_SEASON_TRUTH } = await import('./rosterView');
+  const positions = [position({ positionId: 'a', playerId: 'a', lockedGameCost: 100_000 })];
+  const beat = [
+    result({ positionId: 'a', playerId: 'a', gameId: 'a1', eventCursor: 1, dividendDollars: 200_000, netPnl: 100_000 }),
+    result({ positionId: 'a', playerId: 'a', gameId: 'a2', eventCursor: 2, gameDate: '2025-10-23', dividendDollars: 207_400, netPnl: 107_400 }),
+  ];
+  const better = pickValue(positions, () => 172_200, beat, { fees: -250 });
+  assert.equal(
+    better?.text,
+    "On last season's numbers, the 2 games your pick played would have made +$144.4K. They made +$207.4K before fees. "
+      + "Your picks did better than last season's numbers suggested. A few nights is mostly luck.",
+  );
+  assert.ok(!better?.text.includes(LAST_SEASON_TRUTH));
+  // Short of the guide, the caution explains the gap.
+  const worse = pickValue(positions, () => 400_000, beat, { fees: -250 });
+  assert.ok(worse?.text.includes(LAST_SEASON_TRUTH));
+  assert.ok(!worse?.text.includes(LAST_SEASON_BEATEN));
 });
 
 test('the first-night tip retires once Results is used or a week on (walk 6 T1-17)', async () => {
@@ -765,4 +803,52 @@ test('the first-night tip retires once Results is used or a week on (walk 6 T1-1
   assert.equal(tipRetired('2025-10-21', '2025-10-28', false), true);
   assert.equal(tipRetired('2025-10-21', '2025-10-21', true), true);
   assert.equal(tipRetired(null, '2025-10-21', false), false);
+});
+
+test('a wrapped "a · b" line never ends on a lone dot: the dot holds on to what follows (walk 7 T1-12)', async () => {
+  const { holdDots, closedRows } = await import('./rosterView');
+  assert.equal(holdDots('Short ended Oct 27 · 5 games'), 'Short ended Oct 27 · 5 games');
+  // The rows' own words use the same dot.
+  const [row] = closedRows([
+    position({ positionId: 'd', playerName: 'Nikola Jokic', status: 'closed' }),
+  ], [entry({ kind: 'drop_fee', positionId: 'd', gameDate: null, createdAt: '2025-11-06T12:00:00Z' })], [
+    result({ positionId: 'd', gameId: 'a', gameDate: '2025-11-03' }),
+  ]);
+  assert.ok(!/ · /.test(holdDots(`${row.how} · 1 game`)), holdDots(`${row.how} · 1 game`));
+});
+
+test('the Fees line names who was dropped or closed before playing (walk 7 T2-18)', async () => {
+  const { feesDetail, namesList } = await import('./rosterView');
+  assert.equal(
+    feesDetail({ moves: 13, feeEach: 250, dropped: ['Derrick White'], closedShorts: [] }),
+    '13 moves · $250 each · 1 dropped before playing (Derrick White)',
+  );
+  assert.equal(
+    feesDetail({ moves: 3, feeEach: 250, dropped: ['Derrick White', 'Jalen Duren'], closedShorts: ['Cade Cunningham'] }),
+    '3 moves · $250 each · 2 dropped before playing (Derrick White and Jalen Duren) · 1 short closed before playing (Cade Cunningham)',
+  );
+  assert.equal(feesDetail({ moves: 1, feeEach: 0, dropped: [], closedShorts: [] }), '1 move');
+  assert.equal(namesList(['A', 'B', 'C']), 'A, B and C');
+  assert.equal(namesList(['A', 'B', 'C', 'D', 'E']), 'A, B and 3 more');
+});
+
+test('millions read at one precision on the Roster: always two decimals (walk 7 T4-14)', async () => {
+  const { twoDecimalMillions, formatAt, finalSummary } = await import('./rosterView');
+  assert.equal(twoDecimalMillions('+$1.6M'), '+$1.60M');
+  assert.equal(twoDecimalMillions('-$2M'), '-$2.00M');
+  assert.equal(twoDecimalMillions('+$1.61M beside -$28.64M'), '+$1.61M beside -$28.64M');
+  assert.equal(twoDecimalMillions('$137.5K'), '$137.5K');
+  // The score beside the week figure: "+$1.60M" and "+$1.61M", never "+$1.6M".
+  assert.equal(formatAt(1_604_000, 'fine', true), '+$1.60M');
+  assert.equal(formatAt(1_607_750, 'fine', true), '+$1.61M');
+  assert.equal(formatAt(-5_500_000, 'fine', false), '-$5.50M');
+  assert.equal(finalSummary(5_500_000, null, null), 'Final score +$5.50M.');
+});
+
+test('the chart marks millions at the score block precision and keeps K marks short (walk 7 T4-14)', async () => {
+  const { axisMark } = await import('./rosterView');
+  assert.equal(axisMark(1_604_000), '+$1.60M');
+  assert.equal(axisMark(-28_640_000), '-$28.64M');
+  assert.equal(axisMark(-334_200), '-$334K');
+  assert.equal(axisMark(9_500), '+$9.5K');
 });

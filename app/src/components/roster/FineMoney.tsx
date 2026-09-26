@@ -14,6 +14,7 @@ import { moneyColor } from '../../ui/kit';
 export function FineMoney({
   value,
   signed = true,
+  colored = signed,
   precision = 'fine',
   size = 'value',
   style,
@@ -22,20 +23,29 @@ export function FineMoney({
   value: number;
   /** false for a price or a dividend, which is neither a gain nor a loss. */
   signed?: boolean;
+  /** Green or red by sign; false keeps a signed figure neutral (fees before the first game). */
+  colored?: boolean;
   /** More digits where figures must visibly add up (see `breakdownPrecision`). */
   precision?: PartPrecision;
-  size?: 'label' | 'body' | 'value' | 'title';
+  /**
+   * The headline sizes (the score, the final result) draw like the kit's
+   * `Money`, in the Roster's one millions precision (walk 7 T4-14).
+   */
+  size?: 'label' | 'body' | 'value' | 'title' | 'display' | 'hero';
   style?: StyleProp<TextStyle>;
   accessibilityLabel?: string;
 }) {
+  const fontSize = type[size];
+  const headline = fontSize >= type.display;
   return (
     <Text
       // Screen readers hear the figure the screen shows.
       accessibilityLabel={accessibilityLabel ?? formatAt(value, precision, signed)}
-      maxFontSizeMultiplier={1.4}
+      maxFontSizeMultiplier={headline ? 1.2 : 1.4}
       style={[
         styles.money,
-        { fontSize: type[size], color: signed ? moneyColor(value) : colors.text },
+        { fontSize, color: colored ? moneyColor(value) : colors.text },
+        headline && { letterSpacing: -1.2 },
         style,
       ]}
     >

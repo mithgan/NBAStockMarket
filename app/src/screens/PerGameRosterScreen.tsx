@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -57,6 +57,7 @@ import {
   feeMoves,
   movesLine,
   pickValue,
+  weekLabel,
   rankLine,
   rosterRowView,
   rowLayout,
@@ -154,6 +155,51 @@ function keepFocusClear(pinnedHeight: number): ViewStyle | null {
 
 type ConfirmOutcome = 'kept' | 'closed';
 
+/**
+ * Web, table rows: whether a name needs the next size down to fit its one
+ * line, measured (a user's text spacing or a late font changes the answer),
+ * and re-measured when the column's width changes.
+ */
+function useTableNameFit(table: boolean, name: string) {
+  const ref = useRef<Text>(null);
+  const [small, setSmall] = useState(false);
+  useLayoutEffect(() => {
+    if (!table || Platform.OS !== 'web' || typeof ResizeObserver === 'undefined') {
+      setSmall(false);
+      return undefined;
+    }
+    const node = ref.current as unknown as HTMLElement | null;
+    if (!node) return undefined;
+    const measure = () => {
+      // Fractional: a name 0.4px too long already ends in "…".
+      const room = node.getBoundingClientRect().width;
+      if (!(room > 0) || !node.parentElement) return;
+      // The name's own width at full size, whatever it is drawn at now: an
+      // ellipsis hides the overflow from scrollWidth, so an unseen copy on
+      // one line is measured instead (it takes the user's text spacing too).
+      const probe = node.cloneNode(true) as HTMLElement;
+      Object.assign(probe.style, {
+        position: 'absolute',
+        visibility: 'hidden',
+        width: 'max-content',
+        maxWidth: 'none',
+        overflow: 'visible',
+        whiteSpace: 'nowrap',
+        fontSize: `${type.value}px`,
+      });
+      node.parentElement.appendChild(probe);
+      const full = probe.getBoundingClientRect().width;
+      probe.remove();
+      setSmall(full > room + 0.01);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    measure();
+    return () => observer.disconnect();
+  }, [name, table]);
+  return { ref, small };
+}
+
 function PositionRow({
   position,
   layout,
@@ -184,6 +230,7 @@ function PositionRow({
   marketPrice: number | null;
 }) {
   const { bootstrap, notify, pendingActions } = usePerGame();
+  const nameFit = useTableNameFit(layout === 'table', position.playerName);
   const actionKey = `position:${position.side}:${position.playerId}`;
   // A move waiting its turn counts as this row's; another row's move does
   // not rest this one (its press would wait its turn; walk 5 T4-01).
@@ -248,10 +295,16 @@ function PositionRow({
 
   const identity = (
     <View style={styles.identity}>
-      {/* A table row gives a long name a second line rather than an
-          ellipsis, so "Shai Gilgeous-Alexander" reads in full at 1024px
-          (walk 3 T2-15); it breaks at a space, never at the hyphen. */}
-      <Text numberOfLines={layout === 'table' ? 2 : undefined} style={styles.name}>
+      {/* A table row keeps every name on one line, as tall as the rest (walk
+          7 T4-10): a long name first steps down one size, so "Shai
+          Gilgeous-Alexander" still reads in full at 1024px (walk 3 T2-15);
+          only a name that fits at neither size ends in an ellipsis (the row's
+          spoken name and the profile carry it whole). Phones wrap it. */}
+      <Text
+        ref={nameFit.ref}
+        numberOfLines={layout === 'table' ? 1 : undefined}
+        style={[styles.name, nameFit.small && styles.nameSmall]}
+      >
         {unbrokenName(position.playerName)}
       </Text>
       <View style={styles.meta}>
@@ -433,16 +486,20 @@ function ShortAgainButton({ row, price, quoteVersion, reason, notice = null, onS
   column?: boolean;
 }) {
   const { bootstrap, notify, openPosition, pendingActions } = usePerGame();
-  const pending = pendingActions.has(`position:short:${row.playerId}`) || pendingActions.has(`queued:position:short:${row.playerId}`);
+  // A dropped player is added again, an ended short shorted again: a new move
+  // at today's price with its fee, not an undo (walk 7 T2-20).
+  const side = row.side;
+  const verb = side === 'long' ? 'Add' : 'Short';
+  const pending = pendingActions.has(`position:${side}:${row.playerId}`) || pendingActions.has(`queued:position:${side}:${row.playerId}`);
   const fee = bootstrap?.ruleset.transactionFeeDollars ?? 0;
-  const name = `Short ${row.name} again at ${perGame(price)}${fee > 0 ? `, ${exactMoney(fee)} fee` : ''}`;
+  const name = `${verb} ${row.name} again at ${perGame(price)}${fee > 0 ? `, ${exactMoney(fee)} fee` : ''}`;
   return (
     <Button
       accessibilityHint={reason ?? undefined}
-      accessibilityLabel={pending ? `Shorting ${row.name}` : name}
+      accessibilityLabel={pending ? `${side === 'long' ? 'Adding' : 'Shorting'} ${row.name}` : name}
       disabled={reason !== null || pending}
       focusableWhenDisabled
-      label={pending ? (column ? 'Wait' : 'Shorting…') : 'Short again'}
+      label={pending ? (column ? 'Wait' : side === 'long' ? 'Adding…' : 'Shorting…') : `${verb} again`}
       // A tap while it is unavailable says why and when, like LOCKED (walk 6 T1-15).
       onDisabledPress={() => {
         if (reason !== null && !pending) notify(notice ?? reason);
@@ -454,7 +511,7 @@ function ShortAgainButton({ row, price, quoteVersion, reason, notice = null, onS
         void openPosition({
           playerId: row.playerId,
           playerName: row.name,
-          side: 'short',
+          side,
           expectedQuoteVersion: quoteVersion,
         }).then((ok) => {
           if (ok) onShorted(row.playerId);
@@ -558,6 +615,8 @@ export function PerGameRosterScreen({
     (first, entry) => (entry.gameDate && (first === null || entry.gameDate < first) ? entry.gameDate : first),
     null,
   ), [bootstrap?.ledger.items]);
+  // "Oct 21 games", "Oct 22–28 games": the week figure's days (walk 7 T1-13).
+  const weekWords = useMemo(() => weekLabel(firstGameDate, lastSettledDate), [firstGameDate, lastSettledDate]);
   const [tipClosed, setTipClosed] = useState(firstNightTip.done);
   const tipEligible = isMockActive() && !seasonOver && hasGames && !tipClosed;
   // Through the first week of game nights (walk 6 T1-17).
@@ -643,6 +702,7 @@ export function PerGameRosterScreen({
     }, 60);
   }, []);
   const onShorted = useCallback((playerId: string) => focusNewRow('short', playerId), [focusNewRow]);
+  const onReadded = useCallback((playerId: string) => focusNewRow('long', playerId), [focusNewRow]);
 
   if (!bootstrap) return null;
   const profilePosition = profileId
@@ -714,7 +774,8 @@ export function PerGameRosterScreen({
     parts?.find((part) => part.key === key)?.value ?? fallback
   );
   const precision = 'fine' as const;
-  const unplayed = closed.filter((row) => row.unplayed).length;
+  // Who was dropped (or whose short closed) before playing, by name (walk 7 T2-18).
+  const unplayed = closed.filter((row) => row.unplayed && row.side === 'long').map((row) => row.name);
   // "4 (3 adds, 1 short) · $1K in fees" (walk 5 T1-13).
   const movesText = movesLine(bootstrap.ledger.items, bootstrap.positions, breakdown.fees);
   // The title and the one-line legend pin while the rows scroll, in the
@@ -749,30 +810,36 @@ export function PerGameRosterScreen({
   };
 
   // "Short again" goes on the latest closed row for a player whose short ran
-  // its term, while he is not on either list again.
+  // its term, "Add again" on the latest row of a player you dropped (walk 7
+  // T2-20), while he is not on either list again.
   const reshortable = new Set<string>();
+  const readdable = new Set<string>();
   {
     const seen = new Set<string>();
     for (const row of closed) {
       if (seen.has(row.playerId)) continue;
       seen.add(row.playerId);
       if (row.endedByTerm) reshortable.add(row.positionId);
+      if (row.side === 'long') readdable.add(row.positionId);
     }
   }
   const heldNow = new Set(active.map((position) => position.playerId));
   const shortReason = lockLine
     ?? (shortSlots.used >= shortSlots.limit ? 'Your shorts are full: close one to short again.' : null);
+  const addReason = lockLine
+    ?? (longSlots.used >= longSlots.limit ? 'Your roster is full: drop a player to add him again.' : null);
   const shortAgain = (row: ClosedRow) => {
     const listed = market.get(row.playerId);
-    if (seasonOver || !reshortable.has(row.positionId) || heldNow.has(row.playerId) || !listed) return null;
+    const again = row.side === 'long' ? readdable : reshortable;
+    if (seasonOver || !again.has(row.positionId) || heldNow.has(row.playerId) || !listed) return null;
     return (
       <ShortAgainButton
         column={layout === 'table'}
-        onShorted={onShorted}
+        onShorted={row.side === 'long' ? onReadded : onShorted}
         notice={lockLine ? lockNotice(rosterLockDate) : null}
         price={listed.currentGameCost}
         quoteVersion={listed.quoteVersion}
-        reason={shortReason}
+        reason={row.side === 'long' ? addReason : shortReason}
         row={row}
       />
     );
@@ -863,9 +930,8 @@ export function PerGameRosterScreen({
     />
   ) : tipOpen ? (
     <FirstNightTip
-      // A short window (a phone on its side): Results at the end of the
-      // tip's line, so the tip keeps to about one line (walk 6 T1-08).
-      inline={shortWindow}
+      // Results at the end of the tip's words at every width, so the tip
+      // keeps to a slim band (walk 6 T1-08, walk 7 T1-10).
       onHide={() => {
         retireFirstNightTip();
         setTipClosed(true);
@@ -921,6 +987,7 @@ export function PerGameRosterScreen({
           valueLine={picks?.text ?? null}
           variant={scoreVariant}
           week={recent ? recent.week : null}
+          weekWords={weekWords}
         />
       )}
       {/* On the opening eve the welcome says what the empty chart would. */}
@@ -1028,7 +1095,7 @@ export function PerGameRosterScreen({
         precision={precision}
         totalInset={totalInset}
         unplayed={unplayed}
-        unplayedShorts={closed.filter((row) => row.unplayed && row.side === 'short').length}
+        unplayedShorts={closed.filter((row) => row.unplayed && row.side === 'short').map((row) => row.name)}
       />
     </>
   );
@@ -1226,6 +1293,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: type.value,
     fontWeight: weight.heavy,
+  },
+  // One size down for a long name on a table row's one line (walk 7 T4-10).
+  nameSmall: {
+    fontSize: type.body,
   },
   meta: {
     minHeight: 20,
