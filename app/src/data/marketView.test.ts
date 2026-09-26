@@ -279,7 +279,7 @@ test('the header adds one status line: season over, then the lock, then full (gr
     headerStatus({ ...base, full: true, rosterLocked: true, lockGameDate: '2025-10-31' }),
     { text: rosterReopensLine('2025-10-31'), kind: 'lock' },
   );
-  assert.equal(headerStatus({ ...base, rosterLocked: true, lockGameDate: '2025-10-31' }).text, 'Roster reopens after Oct 31');
+  assert.equal(headerStatus({ ...base, rosterLocked: true, lockGameDate: '2025-10-31' }).text, 'Moves reopen after Oct 31');
   assert.deepEqual(headerStatus({ ...base, seasonOver: true, rosterLocked: true, full: true }), { text: 'The season is over', kind: 'season' });
 });
 

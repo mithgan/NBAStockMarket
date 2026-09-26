@@ -224,7 +224,8 @@ export function nightsCount(count: number): string {
  * settled, then unlocks, so the promise is "after" that date.
  */
 export function rosterReopensLine(lockGameDate: string | null | undefined): string {
-  return lockGameDate ? `Roster reopens after ${humanDate(lockGameDate)}` : 'Roster reopens after these games';
+  // "Moves", not "Roster": shorts pause too (walk 4 T1-07).
+  return lockGameDate ? `Moves reopen after ${humanDate(lockGameDate)}` : 'Moves reopen after these games';
 }
 
 /** Label on a Drop or Close button while it waits for the second tap. */

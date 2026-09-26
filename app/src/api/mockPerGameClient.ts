@@ -522,7 +522,7 @@ export class MockPerGameApiClient {
 
     // A quarter of nights close with the next slate already locked, so the
     // LOCKED chip and disabled mutation states stay reviewable in the mock.
-    // Never two nights in a row: "Roster reopens after <date>" must hold.
+    // Never two nights in a row: "Moves reopen after <date>" must hold.
     // The opening week never locks: a new player's first nights are for
     // building a roster.
     const openingWeek = this.seasonStart !== null && date < addDays(this.seasonStart, 7);

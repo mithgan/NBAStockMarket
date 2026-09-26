@@ -89,8 +89,8 @@ test('names keep their hyphen together', () => {
 });
 
 test('one lock sentence and one confirm line everywhere', () => {
-  assert.equal(rosterReopensLine('2025-10-31'), 'Roster reopens after Oct 31');
-  assert.equal(rosterReopensLine(null), 'Roster reopens after these games');
+  assert.equal(rosterReopensLine('2025-10-31'), 'Moves reopen after Oct 31');
+  assert.equal(rosterReopensLine(null), 'Moves reopen after these games');
   assert.equal(CONFIRM_LABEL, 'Confirm');
   assert.equal(confirmCloseName('long', 'Nikola Jokic'), 'Confirm dropping Nikola Jokic');
   assert.equal(confirmCloseName('short', 'Tyrese Maxey'), 'Confirm closing your short on Tyrese Maxey');

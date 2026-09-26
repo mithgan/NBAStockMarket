@@ -53,7 +53,7 @@ export function SectionHead({
   sticky?: boolean;
   /** A plain sentence about the list, e.g. how shorts work. */
   caption?: string;
-  /** A warning about the list's actions: "Roster reopens after Oct 31." */
+  /** A warning about the list's actions: "Moves reopen after Oct 31." */
   note?: string;
   legend?: ReactNode;
   /** The title, so a screen can move keyboard focus to it. */

@@ -518,13 +518,13 @@ export function practiceDayTiny(progress: PracticeProgress): string {
 }
 
 /**
- * Why moves pause, after "Roster reopens after Oct 30", in plain words rather
- * than "lineups set" (walk 2 T1-07). Not held together: at high zoom the
- * row is narrower than either half.
+ * What a lock does not stop, after "Moves reopen after Oct 30", in plain
+ * words rather than "lineups set" (walk 2 T1-07): only moves wait; the games
+ * count. Not held together: at high zoom the row is narrower than either half.
  */
-export const LOCK_REASON = 'moves pause for those games';
+export const LOCK_REASON = 'your players still play';
 
-/** "Roster reopens after Oct 30 · moves pause for those games". */
+/** "Moves reopen after Oct 30 · your players still play". */
 export function lockLine(lockGameDate: string | null | undefined): string {
   return `${rosterReopensLine(lockGameDate)} · ${LOCK_REASON}`;
 }

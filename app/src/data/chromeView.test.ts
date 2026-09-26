@@ -263,7 +263,7 @@ test('the folded frame, short day count, lock reason and no-games night', async 
   assert.equal(chromeFolded(390), true);
   assert.equal(chromeFolded(500), false);
   assert.equal(practiceDayShort(practiceProgress(OPENING_EVE, '2025-11-05')), 'Day 16/174');
-  assert.equal(lockLine('2025-10-30'), 'Roster reopens after Oct 30 · moves pause for those games');
+  assert.equal(lockLine('2025-10-30'), 'Moves reopen after Oct 30 · your players still play');
   const ledger = [{ gameId: 'g1', gameDate: '2025-10-22' }, { gameId: null, gameDate: '2025-10-23' }];
   assert.equal(playedOn(ledger, '2025-10-22'), true);
   assert.equal(playedOn(ledger, '2025-10-23'), false);
@@ -294,7 +294,7 @@ test('the bars name the night, never "last night" (walk 2 T1-07, T1-14, T4-09)',
   ];
   assert.equal(copy[0], 'Practice, day 2 of 174. Oct 22: none of your players played. Next games Fri, Oct 24.');
   assert.equal(copy[1], 'Practice, day 1 of 174. Oct 21 games +$35,000. Next games Wed, Oct 22.');
-  assert.equal(copy[3], 'Roster reopens after Oct 22 · moves pause for those games');
+  assert.equal(copy[3], 'Moves reopen after Oct 22 · your players still play');
   for (const line of copy) assert.doesNotMatch(line, /last night|lineups set/i);
   const strip = readFileSync(resolve(import.meta.dirname, '../components/PerGameStatusStrip.tsx'), 'utf8');
   assert.doesNotMatch(strip, /'Last night|No games last night/);

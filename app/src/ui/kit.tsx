@@ -191,7 +191,7 @@ export type ButtonProps = {
   focusableWhenDisabled?: boolean;
   /**
    * A press while disabled (focusable disabled buttons only), to say why it
-   * did nothing: "Roster reopens after Oct 22."
+   * did nothing: "Moves reopen after Oct 22."
    */
   onDisabledPress?: () => void;
   /**
