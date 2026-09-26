@@ -9,55 +9,28 @@
  *   perGameMetrics.nightTotals, the figure every screen uses. Games only, like
  *   recentEarnings, so the newest night here is the "Last night" the chrome
  *   and the Roster show.
- * - The day's fees sit on their own "Roster moves" line with their own amount,
- *   so the night still adds up on screen: the header is its game rows, the
- *   fees line is its fee rows. A fee belongs to its game date or, for an add
- *   or drop fee, to the day it was booked (perGameMetrics.entryDay).
- * - A day with fees but no games (moves made for games still to come, or a
- *   night none of your players played) is still a day in the feed.
+ * - The day's fees fold under their own "Roster moves" line with their own
+ *   amount, apart from the header's games figure. A fee belongs to its game
+ *   date or, for an add or drop fee, to the day it was made
+ *   (perGameMetrics.entryDay).
+ * - A day with fees but no games (moves made before the first games, for
+ *   games still to come, or on a night none of your players played) is still
+ *   a day in the feed, and reads as moves.
+ * - Every amount on a row or a header is the app's one money format
+ *   (copy/terms `money`); exact dollars appear only inside a row's opened math.
  */
 import type {
   PerGameBootstrap,
   PerGameLedgerEntry,
   PerGamePositionSide,
   PerGameSettledResult,
+  DividendBasis,
 } from '../api/contracts';
-import { exactMoney, moneyFine } from '../copy/terms';
+import { exactMoney } from '../copy/terms';
 import type { SettlementEquation } from '../state/perGameState';
 import { currentResults, entryDay, nightTotals, summarizeValue } from './perGameMetrics';
 
 export type ResultsFeedSource = Pick<PerGameBootstrap, 'settledResults' | 'ledger' | 'positions'>;
-
-/**
- * Money at the precision a night's rows add up at. Below a million it is
- * `moneyFine` ("$446.5K", "$3,500"); from a million up it stays in thousands
- * with one decimal ("$1,279K") where `moneyFine` would round to the nearest
- * $10K ("$1.28M") and a night's header would stop equalling its rows.
- */
-export function amountFine(value: number): string {
-  const rounded = Math.round(value);
-  const abs = Math.abs(rounded);
-  if (abs < 999_950) return moneyFine(rounded);
-  const [whole, decimal] = (Math.round(abs / 100) / 10).toFixed(1).split('.');
-  return `${rounded < 0 ? '-' : ''}$${Number(whole).toLocaleString('en-US')}${decimal === '0' ? '' : `.${decimal}`}K`;
-}
-
-/** Signed `amountFine`: "+$446.5K", "-$1,215.5K", and "$0" for nothing. */
-export function signedAmountFine(value: number): string {
-  if (Math.round(value) === 0) return '$0';
-  const text = amountFine(value);
-  return text.startsWith('-') ? text : `+${text}`;
-}
-
-/**
- * True when `amountFine` shows this amount exactly: to the dollar under $10K,
- * or in whole hundreds above. A night whose amounts all pass adds up at that
- * precision; any other night is shown to the dollar (`NightSummary.exact`).
- */
-export function shownExactly(value: number): boolean {
-  const rounded = Math.round(value);
-  return Math.abs(rounded) < 10_000 || rounded % 100 === 0;
-}
 
 export interface ResultsFeedOptions {
   /** The last settled game day. A later day can only hold moves for games still to come. */
@@ -110,25 +83,18 @@ export interface NightSummary {
   corrections: number;
   /** After the last settled day: only moves for games still to come. */
   upcoming: boolean;
-  /**
-   * Show this day's amounts to the dollar. Set when one of them (a row's
-   * net, dividend, price or fee, or the total) is not in whole hundreds, so
-   * at `amountFine`'s tenth of a thousand the rows would stop adding up to
-   * the total. Round nights keep the shorter form.
-   */
-  exact: boolean;
+  /** No game of yours on or before this day: moves made before your first games. */
+  beforeGames: boolean;
 }
 
-/** Every row carries its day's `exact`, so a day's amounts share one precision. */
 export type ResultsFeedItem =
   | { type: 'night'; key: string; night: NightSummary }
-  | { type: 'result'; key: string; date: string; exact: boolean; result: PerGameSettledResult }
+  | { type: 'result'; key: string; date: string; result: PerGameSettledResult }
   | {
-      /** The fees under a day that also had games, introduced by a small heading. */
+      /** The line a day's fees fold under: "Roster moves · 8   -$2,000". */
       type: 'fees';
       key: string;
       date: string;
-      exact: boolean;
       count: number;
       total: number;
       /** Every fee is an add or a drop. */
@@ -138,7 +104,6 @@ export type ResultsFeedItem =
       type: 'fee';
       key: string;
       date: string;
-      exact: boolean;
       entry: PerGameLedgerEntry;
       side: PerGamePositionSide | null;
     };
@@ -173,20 +138,13 @@ function summarizeNight(
   fees: readonly PerGameLedgerEntry[],
   totals: ReadonlyMap<string, { net: number; games: number; wins: number; dnp: number; pending: number }>,
   lastSettledDate: string | null,
+  firstGameDate: string | null,
 ): NightSummary {
   const total = totals.get(date);
   const roster = summarizeValue(results.filter((result) => result.side === 'long'));
   const shorts = summarizeValue(results.filter((result) => result.side === 'short'));
   const feeTotal = fees.reduce((sum, entry) => sum + entry.amountDollars, 0);
   const gamesNet = total?.net ?? 0;
-  const shown = [
-    gamesNet,
-    feeTotal,
-    ...fees.map((entry) => entry.amountDollars),
-    ...results.flatMap((result) => (isCounted(result)
-      ? [result.netPnl ?? 0, result.dividendDollars ?? 0, result.lockedGameCost]
-      : result.status === 'verified_dnp' ? [result.netPnl ?? 0] : [])),
-  ];
   return {
     date,
     total: gamesNet,
@@ -206,7 +164,7 @@ function summarizeNight(
     corrections: results.filter((result) => result.kind === 'correction').length,
     upcoming: results.length === 0 && date !== NO_DAY
       && lastSettledDate !== null && date > lastSettledDate,
-    exact: !shown.every(shownExactly),
+    beforeGames: results.length === 0 && (firstGameDate === null || date < firstGameDate),
   };
 }
 
@@ -239,32 +197,87 @@ export function buildResultsFeed(
 
   const days = [...new Set([...resultsByDay.keys(), ...feesByDay.keys()])]
     .sort((left, right) => right.localeCompare(left));
+  const gameDays = [...resultsByDay.keys()].sort();
+  const firstGameDate = gameDays[0] ?? null;
   const items: ResultsFeedItem[] = [];
   for (const date of days) {
     const results = [...(resultsByDay.get(date) ?? [])].sort(byRowOrder);
     const fees = [...(feesByDay.get(date) ?? [])].sort(byNewestEntry);
-    const night = summarizeNight(date, results, fees, totals, lastSettledDate);
-    const { exact } = night;
+    const night = summarizeNight(date, results, fees, totals, lastSettledDate, firstGameDate);
     items.push({ type: 'night', key: `night:${date}`, night });
     for (const result of results) {
-      items.push({ type: 'result', key: `result:${result.positionId}:${result.gameId}`, date, exact, result });
+      items.push({ type: 'result', key: `result:${result.positionId}:${result.gameId}`, date, result });
     }
     if (fees.length > 0) {
       items.push({
         type: 'fees',
         key: `fees:${date}`,
         date,
-        exact,
         count: fees.length,
         total: night.fees,
         moves: night.moves === fees.length,
       });
     }
     for (const entry of fees) {
-      items.push({ type: 'fee', key: `fee:${entry.entryId}`, date, exact, entry, side: sideOf.get(entry.positionId) ?? null });
+      items.push({ type: 'fee', key: `fee:${entry.entryId}`, date, entry, side: sideOf.get(entry.positionId) ?? null });
     }
   }
   return items;
+}
+
+/**
+ * The feed as the screen lists it: each day's fee rows only while its
+ * "Roster moves" line is open (`openDays` holds those days).
+ */
+export function visibleFeed(
+  items: readonly ResultsFeedItem[],
+  openDays: ReadonlySet<string>,
+): ResultsFeedItem[] {
+  return items.filter((item) => item.type !== 'fee' || openDays.has(item.date));
+}
+
+/** A month in the feed, and where its newest day starts in the list. */
+export interface MonthAnchor {
+  /** "2025-11". */
+  key: string;
+  /** "Nov" (with the year when the feed spans two of the same month). */
+  label: string;
+  /** "November 2025", for screen readers and tooltips. */
+  name: string;
+  /** Index of the month's newest day header in `items`. */
+  index: number;
+  /** That day, "2025-11-30". */
+  date: string;
+}
+
+function monthName(key: string, style: 'short' | 'long', withYear: boolean): string {
+  const date = new Date(`${key}-01T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return key;
+  return new Intl.DateTimeFormat('en-US', {
+    month: style,
+    ...(withYear ? { year: style === 'short' ? '2-digit' : 'numeric' } : {}),
+    timeZone: 'UTC',
+  }).format(date);
+}
+
+/**
+ * The months a long feed can jump to, newest first like the feed itself:
+ * one anchor per month, at that month's newest day header.
+ */
+export function monthAnchors(items: readonly ResultsFeedItem[]): MonthAnchor[] {
+  const found: Array<{ key: string; index: number; date: string }> = [];
+  items.forEach((item, index) => {
+    if (item.type !== 'night' || !item.night.date) return;
+    const key = item.night.date.slice(0, 7);
+    if (!found.some((month) => month.key === key)) found.push({ key, index, date: item.night.date });
+  });
+  const shortNames = found.map((month) => monthName(month.key, 'short', false));
+  const repeats = new Set(shortNames.filter((name, index) => shortNames.indexOf(name) !== index));
+  return found.map((month, index) => ({
+    ...month,
+    label: repeats.has(shortNames[index]) ? monthName(month.key, 'short', true) : shortNames[index],
+    name: monthName(month.key, 'long', true),
+  }));
 }
 
 /** Days in the feed, newest first. */
@@ -273,12 +286,13 @@ export function feedNights(items: readonly ResultsFeedItem[]): NightSummary[] {
 }
 
 /**
- * One plain line under a day's date: "5 of 8 beat their price · 1 of 2
- * shorts paid off · 2 didn't play". A short pays off when its player stays
- * under his price, so shorts are counted apart instead of "beating" it. A day
- * with only fees says why there are no games; the fees have their own line.
+ * The facts under a day's date, one phrase each: "5 of 8 beat their price",
+ * "1 of 2 shorts paid off", "2 didn't play". A short pays off when its player
+ * stays under his price, so shorts are counted apart instead of "beating" it.
+ * A day with only fees says why there are no games, except before your first
+ * games, where the moves speak for themselves.
  */
-export function nightSummaryLine(night: NightSummary): string {
+export function nightSummaryParts(night: NightSummary): string[] {
   const parts: string[] = [];
   if (night.rosterGames > 0) parts.push(`${night.rosterWins} of ${night.rosterGames} beat their price`);
   if (night.shortGames > 0) {
@@ -289,9 +303,24 @@ export function nightSummaryLine(night: NightSummary): string {
   if (night.corrections > 0) parts.push(`${night.corrections} corrected`);
   if (night.results === 0) {
     if (night.upcoming) parts.push('games still to come');
-    else if (night.date !== NO_DAY) parts.push('none of your players played');
+    else if (night.date !== NO_DAY && !night.beforeGames) parts.push('none of your players played');
   }
-  return parts.join(' · ');
+  return parts;
+}
+
+/** The facts as one line: "5 of 8 beat their price · 1 of 2 shorts paid off". */
+export function nightSummaryLine(night: NightSummary): string {
+  return nightSummaryParts(night).join(' · ');
+}
+
+/**
+ * The same line for the screen: each phrase kept whole (no-break spaces), so
+ * a narrow header wraps between phrases and never leaves "off" on a line of
+ * its own. The separator stays with the phrase before it.
+ */
+export function nightSummaryWrapped(night: NightSummary): string {
+  const parts = nightSummaryParts(night).map((part) => part.replace(/ /g, '\u00a0'));
+  return parts.map((part, index) => (index < parts.length - 1 ? `${part}\u00a0·` : part)).join(' ');
 }
 
 /** True when what your players made is still unknown: nothing settled yet, games still waiting. */
@@ -308,9 +337,10 @@ export function feesLineName(moves: boolean): string {
 // One result row
 
 /**
- * The two amounts a settled game compares, in the order they subtract to
- * the net: a roster spot's dividend minus his price; a short's credit (his
- * price) minus his dividend. Never "paid": that word ran backwards for shorts.
+ * The two amounts a settled game compares, in one column order on every row:
+ * his price (a roster spot is charged it, a short is credited it), then his
+ * dividend, then the profit. The SHORT tag says which way the sign runs.
+ * Never "paid": that word ran backwards for shorts.
  */
 export interface ValuePair {
   first: { label: string; amount: number };
@@ -321,9 +351,38 @@ export function valuePair(
   result: Pick<PerGameSettledResult, 'side' | 'lockedGameCost'>,
   dividend: number,
 ): ValuePair {
-  return result.side === 'short'
-    ? { first: { label: 'Credit', amount: result.lockedGameCost }, second: { label: 'dividend', amount: dividend } }
-    : { first: { label: 'Dividend', amount: dividend }, second: { label: 'price', amount: result.lockedGameCost } };
+  return {
+    first: { label: result.side === 'short' ? 'Credit' : 'Price', amount: result.lockedGameCost },
+    second: { label: 'dividend', amount: dividend },
+  };
+}
+
+/** Net points shown to one decimal, or two when one would not multiply back to the dividend. */
+function pointsText(points: number, rate: number, dividend: number): string | null {
+  for (const digits of [1, 2]) {
+    const shown = Number(points.toFixed(digits));
+    if (Math.abs(shown * rate - dividend) < 1) return shown.toFixed(digits);
+  }
+  return null;
+}
+
+/**
+ * Where a dividend came from: "7.4 net points × $40,000 = $296,000". Null
+ * when the rate is unknown or the figures would not multiply back exactly
+ * (a line that does not add up is worse than none).
+ */
+export function dividendBasisLine(input: {
+  dividend: number;
+  rate: number;
+  basis: DividendBasis;
+}): string | null {
+  const { dividend, rate, basis } = input;
+  if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(dividend)) return null;
+  const points = pointsText(dividend / rate, rate, dividend);
+  if (points === null) return null;
+  const what = basis === 'surprise_vs_projection' ? 'net points over his projection' : 'net points';
+  // No-break spaces keep "× $40,000" and "= $296,000" whole when the line wraps.
+  return `${points} ${what} ×\u00a0${exactMoney(rate)} =\u00a0${exactMoney(dividend)}`;
 }
 
 /** One line of the opened math: what it was, and what it did to your score. */
@@ -336,8 +395,9 @@ export interface EffectLine {
 /**
  * The settlement of one game, line by line, each by its effect on you, so no
  * line ever needs a minus sign in front of a negative number. The lines sum to
- * the net. A short turns his dividend around, and the label says so:
- *   roster: Dividend collected +$584,000 · Price charged -$137,500
+ * the profit, in the row's column order (price first, then dividend). A
+ * short turns his dividend around, and the label says so:
+ *   roster: Price charged -$137,500 · Dividend collected +$584,000
  *   short:  Price credited +$112,500 · His dividend was -$320,000, which a short collects +$320,000
  */
 export function settlementLines(input: {
@@ -362,7 +422,7 @@ export function settlementLines(input: {
     : input.dividend < 0
       ? { label: `${was}, which a roster spot pays`, amount: input.dividend }
       : { label: Noun, amount: 0 };
-  return [dividend, { label: 'Price charged', amount: -input.price }];
+  return [{ label: 'Price charged', amount: -input.price }, dividend];
 }
 
 /**

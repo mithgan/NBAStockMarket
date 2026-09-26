@@ -7,15 +7,15 @@
  * screen shows you: your account's own figure, the Roster's number. The
  * board ranks you as of the last settled games, so after a roster move its
  * row for you can lag; the rank, ties and gaps here never do, and
- * `boardLag` says how far behind the board's own figure is. Gaps use
- * `moneyFine`, one more digit than a score, so a $250 gap never reads "$0"
- * and two gaps to different scores never read the same.
+ * `boardLag` says how far behind the board's own figure is. Gaps use the
+ * app's one money format (`money`: "$250", "$12.5K", "$1.06M"), so a $250
+ * gap never reads "$0".
  *
  * Places are competition ranks: equal scores share the best place, and the
  * next score down takes the place after everyone above it ("1, 2, 2, 4").
  */
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { moneyFine } from '../copy/terms';
+import { money } from '../copy/terms';
 
 export interface BoardGap {
   rank: number;
@@ -27,6 +27,11 @@ export interface BoardGap {
 export type Standing =
   | { kind: 'empty' }
   | { kind: 'absent'; of: number }
+  /**
+   * Before the first games: every row is still $0, so nobody holds a place
+   * yet. `score` is your own figure, which fees may already have moved.
+   */
+  | { kind: 'level'; of: number; score: number }
   | {
       kind: 'ranked';
       /** The place you hold; in a tie, the best rank in it. */
@@ -58,6 +63,11 @@ export function sortBoard(rows: readonly PerGameLeaderboardRow[]): PerGameLeader
   ));
 }
 
+/** Every row still at $0: nobody has a score until the first games settle. */
+export function boardIsLevel(rows: readonly PerGameLeaderboardRow[]): boolean {
+  return rows.length > 0 && rows.every((row) => Math.abs(row.cumulativePnl) < 1);
+}
+
 function gapTo(row: PerGameLeaderboardRow, score: number, rank = row.rank): BoardGap {
   return { rank, name: row.displayName, gap: Math.abs(row.cumulativePnl - score) };
 }
@@ -83,8 +93,10 @@ export function boardList(
   rows: readonly PerGameLeaderboardRow[],
   accountScore?: number,
 ): BoardEntry[] {
+  // A level board (before the first games) keeps everyone at $0 together.
+  const level = boardIsLevel(rows);
   const scored = sortBoard(rows).map((row, order) => {
-    const live = row.isCurrentUser && accountScore !== undefined ? accountScore : row.cumulativePnl;
+    const live = row.isCurrentUser && accountScore !== undefined && !level ? accountScore : row.cumulativePnl;
     return { row, order, score: live };
   });
   const scores = scored.map((entry) => entry.score);
@@ -112,6 +124,9 @@ export function leaderStanding(
   if (board.length === 0) return { kind: 'empty' };
   const me = board.find((row) => row.isCurrentUser);
   if (!me) return { kind: 'absent', of: board.length };
+  // Nobody is ahead of anybody before the first games, whatever your fees
+  // have already done to your own score: no "#5 of 5" on a level board.
+  if (boardIsLevel(board)) return { kind: 'level', of: board.length, score: accountScore ?? me.cumulativePnl };
 
   const score = accountScore ?? me.cumulativePnl;
   const others = board.filter((row) => row !== me);
@@ -167,12 +182,13 @@ export function standingPlace(standing: Extract<Standing, { kind: 'ranked' }>): 
 export function standingLines(standing: Standing): string[] {
   if (standing.kind === 'empty') return [];
   if (standing.kind === 'absent') return ["You're not on the board yet."];
+  if (standing.kind === 'level') return ['Everyone is level at $0 until the first games'];
   const lines: string[] = [];
   if (standing.tiedWith.length === 1) lines.push(`Level with ${standing.tiedWith[0]}`);
   if (standing.tiedWith.length > 1) lines.push(`Level with ${standing.tiedWith.length} others`);
-  if (standing.above) lines.push(`${moneyFine(standing.above.gap)} behind #${standing.above.rank}`);
-  if (standing.first) lines.push(`${moneyFine(standing.first.gap)} behind #${standing.first.rank}`);
-  if (standing.runnerUp) lines.push(`${moneyFine(standing.runnerUp.gap)} ahead of #${standing.runnerUp.rank}`);
+  if (standing.above) lines.push(`${money(standing.above.gap)} behind #${standing.above.rank}`);
+  if (standing.first) lines.push(`${money(standing.first.gap)} behind #${standing.first.rank}`);
+  if (standing.runnerUp) lines.push(`${money(standing.runnerUp.gap)} ahead of #${standing.runnerUp.rank}`);
   if (standing.leading && standing.of === 1) lines.push('No one else is on the board yet.');
   return lines;
 }

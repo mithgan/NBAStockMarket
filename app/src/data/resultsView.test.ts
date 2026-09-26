@@ -9,17 +9,18 @@ import type {
 import { settlementEquation } from '../state/perGameState';
 import { earningsBetween, recentEarnings } from './perGameMetrics';
 import {
-  amountFine,
   buildResultsFeed,
+  dividendBasisLine,
   feeDay,
   feedNights,
   nightSummaryLine,
   nightTotalPending,
   resultRowModel,
+  monthAnchors,
+  nightSummaryWrapped,
   settlementLines,
-  shownExactly,
-  signedAmountFine,
   valuePair,
+  visibleFeed,
   type ResultsFeedItem,
   type ResultsFeedSource,
 } from './resultsView';
@@ -406,18 +407,18 @@ test('game cost and dividend ledger rows are not listed as fees', () => {
 // ---------------------------------------------------------------------------
 // The words on a row and in its math
 
-test('a row pairs dividend and price for a roster spot, credit and dividend for a short, in subtracting order', () => {
+test('every row keeps one column order: price or credit, then dividend, then profit', () => {
   const roster = valuePair({ side: 'long', lockedGameCost: 137_500 }, 584_000);
-  assert.deepEqual(roster, { first: { label: 'Dividend', amount: 584_000 }, second: { label: 'price', amount: 137_500 } });
+  assert.deepEqual(roster, { first: { label: 'Price', amount: 137_500 }, second: { label: 'dividend', amount: 584_000 } });
   const short = valuePair({ side: 'short', lockedGameCost: 112_500 }, 328_000);
   assert.deepEqual(short, { first: { label: 'Credit', amount: 112_500 }, second: { label: 'dividend', amount: 328_000 } });
-  // First minus second is the net, whatever the signs.
+  // The dividend is always the second amount; the side says which way the profit runs.
   for (const [side, price, dividend] of [
     ['long', 137_500, 584_000], ['long', 100_000, -200_000], ['short', 112_500, 328_000], ['short', 112_500, -320_000],
   ] as const) {
     const pair = valuePair({ side, lockedGameCost: price }, dividend);
-    const net = side === 'long' ? dividend - price : price - dividend;
-    assert.equal(pair.first.amount - pair.second.amount, net, `${side} ${dividend}`);
+    assert.equal(pair.first.amount, price, `${side} ${dividend}: price first`);
+    assert.equal(pair.second.amount, dividend, `${side} ${dividend}: dividend second`);
   }
 });
 
@@ -425,11 +426,11 @@ test('the opened math lists each line by its effect on you, and the lines add up
   const cases = [
     {
       input: { side: 'long', dividend: 584_000, price: 137_500, corrected: false },
-      lines: [['Dividend collected', 584_000], ['Price charged', -137_500]],
+      lines: [['Price charged', -137_500], ['Dividend collected', 584_000]],
     },
     {
       input: { side: 'long', dividend: -200_000, price: 100_000, corrected: false },
-      lines: [['His dividend was -$200,000, which a roster spot pays', -200_000], ['Price charged', -100_000]],
+      lines: [['Price charged', -100_000], ['His dividend was -$200,000, which a roster spot pays', -200_000]],
     },
     {
       input: { side: 'short', dividend: 328_000, price: 112_500, corrected: false },
@@ -441,7 +442,7 @@ test('the opened math lists each line by its effect on you, and the lines add up
     },
     {
       input: { side: 'long', dividend: 0, price: 90_000, corrected: false },
-      lines: [['Dividend', 0], ['Price charged', -90_000]],
+      lines: [['Price charged', -90_000], ['Dividend', 0]],
     },
     {
       input: { side: 'short', dividend: -40_000, price: 90_000, corrected: true },
@@ -472,17 +473,17 @@ function rowFor(
   return resultRowModel(row, settlementEquation(row, ledger, results, { ledgerComplete }));
 }
 
-test('a settled roster game opens dividend collected and price charged', () => {
+test('a settled roster game opens price charged and dividend collected', () => {
   const model = rowFor(result({ lockedGameCost: 200_000, dividendDollars: 336_000, netPnl: 136_000 }));
   assert.equal(model.net, 136_000);
   assert.ok(model.math);
   assert.deepEqual(model.math.pair, {
-    first: { label: 'Dividend', amount: 336_000 },
-    second: { label: 'price', amount: 200_000 },
+    first: { label: 'Price', amount: 200_000 },
+    second: { label: 'dividend', amount: 336_000 },
   });
   assert.deepEqual(model.math.lines, [
-    { label: 'Dividend collected', amount: 336_000 },
     { label: 'Price charged', amount: -200_000 },
+    { label: 'Dividend collected', amount: 336_000 },
   ]);
   assert.equal(model.math.net, 136_000);
   assert.equal(model.adjustment, undefined);
@@ -528,7 +529,7 @@ test('a correction shows its P&L adjustment from the complete ledger, and number
   assert.equal(model.correctionNumber, 1);
   assert.equal(model.adjustment, 24_000);
   assert.equal(model.net, 74_000);
-  assert.equal(model.math?.lines[0].label, 'Corrected dividend collected');
+  assert.equal(model.math?.lines[1].label, 'Corrected dividend collected');
   assert.equal(model.mismatch, false);
 
   const again = result({
@@ -607,81 +608,111 @@ test('amounts that do not add up are flagged, and the math still opens', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Precision: a night's shown total is the sum of its rows as shown.
+// One money format: nights carry no precision of their own.
 
-/** Read a shown amount back: "+$1,215.5K" -> 1215500. */
-function shownValue(text: string): number {
-  const match = text.match(/^([+-]?)\$([\d,.]+)([KM]?)$/);
-  assert.ok(match, `not an amount: ${text}`);
-  const value = parseFloat(match[2].replace(/,/g, '')) * (match[3] === 'K' ? 1_000 : match[3] === 'M' ? 1_000_000 : 1);
-  return match[1] === '-' ? -value : value;
-}
-
-test('amounts keep one decimal of a thousand, even past a million', () => {
-  assert.equal(amountFine(446_500), '$446.5K');
-  assert.equal(amountFine(3_500), '$3,500');
-  assert.equal(amountFine(1_279_000), '$1,279K', 'not "$1.28M", which rounds to $10K');
-  assert.equal(amountFine(-1_215_500), '-$1,215.5K');
-  assert.equal(signedAmountFine(1_062_500), '+$1,062.5K');
-  assert.equal(signedAmountFine(-250), '-$250');
-  assert.equal(signedAmountFine(0), '$0');
-});
-
-/** What a night's row and header amounts read as, at the night's precision. */
-function shown(amount: number, exact: boolean): number {
-  return exact ? Math.round(amount) : shownValue(signedAmountFine(amount));
-}
-
-test("a round night's shown total equals the sum of its rows at a tenth of a thousand, even past a million", () => {
+test('no night or row carries a precision of its own: every amount uses the one money format', () => {
   cursor = 600;
-  const nets = [668_000, 316_500, 79_000, -118_500, -136_500, 470_500];
-  const results = nets.map((netPnl, index) => result({
-    positionId: `pos-${index}`,
-    gameId: `g-${index}`,
-    gameDate: '2025-10-28',
-    lockedGameCost: 100_000,
-    dividendDollars: 100_000 + netPnl,
-    netPnl,
-  }));
-  const feed = buildResultsFeed(source(results, [fee({ kind: 'open_fee', amountDollars: -3_000, createdAt: '2025-10-28T12:00:00.000Z' })]));
-  const [night] = feedNights(feed);
-  assert.equal(night.exact, false, 'whole hundreds everywhere: the short form adds up');
-  assert.equal(night.total, 1_279_000);
-  assert.equal(signedAmountFine(night.total), '+$1,279K');
-  const rows = nets.map((amount) => shown(amount, night.exact));
-  assert.equal(shown(night.total, night.exact), rows.reduce((sum, amount) => sum + amount, 0), 'the header is its game rows');
-  assert.equal(shown(night.fees, night.exact), -3_000, 'the fees line is its fee row');
-  assert.ok(feed.filter((item) => item.type !== 'night').every((item) => 'exact' in item && item.exact === false));
-});
-
-test('a lone fee keeps the short form; a night that would not add up at a tenth of a thousand is shown to the dollar', () => {
-  cursor = 700;
-  // A lone $250 fee is on its own line to the dollar, so round games keep the short form.
-  const games = [446_500, -66_500].map((netPnl, index) => result({
-    positionId: `pos-${index}`, gameId: `f-${index}`, gameDate: '2025-11-05', netPnl, dividendDollars: 100_000 + netPnl,
-  }));
-  const withFee = feedNights(buildResultsFeed(source(games, [fee({ kind: 'drop_fee', createdAt: '2025-11-05T12:00:00.000Z' })])))[0];
-  assert.equal(withFee.total, 380_000);
-  assert.equal(withFee.fees, -250);
-  assert.equal(withFee.exact, false);
-  assert.equal(shown(withFee.total, false), [446_500, -66_500].reduce((sum, amount) => sum + amount, 0));
-
-  // A price locked after the market drifted is in odd dollars.
   const drifted = result({ positionId: 'pos-d', gameId: 'd1', gameDate: '2025-11-06', lockedGameCost: 137_851, dividendDollars: 584_000, netPnl: 446_149 });
-  const round = result({ positionId: 'pos-r', gameId: 'r1', gameDate: '2025-11-06', lockedGameCost: 100_000, dividendDollars: 324_000, netPnl: 224_000 });
-  const feed = buildResultsFeed(source([drifted, round]));
-  const [night] = feedNights(feed);
-  assert.equal(night.exact, true);
-  assert.equal(shown(night.total, true), 446_149 + 224_000);
-  const rows = feed.filter((item) => item.type === 'result');
-  assert.ok(rows.every((item) => item.type === 'result' && item.exact), 'every row on that night follows it');
+  const feed = buildResultsFeed(source([drifted], [fee({ createdAt: '2025-11-06T23:45:00.000Z' })]));
+  for (const item of feed) {
+    assert.ok(!('exact' in item), `${item.key} has no exact flag`);
+    if (item.type === 'night') assert.ok(!('exact' in item.night), 'nor does its night');
+  }
 });
 
-test('shownExactly: dollars under $10K, whole hundreds above', () => {
-  assert.equal(shownExactly(3_500), true);
-  assert.equal(shownExactly(-9_999), true);
-  assert.equal(shownExactly(446_500), true);
-  assert.equal(shownExactly(1_279_000), true);
-  assert.equal(shownExactly(322_250), false);
-  assert.equal(shownExactly(137_851), false);
+// ---------------------------------------------------------------------------
+// Days with only moves
+
+test('moves made before your first games read as moves, not as a night nobody played', () => {
+  cursor = 700;
+  // Practice Day 0: moves booked on the opening eve, which is the last settled day.
+  const eve = [0, 1, 2].map((index) => fee({ entryId: `eve-${index}`, positionId: `pos-${index}`, createdAt: '2025-10-20T23:45:00.000Z' }));
+  const feed = buildResultsFeed(source([], eve), { lastSettledDate: '2025-10-20' });
+  assert.deepEqual(shape(feed), ['night:2025-10-20', 'fees:2025-10-20', 'fee:eve-2', 'fee:eve-1', 'fee:eve-0']);
+  const [night] = feedNights(feed);
+  assert.equal(night.beforeGames, true);
+  assert.equal(night.upcoming, false);
+  assert.equal(nightSummaryLine(night), '', 'no "none of your players played" before any game');
+  const fold = feed[1];
+  assert.ok(fold.type === 'fees');
+  assert.deepEqual({ count: fold.count, total: fold.total, moves: fold.moves }, { count: 3, total: -750, moves: true });
+
+  // Once games have been played, a later day with only moves still says why.
+  const game = result({ positionId: 'pos-0', gameId: 'g1', gameDate: '2025-10-21' });
+  const later = fee({ entryId: 'later', kind: 'drop_fee', createdAt: '2025-10-22T23:45:00.000Z' });
+  const season = feedNights(buildResultsFeed(source([game], [...eve, later]), { lastSettledDate: '2025-10-22' }));
+  assert.deepEqual(season.map((day) => [day.date, day.beforeGames, nightSummaryLine(day)]), [
+    ['2025-10-22', false, 'none of your players played'],
+    ['2025-10-21', false, '1 of 1 beat their price'],
+    ['2025-10-20', true, ''],
+  ]);
+});
+
+test('fee rows stay folded under their day until that day is opened', () => {
+  cursor = 800;
+  const game = result({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-02' });
+  const fees = [fee({ entryId: 'a', createdAt: '2025-11-02T23:45:00.000Z' }), fee({ entryId: 'b', createdAt: '2025-11-01T23:45:00.000Z' })];
+  const feed = buildResultsFeed(source([game], fees));
+  assert.deepEqual(shape(visibleFeed(feed, new Set())), ['night:2025-11-02', 'result:pos-1:g1', 'fees:2025-11-02', 'night:2025-11-01', 'fees:2025-11-01']);
+  assert.deepEqual(shape(visibleFeed(feed, new Set(['2025-11-01']))), ['night:2025-11-02', 'result:pos-1:g1', 'fees:2025-11-02', 'night:2025-11-01', 'fees:2025-11-01', 'fee:b']);
+});
+
+// ---------------------------------------------------------------------------
+// Night headers
+
+test('a night header wraps between phrases, never inside one', () => {
+  cursor = 900;
+  const games = [
+    result({ positionId: 'pos-1', gameId: 'w1', gameDate: '2025-11-03', netPnl: 10_000 }),
+    result({ positionId: 'pos-2', gameId: 'w2', gameDate: '2025-11-03', side: 'short', netPnl: 20_000 }),
+    result({ positionId: 'pos-3', gameId: 'w3', gameDate: '2025-11-03', side: 'short', netPnl: -5_000 }),
+  ];
+  const [night] = feedNights(buildResultsFeed(source(games)));
+  assert.equal(nightSummaryLine(night), '1 of 1 beat their price · 1 of 2 shorts paid off');
+  const wrapped = nightSummaryWrapped(night);
+  // The only breakable space is between the two phrases; "off" stays with its phrase.
+  assert.deepEqual(wrapped.split(' '), ['1 of 1 beat their price ·', '1 of 2 shorts paid off']);
+});
+
+// ---------------------------------------------------------------------------
+// The math behind a dividend
+
+test('the math shows the net points behind a dividend, and only when they multiply back exactly', () => {
+  assert.equal(dividendBasisLine({ dividend: 296_000, rate: 40_000, basis: 'raw_net_points' }), '7.4 net points ×\u00a0$40,000 =\u00a0$296,000');
+  assert.equal(dividendBasisLine({ dividend: -104_000, rate: 40_000, basis: 'raw_net_points' }), '-2.6 net points ×\u00a0$40,000 =\u00a0-$104,000');
+  assert.equal(dividendBasisLine({ dividend: 0, rate: 40_000, basis: 'raw_net_points' }), '0.0 net points ×\u00a0$40,000 =\u00a0$0');
+  assert.equal(
+    dividendBasisLine({ dividend: 90_000, rate: 40_000, basis: 'surprise_vs_projection' }),
+    '2.25 net points over his projection ×\u00a0$40,000 =\u00a0$90,000',
+  );
+  assert.equal(dividendBasisLine({ dividend: 123_457, rate: 40_000, basis: 'raw_net_points' }), null, 'no rounded equation');
+  assert.equal(dividendBasisLine({ dividend: 296_000, rate: 0, basis: 'raw_net_points' }), null, 'no rate, no line');
+});
+
+// ---------------------------------------------------------------------------
+// Long seasons: month jump
+
+test('a long feed offers one jump per month, newest first, at that month\'s newest day', () => {
+  cursor = 1000;
+  const games = ['2025-12-02', '2025-11-30', '2025-11-02', '2025-10-22'].map((gameDate, index) => result({
+    positionId: `pos-${index}`, gameId: `m${index}`, gameDate,
+  }));
+  const feed = buildResultsFeed(source(games, [fee({ entryId: 'eve', createdAt: '2025-10-20T23:45:00.000Z' })]));
+  const anchors = monthAnchors(feed);
+  assert.deepEqual(anchors.map((anchor) => [anchor.key, anchor.label, anchor.date]), [
+    ['2025-12', 'Dec', '2025-12-02'],
+    ['2025-11', 'Nov', '2025-11-30'],
+    ['2025-10', 'Oct', '2025-10-22'],
+  ]);
+  for (const anchor of anchors) {
+    const item = feed[anchor.index];
+    assert.ok(item.type === 'night' && item.night.date === anchor.date, `${anchor.key} points at its header`);
+  }
+  assert.equal(anchors[0].name, 'December 2025');
+  // Twelve months apart, the short label carries the year so two Octobers differ.
+  const twoSeasons = monthAnchors(buildResultsFeed(source([
+    result({ positionId: 'pos-a', gameId: 'y1', gameDate: '2026-10-21' }),
+    result({ positionId: 'pos-b', gameId: 'y2', gameDate: '2025-10-21' }),
+  ])));
+  assert.deepEqual(twoSeasons.map((anchor) => anchor.label), ['Oct 26', 'Oct 25']);
 });

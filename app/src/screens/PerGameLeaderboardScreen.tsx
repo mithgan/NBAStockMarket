@@ -1,31 +1,65 @@
+import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { exactMoney, exactSignedMoney, signedMoney } from '../copy/terms';
+import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
+import { signedMoney } from '../copy/terms';
 import { NetMoney } from '../components/results/NetMoney';
+import { practiceProgress } from '../data/chromeView';
 import {
   boardLag,
   boardList,
   leaderStanding,
   sortBoard,
   standingLines,
-  standingPlace,
   type BoardEntry,
   type Standing,
 } from '../data/leadersView';
+import { isSeasonOver } from '../data/marketView';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, fonts, headingStyle, labelStyle, space, type, weight } from '../theme';
 import { EmptyState, headingLevel, Tag, visuallyHidden } from '../ui/kit';
 
-/** At this width the board becomes a centred column, not a stretched phone. */
+/**
+ * At this width Leaders fills the frame like every other tab: your standing
+ * in a side column (as wide as the Results one) beside the board.
+ */
 const DESKTOP_MIN_WIDTH = 1024;
+const SIDE_WIDTH = 280;
 /** Below this width (a phone at 200% zoom) a row stacks: rank and name, then score. */
 const STACK_MAX_WIDTH = 330;
-const BOARD_MAX_WIDTH = 720;
 const RANK_WIDTH = 52;
 
-/** "$0" for exactly nothing, otherwise the signed exact amount. */
+/** Screen-reader money, read the way the screen writes it: "$0" for nothing. */
 function scoreWords(value: number): string {
-  return Math.round(value) === 0 ? exactMoney(0) : exactSignedMoney(value);
+  return Math.round(value) === 0 ? '$0' : signedMoney(value);
+}
+
+/** One label for screen readers where the eye sees several pieces. */
+function Spoken({ children }: { children: string }) {
+  return (
+    <View style={visuallyHidden}>
+      <Text>{children}</Text>
+    </View>
+  );
+}
+
+/** The seen pieces a `Spoken` label already says, kept out of the reading order. */
+function Seen({ children, style }: { children: ReactNode; style?: object | object[] }) {
+  return (
+    <View
+      accessibilityElementsHidden
+      aria-hidden
+      importantForAccessibility="no-hide-descendants"
+      style={style}
+    >
+      {children}
+    </View>
+  );
+}
+
+/** "Rank 2 of 5" or "Tied for 2 of 5". */
+function placeWords(standing: Extract<Standing, { kind: 'ranked' }>): string {
+  return `${standing.tiedWith.length > 0 ? 'Tied for' : 'Rank'} ${standing.rank} of ${standing.of}`;
 }
 
 /**
@@ -33,22 +67,26 @@ function scoreWords(value: number): string {
  * #1. The score is your account's, shown exactly as the Roster shows it, and
  * the rank, ties and gaps are all worked out from that same score against the
  * other rows; a caption says when the board's own row for you has not caught
- * up. Gaps carry one more digit than the scores (leadersView), so a $250 gap
- * never reads as $0.
+ * up. Before the first games nobody has a place: everyone is level at $0, and
+ * your fees so far are a note. Screen readers hear the block as one sentence.
  */
 function StandingBlock({
   accountScore,
   compact,
+  final,
   standing,
 }: {
   accountScore: number;
   compact: boolean;
+  final: boolean;
   standing: Standing;
 }) {
   if (standing.kind === 'empty') return null;
   const lines = standingLines(standing);
   const heading = (
-    <Text accessibilityRole="header" {...headingLevel(2)} style={styles.standingLabel}>Your standing</Text>
+    <Text accessibilityRole="header" {...headingLevel(2)} style={styles.standingLabel}>
+      {final ? 'Your final standing' : 'Your standing'}
+    </Text>
   );
   if (standing.kind === 'absent') {
     return (
@@ -61,19 +99,34 @@ function StandingBlock({
       </View>
     );
   }
-  const place = standingPlace(standing);
+  if (standing.kind === 'level') {
+    const fees = Math.round(standing.score) === 0
+      ? null
+      : `Your fees so far: ${signedMoney(standing.score)}. The board counts them after the first games.`;
+    return (
+      <View style={styles.standing}>
+        {heading}
+        <Text style={styles.level}>{lines[0]}.</Text>
+        {fees ? <Text style={styles.lag}>{fees}</Text> : null}
+      </View>
+    );
+  }
   const tied = standing.tiedWith.length > 0;
   const lag = boardLag(standing);
-  const lagWords = lag === null
-    ? ''
-    : ` The board still has you at ${scoreWords(standing.boardScore)} until the next games settle.`;
+  const lagLine = lag === null
+    ? null
+    : `The board still has you at ${signedMoney(standing.boardScore)} until the next games settle.`;
+  const spoken = [
+    placeWords(standing),
+    `${final ? 'final score' : 'your score'} ${scoreWords(standing.score)}`,
+    ...(lagLine ? [lagLine.replace(/\.$/, '')] : []),
+    ...lines,
+  ].join(', ');
   return (
     <View style={styles.standing}>
       {heading}
-      <View
-        accessibilityLabel={`${place} of ${standing.of}. Your score ${scoreWords(standing.score)}.${lagWords} ${lines.join('. ')}.`}
-        accessible
-      >
+      <Spoken>{`${spoken}.`}</Spoken>
+      <Seen>
         <View style={[styles.standingTop, compact && styles.standingTopCompact]}>
           <View style={styles.placeLine}>
             {tied ? <Text style={styles.tiedWord}>Tied for</Text> : null}
@@ -82,14 +135,10 @@ function StandingBlock({
           </View>
           <View style={[styles.scoreBlock, compact && styles.scoreBlockCompact]}>
             <NetMoney size="title" value={standing.score} />
-            <Text style={styles.scoreLabel}>your score</Text>
+            <Text style={styles.scoreLabel}>{final ? 'final score' : 'your score'}</Text>
           </View>
         </View>
-        {lag === null ? null : (
-          <Text style={styles.lag}>
-            The board still has you at {signedMoney(standing.boardScore)} until the next games settle.
-          </Text>
-        )}
+        {lagLine ? <Text style={styles.lag}>{lagLine}</Text> : null}
         {lines.length > 0 ? (
           <View style={styles.gaps}>
             {lines.map((line) => (
@@ -97,31 +146,40 @@ function StandingBlock({
             ))}
           </View>
         ) : null}
-      </View>
+      </Seen>
     </View>
   );
 }
 
-function BoardRow({ compact, entry }: { compact: boolean; entry: BoardEntry }) {
+/**
+ * One row of the board, read as one list item: "Rank 2, Deep Threes,
+ * +$245K". On a level board (before the first games) no one has a rank yet.
+ */
+function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEntry; level: boolean }) {
   const { row, place, tied, score, boardScore } = entry;
   const you = row.isCurrentUser;
+  // Practice names your row "You"; a YOU tag beside it would say it twice.
+  const tagged = you && row.displayName.trim().toLowerCase() !== 'you';
+  const who = `${row.displayName}${tagged ? ', you' : ''}`;
+  const spoken = level
+    ? `${who}, level at $0`
+    : `${tied ? 'Tied for' : 'Rank'} ${place}, ${who}, ${scoreWords(score)}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`;
   return (
-    <View
-      accessibilityLabel={`${tied ? 'Tied for ' : ''}#${place}, ${row.displayName}${you ? ', you' : ''}, score ${scoreWords(score)}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`}
-      accessible
-      style={[styles.row, compact && styles.rowCompact, you && styles.currentRow]}
-    >
-      <Text style={[styles.rank, compact && styles.rankCompact]}>#{place}</Text>
-      <View style={[styles.nameCell, compact && styles.nameCompact]}>
-        <Text style={styles.name}>{row.displayName}</Text>
-        {you ? <Tag tone="gold">You</Tag> : null}
-      </View>
-      <View style={[styles.scoreCell, compact && styles.scoreCompact]}>
-        <NetMoney value={score} />
-        {boardScore === null ? null : (
-          <Text style={[styles.boardNote, compact && styles.boardNoteCompact]}>board {signedMoney(boardScore)}</Text>
-        )}
-      </View>
+    <View role="listitem" style={[styles.item, you && styles.currentRow]}>
+      <Spoken>{spoken}</Spoken>
+      <Seen style={[styles.row, compact && styles.rowCompact]}>
+        <Text style={[styles.rank, compact && styles.rankCompact]}>{level ? '–' : `#${place}`}</Text>
+        <View style={[styles.nameCell, compact && styles.nameCompact]}>
+          <Text style={styles.name}>{row.displayName}</Text>
+          {tagged ? <Tag tone="gold">You</Tag> : null}
+        </View>
+        <View style={[styles.scoreCell, compact && styles.scoreCompact]}>
+          <NetMoney value={score} />
+          {boardScore === null ? null : (
+            <Text style={[styles.boardNote, compact && styles.boardNoteCompact]}>board {signedMoney(boardScore)}</Text>
+          )}
+        </View>
+      </Seen>
     </View>
   );
 }
@@ -137,45 +195,78 @@ export function PerGameLeaderboardScreen() {
   const rows = sortBoard(bootstrap.leaderboard);
   // You are placed by your account score, the figure shown; the others by their rows.
   const standing = leaderStanding(rows, bootstrap.account.cumulativePnl);
+  const level = standing.kind === 'level';
   // The list places you by the same score, with the board's figure as a note while it lags.
   const list = boardList(rows, bootstrap.account.cumulativePnl);
+  // The Roster's rule: practice ends on its last day, a live season when no games are left.
+  const final = isSeasonOver({
+    practiceComplete: isMockActive() && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete,
+    lastSettledDate: bootstrap.game.lastSettledDate,
+    nextGameDate: bootstrap.game.nextGameDate,
+  });
+
+  const header = (
+    <View style={styles.header}>
+      <Text accessibilityRole="header" {...headingLevel(1)} style={styles.title}>
+        {final ? 'Final standings' : 'Leaders'}
+      </Text>
+      <Text style={styles.subtitle}>
+        {final
+          ? 'The season is over. Ranked by total score; everyone started at $0.'
+          : 'Ranked by total score. Everyone started the season at $0.'}
+      </Text>
+    </View>
+  );
+  const standingBlock = (
+    <StandingBlock
+      accountScore={bootstrap.account.cumulativePnl}
+      compact={compact || wide}
+      final={final}
+      standing={standing}
+    />
+  );
+  const board = rows.length === 0 ? (
+    <EmptyState
+      copy="The board fills in once the first games settle."
+      level={2}
+      style={styles.empty}
+      title="No one is on the board yet"
+    />
+  ) : (
+    <>
+      <View style={visuallyHidden}>
+        <Text accessibilityRole="header" {...headingLevel(2)}>The board</Text>
+      </View>
+      {!compact ? (
+        <Seen style={styles.tableHead}>
+          <Text style={[styles.headLabel, styles.headRank]}>Rank</Text>
+          <Text style={[styles.headLabel, styles.headName]}>Name</Text>
+          <Text style={[styles.headLabel, styles.headScore]}>Score</Text>
+        </Seen>
+      ) : null}
+      <View accessibilityLabel="The board" role="list">
+        {list.map((entry) => (
+          <BoardRow compact={compact} entry={entry} key={entry.row.entryId} level={level} />
+        ))}
+      </View>
+    </>
+  );
 
   return (
-    <ScrollView
-      contentContainerStyle={[styles.content, wide && styles.contentWide]}
-      style={styles.scroll}
-    >
-      <View style={styles.header}>
-        <Text accessibilityRole="header" {...headingLevel(1)} style={styles.title}>Leaders</Text>
-        <Text style={styles.subtitle}>Ranked by total score. Everyone started the season at $0.</Text>
-      </View>
-      <StandingBlock
-        accountScore={bootstrap.account.cumulativePnl}
-        compact={compact}
-        standing={standing}
-      />
-      {rows.length === 0 ? (
-        <EmptyState
-          copy="The board fills in once the first games settle."
-          level={2}
-          style={styles.empty}
-          title="No one is on the board yet"
-        />
+    <ScrollView contentContainerStyle={[styles.content, wide && styles.contentWide]} style={styles.scroll}>
+      {wide ? (
+        <View style={styles.split}>
+          <View style={styles.side}>
+            {header}
+            {standingBlock}
+          </View>
+          <View style={styles.main}>{board}</View>
+        </View>
       ) : (
         <>
-          <View style={visuallyHidden}>
-            <Text accessibilityRole="header" {...headingLevel(2)}>The board</Text>
-          </View>
-          {!compact ? (
-            <View style={styles.tableHead}>
-              <Text style={[styles.headLabel, styles.headRank]}>Rank</Text>
-              <Text style={[styles.headLabel, styles.headName]}>Name</Text>
-              <Text style={[styles.headLabel, styles.headScore]}>Score</Text>
-            </View>
-          ) : null}
-          {list.map((entry) => (
-            <BoardRow compact={compact} entry={entry} key={entry.row.entryId} />
-          ))}
+          {header}
+          {standingBlock}
+          {board}
         </>
       )}
     </ScrollView>
@@ -187,18 +278,30 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    // Fill the screen even when the board is short, so the desktop column's
-    // side rules run all the way down.
+    // Fill the screen even when the board is short, so the desktop side
+    // column's rule runs all the way down.
     flexGrow: 1,
     paddingBottom: 110,
   },
+  // Desktop: the side column runs to the bottom; the board keeps the room
+  // under its last row.
   contentWide: {
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: BOARD_MAX_WIDTH,
-    borderLeftWidth: StyleSheet.hairlineWidth,
+    paddingBottom: 0,
+  },
+  split: {
+    flexGrow: 1,
+    flexDirection: 'row',
+  },
+  side: {
+    width: SIDE_WIDTH,
     borderRightWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderRightColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  main: {
+    flex: 1,
+    minWidth: 0,
+    paddingBottom: 110,
   },
   header: {
     paddingHorizontal: space.lg,
@@ -279,6 +382,15 @@ const styles = StyleSheet.create({
     color: colors.faint,
     fontSize: type.caption,
   },
+  // Before the first games: one plain sentence instead of a rank.
+  level: {
+    marginTop: space.sm,
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.bold,
+    lineHeight: 21,
+  },
   lag: {
     marginTop: space.sm,
     color: colors.muted,
@@ -333,6 +445,11 @@ const styles = StyleSheet.create({
   headScore: {
     textAlign: 'right',
   },
+  item: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.background,
+  },
   row: {
     minHeight: 52,
     flexDirection: 'row',
@@ -340,9 +457,6 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.background,
   },
   rowCompact: {
     flexWrap: 'wrap',

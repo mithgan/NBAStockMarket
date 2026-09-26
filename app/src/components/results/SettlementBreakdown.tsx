@@ -19,22 +19,32 @@ function effect(amount: number): string {
  * `settlementLines` (data/resultsView.ts).
  */
 export function SettlementBreakdown({
+  basis,
   lines,
   net,
   side,
   wide,
 }: {
+  /** Where his dividend came from: "7.4 net points × $40,000 = $296,000". */
+  basis?: string | null;
   lines: readonly EffectLine[];
   net: number;
   side: PerGamePositionSide;
   /** Desktop: a receipt-width column aligned to the right, under the numbers. */
   wide: boolean;
 }) {
-  const spoken = [...lines.map((line) => `${line.label}: ${effect(line.amount)}`), `Net: ${effect(net)}`].join('. ');
+  const spoken = [
+    ...(basis ? [`His dividend: ${basis}`] : []),
+    ...lines.map((line) => `${line.label}: ${effect(line.amount)}`),
+    `Profit: ${effect(net)}`,
+  ].join('. ');
   return (
     <View style={[styles.box, wide && styles.boxWide]}>
       <View accessibilityLabel={`${spoken}.`} accessible>
         <Text style={styles.heading}>For you</Text>
+        {basis ? (
+          <Text style={styles.basis}>His dividend: {basis}</Text>
+        ) : null}
         {lines.map((line) => (
           <View key={line.label} style={styles.line}>
             <Text style={styles.lineLabel}>{line.label}</Text>
@@ -42,7 +52,7 @@ export function SettlementBreakdown({
           </View>
         ))}
         <View style={[styles.line, styles.total]}>
-          <Text style={[styles.lineLabel, styles.totalLabel]}>Net</Text>
+          <Text style={[styles.lineLabel, styles.totalLabel]}>Profit</Text>
           <NetMoney compact={false} size="body" style={styles.lineMoney} value={net} />
         </View>
       </View>
@@ -71,6 +81,13 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
     textAlign: 'right',
     textTransform: 'uppercase',
+  },
+  basis: {
+    marginBottom: 2,
+    color: colors.muted,
+    fontSize: type.caption,
+    lineHeight: 17,
+    fontVariant: ['tabular-nums'],
   },
   line: {
     minHeight: 22,

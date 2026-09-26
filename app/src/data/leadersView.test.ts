@@ -146,17 +146,11 @@ test('the list shows a tie as one shared place, matching "Tied for #2"', () => {
 });
 
 test('while the board lags, your row sits at the score shown, with the board figure as a note', () => {
-  // Day 0 after one add: everyone else at $0, you at -$250; the board still says $0.
+  // Day 0 after one add: everyone is level at $0 until the first games, fees or not.
   const day0 = boardList(board([['Ava', 0], ['Ben', 0], ['You', 0, true], ['Cal', 0], ['Dee', 0]]), -250);
-  assert.deepEqual(listed(day0), [
-    '#1= Ava 0',
-    '#1= Ben 0',
-    '#1= Cal 0',
-    '#1= Dee 0',
-    '#5 You -250 (board 0)',
-  ]);
-  const standing = ranked(leaderStanding(board([['Ava', 0], ['Ben', 0], ['You', 0, true], ['Cal', 0], ['Dee', 0]]), -250));
-  assert.equal(standingPlace(standing), '#5', 'the headline and the list agree');
+  assert.deepEqual(listed(day0), ['#1= Ava 0', '#1= Ben 0', '#1= You 0', '#1= Cal 0', '#1= Dee 0']);
+  const standing = leaderStanding(board([['Ava', 0], ['Ben', 0], ['You', 0, true], ['Cal', 0], ['Dee', 0]]), -250);
+  assert.deepEqual(standing, { kind: 'level', of: 5, score: -250 }, 'no last place on a level board');
 
   // A score that has moved past someone takes their place in the list too.
   const passed = boardList(board([['Ava', 100_000], ['Ben', 60_000], ['You', 50_000, true], ['Cal', 10_000]]), 70_000);
@@ -186,15 +180,14 @@ test('the board can lag your account score until the next games settle', () => {
 });
 
 test('you are placed by the score shown, not by a board row that lags it', () => {
-  // Day 0: everyone at $0 on the board, and one add fee has taken you to -$250.
-  const day0 = ranked(leaderStanding(board([
+  // Day 0: everyone at $0 on the board. One add fee has taken you to -$250,
+  // but nobody has a place yet: one sentence, and your fees as a note.
+  const day0 = leaderStanding(board([
     ['You', 0, true], ['Ava', 0], ['Ben', 0], ['Cal', 0], ['Dee', 0],
-  ]), -250));
-  assert.equal(standingPlace(day0), '#5', 'last, not "Tied for #1"');
-  assert.equal(day0.of, 5);
-  assert.deepEqual(day0.tiedWith, []);
-  assert.deepEqual(standingLines(day0), ['$250 behind #1']);
-  assert.equal(boardLag(day0), -250);
+  ]), -250);
+  assert.equal(day0.kind, 'level');
+  assert.deepEqual(standingLines(day0), ['Everyone is level at $0 until the first games']);
+  assert.equal(boardLag(day0), null);
 
   // After drops the gap is measured from the -$188.5K shown, not the board's -$187.5K.
   const afterDrops = ranked(leaderStanding(board([

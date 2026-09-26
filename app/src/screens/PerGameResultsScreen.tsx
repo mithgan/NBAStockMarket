@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -7,17 +7,20 @@ import {
   useWindowDimensions,
   View,
   type ListRenderItem,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type ViewToken,
 } from 'react-native';
 
 import type {
+  DividendBasis,
   PerGameLedgerEntry,
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
 import {
-  exactMoney,
-  exactSignedMoney,
   humanDay,
+  money,
   signedMoney,
   unbrokenName,
 } from '../copy/terms';
@@ -26,13 +29,17 @@ import { Disclosure, DisclosureSpace, DISCLOSURE_WIDTH } from '../components/res
 import { NetMoney } from '../components/results/NetMoney';
 import { SettlementBreakdown } from '../components/results/SettlementBreakdown';
 import {
-  amountFine,
   buildResultsFeed,
+  dividendBasisLine,
   feedNights,
   feesLineName,
+  monthAnchors,
   nightSummaryLine,
+  nightSummaryWrapped,
   nightTotalPending,
   resultRowModel,
+  visibleFeed,
+  type MonthAnchor,
   type NightSummary,
   type ResultRowModel,
   type ResultsFeedItem,
@@ -44,16 +51,23 @@ import {
   type SettlementEquation,
 } from '../state/perGameState';
 import { colors, fonts, headingStyle, labelStyle, space, type, weight } from '../theme';
-import { EmptyState, headingLevel, Tag } from '../ui/kit';
+import { Button, EmptyState, headingLevel, Tag } from '../ui/kit';
 
-/** At this width the feed becomes a centred column with aligned number columns. */
+/**
+ * At this width the screen fills the frame like Roster and Market: a side
+ * column (title, month jump) beside the feed, whose rows use aligned number
+ * columns.
+ */
 const DESKTOP_MIN_WIDTH = 1024;
+/** The desktop side column, the same width as the Leaders standing column. */
+const SIDE_WIDTH = 280;
 /**
  * Below this width (a phone at 200% zoom is 195 CSS px) a name and a net no
  * longer fit side by side: rows stack, and the headshot steps aside.
  */
 const STACK_MAX_WIDTH = 330;
-const FEED_MAX_WIDTH = 840;
+/** Scrolled this many screens down, "Back to newest" appears. */
+const FAR_SCREENS = 1.5;
 const AVATAR = 32;
 /** Collapsed height of a row's two lines, so the chevron sits level with them. */
 const STACKED_LINES = 40;
@@ -94,31 +108,15 @@ function edges(layout: Layout) {
 // ---------------------------------------------------------------------------
 // Copy for one result. Every status keeps a visible, honest line.
 
-/**
- * An amount at its night's precision: a tenth of a thousand ("$446.5K"), or
- * to the dollar on a night whose amounts would not add up that way.
- */
-function amountText(value: number, exact: boolean): string {
-  return exact ? exactMoney(value) : amountFine(value);
-}
-
-function resultPhrase(result: PerGameSettledResult, model: ResultRowModel, exact: boolean): string {
+function resultPhrase(result: PerGameSettledResult, model: ResultRowModel): string {
   if (result.status === 'verified_dnp') return "Didn't play — no charge";
   if (result.status === 'unsettled_missing_projection') return 'Unsettled · his pregame projection is missing';
   if (result.status !== 'settled') return 'Unsettled · waiting on stats';
   if (!model.math) return 'Result incomplete · waiting on stats';
-  // The pair in the order it subtracts to the net, at the same precision as
-  // the net, so the three numbers visibly add up ($584K - $137.5K = $446.5K).
-  // A no-break space keeps each word with its amount when the line wraps.
+  // Price (or credit), then dividend: the column order of every row. A
+  // no-break space keeps each word with its amount when the line wraps.
   const { first, second } = model.math.pair;
-  return `${first.label}\u00a0${amountText(first.amount, exact)} · ${second.label}\u00a0${amountText(second.amount, exact)}`;
-}
-
-/** A row's or a night's own figure, green or red, at its night's precision. */
-function NightMoney({ exact, size, value }: { exact: boolean; size?: 'body' | 'value' | 'title'; value: number }) {
-  return exact
-    ? <NetMoney compact={false} size={size} value={value} />
-    : <NetMoney fine size={size} value={value} />;
+  return `${first.label}\u00a0${money(first.amount)} · ${second.label}\u00a0${money(second.amount)}`;
 }
 
 /** "CORRECTION" for the first correction, "CORRECTION 2" for the next. */
@@ -126,9 +124,9 @@ function correctionTag(correctionNumber: number): string {
   return correctionNumber > 1 ? `CORRECTION ${correctionNumber}` : 'CORRECTION';
 }
 
-/** Exact signed dollars for screen readers; exactly nothing is "$0", as on screen. */
+/** Screen-reader money, read the way the screen writes it; nothing is "$0". */
 function netWords(value: number): string {
-  return Math.round(value) === 0 ? exactMoney(0) : exactSignedMoney(value);
+  return Math.round(value) === 0 ? '$0' : signedMoney(value);
 }
 
 function adjustmentText(adjustment: number | null): string {
@@ -140,22 +138,23 @@ function adjustmentText(adjustment: number | null): string {
 const MISMATCH = 'This result does not reconcile. Refresh before relying on it.';
 
 /**
- * The row's accessible name carries everything the row shows, including a
- * correction's adjustment and the does-not-reconcile warning: inside a
- * button, a screen reader hears only the button's name.
+ * The row's accessible name carries everything the row shows, in the row's
+ * order (price or credit, dividend, profit), including a correction's
+ * adjustment and the does-not-reconcile warning: inside a button, a screen
+ * reader hears only the button's name.
  */
 function resultLabel(name: string, result: PerGameSettledResult, model: ResultRowModel): string {
   const parts = [name];
   if (result.side === 'short') parts.push('short');
   if (model.correctionNumber > 0) parts.push(correctionTag(model.correctionNumber).toLowerCase());
-  parts.push(model.net === null ? 'Net profit and loss unavailable' : netWords(model.net));
   let label = `${parts.join(', ')}. `;
   if (model.math) {
     const { first, second } = model.math.pair;
-    label += `${first.label} ${exactMoney(first.amount)}, ${second.label} ${exactMoney(second.amount)}.`;
+    label += `${first.label} ${money(first.amount)}, ${second.label} ${money(second.amount)}, `;
   } else {
-    label += `${resultPhrase(result, model, false).replace(' · ', ', ').replace(' — ', ', ')}.`;
+    label += `${resultPhrase(result, model).replace(' · ', ', ').replace(' — ', ', ')}. `;
   }
+  label += model.net === null ? 'Net profit and loss unavailable.' : `profit ${netWords(model.net)}.`;
   if (model.adjustment !== undefined) {
     label += ` ${model.adjustment === null ? 'Adjustment amount unavailable.' : `P&L adjustment ${netWords(model.adjustment)}.`}`;
   }
@@ -166,23 +165,25 @@ function resultLabel(name: string, result: PerGameSettledResult, model: ResultRo
 // ---------------------------------------------------------------------------
 // Rows
 
+/** How the season's dividends are counted: the rate and what it multiplies. */
+type DividendRule = { rate: number; basis: DividendBasis };
+
 function ResultRow({
   equation,
-  exact,
   expanded,
   layout,
   onToggle,
   playerName,
   result,
+  rule,
 }: {
   equation: SettlementEquation;
-  /** Its night's precision: to the dollar, or a tenth of a thousand. */
-  exact: boolean;
   expanded: boolean;
   layout: Layout;
   onToggle: () => void;
   playerName: string;
   result: PerGameSettledResult;
+  rule: DividendRule;
 }) {
   const { columns, compact, tight } = layout;
   const edge = edges(layout);
@@ -195,8 +196,18 @@ function ResultRow({
   const net = model.net === null ? (
     <Text accessibilityLabel="Net profit and loss unavailable" style={styles.netUnavailable}>—</Text>
   ) : (
-    <NightMoney exact={exact} value={model.net} />
+    <NetMoney value={model.net} />
   );
+  const tagged = result.side === 'short' || model.correctionNumber > 0;
+  const tags = tagged ? (
+    <>
+      {result.side === 'short' ? <Tag>Short</Tag> : null}
+      {model.correctionNumber > 0 ? <Tag tone="cyan">{correctionTag(model.correctionNumber)}</Tag> : null}
+    </>
+  ) : null;
+  const basis = math && result.dividendDollars !== null
+    ? dividendBasisLine({ dividend: result.dividendDollars, rate: rule.rate, basis: rule.basis })
+    : null;
 
   const body = (
     <>
@@ -205,18 +216,20 @@ function ResultRow({
         <View style={[styles.rowHeader, columns && styles.rowHeaderColumns, compact && styles.rowHeaderCompact]}>
           <View style={[styles.identity, compact && styles.identityCompact]}>
             <Text style={styles.playerName}>{unbrokenName(playerName)}</Text>
-            {result.side === 'short' ? <Tag>Short</Tag> : null}
-            {model.correctionNumber > 0 ? <Tag tone="cyan">{correctionTag(model.correctionNumber)}</Tag> : null}
+            {/* Desktop keeps the tag beside the name; narrower rows lead their
+                second line with it, so a long name never pushes it onto a line
+                of its own. */}
+            {columns ? tags : null}
           </View>
           {priceColumns && math ? (
             <>
               <Text style={styles.cell}>
-                <Text style={styles.cellLabel}>{math.pair.first.label.toLowerCase()} </Text>
-                {amountText(math.pair.first.amount, exact)}
+                <Text style={styles.cellLabel}>{math.pair.first.label.toLowerCase()}{'\u00a0'}</Text>
+                {money(math.pair.first.amount)}
               </Text>
               <Text style={styles.cell}>
-                <Text style={styles.cellLabel}>{math.pair.second.label.toLowerCase()} </Text>
-                {amountText(math.pair.second.amount, exact)}
+                <Text style={styles.cellLabel}>{math.pair.second.label.toLowerCase()}{'\u00a0'}</Text>
+                {money(math.pair.second.amount)}
               </Text>
             </>
           ) : null}
@@ -225,7 +238,12 @@ function ResultRow({
             {compact && math ? <Disclosure height={20} open={expanded} /> : null}
           </View>
         </View>
-        {priceColumns ? null : <Text style={styles.detail}>{resultPhrase(result, model, exact)}</Text>}
+        {priceColumns ? null : (
+          <View style={styles.detailLine}>
+            {columns ? null : tags}
+            <Text style={[styles.detail, styles.detailInline]}>{resultPhrase(result, model)}</Text>
+          </View>
+        )}
         {model.adjustment !== undefined ? (
           <Text style={styles.adjustment}>{adjustmentText(model.adjustment)}</Text>
         ) : null}
@@ -271,7 +289,7 @@ function ResultRow({
       </Pressable>
       {expanded ? (
         <View style={[styles.breakdown, { paddingLeft: edge.text, paddingRight: edge.right }]}>
-          <SettlementBreakdown lines={math.lines} net={math.net} side={result.side} wide={columns} />
+          <SettlementBreakdown basis={basis} lines={math.lines} net={math.net} side={result.side} wide={columns} />
         </View>
       ) : null}
     </View>
@@ -303,13 +321,11 @@ function feeExplanation(entry: PerGameLedgerEntry, side: PerGamePositionSide | n
 
 function FeeActivityRow({
   entry,
-  exact,
   layout,
   playerName,
   side,
 }: {
   entry: PerGameLedgerEntry;
-  exact: boolean;
   layout: Layout;
   playerName: string;
   side: PerGamePositionSide | null;
@@ -326,13 +342,15 @@ function FeeActivityRow({
         <View style={[styles.rowHeader, columns && styles.rowHeaderColumns, compact && styles.rowHeaderCompact]}>
           <View style={[styles.identity, compact && styles.identityCompact]}>
             <Text style={styles.playerName}>{unbrokenName(playerName)}</Text>
-            <Tag>{feeTitle(entry)}</Tag>
           </View>
           <View style={[styles.netCell, columns && styles.netCellColumns, compact && styles.netCellCompact]}>
-            <NightMoney exact={exact} value={entry.amountDollars} />
+            <NetMoney value={entry.amountDollars} />
           </View>
         </View>
-        <Text style={styles.detail}>{feeExplanation(entry, side)}</Text>
+        {/* The kind of fee leads the line under the name, so a long name
+            never pushes a chip onto a line of its own: every fee row is the
+            same height. */}
+        <Text style={styles.detail}>{feeTitle(entry)} · {feeExplanation(entry, side)}</Text>
       </View>
       {compact ? null : <DisclosureSpace />}
     </View>
@@ -342,13 +360,20 @@ function FeeActivityRow({
 // ---------------------------------------------------------------------------
 // Group headers
 
+/** The element id of a day's header, so a month jump can move focus to it. */
+function nightAnchorId(date: string): string {
+  return `results-day-${date || 'undated'}`;
+}
+
 /**
  * A day's header: its date and what your players made that night (games
- * only, the same figure as "Last night"). A day with no games shows no figure;
- * its fees have their own line below.
+ * only, the same figure as "Last night", labelled "Games" so nobody reads it
+ * as the fees below too). A day with no games shows no figure; its moves fold
+ * under their own line below.
  */
 function NightHeader({ night, layout }: { night: NightSummary; layout: Layout }) {
-  const summary = nightSummaryLine(night);
+  const summary = nightSummaryWrapped(night);
+  const spokenSummary = nightSummaryLine(night).replace(/ · /g, ', ');
   const pending = nightTotalPending(night);
   const played = night.results > 0;
   const title = night.date ? humanDay(night.date) : 'Undated fees';
@@ -358,10 +383,12 @@ function NightHeader({ night, layout }: { night: NightSummary; layout: Layout })
   const edge = edges(layout);
   return (
     <View
-      accessibilityLabel={`${title}:${totalWords}${summary ? ` ${summary}.` : ''}`}
+      accessibilityLabel={`${title}:${totalWords}${spokenSummary ? ` ${spokenSummary}.` : ''}`}
       accessibilityRole="header"
       accessible
+      nativeID={nightAnchorId(night.date)}
       {...headingLevel(2)}
+      {...({ tabIndex: -1 } as object)}
       style={[
         styles.groupHeader,
         { paddingLeft: edge.left, paddingRight: edge.right },
@@ -373,12 +400,12 @@ function NightHeader({ night, layout }: { night: NightSummary; layout: Layout })
         {summary ? <Text style={styles.groupSummary}>{summary}</Text> : null}
       </View>
       {played ? (
-        <View style={[styles.groupTotal, layout.compact && styles.netCellCompact]}>
+        <View style={[styles.groupTotal, layout.compact && styles.groupTotalCompact]}>
+          <Text style={styles.groupTotalLabel}>Games</Text>
           {pending ? (
             <Text style={styles.netUnavailable}>—</Text>
           ) : (
-            // At the game rows' own precision, so the total is their sum as shown.
-            <NightMoney exact={night.exact} size="title" value={night.total} />
+            <NetMoney size="title" value={night.total} />
           )}
         </View>
       ) : null}
@@ -386,32 +413,115 @@ function NightHeader({ night, layout }: { night: NightSummary; layout: Layout })
   );
 }
 
-/** The day's fees on their own line, with their own amount: "Roster moves · 3  -$750". */
-function FeesHeader({
+/**
+ * A day's fees, folded to one line until opened: "Roster moves · 8  -$2,000".
+ * Fifteen opening moves no longer bury the games under a thousand pixels of
+ * fee rows; one tap lists them.
+ */
+function FeesFold({
   count,
-  exact,
   layout,
   moves,
+  onToggle,
+  open,
   total,
 }: {
   count: number;
-  exact: boolean;
   layout: Layout;
   moves: boolean;
+  onToggle: () => void;
+  open: boolean;
   total: number;
 }) {
-  const edge = edges(layout);
   const name = feesLineName(moves);
+  const noun = moves ? (count === 1 ? 'move' : 'moves') : (count === 1 ? 'fee' : 'fees');
   return (
-    <View
-      accessibilityLabel={`${name}: ${count} ${count === 1 ? 'fee' : 'fees'}, ${netWords(total)}.`}
-      accessibilityRole="header"
-      accessible
-      {...headingLevel(3)}
-      style={[styles.feesHeader, { paddingLeft: edge.text, paddingRight: edge.right }]}
+    <Pressable
+      accessibilityHint={open ? `Hides the ${noun}.` : `Lists each ${moves ? 'move' : 'fee'}.`}
+      accessibilityLabel={`${name}, ${count} ${noun}, ${netWords(total)}`}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      aria-expanded={open}
+      onPress={onToggle}
+      style={({ pressed }) => [
+        styles.feesFold,
+        { paddingLeft: edges(layout).text, paddingRight: ROW_END },
+        (pressed || open) && styles.rowOpen,
+      ]}
     >
       <Text style={styles.feesTitle}>{name} · {count}</Text>
-      <NightMoney exact={exact} value={total} />
+      <NetMoney size="body" value={total} />
+      <Disclosure height={20} open={open} />
+    </Pressable>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Long seasons: a month jump and a way back to the newest night
+
+const TITLE_ID = 'results-title';
+
+/** Set while Results is on screen: scroll back to the newest night. */
+let showNewest: (() => void) | null = null;
+
+/**
+ * Scroll Results back to its newest night (what re-pressing the active
+ * Results tab should do). Returns false when Results is not on screen.
+ */
+export function scrollResultsToNewest(): boolean {
+  if (!showNewest) return false;
+  showNewest();
+  return true;
+}
+
+/** Move keyboard focus to an element by id, once it has rendered (web only). */
+function focusWhenReady(id: string, tries = 40): void {
+  if (typeof document === 'undefined') return;
+  const node = document.getElementById(id) as (HTMLElement | null);
+  if (node) {
+    node.focus({ preventScroll: true });
+    return;
+  }
+  if (tries > 0) setTimeout(() => focusWhenReady(id, tries - 1), 80);
+}
+
+function toggled(previous: ReadonlySet<string>, key: string): ReadonlySet<string> {
+  const next = new Set(previous);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  return next;
+}
+
+/** "Jump to" and one button per month, newest first like the feed. */
+function MonthJump({
+  anchors,
+  current,
+  onJump,
+}: {
+  anchors: readonly MonthAnchor[];
+  current: string | null;
+  onJump: (anchor: MonthAnchor) => void;
+}) {
+  return (
+    <View accessibilityLabel="Jump to a month" role="group" style={styles.jump}>
+      <Text style={styles.jumpLabel}>Jump to</Text>
+      <View style={styles.jumpChips}>
+        {anchors.map((anchor) => {
+          const here = anchor.key === current;
+          return (
+            <Pressable
+              key={anchor.key}
+              accessibilityLabel={anchor.name}
+              accessibilityRole="button"
+              aria-current={here ? 'true' : undefined}
+              onPress={() => onJump(anchor)}
+              style={({ pressed }) => [styles.chip, here && styles.chipHere, pressed && styles.rowOpen]}
+            >
+              <Text style={[styles.chipText, here && styles.chipTextHere]}>{anchor.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -422,18 +532,59 @@ export function PerGameResultsScreen() {
   const { bootstrap } = usePerGame();
   const { fontScale, width } = useWindowDimensions();
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  // Days whose fee rows are listed; every "Roster moves" line starts folded.
+  const [openFees, setOpenFees] = useState<ReadonlySet<string>>(() => new Set());
+  const [far, setFar] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState<string | null>(null);
+  const listRef = useRef<FlatList<ResultsFeedItem>>(null);
+  const listHeight = useRef(0);
+  const jumpRetries = useRef(0);
   const feed = useMemo(
     () => (bootstrap ? buildResultsFeed(bootstrap, { lastSettledDate: bootstrap.game.lastSettledDate }) : []),
     [bootstrap],
   );
-  const toggle = useCallback((key: string) => {
-    setExpanded((previous) => {
-      const next = new Set(previous);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  const visible = useMemo(() => visibleFeed(feed, openFees), [feed, openFees]);
+  const anchors = useMemo(() => monthAnchors(visible), [visible]);
+  const extraData = useMemo(() => ({ expanded, openFees }), [expanded, openFees]);
+  const toggle = useCallback((key: string) => setExpanded((previous) => toggled(previous, key)), []);
+  const toggleFees = useCallback((date: string) => setOpenFees((previous) => toggled(previous, date)), []);
+
+  const backToNewest = useCallback(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    setFar(false);
+    focusWhenReady(TITLE_ID);
   }, []);
+  useEffect(() => {
+    showNewest = backToNewest;
+    return () => {
+      if (showNewest === backToNewest) showNewest = null;
+    };
+  }, [backToNewest]);
+
+  const jumpTo = useCallback((anchor: MonthAnchor) => {
+    jumpRetries.current = 0;
+    listRef.current?.scrollToIndex({ index: anchor.index, animated: false, viewPosition: 0 });
+    focusWhenReady(nightAnchorId(anchor.date));
+  }, []);
+  // A far month is not measured yet: walk down to the furthest row measured
+  // so far (the rows past it then render), and try again until its day is.
+  const onScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number }) => {
+    const list = listRef.current;
+    if (!list || jumpRetries.current >= 40) return;
+    jumpRetries.current += 1;
+    list.scrollToIndex({ index: Math.max(0, info.highestMeasuredFrameIndex), animated: false, viewPosition: 0 });
+    setTimeout(() => list.scrollToIndex({ index: info.index, animated: false, viewPosition: 0 }), 60);
+  }, []);
+  const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const next = event.nativeEvent.contentOffset.y > Math.max(600, listHeight.current * FAR_SCREENS);
+    setFar((was) => (was === next ? was : next));
+  }, []);
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const top = viewableItems.find((token) => token.isViewable)?.item as ResultsFeedItem | undefined;
+    const date = !top ? null : top.type === 'night' ? top.night.date : top.date;
+    setCurrentMonth(date ? date.slice(0, 7) : null);
+  }).current;
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 10 }).current;
   if (!bootstrap) return null;
 
   const tight = width < STACK_MAX_WIDTH;
@@ -444,20 +595,34 @@ export function PerGameResultsScreen() {
   const played = nights.filter((night) => night.results > 0);
   const lastSettled = bootstrap.game.lastSettledDate;
   const ledgerComplete = bootstrap.ledger.nextCursor === null;
+  const rule: DividendRule = {
+    rate: bootstrap.ruleset.dividendDollarsPerNetPoint,
+    basis: bootstrap.ruleset.dividendBasis,
+  };
   // Say so when the last settled night had nothing for you at all.
   const quietLastNight = Boolean(lastSettled && played[0] && lastSettled > played[0].date
     && !nights.some((night) => night.date === lastSettled));
+  // Moves made, but no games yet: the moves are the story, not "No results".
+  const movesOnly = played.length === 0 && feed.length > 0;
 
   const renderItem: ListRenderItem<ResultsFeedItem> = ({ item }) => {
     if (item.type === 'night') return <NightHeader layout={layout} night={item.night} />;
     if (item.type === 'fees') {
-      return <FeesHeader count={item.count} exact={item.exact} layout={layout} moves={item.moves} total={item.total} />;
+      return (
+        <FeesFold
+          count={item.count}
+          layout={layout}
+          moves={item.moves}
+          onToggle={() => toggleFees(item.date)}
+          open={openFees.has(item.date)}
+          total={item.total}
+        />
+      );
     }
     if (item.type === 'fee') {
       return (
         <FeeActivityRow
           entry={item.entry}
-          exact={item.exact}
           layout={layout}
           playerName={perGamePlayerName(bootstrap, item.entry.playerId, item.entry.positionId)}
           side={item.side}
@@ -472,27 +637,49 @@ export function PerGameResultsScreen() {
           bootstrap.settledResults,
           { ledgerComplete },
         )}
-        exact={item.exact}
         expanded={expanded.has(item.key)}
         layout={layout}
         onToggle={() => toggle(item.key)}
         playerName={perGamePlayerName(bootstrap, item.result.playerId, item.result.positionId)}
         result={item.result}
+        rule={rule}
       />
     );
   };
 
+  const back = (
+    <Button
+      accessibilityLabel="Back to the newest night"
+      label="↑ Back to newest"
+      onPress={backToNewest}
+    />
+  );
   const header = (
-    <View style={[styles.header, { paddingHorizontal: edges(layout).left }]}>
-      <Text accessibilityRole="header" {...headingLevel(1)} style={styles.title}>Results</Text>
+    <View style={[styles.header, wide ? styles.headerSide : { paddingHorizontal: edges(layout).left }]}>
+      <Text
+        accessibilityRole="header"
+        nativeID={TITLE_ID}
+        {...headingLevel(1)}
+        {...({ tabIndex: -1 } as object)}
+        style={styles.title}
+      >
+        Results
+      </Text>
       {played.length > 0 ? (
-        <Text style={styles.caption}>
-          Newest night first. {layout.columns ? 'Click' : 'Tap'} a player to see the math.
+        <Text style={styles.caption}>Newest night first. Select a player to see the math.</Text>
+      ) : null}
+      {movesOnly ? (
+        <Text style={styles.note}>
+          No games yet. Results land here after each night of games. Your moves so far are below.
         </Text>
       ) : null}
       {quietLastNight && lastSettled ? (
         <Text style={styles.note}>None of your players had a game on {humanDay(lastSettled)}.</Text>
       ) : null}
+      {anchors.length > 1 ? (
+        <MonthJump anchors={anchors} current={wide ? currentMonth : null} onJump={jumpTo} />
+      ) : null}
+      {wide && far ? <View style={styles.sideBack}>{back}</View> : null}
     </View>
   );
   const empty = (
@@ -504,25 +691,44 @@ export function PerGameResultsScreen() {
     />
   );
 
-  return (
+  const list = (
     <FlatList
-      contentContainerStyle={[styles.content, wide && styles.contentWide]}
-      data={feed}
-      extraData={expanded}
+      ref={listRef}
+      contentContainerStyle={styles.content}
+      data={visible}
+      extraData={extraData}
       initialNumToRender={16}
       keyExtractor={(item) => item.key}
       ListEmptyComponent={empty}
-      ListHeaderComponent={(
-        <>
-          {header}
-          {played.length === 0 && feed.length > 0 ? empty : null}
-        </>
-      )}
+      ListHeaderComponent={wide ? null : header}
       maxToRenderPerBatch={16}
+      onLayout={(event) => {
+        listHeight.current = event.nativeEvent.layout.height;
+      }}
+      onScroll={onScroll}
+      onScrollToIndexFailed={onScrollToIndexFailed}
+      onViewableItemsChanged={onViewableItemsChanged}
       renderItem={renderItem}
+      scrollEventThrottle={100}
       style={styles.list}
+      viewabilityConfig={viewabilityConfig}
       windowSize={9}
     />
+  );
+
+  if (wide) {
+    return (
+      <View style={styles.split}>
+        <View style={styles.side}>{header}</View>
+        {list}
+      </View>
+    );
+  }
+  return (
+    <View style={styles.screen}>
+      {list}
+      {far ? <View style={styles.floatingBack}>{back}</View> : null}
+    </View>
   );
 }
 
@@ -534,18 +740,75 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: 110,
   },
-  contentWide: {
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: FEED_MAX_WIDTH,
-    borderLeftWidth: StyleSheet.hairlineWidth,
+  screen: {
+    flex: 1,
+    minHeight: 0,
+  },
+  // Desktop: the whole frame, a side column beside the feed.
+  split: {
+    flex: 1,
+    minHeight: 0,
+    flexDirection: 'row',
+  },
+  side: {
+    width: SIDE_WIDTH,
     borderRightWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderRightColor: colors.border,
+    backgroundColor: colors.background,
   },
   header: {
     paddingTop: space.lg,
     paddingBottom: space.md,
     backgroundColor: colors.background,
+  },
+  headerSide: {
+    paddingHorizontal: space.lg,
+  },
+  jump: {
+    marginTop: space.md,
+  },
+  jumpLabel: {
+    ...labelStyle,
+    marginBottom: space.xs,
+  },
+  jumpChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.xs,
+  },
+  chip: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    borderRadius: 4,
+    backgroundColor: colors.background,
+  },
+  chipHere: {
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceRaised,
+  },
+  chipText: {
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.bold,
+  },
+  chipTextHere: {
+    color: colors.text,
+  },
+  sideBack: {
+    marginTop: space.lg,
+    alignItems: 'flex-start',
+  },
+  // Phone: over the list's bottom padding, clear of the last row.
+  floatingBack: {
+    position: 'absolute',
+    right: space.lg,
+    bottom: space.lg,
   },
   title: {
     ...headingStyle,
@@ -605,13 +868,23 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
     alignItems: 'flex-end',
   },
-  feesHeader: {
-    minHeight: 36,
+  // Stacked: "GAMES +$253.5K" on a line of its own under the date.
+  groupTotalCompact: {
+    marginLeft: 0,
+    flexBasis: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    columnGap: space.md,
+    gap: space.sm,
+  },
+  groupTotalLabel: {
+    ...labelStyle,
+  },
+  // A folded day's fees: a 44px line that opens the list of moves.
+  feesFold: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ROW_GAP,
     paddingVertical: space.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
@@ -619,7 +892,16 @@ const styles = StyleSheet.create({
   },
   feesTitle: {
     ...labelStyle,
+    flex: 1,
+    minWidth: 0,
     color: colors.muted,
+  },
+  detailLine: {
+    marginTop: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   row: {
     minHeight: 56,
@@ -721,6 +1003,11 @@ const styles = StyleSheet.create({
     fontSize: type.caption,
     lineHeight: 17,
     fontVariant: ['tabular-nums'],
+  },
+  detailInline: {
+    marginTop: 0,
+    flexShrink: 1,
+    minWidth: 0,
   },
   adjustment: {
     marginTop: space.xs,
