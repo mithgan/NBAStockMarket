@@ -233,7 +233,9 @@ function SkipLink() {
         if (typeof document === 'undefined') return;
         (document.getElementById('app-screen') as HTMLElement | null)?.focus?.();
       }}
-      style={[styles.skipLink, !focused && visuallyHidden]}
+      // Hidden, it must not keep an invisible tappable box in the corner:
+      // the link's minimum height and padding are dropped with it.
+      style={[styles.skipLink, !focused && visuallyHidden, !focused && styles.skipLinkHidden]}
     >
       <Text style={styles.skipLinkText}>Skip to content</Text>
     </Pressable>
@@ -796,6 +798,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     borderRadius: radius.md,
     backgroundColor: colors.gold,
+  },
+  skipLinkHidden: {
+    minHeight: 0,
+    paddingHorizontal: 0,
   },
   skipLinkText: {
     color: colors.onGold,
