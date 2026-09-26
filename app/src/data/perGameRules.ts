@@ -78,9 +78,11 @@ export function perGameRulesPresentation(rules: PerGameRuleset, practice: Practi
       { label: 'Drop fee', value: formatMoney(rules.transactionFeeDollars) },
       { label: 'Shorts last', value: rules.shortTermDays === null ? 'Until you close them' : `${rules.shortTermDays} days` },
     ],
-    // The loop first (what you do and how you profit), one worked night,
-    // then where dividends come from, then the rest.
-    explanation: `${goal} ${ROSTER_EXPLAINER} ${workedExample(rules.dividendDollarsPerNetPoint, raw)} ${raw ? DIVIDEND_RAW : DIVIDEND_PROJECTION} ${NET_POINTS_EXPLAINER} ${SHORT_EXPLAINER} Your score adds up those games, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${NEGATIVE_DIVIDEND_EXPLAINER} ${LUCK_EXPLAINER} ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
+    // In steps (walk 5 T1-09, T3-13): the goal; how a game scores (the loop,
+    // where dividends come from, net points, then one worked night, which
+    // used "net points" before they were explained); shorts and bad games;
+    // fees; prices; locks. rulesSections cuts it there and names each part.
+    explanation: `${goal} ${ROSTER_EXPLAINER} ${raw ? DIVIDEND_RAW : DIVIDEND_PROJECTION} ${NET_POINTS_EXPLAINER} ${workedExample(rules.dividendDollarsPerNetPoint, raw)} ${LUCK_EXPLAINER} ${SHORT_EXPLAINER} ${NEGATIVE_DIVIDEND_EXPLAINER} ${FEES_LEAD}, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
     /** Plain definitions of the words the screens use. */
     glossary: [
       { term: 'Price', meaning: 'What one game of a player costs. The price you add him at stays locked while you hold him.' },
@@ -110,24 +112,59 @@ export function positionSlotHint(side: PerGamePositionSide, limit: number) {
     : `Short up to ${limit} players`;
 }
 
+/** Where the fees sentence starts ("Your score adds up those games, minus a $250 fee…"). */
+const FEES_LEAD = 'Your score adds up those games';
+
 /**
- * The explanation in short paragraphs, each starting at one of these
- * sentences and running to the next, without changing a word: the loop and
- * its example; where dividends come from; shorts and fees; bad games;
- * prices; locks. The Rules sheet and Settings both read it this way.
+ * The rules' parts and their short headings, each starting at its sentence
+ * (walk 5 T1-09, T3-13: one run of text with no headings to jump by).
  */
-export function rulesParagraphs(explanation: string): string[] {
-  const markers = [DIVIDEND_RAW, DIVIDEND_PROJECTION, SHORT_EXPLAINER, NEGATIVE_DIVIDEND_EXPLAINER, PRICE_EXPLAINER, LOCK_EXPLAINER];
-  const cuts = markers
-    .map((marker) => explanation.indexOf(marker))
-    .filter((at) => at > 0)
-    .sort((left, right) => left - right);
-  const paragraphs: string[] = [];
+const SECTION_STARTS: ReadonlyArray<readonly [string, string]> = [
+  ['Scoring', ROSTER_EXPLAINER],
+  ['Shorts', SHORT_EXPLAINER],
+  ['Fees', FEES_LEAD],
+  ['Prices', PRICE_EXPLAINER],
+  ['Locks', LOCK_EXPLAINER],
+];
+
+export interface RulesSection {
+  heading: string;
+  text: string;
+}
+
+/**
+ * The explanation as headed parts, without changing a word: Goal, Scoring,
+ * Shorts, Fees, Prices, Locks. The Rules sheet reads it this way.
+ */
+export function rulesSections(explanation: string): RulesSection[] {
+  const cuts = SECTION_STARTS
+    .map(([heading, marker]) => ({ heading, at: explanation.indexOf(marker) }))
+    .filter((cut) => cut.at > 0)
+    .sort((left, right) => left.at - right.at);
+  const sections: RulesSection[] = [];
   let start = 0;
-  for (const at of cuts) {
-    paragraphs.push(explanation.slice(start, at));
-    start = at;
+  let heading = 'Goal';
+  for (const cut of cuts) {
+    sections.push({ heading, text: explanation.slice(start, cut.at).trim() });
+    start = cut.at;
+    heading = cut.heading;
   }
-  paragraphs.push(explanation.slice(start));
-  return paragraphs.map((part) => part.trim()).filter(Boolean);
+  sections.push({ heading, text: explanation.slice(start).trim() });
+  return sections.filter((section) => section.text);
+}
+
+/** The explanation in short paragraphs (the sections' text), without changing a word. */
+export function rulesParagraphs(explanation: string): string[] {
+  return rulesSections(explanation).map((section) => section.text);
+}
+
+/**
+ * Settings' lede: the goal, then the loop in one breath ("Each game he
+ * plays, you pay his price and collect his dividend…"); the rest is one tap
+ * away in the rules.
+ */
+export function rulesSummary(explanation: string): string | null {
+  const goal = rulesSections(explanation)[0]?.text;
+  if (!goal) return null;
+  return explanation.includes(ROSTER_EXPLAINER) && !goal.includes(ROSTER_EXPLAINER) ? `${goal} ${ROSTER_EXPLAINER}` : goal;
 }

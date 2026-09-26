@@ -68,3 +68,25 @@ test('practice rules name the rivals and the season right after the goal (walk 4
   assert.match(first, /^Finish the season with the highest score on the Leaders board\. In practice you play 4 computer rivals/);
   assert.doesNotMatch(rulesParagraphs(perGameRulesPresentation(ruleset).explanation)[0], /computer rivals/);
 });
+
+test('the rules read in steps: goal, scoring with the example after net points, then short headings (walk 5 T1-09, T3-13)', async () => {
+  const { perGameRulesPresentation, rulesSections, rulesSummary } = await import('./perGameRules');
+  const { explanation } = perGameRulesPresentation(rules, { rivals: 4, opens: 'Oct 21', ends: 'Apr 12', days: 174 });
+  const sections = rulesSections(explanation);
+  assert.deepEqual(sections.map((section) => section.heading), ['Goal', 'Scoring', 'Shorts', 'Fees', 'Prices', 'Locks']);
+  assert.equal(sections.map((section) => section.text).join(' '), explanation);
+  // The goal stands alone; how a game scores comes next.
+  assert.match(sections[0].text, /^Finish the season with the highest score on the Leaders board\. In practice you play 4 computer rivals/);
+  assert.doesNotMatch(sections[0].text, /net points|dividend/);
+  // The worked night follows the net-points explanation.
+  const scoring = sections[1].text;
+  assert.ok(scoring.indexOf('Net points boil his box score') < scoring.indexOf('For example, a game of 3.5 net points'));
+  assert.match(sections[2].text, /^A short pays you/);
+  assert.match(sections[2].text, /negative/);
+  assert.match(sections[3].text, /^Your score adds up those games, minus a \$[\d,]+ fee/);
+  // Settings' lede: the goal and the loop in one breath.
+  assert.equal(
+    rulesSummary(explanation),
+    `${sections[0].text} Each game he plays, you pay his price and collect his dividend. Beat his price and you profit.`,
+  );
+});

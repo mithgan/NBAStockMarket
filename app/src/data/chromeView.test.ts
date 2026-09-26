@@ -359,12 +359,12 @@ test('after +1 week the status row names the week it played until the next advan
   assert.equal(dateSpanText('2025-10-27', '2025-10-27'), 'Oct 27');
   // Day 0 (Oct 20) + 1 week: the span Oct 21-27, games after Oct 20 through Oct 27.
   const week = { step: 'week' as const, from: OPENING_EVE };
-  assert.deepEqual(resultSpan([week], '2025-10-27'), { after: OPENING_EVE, through: '2025-10-27', label: 'Oct 21–27' });
+  assert.deepEqual(resultSpan([week], '2025-10-27'), { after: OPENING_EVE, through: '2025-10-27', label: 'Oct 21–27', nobody: false });
   // +1 night pressed next: while it plays the row keeps the week...
   const night = { step: 'night' as const, from: '2025-10-27' };
   assert.equal(resultSpan([week, night], '2025-10-27')?.label, 'Oct 21–27');
   // ...and once it lands, the one night: "Oct 28 games".
-  assert.deepEqual(resultSpan([week, night], '2025-10-28'), { after: '2025-10-27', through: '2025-10-28', label: 'Oct 28' });
+  assert.deepEqual(resultSpan([week, night], '2025-10-28'), { after: '2025-10-27', through: '2025-10-28', label: 'Oct 28', nobody: false });
   // No advance yet, a +1 night, or a final week cut to one day: the last night alone.
   assert.equal(resultSpan([], '2025-10-21')?.label, 'Oct 21');
   assert.equal(resultSpan([{ step: 'night', from: '2025-10-22' }], '2025-10-24')?.after, '2025-10-23');
@@ -422,15 +422,41 @@ test('rows with no line to spare keep a short hint, and +1 night its night (walk
   assert.ok(NIGHT_DATE_STACKED_MIN_WIDTH <= 195);
 });
 
-test('a press while a week plays says it is still playing (walk 4 T4-04)', async () => {
-  const { stillPlayingLine, weekSpanLabel } = await import('./chromeView');
+test('a press while a week plays is queued once and says so (walk 5 T3-11, T4-06)', async () => {
+  const { queuedLabel, queuedLine, weekSpanLabel } = await import('./chromeView');
   assert.equal(weekSpanLabel(OPENING_EVE, practiceSeasonEnd(OPENING_EVE)), 'Oct 21–27');
   assert.equal(weekSpanLabel('2025-10-27', practiceSeasonEnd(OPENING_EVE)), 'Oct 28–Nov 3');
   // The last press stops at the season's last day.
   assert.equal(weekSpanLabel('2026-04-07', practiceSeasonEnd(OPENING_EVE)), 'Apr 8–12');
-  assert.equal(stillPlayingLine('Oct 21–27', 'week'), "Still playing Oct 21–27. Press +1 week again once it's in.");
-  assert.equal(stillPlayingLine('Oct 21', 'night'), "Still playing Oct 21. Press +1 night again once it's in.");
-  assert.equal(stillPlayingLine(null, 'night'), "Still playing. Press +1 night again once it's in.");
+  assert.equal(queuedLine('week', 'Oct 21–27'), 'Next week queued. It plays once Oct 21–27 is in.');
+  assert.equal(queuedLine('night', 'Oct 21'), 'Next night queued. It plays once Oct 21 is in.');
+  // Behind a move that is saving: no nights to name.
+  assert.equal(queuedLine('night', null), 'Next night queued. It plays in a moment.');
+  // On the button, where sighted players see it; the stacked 55px button keeps two short words.
+  assert.equal(queuedLabel('week', false), '+1 week\nqueued');
+  assert.equal(queuedLabel('night', true), 'Next\nqueued');
+});
+
+test('with nobody on the roster the status row says so, as the notice does (walk 5 T1-17)', async () => {
+  const { noGamesWords, resultSpan } = await import('./chromeView');
+  assert.equal(noGamesWords(true), ' games: nobody on your roster');
+  assert.equal(noGamesWords(false), ': none of your players played');
+  // Who you held is who you held when you pressed (Play anyway with nobody).
+  const empty = { step: 'night' as const, from: OPENING_EVE, emptyRoster: true };
+  assert.equal(resultSpan([empty], '2025-10-21')?.nobody, true);
+  // Adding a player afterwards does not rewrite the night you played without one.
+  assert.equal(resultSpan([empty], '2025-10-21', false)?.nobody, true);
+  // A press with a roster: "none of your players played" still fits.
+  assert.equal(resultSpan([{ step: 'week', from: OPENING_EVE, emptyRoster: false }], '2025-10-27', true)?.nobody, false);
+  // No press recorded (the live market): the roster now answers.
+  assert.equal(resultSpan([], '2025-10-21', true)?.nobody, true);
+  assert.equal(
+    statusSummary({
+      mode: 'practice', lastSettledDate: '2025-10-21', nextGameDate: '2025-10-22', lastNight: 0, noGames: true, nobody: true,
+      progress: practiceProgress(OPENING_EVE, '2025-10-21'), resultLabel: 'Oct 21',
+    }),
+    'Practice, day 1 of 174. Oct 21 games: nobody on your roster. Next games Wed, Oct 22.',
+  );
 });
 
 test('sheets start where the status row starts, never mid-line (walk 4 T1-01)', async () => {
@@ -448,4 +474,18 @@ test('sheets start where the status row starts, never mid-line (walk 4 T1-01)', 
   const bar = readFileSync(resolve(import.meta.dirname, '../components/SimBar.tsx'), 'utf8');
   const quiet = bar.slice(bar.indexOf('  advanceQuiet: {'), bar.indexOf('},', bar.indexOf('  advanceQuiet: {')));
   assert.doesNotMatch(quiet, /dashed/);
+});
+
+test('wide windows float Rules and Settings under the frame, never on it (walk 5 T2-05)', async () => {
+  const { floatTopFor, sheetFloats } = await import('./chromeView');
+  // Desktop and tablets float; phones and short (folded) windows keep the sheet.
+  assert.equal(sheetFloats(1440, 900), true);
+  assert.equal(sheetFloats(768, 1024), true);
+  assert.equal(sheetFloats(390, 844), false);
+  assert.equal(sheetFloats(844, 390), false);
+  // 16px under the frame's bottom edge (the practice bar's rule at 151 on a desktop).
+  assert.equal(floatTopFor(151), 167);
+  assert.equal(floatTopFor(167.6), 184);
+  assert.equal(floatTopFor(null), null);
+  assert.equal(floatTopFor(Number.NaN), null);
 });

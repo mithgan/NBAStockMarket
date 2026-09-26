@@ -25,8 +25,9 @@ import {
   practiceQuestion,
   practiceSeasonEnd,
   practiceStakes,
+  queuedLabel,
+  queuedLine,
   SEASON_TOTAL_DAYS,
-  stillPlayingLine,
   weekSpanLabel,
 } from '../data/chromeView';
 import type { PracticeRulesContext } from '../data/perGameRules';
@@ -42,10 +43,27 @@ import { ChromeButton } from './chrome/ChromeButton';
 import { LockIcon, MoreIcon } from './chrome/ChromeIcons';
 
 /**
- * After a night or week has played, the advance buttons rest this long before
- * they take another press, so a double tap plays one night, not two.
+ * Resolve once the browser has painted the frame now pending, so a press
+ * shows "Playing…" before the night's heavy work starts: on a slow phone the
+ * label waited for the whole night (walk 5 T4-11). A hidden tab paints no
+ * frames, so it does not wait; the timer is only a safety net.
  */
-const ADVANCE_COOLDOWN_MS = 450;
+const PAINT_FALLBACK_MS = 500;
+
+function afterPaint(): Promise<void> {
+  if (typeof requestAnimationFrame !== 'function'
+    || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) return Promise.resolve();
+  return new Promise((resolve) => {
+    let done = false;
+    const go = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    requestAnimationFrame(() => setTimeout(go, 0));
+    setTimeout(go, PAINT_FALLBACK_MS);
+  });
+}
 
 // The settled date on which the roster was last seen empty. Every place that
 // shows the practice hint (the line under the buttons on phones, the status
@@ -521,36 +539,41 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // was when the press landed ("Playing Oct 21…"), or the week.
   const [playing, setPlaying] = useState<{ step: 'night' | 'week'; date: string | null } | null>(null);
   const advancing = playing !== null;
-  // A press while one is still playing is ignored (one press, one night or
-  // week), and says so: the busy label reads "Still playing…" and a polite
-  // line tells screen readers when to press again (walk 4 T4-04).
-  const [pressedWhileBusy, setPressedWhileBusy] = useState(false);
   const [busyLine, setBusyLine] = useState('');
   const busyLineTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (busyLineTimer.current) clearTimeout(busyLineTimer.current);
   }, []);
-  // A press while your last move is still being saved (an Add a moment
-  // ago) is not dropped: it waits, and plays once the move is in (walk 5
-  // T2-12: +1 week 0.1 s after an Add did nothing and said nothing).
+  // A press while a night or week is still playing, or while your last move
+  // is being saved (an Add a moment ago; walk 5 T2-12), is not dropped: it is
+  // queued, once, and plays as soon as the screen has caught up. The pressed
+  // button says so ("+1 week" over "queued") and a polite line tells
+  // screen readers (it said "Still playing" and did nothing, so a steady run
+  // of presses advanced every other time; walk 5 T3-11, T4-06, T4-N2). A key
+  // held down is one press (react-native-web presses on key up).
   const queuedStep = useRef<'night' | 'week' | null>(null);
-  const sayStillPlaying = (pressed: 'night' | 'week') => {
-    if (!playing) {
-      if (pendingActions.size > 0) queuedStep.current = pressed;
-      return;
-    }
-    setPressedWhileBusy(true);
-    const line = stillPlayingLine(playing.date, pressed);
+  const [queued, setQueued] = useState<'night' | 'week' | null>(null);
+  const queuePress = (pressed: 'night' | 'week', playingDate: string | null) => {
+    // One waits at most: a third press keeps the one already queued.
+    const step = queuedStep.current ?? pressed;
+    queuedStep.current = step;
+    setQueued(step);
+    const line = queuedLine(step, playingDate);
     // The same words twice still count as news for the live region.
-    setBusyLine((current) => (current === line ? `${line} ` : line));
+    setBusyLine((current) => (current === line ? `${line} ` : line));
     if (busyLineTimer.current) clearTimeout(busyLineTimer.current);
     busyLineTimer.current = setTimeout(() => setBusyLine(''), 4000);
   };
+  const pressWhileBusy = (pressed: 'night' | 'week') => {
+    // Busy with nothing that will finish (the game is still loading): no queue.
+    if (!playing && pendingActions.size === 0 && !isRefreshing) return;
+    queuePress(pressed, playing?.date ?? null);
+  };
   // State updates land a render later; a second tap in the same frame still
-  // sees the old props. The ref closes the door synchronously, and stays
-  // closed for a short rest after each advance (a double tap plays once).
+  // sees the old props. The ref closes the door synchronously (that tap is
+  // queued like any other).
   const advancingRef = useRef(false);
-  const readyAtRef = useRef(0);
+  const playingDateRef = useRef<string | null>(null);
   const advancedRef = useRef(false);
   const restartRef = useRef<View>(null);
   const exitRef = useRef<View>(null);
@@ -559,6 +582,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   const moreRef = useRef<View>(null);
   // "Play anyway" in the shared question plays through this set of controls.
   const advanceRef = useRef<((step: 'night' | 'week') => void) | null>(null);
+  // A queued press goes through the buttons' own press (it asks first with
+  // nobody on the roster, as a press would).
+  const pressRef = useRef<((step: 'night' | 'week') => void) | null>(null);
   useEffect(() => {
     const run = (step: 'night' | 'week') => advanceRef.current?.(step);
     advanceFromQuestion = run;
@@ -609,13 +635,17 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     advancedRef.current = false;
     focusLater(restartRef, 150);
   }, [complete]);
-  // Play a press that waited for a move to be saved.
+  // Play the queued press once the controls are free: the nights before it
+  // are on screen, or your move is saved. Nothing is left to play once the
+  // season is over.
+  const busyNow = !isGameplayReady || isRefreshing || pendingActions.size > 0 || advancing;
   useEffect(() => {
-    if (pendingActions.size > 0 || !queuedStep.current) return;
+    if (busyNow || !queuedStep.current) return;
     const step = queuedStep.current;
     queuedStep.current = null;
-    advanceRef.current?.(step);
-  }, [pendingActions.size]);
+    setQueued(null);
+    if (!complete) pressRef.current?.(step);
+  }, [busyNow, complete]);
   if (!bootstrap || !isMockActive() || typeof window === 'undefined') return null;
 
   const layout = chromeLayout(width, fontScale);
@@ -637,44 +667,54 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   const hint = hintText && !inline && !folded ? (
     <Text maxFontSizeMultiplier={1.5} nativeID={PRACTICE_HINT_ID} style={styles.hint}>{hintText}</Text>
   ) : null;
-  // "Still playing Oct 21–27. Press +1 week again once it's in." for screen
-  // readers, after a press that landed mid-play; nothing is drawn.
+  // "Next week queued. It plays once Oct 21–27 is in." for screen readers,
+  // after a press that landed mid-play (the button shows it too).
   const busyAnnouncer = (
     <View style={visuallyHidden}>
       <Text accessibilityLiveRegion="polite">{busyLine}</Text>
     </View>
   );
 
-  // One night (or week) per tap, and never a second one before the screen has
-  // caught up with the first: the client and the screen stay on the same day.
+  // One night (or week) per press, and the next press waits for the screen
+  // to catch up with this one (it is queued, once): the client and the
+  // screen stay on the same day.
   const advance = async (step: 'night' | 'week') => {
-    if (advancingRef.current || Date.now() < readyAtRef.current) return;
+    if (advancingRef.current) {
+      queuePress(step, playingDateRef.current);
+      return;
+    }
     advancingRef.current = true;
     advancedRef.current = true;
-    recordAdvance({ step, from: bootstrap.game.lastSettledDate ?? null });
-    setPlaying({
-      step,
-      date: step === 'night' ? nightDate
-        : bootstrap.game.lastSettledDate ? weekSpanLabel(bootstrap.game.lastSettledDate, practiceSeasonEnd(mockSeasonStart())) : null,
-    });
+    const from = bootstrap.game.lastSettledDate ?? null;
+    const date = step === 'night' ? nightDate
+      : from ? weekSpanLabel(from, practiceSeasonEnd(mockSeasonStart())) : null;
+    playingDateRef.current = date;
+    setPlaying({ step, date });
     try {
+      // "Playing Oct 21…" paints before the night's heavy work (walk 5 T4-11).
+      await afterPaint();
+      recordAdvance({ step, from, emptyRoster: open.length === 0 });
       if (step === 'week') playPracticeWeek();
-      else playPracticeNight(bootstrap.game.lastSettledDate, practiceSeasonEnd(mockSeasonStart()));
+      else playPracticeNight(from, practiceSeasonEnd(mockSeasonStart()));
       for (let attempt = 0; attempt < ADVANCE_REFRESH_ATTEMPTS; attempt += 1) {
         if (await refreshData()) break;
         await wait(ADVANCE_RETRY_MS);
       }
     } finally {
-      readyAtRef.current = Date.now() + ADVANCE_COOLDOWN_MS;
+      // The nights are in: the buttons take presses at once, in the render
+      // that shows them (they rested another 0.45 s, and a press then was
+      // dropped; walk 5 T3-11, T4-06). A queued press plays now.
       advancingRef.current = false;
-      setTimeout(() => {
-        setPlaying(null);
-        setPressedWhileBusy(false);
-      }, ADVANCE_COOLDOWN_MS);
+      playingDateRef.current = null;
+      setPlaying(null);
     }
   };
   advanceRef.current = (step) => {
     void advance(step);
+  };
+  pressRef.current = (step) => {
+    if (asksFirst) askQuestion(step === 'night' ? 'empty-night' : 'empty-week');
+    else void advance(step);
   };
 
   const stackLabels = (compact || folded) && width < STACKED_LABEL_MAX_WIDTH;
@@ -686,25 +726,28 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // Folded and narrow: the controls get their own line and share it evenly.
   const foldFill = folded && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
   // While a night (or week) plays, the pressed button says so and keeps its
-  // full ink, so extra taps are visibly ignored rather than silently dropped
-  // (walk 2 T4-07); the other one dims.
+  // full ink (walk 2 T4-07); the other one dims. A press queued behind it
+  // shows on the button it was made on, in full ink: "+1 week" over
+  // "queued".
   const playingNight = playing?.step === 'night';
   const playingWeek = playing?.step === 'week';
   const playingText = playing?.date ? `Playing ${playing.date}…` : 'Playing…';
+  const inkNight = playingNight || queued === 'night';
+  const inkWeek = playingWeek || queued === 'week';
   // Stacked labels still name the night where the row allows: "+1 NIGHT"
   // over "OCT 21", the night button taking the larger share (walk 4 T3-11).
   const stackedDate = stackLabels && nightDate !== null && width >= NIGHT_DATE_STACKED_MIN_WIDTH;
-  // The pressed button's busy words: the night it plays, then "Still
-  // playing…" (same width, two lines) once a press lands on it mid-play.
-  const busyLabel = (withDate: boolean) => (pressedWhileBusy
-    ? 'Still\nplaying…'
-    : withDate && !stackLabels && playing?.date ? `Playing\n${playing.date}…` : 'Playing…');
-  const nightLabel = playingNight
-    ? busyLabel(true)
-    : stackedDate ? `+1 night\n${nightDate}` : stackLabels ? '+1\nnight' : nightDate ? `+1 night\n${nightDate}` : '+1 night';
-  const nightName = playingNight
+  // The pressed button's busy words: the night it plays.
+  const busyLabel = (withDate: boolean) => (
+    withDate && !stackLabels && playing?.date ? `Playing\n${playing.date}…` : 'Playing…'
+  );
+  const queuedName = (step: 'night' | 'week') => (queued === step ? ` Next ${step} queued.` : '');
+  const nightLabel = queued === 'night' ? queuedLabel('night', stackLabels)
+    : playingNight ? busyLabel(true)
+      : stackedDate ? `+1 night\n${nightDate}` : stackLabels ? '+1\nnight' : nightDate ? `+1 night\n${nightDate}` : '+1 night';
+  const nightName = (playingNight
     ? `+1 night: advance one night. ${playingText}`
-    : nightDate ? `+1 night: advance one night, to the ${nightDate} games` : '+1 night: advance one night';
+    : nightDate ? `+1 night: advance one night, to the ${nightDate} games` : '+1 night: advance one night') + queuedName('night');
   const advanceButtons = (
     <>
       <Button
@@ -713,31 +756,25 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         disabled={advanceBusy || progress.complete}
         focusableWhenDisabled={!progress.complete}
         label={nightLabel}
-        onDisabledPress={() => sayStillPlaying('night')}
+        onDisabledPress={() => pressWhileBusy('night')}
         steady
-        onPress={() => {
-          if (asksFirst) askQuestion('empty-night');
-          else void advance('night');
-        }}
-        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, stackedDate && styles.advanceDated, asksFirst && styles.advanceQuiet, playingNight && styles.advancePlaying]}
-        textStyle={[asksFirst ? styles.advanceTextQuiet : styles.advanceText, stackLabels && playingNight && styles.advanceTextBusyStacked]}
+        onPress={() => pressRef.current?.('night')}
+        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, stackedDate && styles.advanceDated, asksFirst && styles.advanceQuiet, inkNight && styles.advancePlaying]}
+        textStyle={[asksFirst ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkNight && styles.advanceTextBusyStacked]}
         variant="secondary"
       />
       <Button
         ref={weekRef}
         // The span it plays is in the name; the label keeps the button's width.
-        accessibilityLabel={playingWeek ? `+1 week: advance one week. ${playingText}` : '+1 week: advance one week'}
+        accessibilityLabel={`${playingWeek ? `+1 week: advance one week. ${playingText}` : '+1 week: advance one week'}${queuedName('week')}`}
         disabled={advanceBusy || progress.complete}
         focusableWhenDisabled={!progress.complete}
-        label={playingWeek ? busyLabel(false) : stackLabels ? '+1\nweek' : '+1 week'}
-        onDisabledPress={() => sayStillPlaying('week')}
+        label={queued === 'week' ? queuedLabel('week', stackLabels) : playingWeek ? busyLabel(false) : stackLabels ? '+1\nweek' : '+1 week'}
+        onDisabledPress={() => pressWhileBusy('week')}
         steady
-        onPress={() => {
-          if (asksFirst) askQuestion('empty-week');
-          else void advance('week');
-        }}
-        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, asksFirst && styles.advanceQuiet, playingWeek && styles.advancePlaying]}
-        textStyle={[asksFirst ? styles.advanceTextQuiet : styles.advanceText, stackLabels && playingWeek && styles.advanceTextBusyStacked]}
+        onPress={() => pressRef.current?.('week')}
+        style={[styles.advance, narrow && styles.advanceNarrow, compact && styles.advanceCompact, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, asksFirst && styles.advanceQuiet, inkWeek && styles.advancePlaying]}
+        textStyle={[asksFirst ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkWeek && styles.advanceTextBusyStacked]}
         variant="secondary"
       />
     </>

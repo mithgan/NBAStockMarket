@@ -3,18 +3,19 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vi
 import Svg, { Circle, Line } from 'react-native-svg';
 
 import type { PerGameRuleset } from '../api/contracts';
-import { chromeFolded, sheetNarrow } from '../data/chromeView';
-import { perGameRulesPresentation, rulesParagraphs } from '../data/perGameRules';
+import { chromeFolded, sheetFloats, sheetNarrow } from '../data/chromeView';
+import { perGameRulesPresentation, rulesSummary } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useDesignVariant } from '../theme/ThemeProvider';
 import { APPEARANCE_CHOICES, VARIANTS } from '../theme/variants';
 import { rowMarker } from '../ui/domMarkers';
 import { headingLevel } from '../ui/kit';
+import { reduceMotionChosen, setReduceMotion, useReduceMotionChoice } from '../state/motionPreference';
 import { keepNoticesUntilClosed, setKeepNoticesUntilClosed, useKeepNotices } from '../state/noticePreference';
 import { cancelSettingsReturn, openRules, returnToSettingsAfterRules } from '../state/uiActions';
 import { useSheetHistory, useSheetShown } from '../web/appHistory';
 import { colors, fonts, numeric, radius, space, type, weight } from '../theme';
-import { measuredSheetTop } from './chrome/sheetTop';
+import { measuredFloatTop, measuredSheetTop } from './chrome/sheetTop';
 import { liveMarketToExitTo, usePracticeRulesContext } from './SimBar';
 
 /** Account facts the sheet can show; absent entirely in the local demo. */
@@ -70,11 +71,10 @@ function Section({ title, narrow = false, children }: { title: string; narrow?: 
  * Settings sheet. A modal panel rather than a screen so it can open from any
  * tab without disturbing the navigation state underneath it.
  */
-/** From this width Settings floats as a panel with a bottom edge, not a phone sheet. */
-const FLOATING_MIN_WIDTH = 720;
-
 /** The switch's one-line explanation (its aria-describedby). */
 const KEEP_NOTICES_NOTE_ID = 'keep-notices-note';
+/** The Reduce motion switch's explanation (its aria-describedby). */
+const REDUCE_MOTION_NOTE_ID = 'reduce-motion-note';
 
 export function SettingsSheet({
   onClose,
@@ -96,7 +96,9 @@ export function SettingsSheet({
   visible: boolean;
 }) {
   const { height, width } = useWindowDimensions();
-  const floating = width >= FLOATING_MIN_WIDTH;
+  // A wide window floats Settings under the frame, edged all round, as Rules
+  // (chromeView.sheetFloats; walk 5 T2-05).
+  const floating = sheetFloats(width, height);
   // A phone at 400% zoom (98px wide): Done gets a full-width row under the
   // title, gutters narrow so headings wrap between words, and each theme's
   // swatch sits under its name (walk 3 T3-31).
@@ -107,7 +109,7 @@ export function SettingsSheet({
   const { setVariant, variantId } = useDesignVariant();
   // Back closes the sheet; the app behind it is inert while it is open.
   useSheetHistory(visible, onClose);
-  const sheetTop = visible ? measuredSheetTop() : null;
+  const sheetTop = visible ? (floating ? measuredFloatTop() : measuredSheetTop()) : null;
   const choiceRefs = useRef<Array<View | null>>([]);
   // Rules opened from here hand back to Settings when they close (the frame
   // reopens it); focus goes back to "Read the full rules", where the player
@@ -152,10 +154,17 @@ export function SettingsSheet({
     event.preventDefault();
     if (!event.repeat) setKeepNoticesUntilClosed(!keepNoticesUntilClosed());
   };
+  // "Reduce motion", on top of the device's own setting (walk 5 T3 NYI-4).
+  const motionReduced = useReduceMotionChoice();
+  const onMotionKey = (event: { key: string; repeat?: boolean; preventDefault: () => void }) => {
+    if (event.key !== ' ' && event.key !== 'Spacebar') return;
+    event.preventDefault();
+    if (!event.repeat) setReduceMotion(!reduceMotionChosen());
+  };
   const shown = useSheetShown(visible);
   if (!shown) return null;
-  // The loop and its worked example; the rest is one tap away in the rules.
-  const firstParagraph = rules ? rulesParagraphs(rules.explanation)[0] ?? null : null;
+  // The goal and the loop in one breath; the rest is one tap away in the rules.
+  const firstParagraph = rules ? rulesSummary(rules.explanation) : null;
   return (
     <Modal
       accessibilityLabel="Settings"
@@ -282,6 +291,35 @@ export function SettingsSheet({
                 </View>
                 <View style={[styles.switchTrack, keepNotices && styles.switchTrackOn]}>
                   <View style={[styles.switchKnob, keepNotices && styles.switchKnobOn]} />
+                </View>
+              </Pressable>
+            </View>
+          </Section>
+
+          {/* The app follows the device's reduced-motion setting; a shared or
+              locked device may not let a player change it, so the app has its
+              own switch on top (walk 5 T3 NYI-4). */}
+          <Section narrow={narrow} title="Motion">
+            <View {...({ onKeyDown: onMotionKey } as object)}>
+              <Pressable
+                accessibilityLabel="Reduce motion"
+                accessibilityRole="switch"
+                accessibilityState={{ checked: motionReduced }}
+                // react-native-web drops accessibilityState.checked.
+                aria-checked={motionReduced}
+                aria-describedby={REDUCE_MOTION_NOTE_ID}
+                onPress={() => setReduceMotion(!reduceMotionChosen())}
+                style={({ pressed }) => [styles.choice, narrow && styles.choiceNarrow, pressed && styles.pressed]}
+                {...rowMarker}
+              >
+                <View style={[styles.choiceCopy, narrow && styles.choiceCopyNarrow]}>
+                  <Text style={styles.choiceName}>Reduce motion</Text>
+                  <Text nativeID={REDUCE_MOTION_NOTE_ID} style={styles.choiceBlurb}>
+                    Sheets and figures appear at once, without fades or counting up. Your device's own setting still applies.
+                  </Text>
+                </View>
+                <View style={[styles.switchTrack, motionReduced && styles.switchTrackOn]}>
+                  <View style={[styles.switchKnob, motionReduced && styles.switchKnobOn]} />
                 </View>
               </Pressable>
             </View>

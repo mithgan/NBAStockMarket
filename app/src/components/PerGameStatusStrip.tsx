@@ -28,7 +28,7 @@ import {
   lockLine,
   lockShortText,
   nextGamesText,
-  NO_PLAYERS_PLAYED,
+  noGamesWords,
   playedBetween,
   practiceDayShort,
   practiceDayText,
@@ -36,21 +36,22 @@ import {
   practiceProgress,
   type PracticeProgress,
   resultSpan,
+  sheetFloats,
   sheetNarrow,
   shortTermText,
   statusSummary,
 } from '../data/chromeView';
 import { earningsBetween } from '../data/perGameMetrics';
-import { perGameRulesPresentation, positionSlotHint, rulesParagraphs } from '../data/perGameRules';
+import { perGameRulesPresentation, positionSlotHint, rulesSections } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
 import { openSettings, registerRulesOpener } from '../state/uiActions';
 import { colors, control, fonts, labelStyle, radius, space, type, weight } from '../theme';
-import { headingLevel, moneyColor, Tag, visuallyHidden } from '../ui/kit';
+import { Button, headingLevel, moneyColor, Tag, visuallyHidden } from '../ui/kit';
 import { useSheetHistory, useSheetShown } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
-import { measuredSheetTop } from './chrome/sheetTop';
+import { measuredFloatTop, measuredSheetTop } from './chrome/sheetTop';
 import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, usePracticeRulesContext, useRecentAdvances } from './SimBar';
 
 /**
@@ -97,7 +98,10 @@ export function PerGameStatusStrip() {
   // whole week it played, until the next advance lands (walk 3 T1-20), games
   // only, as the notice after the advance counts them.
   const advances = useRecentAdvances();
-  const span = useMemo(() => resultSpan(advances, lastSettled), [advances, lastSettled]);
+  // Nobody on the roster or shorts: the row says so, as the notice does
+  // ("Oct 21 games: nobody on your roster"; walk 5 T1-17).
+  const emptyNow = !(bootstrap?.positions ?? []).some((position) => position.status === 'active');
+  const span = useMemo(() => resultSpan(advances, lastSettled, emptyNow), [advances, lastSettled, emptyNow]);
   const spanResult = useMemo(() => (
     span && ledgerItems ? earningsBetween(ledgerItems, span.after, span.through, { gamesOnly: true }) : null
   ), [ledgerItems, span]);
@@ -150,6 +154,7 @@ export function PerGameStatusStrip() {
     nextGameDate,
     lastNight,
     noGames,
+    nobody: span?.nobody ?? false,
     progress: progress ?? undefined,
     lockSentence,
     resultLabel: span?.label ?? null,
@@ -179,7 +184,12 @@ export function PerGameStatusStrip() {
   const dayText = progress
     ? keepTogether(shortDay ? practiceDayShort(progress) : practiceDayText(progress))
     : null;
-  const meter = progress ? <ProgressMeter progress={progress} tiny={tiny} /> : null;
+  // At season end a full bar only repeats "Season complete", and in the
+  // narrowest folded row (a phone at 200% zoom) it pushed Settings onto a
+  // line of its own; there the words stand alone and the gear sits beside
+  // them (walk 5 T4-15).
+  const endFold = folded && !tiny && progress?.complete === true && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
+  const meter = progress && !endFold ? <ProgressMeter progress={progress} tiny={tiny} /> : null;
   const money = lastNight === null || noGames ? null : <LastNightMoney tight={tight} value={lastNight} />;
   // The narrowest phones single-space the dots, so the first line keeps to
   // one row even with last night at its finer precision.
@@ -189,7 +199,8 @@ export function PerGameStatusStrip() {
   // "Oct 22: none of your players played". Wherever it shows, the lead leaves
   // the date to it.
   const named = lastNight !== null;
-  const nightWords = noGames ? `: ${NO_PLAYERS_PLAYED}` : ' games ';
+  // "games" keeps to its date (a no-break space), as the figure's words do.
+  const nightWords = noGames ? noGamesWords(span?.nobody ?? false).replace(/^ /, '\u00a0') : ' games ';
 
   // First line. Practice: the mode, plus the day on a wide screen or the
   // latest night on a phone. Signed in: how far the results go, until a night
@@ -554,7 +565,10 @@ function RulesSheet({
   const narrow = sheetNarrow(width);
   // Back closes the sheet; the app behind it is inert while it is open.
   useSheetHistory(visible, onClose);
-  const sheetTop = visible ? measuredSheetTop() : null;
+  // A wide window floats the rules under the frame, edged all round (walk 5
+  // T2-05); a phone keeps the sheet from the status row down.
+  const floats = sheetFloats(width, height);
+  const sheetTop = visible ? (floats ? measuredFloatTop() : measuredSheetTop()) : null;
   const practiceRules = usePracticeRulesContext();
   const shown = useSheetShown(visible);
   if (!shown) return null;
@@ -593,7 +607,7 @@ function RulesSheet({
           status row starts (under the brand bar; at the top of a short
           window), so no line of the frame is cut in half behind the scrim
           (walk 4 T1-01). Scrolls inside. */}
-      <View style={[styles.sheet, chromeFolded(height) && styles.sheetShort, sheetTop !== null && { marginTop: sheetTop }]}>
+      <View style={[styles.sheet, floats && styles.sheetFloating, chromeFolded(height) && styles.sheetShort, sheetTop !== null && { marginTop: sheetTop }]}>
         <View style={[styles.sheetHead, narrow && styles.sheetHeadNarrow]}>
           <Text accessibilityRole="header" {...headingLevel(2)} style={styles.sheetTitle}>Game rules</Text>
           <Pressable
@@ -616,20 +630,30 @@ function RulesSheet({
           style={styles.sheetBody}
           tabIndex={0}
         >
+          {/* In steps, each under a short heading to jump by: Goal, Scoring,
+              Shorts, Fees, Prices, Locks (walk 5 T1-09, T3-13). */}
           <View style={styles.explanation}>
-            {rulesParagraphs(presentation.explanation).map((paragraph) => (
-              <Text key={paragraph} style={styles.paragraph}>{paragraph}</Text>
-            ))}
-          </View>
-          <View style={styles.factList}>
-            {facts.map((fact) => (
-              <View key={fact.label} style={styles.factRow}>
-                <Text style={[styles.factName, narrow && styles.factNameNarrow]}>{fact.label}</Text>
-                {/* Narrow, a phrase held together ("$40,000 for each net point")
-                    is wider than the sheet, so it may wrap between its words. */}
-                <Text style={styles.factValue}>{narrow ? fact.value.replace(/\u00a0/g, ' ') : fact.value}</Text>
+            {rulesSections(presentation.explanation).map((section) => (
+              <View key={section.heading} style={styles.rulesSection}>
+                <Text accessibilityRole="header" {...headingLevel(3)} style={styles.sectionTitle}>{section.heading}</Text>
+                <Text style={styles.paragraph}>{section.text}</Text>
               </View>
             ))}
+          </View>
+          {/* The numbers a player checks before a move, as terms and their
+              values under a heading (they read as one run of loose text). */}
+          <View style={styles.glossary}>
+            <Text accessibilityRole="header" {...headingLevel(3)} style={styles.glossaryTitle}>At a glance</Text>
+            <View aria-label="At a glance" role="list" style={styles.factList}>
+              {facts.map((fact) => (
+                <View key={fact.label} role="listitem" style={styles.factRow}>
+                  <Text role="term" style={[styles.factName, narrow && styles.factNameNarrow]}>{fact.label}</Text>
+                  {/* Narrow, a phrase held together ("$40,000 for each net point")
+                      is wider than the sheet, so it may wrap between its words. */}
+                  <Text role="definition" style={styles.factValue}>{narrow ? fact.value.replace(/\u00a0/g, ' ') : fact.value}</Text>
+                </View>
+              ))}
+            </View>
           </View>
           <View style={styles.glossary}>
             <Text accessibilityRole="header" {...headingLevel(3)} style={styles.glossaryTitle}>
@@ -646,6 +670,9 @@ function RulesSheet({
               ))}
             </View>
           </View>
+          {/* Read to the end on a phone, the way out is here, not back at the
+              top corner (Done stays there too; walk 5 T1-09). */}
+          <Button accessibilityLabel="Got it, close the game rules" label="Got it" onPress={onClose} style={styles.gotIt} />
         </ScrollView>
       </View>
     </Modal>
@@ -882,6 +909,13 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.lg,
     overflow: 'hidden',
   },
+  // A wide window: a panel under the frame, edged all round and short of the
+  // bottom (it ran into the window's bottom edge; walk 5 T2-05).
+  sheetFloating: {
+    marginBottom: space.xl,
+    borderBottomWidth: 1,
+    borderRadius: radius.lg,
+  },
   // A short window keeps the rules, not the gap above them.
   sheetShort: {
     marginTop: space.sm,
@@ -942,7 +976,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
   },
   explanation: {
-    gap: space.sm,
+    gap: space.lg,
+  },
+  rulesSection: {
+    gap: space.xs,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.heavy,
+  },
+  gotIt: {
+    alignSelf: 'stretch',
   },
   paragraph: {
     color: colors.text,

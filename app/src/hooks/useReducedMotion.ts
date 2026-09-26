@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Platform } from 'react-native';
 
+import { useReduceMotionChoice } from '../state/motionPreference';
+
 /**
- * True when the viewer asked the OS/browser to minimise motion. Hover and focus
- * transitions are suppressed so the interface stays completely still for them.
+ * True when the viewer asked the OS/browser to minimise motion, or turned on
+ * Settings > Reduce motion (for shared or locked devices whose system setting
+ * they cannot change; walk 5 T3 NYI-4). Hover and focus transitions are
+ * suppressed so the interface stays completely still for them.
  */
 function initialPreference(): boolean {
   // Web can answer synchronously, so the very first paint is already correct.
@@ -21,6 +25,7 @@ function initialPreference(): boolean {
 
 export function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(initialPreference);
+  const chosen = useReduceMotionChoice();
 
   useEffect(() => {
     let active = true;
@@ -55,5 +60,5 @@ export function useReducedMotion(): boolean {
     };
   }, []);
 
-  return reduced;
+  return reduced || chosen;
 }

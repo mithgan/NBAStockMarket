@@ -290,6 +290,8 @@ export interface StatusSummaryInput {
   lastNight: number | null;
   /** None of your players had a game on the last settled day. */
   noGames?: boolean;
+  /** …because nobody was on your roster (ResultSpan.nobody). */
+  nobody?: boolean;
   /** Practice only. */
   progress?: PracticeProgress;
   /** A sentence about the roster lock, when it is on. */
@@ -335,6 +337,8 @@ export function dateSpanText(firstDay: string, lastDay: string): string {
 export interface PracticeAdvance {
   step: 'night' | 'week';
   from: string | null;
+  /** Nobody on the roster or shorts when it was pressed (Play anyway). */
+  emptyRoster?: boolean;
 }
 
 /** The games the status row's figure covers: after `after`, through `through`. */
@@ -343,6 +347,20 @@ export interface ResultSpan {
   through: string;
   /** "Oct 21–27" after +1 week; "Oct 28" for one night. */
   label: string;
+  /** Nobody was on the roster through those games. */
+  nobody: boolean;
+}
+
+/**
+ * The status row's words for games none of your players had, as the notice
+ * after them says it: "Oct 21 games: nobody on your roster" when you held
+ * nobody ("your players" implied you had some; walk 5 T1-17), else
+ * "Oct 22: none of your players played". The words after the date.
+ */
+export const NOBODY_ON_ROSTER = 'nobody on your roster';
+
+export function noGamesWords(nobody: boolean): string {
+  return nobody ? ` games: ${NOBODY_ON_ROSTER}` : `: ${NO_PLAYERS_PLAYED}`;
 }
 
 /**
@@ -357,17 +375,23 @@ export interface ResultSpan {
 export function resultSpan(
   advances: readonly PracticeAdvance[],
   lastSettled: string | null | undefined,
+  /** Nobody on the roster now: the answer when no press recorded it. */
+  emptyNow = false,
 ): ResultSpan | null {
   if (!lastSettled) return null;
   const landed = [...advances].reverse().find((advance) => advance.from !== null && advance.from < lastSettled);
+  // Who you held through the games is who you held when you pressed, as the
+  // notice after them counts it.
+  const nobody = landed?.emptyRoster ?? emptyNow;
   if (landed?.from && landed.step === 'week' && daysBetween(landed.from, lastSettled) > 1) {
     return {
       after: landed.from,
       through: lastSettled,
       label: dateSpanText(shiftDay(landed.from, 1), lastSettled),
+      nobody,
     };
   }
-  return { after: shiftDay(lastSettled, -1), through: lastSettled, label: humanDate(lastSettled) };
+  return { after: shiftDay(lastSettled, -1), through: lastSettled, label: humanDate(lastSettled), nobody };
 }
 
 /** Whether any of your players played after `after`, through `through` (games, not fees). */
@@ -393,6 +417,7 @@ export function statusSummary({
   nextGameDate,
   lastNight,
   noGames = false,
+  nobody = false,
   progress,
   lockSentence,
   resultLabel = null,
@@ -412,7 +437,7 @@ export function statusSummary({
   }
   if (named) {
     parts.push(noGames
-      ? `${label ?? 'Latest games'}: ${NO_PLAYERS_PLAYED}.`
+      ? (nobody && label ? `${label}${noGamesWords(true)}.` : `${label ?? 'Latest games'}: ${nobody ? NOBODY_ON_ROSTER : NO_PLAYERS_PLAYED}.`)
       : `${label ? `${label} games` : 'Latest games'} ${exactSignedMoney(lastNight)}.`);
   }
   const next = nextGamesText(nextGameDate);
@@ -510,6 +535,27 @@ export function sheetNarrow(width: number): boolean {
 export function sheetTopFor(statusRowTop: number | null | undefined): number | null {
   if (statusRowTop === null || statusRowTop === undefined || !Number.isFinite(statusRowTop) || statusRowTop < 0) return null;
   return Math.round(statusRowTop);
+}
+
+/**
+ * From this width, in a window tall enough not to fold the frame, Rules and
+ * Settings open as a floating panel: it starts under the frame with a gap and
+ * stops short of the bottom, edged all round. As a phone sheet it started on
+ * the status row, cut through "+1 NIGHT" and ran into the bottom edge (walk 5
+ * T2-05).
+ */
+export const SHEET_FLOATING_MIN_WIDTH = 720;
+/** The floating panel's gap under the frame. */
+export const SHEET_FLOAT_GAP = 16;
+
+export function sheetFloats(width: number, height: number): boolean {
+  return width >= SHEET_FLOATING_MIN_WIDTH && !chromeFolded(height);
+}
+
+/** The floating panel's top: under the frame's bottom edge, with the gap. */
+export function floatTopFor(frameBottom: number | null | undefined): number | null {
+  if (frameBottom === null || frameBottom === undefined || !Number.isFinite(frameBottom) || frameBottom < 0) return null;
+  return Math.round(frameBottom + SHEET_FLOAT_GAP);
 }
 
 /** The day count in a tiny row, in two short lines: "Day 16" over "of 174". */
@@ -636,11 +682,23 @@ export function weekSpanLabel(from: string, seasonEnd: string | null | undefined
 
 /**
  * What a press on +1 night or +1 week says while the last press is still
- * playing: it is ignored (one press, one night or week), and it says so
- * rather than doing nothing (walk 4 T4-04).
+ * playing (or your last move is saving): it is queued, once, and plays as
+ * soon as the nights on screen are in. It was dropped with "Still playing",
+ * so a steady run of presses advanced only every other time (walk 5 T3-11,
+ * T4-06). `playing`: the nights playing now ("Oct 21–27"), if any.
  */
-export function stillPlayingLine(playing: string | null, pressed: 'night' | 'week'): string {
-  return `Still playing${playing ? ` ${playing}` : ''}. Press +1 ${pressed} again once it's in.`;
+export function queuedLine(pressed: 'night' | 'week', playing: string | null): string {
+  return `Next ${pressed} queued. It plays ${playing ? `once ${playing} is in` : 'in a moment'}.`;
+}
+
+/**
+ * The queued button's label, where sighted players see it (the queue lived
+ * only in a hidden live region): "+1 week" over "queued", no wider than the
+ * button's own label, so nothing beside it moves; "Next" over "queued" in a
+ * stacked row (195px), where the button is 55px wide.
+ */
+export function queuedLabel(step: 'night' | 'week', stacked: boolean): string {
+  return stacked ? 'Next\nqueued' : `+1 ${step}\nqueued`;
 }
 
 /**
