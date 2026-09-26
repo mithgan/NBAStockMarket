@@ -1375,7 +1375,6 @@ export function heldOrderLine(previousNight: string, night: string): string {
   return `Same order as before the ${gamesSince(previousNight, night)} games.`;
 }
 
-/** "Re-sort"'s accessible name: what it sorts for ("Re-sort for the Oct 21 games"). */
 /**
  * The phone list's one quiet line under the sort, and the laptop table's
  * (walk 9 T4-10, T1-16, T2-12): the order in words, an unusual order said
@@ -1400,8 +1399,12 @@ export function orderLine({
   return { text: said, tone: 'quiet', resort: false, reserve };
 }
 
-export function resortName(night: string): string {
-  return `Re-sort for the ${humanDate(night)} games`;
+/**
+ * "Re-sort"'s accessible name: what it sorts for, the same games the line
+ * names ("Re-sort for the Oct 21–27 games"; it said "Oct 27" after a week).
+ */
+export function resortName(night: string, sortedNight = ''): string {
+  return `Re-sort for the ${gamesSince(sortedNight, night)} games`;
 }
 
 /** Two orders list the same players in the same places. */

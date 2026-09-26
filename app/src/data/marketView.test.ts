@@ -740,6 +740,7 @@ test('after a night the list keeps its order, says so for which games, and re-so
   assert.equal(heldOrderLine('2025-10-20', '2025-10-21'), 'Same order as before the Oct 21 games.');
   assert.equal(heldOrderLine('2025-10-20', '2025-10-27'), 'Same order as before the Oct 21–27 games.');
   assert.equal(resortName('2025-10-21'), 'Re-sort for the Oct 21 games');
+  assert.equal(resortName('2025-10-27', '2025-10-20'), 'Re-sort for the Oct 21–27 games');
   assert.equal(resortedLine('2025-10-20', '2025-10-21'), 'Re-sorted for the Oct 21 games.');
   assert.equal(resortedLine('', '2025-10-21'), 'Re-sorted for the Oct 21 games.');
   assert.equal(resortedLine('2025-10-20', '2025-10-27'), 'Re-sorted for the Oct 21–27 games.');

@@ -237,8 +237,7 @@ function SameHeight({ children, ghosts }: { children: ReactNode; ghosts: ReactNo
           key={index}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
-          pointerEvents="none"
-          style={[styles.sameHeightLayer, styles.sameHeightGhost]}
+          style={[styles.sameHeightLayer, styles.sameHeightGhost, NO_POINTER]}
           {...({ 'aria-hidden': true } as object)}
         >
           {ghost}
@@ -845,7 +844,7 @@ function MarketRow({
     return (
       <>
       <View style={[styles.row, styles.rowTable]} {...playerMarker(player.playerId)} {...(tableRoles ? ({ role: 'row' } as object) : {})}>
-        {dimmed ? <View pointerEvents="none" style={styles.dimMarker} /> : null}
+        {dimmed ? <View style={[styles.dimMarker, NO_POINTER]} /> : null}
         <View style={styles.starWrap} {...cellRole}>
         <Pressable
           ref={starRef}
@@ -979,7 +978,7 @@ function MarketRow({
   return (
     <>
     <View style={[styles.row, large && styles.rowLarge]} {...playerMarker(player.playerId)}>
-      {dimmed ? <View pointerEvents="none" style={styles.dimMarker} /> : null}
+      {dimmed ? <View style={[styles.dimMarker, NO_POINTER]} /> : null}
       <Pressable
         ref={profileRef}
         accessibilityLabel={label}
@@ -1654,7 +1653,7 @@ export function PerGameMarketScreen({
   const orderStrip = (
     <OrderLine
       reserve={order.reserve}
-      resort={order.resort ? { name: resortName(night), onPress: resortNow } : null}
+      resort={order.resort ? { name: resortName(night, sortedNight), onPress: resortNow } : null}
       text={order.text}
       tone={order.tone}
     />
@@ -1757,7 +1756,7 @@ export function PerGameMarketScreen({
           {heldNote ? (
             <View style={styles.flipNote}>
               <Text maxFontSizeMultiplier={1.4} style={[styles.explainer, styles.resortText]}>{heldNote}</Text>
-              <Button accessibilityLabel={resortName(night)} label="Re-sort" onPress={resortNow} variant="secondary" />
+              <Button accessibilityLabel={resortName(night, sortedNight)} label="Re-sort" onPress={resortNow} variant="secondary" />
             </View>
           ) : reversed ? (
             <View style={styles.flipNote}>
@@ -1979,6 +1978,9 @@ export function PerGameMarketScreen({
     </>
   );
 }
+
+/** Seen, never pressed (react-native-web wants pointerEvents as a style). */
+const NO_POINTER = { pointerEvents: 'none' } as const;
 
 const styles = StyleSheet.create({
   list: {

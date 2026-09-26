@@ -54,7 +54,6 @@ export function OrderLine({
       <View
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        pointerEvents="none"
         style={[styles.layer, styles.ghost]}
         {...({ 'aria-hidden': true } as object)}
       >
@@ -76,6 +75,7 @@ const styles = StyleSheet.create({
   ghost: {
     marginLeft: '-100%',
     opacity: 0,
+    pointerEvents: 'none',
   },
   line: {
     flexDirection: 'row',
@@ -98,10 +98,13 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   action: {
-    // A text button in the line: 28px tall, underlined, as an inline link.
-    minHeight: 28,
+    // A text button in the line, underlined, as an inline link: a full 44px
+    // target that reaches into the space above and below, so the line keeps
+    // its 28px (the audit found a 53x28 target).
+    minHeight: 44,
+    marginVertical: -8,
     justifyContent: 'center',
-    paddingHorizontal: space.xs,
+    paddingHorizontal: space.sm,
   },
   actionHover: {
     backgroundColor: colors.surfaceHigh,

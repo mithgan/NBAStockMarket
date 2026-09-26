@@ -227,7 +227,7 @@ export function PerGamePnlChart({
         <View style={styles.headingLayer}>
           {point ? <Reading point={point} previous={series[shownIndex - 1]} stacked={tallReading} /> : restWords}
         </View>
-        <View aria-hidden pointerEvents="none" style={[styles.headingLayer, styles.headingGhost]}>
+        <View aria-hidden style={[styles.headingLayer, styles.headingGhost]}>
           {restWords}
         </View>
         {/* Measured as it would wrap by itself: two lines or more, and every
@@ -238,13 +238,12 @@ export function PerGamePnlChart({
             const tall = event.nativeEvent.layout.height > 26;
             setTallReading((current) => (current === tall ? current : tall));
           }}
-          pointerEvents="none"
           style={[styles.headingLayer, styles.headingGhost]}
         >
           <Reading point={series[widest]} previous={series[widest - 1]} />
         </View>
         {tallReading ? (
-          <View aria-hidden pointerEvents="none" style={[styles.headingLayer, styles.headingGhost]}>
+          <View aria-hidden style={[styles.headingLayer, styles.headingGhost]}>
             <Reading point={series[widest]} previous={series[widest - 1]} stacked />
           </View>
         ) : null}
@@ -436,6 +435,7 @@ const styles = StyleSheet.create({
   },
   // Laid out, never drawn, read, found or selected.
   headingGhost: {
+    pointerEvents: 'none',
     marginLeft: '-100%',
     ...({ visibility: 'hidden' } as object),
   },
