@@ -12,6 +12,7 @@ import {
   chromeFolded,
   chromeLayout,
   EMPTY_ROSTER_HINT,
+  readyHint,
   practiceProgress,
   practiceQuestion,
   practiceSeasonEnd,
@@ -198,6 +199,17 @@ export function PracticeControls({ inline = false, folded = false, onRules }: {
   const moreRef = useRef<View>(null);
   const askedFromMenuRef = useRef(false);
   const complete = practiceProgress(mockSeasonStart(), bootstrap?.game.lastSettledDate ?? null).complete;
+  // The hint line under the buttons keeps its place when the first player
+  // lands (it turns into "Ready…"), and only goes once the player advances:
+  // a line vanishing mid-tap would move the list under their finger.
+  const openCount = bootstrap?.positions.filter((position) => position.status === 'active').length ?? 0;
+  const settledOn = bootstrap?.game.lastSettledDate ?? '';
+  const [readyOn, setReadyOn] = useState<string | null>(null);
+  const wasEmptyRef = useRef(openCount === 0);
+  useEffect(() => {
+    if (wasEmptyRef.current && openCount > 0) setReadyOn(settledOn);
+    wasEmptyRef.current = openCount === 0;
+  }, [openCount, settledOn]);
 
   // Restart or Exit asks first; an item in More closes the menu as it asks.
   const askQuestion = (kind: Question) => {
@@ -235,8 +247,10 @@ export function PracticeControls({ inline = false, folded = false, onRules }: {
   // Nothing to play for yet: +1 night / +1 week stay quiet (the first move is
   // adding a player) and a line under them says what they do.
   const emptyRoster = open.length === 0 && !progress.complete;
-  const hint = emptyRoster && !inline && !folded ? (
-    <Text maxFontSizeMultiplier={1.5} style={styles.hint}>{EMPTY_ROSTER_HINT}</Text>
+  const ready = !emptyRoster && !progress.complete && readyOn === settledOn;
+  const hintText = emptyRoster ? EMPTY_ROSTER_HINT : ready ? readyHint(bootstrap.game.nextGameDate) : null;
+  const hint = hintText && !inline && !folded ? (
+    <Text maxFontSizeMultiplier={1.5} style={styles.hint}>{hintText}</Text>
   ) : null;
   const stakes = practiceStakes({
     progress,

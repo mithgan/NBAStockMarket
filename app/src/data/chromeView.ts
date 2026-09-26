@@ -342,6 +342,15 @@ export function playedOn(
 /** Under +1 night / +1 week while the roster is empty. */
 export const EMPTY_ROSTER_HINT = "Add a player first. +1 night plays the next night's games.";
 
+/**
+ * The same line once the first player is in, until the next advance: the
+ * line keeps its place, so nothing under the player's finger moves the
+ * moment an Add lands (a second tap would otherwise hit the row below).
+ */
+export function readyHint(nextGameDate: string | null | undefined): string {
+  return nextGameDate ? `Ready. +1 night plays the ${humanDate(nextGameDate)} games.` : "Ready. +1 night plays the next night's games.";
+}
+
 /** How long a short stays open, in words. */
 export function shortTermText(shortTermDays: number | null): string {
   if (shortTermDays === null) return 'A short stays open until you close it';

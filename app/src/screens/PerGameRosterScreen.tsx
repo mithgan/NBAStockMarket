@@ -59,7 +59,7 @@ import {
 import { usePerGame } from '../state/PerGameContext';
 import { openRules } from '../state/uiActions';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
-import { Button, ConfirmStrip, EmptyState, headingLevel, Tag, visuallyHidden } from '../ui/kit';
+import { Button, ConfirmStrip, EmptyState, headingLevel, Tag, useAriaDisabled, visuallyHidden } from '../ui/kit';
 import { restartPractice } from '../web/practiceSession';
 
 /** Desktop: score and chart beside the lists. */
@@ -135,6 +135,15 @@ function PositionRow({
   const nextGameDate = bootstrap?.game.nextGameDate ?? null;
   const rosterLockHint = `${rosterReopensLine(rosterLockDate)}.`;
   const disabled = pending || locked || rosterLocked;
+  // The button stays enabled for the browser, so a tap on LOCKED or on a
+  // pending Drop is caught here instead of falling through to the row (which
+  // would open the profile); its disabled state is written for assistive tech.
+  const ownAction = useRef<View | null>(null);
+  useAriaDisabled(ownAction, disabled);
+  const setActionRef = useCallback((node: View | null) => {
+    ownAction.current = node;
+    actionRef(node);
+  }, [actionRef]);
   const openedAt = useRef(0);
   useEffect(() => {
     if (confirming) openedAt.current = Date.now();
@@ -215,7 +224,7 @@ function PositionRow({
   // At season end there is nothing left to do with a row, so no button.
   const action = seasonOver ? null : (
     <Pressable
-      ref={actionRef}
+      ref={setActionRef}
       accessibilityHint={rosterLocked ? rosterLockHint : undefined}
       // react-native-web drops accessibilityHint, so the name carries the reason.
       accessibilityLabel={rosterLocked
@@ -227,8 +236,6 @@ function PositionRow({
       // keyboard or screen-reader user reaches it and hears why.
       accessibilityState={{ disabled }}
       aria-expanded={confirming}
-      disabled={disabled}
-      tabIndex={0}
       onPress={onActionPress}
       style={({ pressed }) => [
         styles.action,

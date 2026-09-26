@@ -6,6 +6,7 @@ import test from 'node:test';
 import { parsePerGameBootstrap } from '../api/contracts';
 import { signedMoneyFine } from '../copy/terms';
 import {
+  readyHint,
   chromeLayout,
   daysBetween,
   dividendBasisText,
@@ -235,4 +236,9 @@ test('the folded frame, short day count, lock reason and no-games night', async 
     }),
     'Practice, Nov 5, day 16 of 174. No games last night. Next games Thu, Nov 6.',
   );
+});
+
+test('the hint under the advance buttons keeps its line once the first player is in', () => {
+  assert.equal(readyHint('2025-10-21'), 'Ready. +1 night plays the Oct 21 games.');
+  assert.equal(readyHint(null), "Ready. +1 night plays the next night's games.");
 });

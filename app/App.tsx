@@ -223,16 +223,28 @@ function NoticeToast({
  */
 function SkipLink() {
   const [focused, setFocused] = useState(false);
+  const jump = () => {
+    if (typeof document === 'undefined') return;
+    (document.getElementById('app-screen') as HTMLElement | null)?.focus?.();
+  };
   return (
     <Pressable
       accessibilityLabel="Skip to content"
       accessibilityRole="link"
       onBlur={() => setFocused(false)}
       onFocus={() => setFocused(true)}
-      onPress={() => {
-        if (typeof document === 'undefined') return;
-        (document.getElementById('app-screen') as HTMLElement | null)?.focus?.();
-      }}
+      // react-native-web only presses a "link" role on click, so the keys the
+      // people who need this link actually use (Enter, Space) are handled here
+      // (a web-only prop the native types do not list).
+      {...({
+        onKeyDown: (event: { key?: string; nativeEvent?: { key?: string }; preventDefault?: () => void }) => {
+          const key = event.nativeEvent?.key ?? event.key;
+          if (key !== 'Enter' && key !== ' ') return;
+          event.preventDefault?.();
+          jump();
+        },
+      } as object)}
+      onPress={jump}
       // Hidden, it must not keep an invisible tappable box in the corner:
       // the link's minimum height and padding are dropped with it.
       style={[styles.skipLink, !focused && visuallyHidden, !focused && styles.skipLinkHidden]}
