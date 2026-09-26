@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { settleTaps } from './tapSettle';
 
@@ -170,4 +170,23 @@ export function useBackFolds(visible: boolean, onFold: () => void): void {
 /** Whether a sheet is open right now (the tab history ignores Back while one is). */
 export function sheetIsOpen(): boolean {
   return openSheets > 0;
+}
+
+/**
+ * Whether a sheet should draw anything: while it is open, and for its fade
+ * out after. Closed sheets render nothing, so a move elsewhere does not
+ * redraw the Rules and Settings contents (walk 4 T4-11: they redrew on every
+ * Add while closed).
+ */
+export function useSheetShown(visible: boolean, fadeMs = 320): boolean {
+  const [shown, setShown] = useState(visible);
+  useEffect(() => {
+    if (visible) {
+      setShown(true);
+      return undefined;
+    }
+    const timer = setTimeout(() => setShown(false), fadeMs);
+    return () => clearTimeout(timer);
+  }, [fadeMs, visible]);
+  return visible || shown;
 }

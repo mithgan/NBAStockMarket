@@ -12,7 +12,7 @@ import { rowMarker } from '../ui/domMarkers';
 import { headingLevel } from '../ui/kit';
 import { keepNoticesUntilClosed, setKeepNoticesUntilClosed, useKeepNotices } from '../state/noticePreference';
 import { cancelSettingsReturn, openRules, returnToSettingsAfterRules } from '../state/uiActions';
-import { useSheetHistory } from '../web/appHistory';
+import { useSheetHistory, useSheetShown } from '../web/appHistory';
 import { colors, fonts, numeric, radius, space, type, weight } from '../theme';
 import { measuredSheetTop } from './chrome/sheetTop';
 import { liveMarketToExitTo, usePracticeRulesContext } from './SimBar';
@@ -145,6 +145,8 @@ export function SettingsSheet({
     event.preventDefault();
     if (!event.repeat) setKeepNoticesUntilClosed(!keepNoticesUntilClosed());
   };
+  const shown = useSheetShown(visible);
+  if (!shown) return null;
   // The loop and its worked example; the rest is one tap away in the rules.
   const firstParagraph = rules ? rulesParagraphs(rules.explanation)[0] ?? null : null;
   return (

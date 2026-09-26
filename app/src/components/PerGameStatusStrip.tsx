@@ -47,7 +47,7 @@ import { usePerGame } from '../state/PerGameContext';
 import { openSettings, registerRulesOpener } from '../state/uiActions';
 import { colors, control, fonts, labelStyle, radius, space, type, weight } from '../theme';
 import { headingLevel, moneyColor, Tag, visuallyHidden } from '../ui/kit';
-import { useSheetHistory } from '../web/appHistory';
+import { useSheetHistory, useSheetShown } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
 import { measuredSheetTop } from './chrome/sheetTop';
@@ -552,7 +552,10 @@ function RulesSheet({
   // Back closes the sheet; the app behind it is inert while it is open.
   useSheetHistory(visible, onClose);
   const sheetTop = visible ? measuredSheetTop() : null;
-  const presentation = perGameRulesPresentation(rules, usePracticeRulesContext());
+  const practiceRules = usePracticeRulesContext();
+  const shown = useSheetShown(visible);
+  if (!shown) return null;
+  const presentation = perGameRulesPresentation(rules, practiceRules);
   const startingScore = presentation.facts.find((fact) => fact.label === 'Starting score')?.value;
   const fee = exactMoney(rules.transactionFeeDollars);
   const facts = [
