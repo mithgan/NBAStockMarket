@@ -214,18 +214,48 @@ test('Restart and Exit say what the season would lose', async () => {
   assert.equal(restart.confirmLabel, 'Start over');
   assert.match(restart.lines[0], /Day 16 of 174, 8 players/);
   assert.equal(practiceQuestion('exit', stakes).confirmLabel, 'Leave practice');
-  // Season over: one name for the action (walk 2 T2-17).
-  const done = practiceStakes({
-    progress: practiceProgress(OPENING_EVE, '2026-04-12'), players: 8, shorts: 0, score: -40_000,
-  });
-  const again = practiceQuestion('play-again', done);
-  assert.equal(again.title, 'Play another season?');
-  assert.equal(again.lines[0], 'Your final result will be cleared: a finished season, 8 players, score -$40K.');
-  assert.equal(again.confirmLabel, 'Play another season');
+  assert.equal(
+    practiceStakes({ progress: practiceProgress(OPENING_EVE, '2026-04-12'), players: 8, shorts: 0, score: -40_000 }),
+    'a finished season, 8 players, score -$40K',
+  );
   assert.equal(
     practiceStakes({ progress: practiceProgress(OPENING_EVE, OPENING_EVE), players: 0, shorts: 0, score: 0 }),
     'Day 0 of 174, no players, score $0',
   );
+});
+
+test('Exit is offered only where the live market is set up (walk 4 T2-10, T4-05, T1-12)', async () => {
+  const { practiceOffersExit, practiceQuestion } = await import('./chromeView');
+  const { resolvePublicAppConfig } = await import('../api/config');
+  // A site without the public config: Exit would land on "The live market
+  // isn't open yet" after throwing the season away, so it is not offered.
+  assert.equal(practiceOffersExit(resolvePublicAppConfig({})), false);
+  assert.equal(practiceOffersExit(resolvePublicAppConfig({ apiUrl: 'http://127.0.0.1:8011/', apiPrefix: '/api/v2/' })), false);
+  assert.equal(practiceOffersExit(null), false);
+  // A site with it keeps today's Exit and its question.
+  assert.equal(practiceOffersExit(resolvePublicAppConfig({
+    apiUrl: 'http://127.0.0.1:8011/',
+    apiPrefix: '/api/v2/',
+    supabaseUrl: 'https://example.supabase.co/',
+    supabasePublishableKey: 'public-key',
+  })), true);
+  const exit = practiceQuestion('exit', 'Day 1 of 174, 1 player, score -$250');
+  assert.equal(exit.title, 'Leave practice for the live market?');
+  assert.equal(exit.confirmLabel, 'Leave practice');
+});
+
+test('a finished season starts the next at once; Restart and Exit ask once there is anything to lose (walk 4 T1-13)', async () => {
+  const { practiceAsksFirst } = await import('./chromeView');
+  // Season over: the season is lost either way, so no question, and none in red.
+  assert.equal(practiceAsksFirst('play-again', { day: SEASON_TOTAL_DAYS, moves: 14 }), false);
+  // The opening eve with no moves: nothing to lose, so they just act.
+  assert.equal(practiceAsksFirst('restart', { day: 0, moves: 0 }), false);
+  assert.equal(practiceAsksFirst('exit', { day: 0, moves: 0 }), false);
+  // A move or a night played: ask first.
+  assert.equal(practiceAsksFirst('restart', { day: 0, moves: 1 }), true);
+  assert.equal(practiceAsksFirst('exit', { day: 1, moves: 0 }), true);
+  const bar = readFileSync(resolve(import.meta.dirname, '../components/SimBar.tsx'), 'utf8');
+  assert.doesNotMatch(bar, /Keep this result/);
 });
 
 test('the folded frame, short day count, lock reason and no-games night', async () => {
@@ -378,4 +408,44 @@ test('a finished season states its final score; only the button names the way on
   assert.doesNotMatch(strip, /PRACTICE_OVER_TEXT|PLAY AGAIN|'Play again'/);
   const bar = readFileSync(resolve(import.meta.dirname, '../components/SimBar.tsx'), 'utf8');
   assert.doesNotMatch(bar, /label="Play again"|'PLAY AGAIN'|label=\{'Play again'\}/);
+});
+
+test('rows with no line to spare keep a short hint, and +1 night its night (walk 4 T1-09, T3-11)', async () => {
+  const { NIGHT_DATE_STACKED_MIN_WIDTH, practiceHintShort } = await import('./chromeView');
+  const base = { complete: false, emptyRoster: false, playedWithoutRoster: false, justFilled: false, nextGameDate: '2025-10-21' };
+  assert.equal(practiceHintShort({ ...base, emptyRoster: true }), 'Add a player first');
+  assert.equal(practiceHintShort({ ...base, emptyRoster: true, playedWithoutRoster: true }), 'No players yet');
+  assert.equal(practiceHintShort({ ...base, justFilled: true }), 'Ready for +1 night');
+  assert.equal(practiceHintShort(base), null);
+  assert.equal(practiceHintShort({ ...base, emptyRoster: true, complete: true }), null);
+  // A 390px phone at 200% zoom (195px) names the night: "+1 NIGHT" over "OCT 21".
+  assert.ok(NIGHT_DATE_STACKED_MIN_WIDTH <= 195);
+});
+
+test('a press while a week plays says it is still playing (walk 4 T4-04)', async () => {
+  const { stillPlayingLine, weekSpanLabel } = await import('./chromeView');
+  assert.equal(weekSpanLabel(OPENING_EVE, practiceSeasonEnd(OPENING_EVE)), 'Oct 21–27');
+  assert.equal(weekSpanLabel('2025-10-27', practiceSeasonEnd(OPENING_EVE)), 'Oct 28–Nov 3');
+  // The last press stops at the season's last day.
+  assert.equal(weekSpanLabel('2026-04-07', practiceSeasonEnd(OPENING_EVE)), 'Apr 8–12');
+  assert.equal(stillPlayingLine('Oct 21–27', 'week'), "Still playing Oct 21–27. Press +1 week again once it's in.");
+  assert.equal(stillPlayingLine('Oct 21', 'night'), "Still playing Oct 21. Press +1 night again once it's in.");
+  assert.equal(stillPlayingLine(null, 'night'), "Still playing. Press +1 night again once it's in.");
+});
+
+test('sheets start where the status row starts, never mid-line (walk 4 T1-01)', async () => {
+  const { sheetTopFor } = await import('./chromeView');
+  // Under the brand bar on a phone (it was a fixed 64px, through "Practice · Oct 20").
+  assert.equal(sheetTopFor(52.6), 53);
+  // A short window has no brand bar: the sheet covers the row from the top.
+  assert.equal(sheetTopFor(0), 0);
+  // Not measured: the sheets keep their own margins.
+  assert.equal(sheetTopFor(null), null);
+  assert.equal(sheetTopFor(undefined), null);
+  assert.equal(sheetTopFor(Number.NaN), null);
+  assert.equal(sheetTopFor(-8), null);
+  // The quiet advance buttons keep a solid edge: dashed means unavailable (walk 4 T2-03).
+  const bar = readFileSync(resolve(import.meta.dirname, '../components/SimBar.tsx'), 'utf8');
+  const quiet = bar.slice(bar.indexOf('  advanceQuiet: {'), bar.indexOf('},', bar.indexOf('  advanceQuiet: {')));
+  assert.doesNotMatch(quiet, /dashed/);
 });

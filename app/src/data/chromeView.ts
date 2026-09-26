@@ -102,13 +102,38 @@ export function practiceStakes({ progress, players, shorts, score }: {
 }
 
 /**
- * The season-level questions the practice controls ask before acting. Once
- * the season is complete, Restart is "Play again" and asks 'play-again': the
- * same action the status row and the result card name "Play another season"
- * (walk 2 T2-17).
+ * Whether practice offers Exit: only where the live market is set up on this
+ * site (the app's public config resolves; pass `resolvePublicAppConfig()`).
+ * Elsewhere Exit threw the season away to land on "The live market isn't open
+ * yet" (walk 4 T2-10, T4-05, T1-12), so practice keeps Restart alone there.
+ */
+export function practiceOffersExit(liveConfig: { config: unknown } | null | undefined): boolean {
+  return Boolean(liveConfig?.config);
+}
+
+/**
+ * Whether a season control asks before it acts. Restart and Exit ask once
+ * the season holds something a reload throws away (a night played, or a
+ * move); on the opening eve with no moves they just act. Play another season
+ * never asks: the season is over, the result card's button of the same name
+ * starts the next one at once, and the question's red button made the natural
+ * next step look like a mistake (walk 4 T1-13).
+ */
+export function practiceAsksFirst(
+  kind: 'restart' | 'play-again' | 'exit',
+  { day, moves }: { day: number; moves: number },
+): boolean {
+  if (kind === 'play-again') return false;
+  return day > 0 || moves > 0;
+}
+
+/**
+ * The season-level questions the practice controls ask before acting.
+ * Play another season (Restart once the season is complete) acts at once
+ * (practiceAsksFirst).
  */
 export function practiceQuestion(
-  kind: 'restart' | 'play-again' | 'exit' | 'empty-night' | 'empty-week',
+  kind: 'restart' | 'exit' | 'empty-night' | 'empty-week',
   stakes: string,
   nextGames: string | null = null,
 ): {
@@ -132,14 +157,6 @@ export function practiceQuestion(
       // nothing, so it is a plain button, not a red one.
       confirmLabel: 'Play anyway',
       cancelLabel: 'Open market',
-    };
-  }
-  if (kind === 'play-again') {
-    return {
-      title: 'Play another season?',
-      lines: [`Your final result will be cleared: ${stakes}.`, 'A new season starts at Day 0 with an empty roster.'],
-      confirmLabel: 'Play another season',
-      cancelLabel: 'Keep this result',
     };
   }
   return kind === 'restart'
@@ -253,7 +270,8 @@ export function nextGamesText(nextGameDate: string | null | undefined): string |
 
 /**
  * The one name for the way on once practice is over: the practice bar's
- * button, the result card's button and the Play again question all use it.
+ * button and the result card's button both use it, and both start the next
+ * season at once (walk 4 T1-13).
  * The status row states the final score instead (walk 3 T4-04); this stands
  * in for it in the spoken summary only when no score is given.
  */
@@ -481,6 +499,19 @@ export function sheetNarrow(width: number): boolean {
   return width < SHEET_NARROW_MAX_WIDTH;
 }
 
+/**
+ * Where the Rules and Settings sheets start: at the top of the status row,
+ * which is the bottom of the brand bar, so the sheet's top edge never slices
+ * a line of the frame in half behind the scrim (at a fixed 64px the top
+ * halves of "Practice · Oct 20" peeked out above it, walk 4 T1-01). A short
+ * window has no brand bar, so the sheet covers the row from the top. null
+ * when the frame is not measured: the sheets keep their own margins.
+ */
+export function sheetTopFor(statusRowTop: number | null | undefined): number | null {
+  if (statusRowTop === null || statusRowTop === undefined || !Number.isFinite(statusRowTop) || statusRowTop < 0) return null;
+  return Math.round(statusRowTop);
+}
+
 /** The day count in a tiny row, in two short lines: "Day 16" over "of 174". */
 export function practiceDayTiny(progress: PracticeProgress): string {
   return progress.complete ? 'Season\nover' : `Day ${progress.day}\nof ${progress.total}`;
@@ -565,6 +596,51 @@ export function practiceHint({
   if (complete) return null;
   if (emptyRoster) return playedWithoutRoster ? EMPTY_ROSTER_PLAYING_HINT : EMPTY_ROSTER_HINT;
   return justFilled ? readyHint(nextGameDate) : null;
+}
+
+/**
+ * The practice hint in a short form, for the rows with no line to spare: the
+ * folded row (landscape, 200% zoom), beside or under the day count, and the
+ * top of More at 400% zoom. The full hint vanished there, so the quiet
+ * buttons looked disabled for no reason (walk 4 T1-09, T3-11). Each fits the
+ * 129px a 195px row leaves beside Settings.
+ */
+export const EMPTY_ROSTER_HINT_SHORT = 'Add a player first';
+export const EMPTY_ROSTER_PLAYING_HINT_SHORT = 'No players yet';
+export const READY_HINT_SHORT = 'Ready for +1 night';
+
+export function practiceHintShort(input: Parameters<typeof practiceHint>[0]): string | null {
+  const full = practiceHint(input);
+  if (full === null) return null;
+  if (full === EMPTY_ROSTER_HINT) return EMPTY_ROSTER_HINT_SHORT;
+  if (full === EMPTY_ROSTER_PLAYING_HINT) return EMPTY_ROSTER_PLAYING_HINT_SHORT;
+  return READY_HINT_SHORT;
+}
+
+/**
+ * From this width a row that stacks its advance labels (a phone at 200% zoom,
+ * 195px) still names the night +1 night plays: "+1 NIGHT" over "OCT 21", with
+ * the night button taking a larger share and "+1" over "WEEK" beside it.
+ * Narrower rows keep "+1" over "NIGHT" (walk 4 T3-11).
+ */
+export const NIGHT_DATE_STACKED_MIN_WIDTH = 180;
+
+/**
+ * The days a +1 week pressed on settled date `from` plays: the next seven
+ * ("Oct 21–27"), never past the season's last day.
+ */
+export function weekSpanLabel(from: string, seasonEnd: string | null | undefined): string {
+  const last = shiftDay(from, 7);
+  return dateSpanText(shiftDay(from, 1), seasonEnd && seasonEnd < last ? seasonEnd : last);
+}
+
+/**
+ * What a press on +1 night or +1 week says while the last press is still
+ * playing: it is ignored (one press, one night or week), and it says so
+ * rather than doing nothing (walk 4 T4-04).
+ */
+export function stillPlayingLine(playing: string | null, pressed: 'night' | 'week'): string {
+  return `Still playing${playing ? ` ${playing}` : ''}. Press +1 ${pressed} again once it's in.`;
 }
 
 /**

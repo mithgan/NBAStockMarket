@@ -85,6 +85,12 @@ export function humanNightsSince(since: string | null, through: string): string 
   return humanDaySpan(new Date(start.getTime() + 86_400_000).toISOString().slice(0, 10), through);
 }
 
+/** A finished season in a phrase: "+$3.97M, #1 of 5". */
+export function seasonResultLine(score: number, rank: string | null): string {
+  const money = Math.round(score) === 0 ? '$0' : signedMoneyFine(score);
+  return rank ? `${money}, ${rank}` : money;
+}
+
 /** "Wed, Nov 6". */
 export function humanDay(value: string | null | undefined): string {
   if (!value) return '';

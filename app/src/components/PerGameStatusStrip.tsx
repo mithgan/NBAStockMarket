@@ -50,6 +50,7 @@ import { headingLevel, moneyColor, Tag, visuallyHidden } from '../ui/kit';
 import { useSheetHistory } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
+import { measuredSheetTop } from './chrome/sheetTop';
 import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, usePracticeRulesContext, useRecentAdvances } from './SimBar';
 
 /**
@@ -102,8 +103,10 @@ export function PerGameStatusStrip() {
   ), [ledgerItems, span]);
   const noGames = useMemo(() => !span || !playedBetween(ledgerItems, span.after, span.through), [ledgerItems, span]);
   // Desktop has no line under +1 night / +1 week, so the practice hint ("Add
-  // a player first…", then "Ready…") rides at the end of the facts.
+  // a player first…", then "Ready…") rides at the end of the facts; a folded
+  // row (landscape, 200% zoom) carries its short form (walk 4 T1-09, T3-11).
   const practiceHint = usePracticeHint();
+  const practiceHintShort = usePracticeHint(true);
   if (!bootstrap) return null;
 
   const practice = isMockActive();
@@ -298,11 +301,19 @@ export function PerGameStatusStrip() {
   let facts;
   if (folded && !foldedFacts) {
     // Folded and narrow: the day and its progress, with "Locked · Nov 1"
-    // under them on a locked night (two tight lines inside the 44px row).
+    // under them on a locked night, or else the short practice hint ("Add a
+    // player first"), two tight lines inside the 44px row. The quiet +1
+    // night / +1 week looked disabled for no reason without it (walk 4 T3-11).
+    const hintUnderDay = !tiny && !locked && practiceHintShort ? (
+      <Text key="hint" maxFontSizeMultiplier={1.5} nativeID={PRACTICE_HINT_ID} style={[styles.fact, styles.factLabel, styles.tight]}>
+        {practiceHintShort}
+      </Text>
+    ) : null;
     facts = (
       <>
         {day}
         {lock}
+        {hintUnderDay}
       </>
     );
   } else if (arrangement === 'wide') {
@@ -315,9 +326,9 @@ export function PerGameStatusStrip() {
         {night}
         {upcoming}
         {lock}
-        {practiceHint && layout.merged ? (
+        {practiceHint && (layout.merged || foldedFacts) ? (
           <Text key="hint" maxFontSizeMultiplier={1.5} nativeID={PRACTICE_HINT_ID} style={[styles.fact, styles.factLabel]}>
-            {practiceHint}
+            {layout.merged ? practiceHint : practiceHintShort}
           </Text>
         ) : null}
       </View>
@@ -540,6 +551,7 @@ function RulesSheet({
   const narrow = sheetNarrow(width);
   // Back closes the sheet; the app behind it is inert while it is open.
   useSheetHistory(visible, onClose);
+  const sheetTop = visible ? measuredSheetTop() : null;
   const presentation = perGameRulesPresentation(rules, usePracticeRulesContext());
   const startingScore = presentation.facts.find((fact) => fact.label === 'Starting score')?.value;
   const fee = exactMoney(rules.transactionFeeDollars);
@@ -571,9 +583,11 @@ function RulesSheet({
         onStartShouldSetResponder={() => true}
         style={styles.scrim}
       />
-      {/* Framed like Settings: a sheet from the bottom, 64px below the top
-          (less in a short window), scrolling inside. */}
-      <View style={[styles.sheet, chromeFolded(height) && styles.sheetShort]}>
+      {/* Framed like Settings: a sheet from the bottom, starting where the
+          status row starts (under the brand bar; at the top of a short
+          window), so no line of the frame is cut in half behind the scrim
+          (walk 4 T1-01). Scrolls inside. */}
+      <View style={[styles.sheet, chromeFolded(height) && styles.sheetShort, sheetTop !== null && { marginTop: sheetTop }]}>
         <View style={[styles.sheetHead, narrow && styles.sheetHeadNarrow]}>
           <Text accessibilityRole="header" {...headingLevel(2)} style={styles.sheetTitle}>Game rules</Text>
           <Pressable

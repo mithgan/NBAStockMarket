@@ -26,7 +26,7 @@ import { Button, visuallyHidden } from './src/ui/kit';
 import { registerSettingsOpener, registerTabOpener, settingsReturnStep } from './src/state/uiActions';
 import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
 import { settleTaps } from './src/web/tapSettle';
-import { consumeArrivedByKeyboard, consumePracticeRestarted, setPracticeProgress } from './src/web/practiceSession';
+import { consumeArrivedByKeyboard, consumeLastSeasonResult, consumePracticeRestarted, setPracticeProgress } from './src/web/practiceSession';
 import {
   PerGameProvider as PortfolioProvider,
   usePerGame as usePortfolio,
@@ -34,6 +34,7 @@ import {
 } from './src/state/PerGameContext';
 import { ThemeProvider, useDesignVariant } from './src/theme/ThemeProvider';
 import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
+import { useKeepNotices } from './src/state/noticePreference';
 import { installGlobalWebStyles } from './src/web/globalStyles';
 import { ignoreHeldKeys } from './src/web/keyRepeat';
 import { treatmentNavigation } from './src/web/treatmentNavigation';
@@ -237,11 +238,14 @@ function NoticeToast({
   const insets = useSafeAreaInsets();
   // A pointer resting on a notice holds it (a magnifier user reads it where it is).
   const [held, setHeld] = useState(false);
+  // Settings > "Keep notices until I close them" (WCAG 2.2.1, walk 4 T3-N1):
+  // no timer, and a Dismiss button on every notice.
+  const keep = useKeepNotices();
   useEffect(() => {
-    if (tone !== 'success' || held) return undefined;
+    if (tone !== 'success' || held || keep) return undefined;
     const timer = setTimeout(onDismiss, successNoticeMs(message));
     return () => clearTimeout(timer);
-  }, [held, message, onDismiss, tone]);
+  }, [held, keep, message, onDismiss, tone]);
   const noticeRef = useRef<View | null>(null);
   const layer = placement === 'frame'
     ? [styles.noticeLayer, styles.noticeLayerFrame, { top: insets.top + 6 }]
@@ -288,7 +292,7 @@ function NoticeToast({
     };
   }, [onDismiss, problem]);
   if (!problem && sheetOpen) return null;
-  if (!problem) {
+  if (!problem && !keep) {
     // A success reads like a snackbar: tapping it dismisses it, and never
     // presses whatever sits underneath. Screen readers already heard it
     // through the live region, so the visual copy stays out of their way.
@@ -311,7 +315,7 @@ function NoticeToast({
   }
   return (
     <View style={layer}>
-      <View ref={noticeRef} style={[styles.notice, placement === 'corner' && styles.noticeCorner, styles.noticeProblem]}>
+      <View ref={noticeRef} style={[styles.notice, placement === 'corner' && styles.noticeCorner, problem && styles.noticeProblem]}>
         <Text style={styles.noticeText}>{message}</Text>
         <Pressable
           accessibilityLabel={`Dismiss: ${message}`}
@@ -469,8 +473,11 @@ function AppBody() {
   useEffect(() => {
     if (!consumePracticeRestarted()) return undefined;
     const byKeyboard = consumeArrivedByKeyboard();
+    const last = consumeLastSeasonResult();
     const timer = setTimeout(() => {
-      setAppNotice('New practice season: Day 0, empty roster, score $0. Add players in the Market, then press +1 night to play the first games.');
+      setAppNotice(last
+        ? `New practice season. Your last one finished ${last}. Add players in the Market, then press +1 night to play the first games.`
+        : 'New practice season: Day 0, empty roster, score $0. Add players in the Market, then press +1 night to play the first games.');
       if (!byKeyboard || typeof document === 'undefined') return;
       const target = document.getElementById(PRACTICE_WELCOME_TITLE_ID) ?? document.getElementById('app-screen');
       (target as HTMLElement | null)?.focus?.({ preventScroll: true });

@@ -42,11 +42,21 @@ export function setPracticeProgress(progress: boolean): void {
   }
 }
 
-/** Start a fresh practice season (after the player confirmed). */
-export function restartPractice(): void {
+const LAST_RESULT_KEY = 'nba-stock-market:last-season-result';
+
+/**
+ * Start a fresh practice season (after the player confirmed). A finished
+ * season passes its result ("+$3.97M, #1 of 5") so the new season's notice
+ * can say how the last one ended (walk 4 T1-13 idea).
+ */
+export function restartPractice(lastResult?: string): void {
   if (!isWeb) return;
   leaving = true;
   rememberHowPressed();
+  try {
+    if (typeof lastResult === 'string' && lastResult) window.sessionStorage.setItem(LAST_RESULT_KEY, lastResult);
+    else window.sessionStorage.removeItem(LAST_RESULT_KEY);
+  } catch {}
   try {
     window.sessionStorage.setItem(RESTARTED_KEY, '1');
   } catch {}
@@ -82,5 +92,17 @@ export function consumeArrivedByKeyboard(): boolean {
     return flag;
   } catch {
     return false;
+  }
+}
+
+/** The finished season's result, once, on the page its "Play another season" loaded. */
+export function consumeLastSeasonResult(): string | null {
+  if (!isWeb) return null;
+  try {
+    const result = window.sessionStorage.getItem(LAST_RESULT_KEY);
+    window.sessionStorage.removeItem(LAST_RESULT_KEY);
+    return result;
+  } catch {
+    return null;
   }
 }

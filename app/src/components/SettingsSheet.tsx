@@ -10,10 +10,12 @@ import { useDesignVariant } from '../theme/ThemeProvider';
 import { APPEARANCE_CHOICES, VARIANTS } from '../theme/variants';
 import { rowMarker } from '../ui/domMarkers';
 import { headingLevel } from '../ui/kit';
+import { keepNoticesUntilClosed, setKeepNoticesUntilClosed, useKeepNotices } from '../state/noticePreference';
 import { cancelSettingsReturn, openRules, returnToSettingsAfterRules } from '../state/uiActions';
 import { useSheetHistory } from '../web/appHistory';
 import { colors, fonts, numeric, radius, space, type, weight } from '../theme';
-import { usePracticeRulesContext } from './SimBar';
+import { measuredSheetTop } from './chrome/sheetTop';
+import { liveMarketToExitTo, usePracticeRulesContext } from './SimBar';
 
 /** Account facts the sheet can show; absent entirely in the local demo. */
 type SettingsProfile = {
@@ -64,6 +66,9 @@ function Section({ title, narrow = false, children }: { title: string; narrow?: 
 /** From this width Settings floats as a panel with a bottom edge, not a phone sheet. */
 const FLOATING_MIN_WIDTH = 720;
 
+/** The switch's one-line explanation (its aria-describedby). */
+const KEEP_NOTICES_NOTE_ID = 'keep-notices-note';
+
 export function SettingsSheet({
   onClose,
   onSignOut,
@@ -95,6 +100,7 @@ export function SettingsSheet({
   const { setVariant, variantId } = useDesignVariant();
   // Back closes the sheet; the app behind it is inert while it is open.
   useSheetHistory(visible, onClose);
+  const sheetTop = visible ? measuredSheetTop() : null;
   const choiceRefs = useRef<Array<View | null>>([]);
   // Rules opened from here hand back to Settings when they close (the frame
   // reopens it); focus goes back to "Read the full rules", where the player
@@ -131,6 +137,14 @@ export function SettingsSheet({
     setVariant(APPEARANCE_CHOICES[next]);
     (choiceRefs.current[next] as unknown as { focus?: () => void } | null)?.focus?.();
   };
+  // "Keep notices until I close them": Enter reaches it as a press, but
+  // react-native-web presses on Space only for buttons, so Space is here.
+  const keepNotices = useKeepNotices();
+  const onSwitchKey = (event: { key: string; repeat?: boolean; preventDefault: () => void }) => {
+    if (event.key !== ' ' && event.key !== 'Spacebar') return;
+    event.preventDefault();
+    if (!event.repeat) setKeepNoticesUntilClosed(!keepNoticesUntilClosed());
+  };
   // The loop and its worked example; the rest is one tap away in the rules.
   const firstParagraph = rules ? rulesParagraphs(rules.explanation)[0] ?? null : null;
   return (
@@ -151,8 +165,10 @@ export function SettingsSheet({
         onStartShouldSetResponder={() => true}
         style={styles.scrim}
       />
-      {/* A short window keeps the settings, not the gap above them (as Rules). */}
-      <View style={[styles.sheet, floating && styles.sheetFloating, chromeFolded(height) && styles.sheetShort]}>
+      {/* A short window keeps the settings, not the gap above them (as Rules).
+          The sheet starts where the status row starts, so no line of the
+          frame is cut in half behind the scrim (walk 4 T1-01). */}
+      <View style={[styles.sheet, floating && styles.sheetFloating, chromeFolded(height) && styles.sheetShort, sheetTop !== null && { marginTop: sheetTop }]}>
         <View style={[styles.sheetHead, narrow && styles.sheetHeadNarrow]}>
           <Text accessibilityRole="header" {...headingLevel(2)} style={styles.sheetTitle}>Settings</Text>
           <Pressable
@@ -232,6 +248,36 @@ export function SettingsSheet({
             ) : null}
           </Section>
 
+          {/* Notices clear by themselves after a few seconds, too soon at
+              high zoom or with a magnifier, and a keyboard cannot hover one
+              to hold it (walk 4 T3-N1, WCAG 2.2.1). A switch: Enter (the
+              press) and Space both flip it. */}
+          <Section narrow={narrow} title="Notices">
+            <View {...({ onKeyDown: onSwitchKey } as object)}>
+              <Pressable
+                accessibilityLabel="Keep notices until I close them"
+                accessibilityRole="switch"
+                accessibilityState={{ checked: keepNotices }}
+                // react-native-web drops accessibilityState.checked.
+                aria-checked={keepNotices}
+                aria-describedby={KEEP_NOTICES_NOTE_ID}
+                onPress={() => setKeepNoticesUntilClosed(!keepNoticesUntilClosed())}
+                style={({ pressed }) => [styles.choice, narrow && styles.choiceNarrow, pressed && styles.pressed]}
+                {...rowMarker}
+              >
+                <View style={[styles.choiceCopy, narrow && styles.choiceCopyNarrow]}>
+                  <Text style={styles.choiceName}>Keep notices until I close them</Text>
+                  <Text nativeID={KEEP_NOTICES_NOTE_ID} style={styles.choiceBlurb}>
+                    Notices stay on screen until you close them, instead of clearing after a few seconds.
+                  </Text>
+                </View>
+                <View style={[styles.switchTrack, keepNotices && styles.switchTrackOn]}>
+                  <View style={[styles.switchKnob, keepNotices && styles.switchKnobOn]} />
+                </View>
+              </Pressable>
+            </View>
+          </Section>
+
           <Section narrow={narrow} title="How the game works">
             {firstParagraph ? <Text style={[styles.lede, narrow && styles.gutterNarrow]}>{firstParagraph}</Text> : (
               <Text style={[styles.note, narrow && styles.gutterNarrow]}>The rules will appear when your account loads.</Text>
@@ -301,7 +347,10 @@ export function SettingsSheet({
           ) : (
             <Section narrow={narrow} title="Practice mode">
               <Text style={[styles.note, narrow && styles.gutterNarrow]}>
-                This is practice. It plays generated games in this browser's memory and starts over when you reload. Your saved account is separate and untouched.
+                {/* A site without the live market has no saved account to mention. */}
+                {liveMarketToExitTo()
+                  ? "This is practice. It plays generated games in this browser's memory and starts over when you reload. Your saved account is separate and untouched."
+                  : "This is practice. It plays generated games in this browser's memory and starts over when you reload."}
               </Text>
             </Section>
           )}
@@ -487,6 +536,33 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     lineHeight: 17,
     marginTop: 2,
+  },
+  // A switch: the knob's side says off (left) or on (right, on gold), so the
+  // state never rests on colour alone; both edges are 3:1 controls.
+  switchTrack: {
+    width: 44,
+    height: 26,
+    flexShrink: 0,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: colors.controlBorder,
+    backgroundColor: colors.surfaceRaised,
+  },
+  switchTrackOn: {
+    alignItems: 'flex-end',
+    borderColor: colors.goldInk,
+    backgroundColor: colors.gold,
+  },
+  switchKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.muted,
+  },
+  switchKnobOn: {
+    backgroundColor: colors.onGold,
   },
   check: {
     ...numeric,
