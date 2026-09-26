@@ -3,9 +3,11 @@ import test from 'node:test';
 
 import type { PerGameSettledResult } from '../api/contracts';
 import { moneyFine } from '../copy/terms';
+import { shownEdge } from './marketView';
 import { positionValue } from './perGameMetrics';
 import {
   buildProfileNights,
+  chartDateLabels,
   chartLegend,
   chartSummary,
   defaultRange,
@@ -14,6 +16,7 @@ import {
   holdingStatus,
   isRecentRange,
   lastSeasonFacts,
+  lastSeasonValue,
   logCaption,
   logPriceHeader,
   logRows,
@@ -28,6 +31,7 @@ import {
   profileSide,
   rangeNights,
   rangeOptions,
+  readoutCaption,
   sideNet,
   sideWords,
   pastStintLead,
@@ -153,7 +157,7 @@ test('a negative dividend is a winning short (grader B3: Maxey at $225K, dividen
   assert.equal(summary.avgNet, 345_000);
   assert.equal(summary.best?.net, 345_000);
   assert.equal(formVerdict(summary, { side: 'short', held: true }), 'Stayed under his price by $345K in his only game so far.');
-  assert.equal(nightReadout(nights[0], 'dividends', 'short'), 'Dividend -$120K · credit $225K · +$345K');
+  assert.equal(nightReadout(nights[0], 'dividends', 'short'), 'Dividend -$120K · price $225K · +$345K');
 });
 
 test('outside practice the nights are your results; the other side counts as market nights', () => {
@@ -262,7 +266,9 @@ test('labels follow the side, so a short never reads as a roster spot', () => {
   const roster = sideWords('long');
   const short = sideWords('short');
   assert.equal(roster.price, 'Price');
-  assert.equal(short.price, 'Credit');
+  // Both sides say price: a short is credited his price (walk 5 T1-11).
+  assert.equal(short.price, 'Price');
+  assert.equal(short.netCaption, 'price − dividend');
   assert.equal(roster.beat, 'Beat his price');
   assert.equal(short.beat, 'Under his price');
   assert.equal(roster.missedCaption(3), 'missed 3');
@@ -280,10 +286,10 @@ test('the price is labelled by where it came from', () => {
   assert.equal(priceSourceCaption({ games: 6, yours: 4 }, 'short'), 'yours and market');
   assert.equal(logPriceHeader(nights, 'long'), 'Price');
   assert.equal(logPriceHeader(nights.slice(2), 'long'), 'Your price');
-  assert.equal(logPriceHeader(nights.slice(2), 'short'), 'Your credit');
+  assert.equal(logPriceHeader(nights.slice(2), 'short'), 'Your price');
   assert.equal(logPriceHeader(nights.slice(0, 2), 'long'), 'Market price');
   assert.equal(nightSourceLabel(nights[0], 'long'), 'market price');
-  assert.equal(nightSourceLabel(nights[3], 'short'), 'your credit');
+  assert.equal(nightSourceLabel(nights[3], 'short'), 'your price');
 });
 
 test('after a drop and re-add the price is plainly an average of your two prices (rigor round-3 L-2)', () => {
@@ -296,7 +302,7 @@ test('after a drop and re-add the price is plainly an average of your two prices
   assert.equal(summary.yourPrices, 2);
   assert.equal(moneyFine(summary.avgPrice ?? 0), '$100.4K');
   assert.equal(priceSourceCaption(summary, 'long'), 'average of your prices', 'never "your price" beside "Locked in at $104.3K"');
-  assert.equal(priceSourceCaption(summary, 'short'), 'average of your credits');
+  assert.equal(priceSourceCaption(summary, 'short'), 'average of your prices');
   assert.equal(mixNote(stints, 'long'), 'These 12 games were at your prices: 11 at $100K, 1 at $104.3K.');
   assert.equal(priceSourceCaption(summarizeNights(stints.slice(0, 11)), 'long'), 'your price', 'one stint');
   assert.equal(mixNote(stints.slice(0, 11), 'long'), null, 'one stint: the caption says it');
@@ -328,7 +334,7 @@ test('a mixed range says which games were yours and at what price (grader N-S3)'
   assert.equal(mixNote(white.slice(9), 'long'), null, 'all yours');
   assert.equal(mixNote(white.slice(0, 9), 'long'), null, 'all market');
   const twoPrices = white.map((night, index) => (index === 10 ? { ...night, price: 172_500 } : night));
-  assert.equal(mixNote(twoPrices, 'short'), 'These 11 games: 2 with you (1 at $169K, 1 at $172.5K), 9 at his market credit.');
+  assert.equal(mixNote(twoPrices, 'short'), 'These 11 games: 2 with you (1 at $169K, 1 at $172.5K), 9 at his market price.');
 });
 
 test('did-not-play and unsettled nights keep a line in the log and a note (rigor S-6)', () => {
@@ -410,7 +416,7 @@ test('ranges keep the latest games, and only a shortened range counts as recent'
 test('price story reads the move in plain words and says when the price was yours', () => {
   assert.equal(priceStory(nights), 'His price went from $100K to $105K a game over 6 games (your locked price in 4).');
   assert.equal(priceStory(nights.slice(0, 1)), 'His price held near $100K a game over 1 game.');
-  assert.equal(priceStory(nights.slice(2), 'short'), 'His credit went from $102K to $105K a game over 4 games (your locked credit).');
+  assert.equal(priceStory(nights.slice(2), 'short'), 'His price went from $102K to $105K a game over 4 games (your locked price).');
   assert.equal(priceStory([]), 'No games yet.');
 });
 
@@ -580,7 +586,7 @@ test('the price view plots his market price against your locked price (walk-1 T2
   // Every line carries a label with its value.
   assert.deepEqual(chartLegend(held, 'price'), { line: 'His market price', yours: 'Your price $125K' });
   assert.deepEqual(chartLegend(held, 'dividends'), { line: 'Your price $125K', yours: null });
-  assert.deepEqual(chartLegend(held, 'dividends', 'short'), { line: 'Your credit $125K', yours: null });
+  assert.deepEqual(chartLegend(held, 'dividends', 'short'), { line: 'Your price $125K', yours: null });
   assert.equal(nightReadout(held[2], 'price'), 'Market $128K · your price $125K');
   assert.equal(
     priceStory(held, 'long', 128_500, '2025-10-21'),
@@ -597,12 +603,12 @@ test('the price view plots his market price against your locked price (walk-1 T2
     priceStory(steady, 'long', 128_300, '2025-10-21'),
     'Your price: $125K (locked).\nMarket price: $128.3K today, up from $128K at his first game with you.',
   );
-  assert.equal(priceStory(held, 'short'), 'You locked $125K. Over these 3 games his market credit went from $120K to $128K.');
+  assert.equal(priceStory(held, 'short'), 'You locked $125K. Over these 3 games his market price went from $120K to $128K.');
   assert.equal(
     priceStory(held.slice(1), 'long', 99_700, '2025-10-21'),
     'Your price: $125K (locked).\nMarket price: $99.7K today, down from $124K at his Oct 22 game.\nHis market price moves between games too.',
   );
-  assert.equal(priceStory(held.slice(0, 1), 'short'), 'You locked $125K. His market credit was $120K in that game.');
+  assert.equal(priceStory(held.slice(0, 1), 'short'), 'You locked $125K. His market price was $120K in that game.');
   assert.match(chartSummary(held, 'price'), /^His market price a game over 3 games, against your locked price\. High \$128K/);
   // Outside practice there is no market line: your price is the one line.
   const live = held.map(({ market: _market, ...night }) => night);
@@ -632,10 +638,10 @@ test('the Price view is short lines, and up or down compares today with the firs
     priceStory([night('2025-10-22', 250_000, 250_000), night('2025-10-24', 250_000, 250_000)], 'long', 250_000, '2025-10-22'),
     'Your price: $250K (locked).\nMarket price: $250K today, the same as at his first game with you.',
   );
-  // A short reads its credit; two stints name both prices.
+  // A short reads his price too (walk 5 T1-11); two stints name both prices.
   assert.equal(
     priceStory([night('2025-10-22', 230_000, 225_000)], 'short', 236_000, '2025-10-22'),
-    'Your credit: $225K (locked).\nMarket credit: $236K today, up from $230K at his first game with you.\nHis market credit moves between games too.',
+    'Your price: $225K (locked).\nMarket price: $236K today, up from $230K at his first game with you.\nHis market price moves between games too.',
   );
   assert.equal(
     priceStory([night('2025-10-22', 101_000, 100_000), night('2025-10-24', 104_000, 104_300)], 'long', 104_000, '2025-10-22').split('\n')[0],
@@ -672,7 +678,7 @@ test('read-outs and summaries say Dividend, use human dates, and read naturally 
     'Dividend -$80K · price $112.5K · -$192.5K',
   );
   assert.equal(nightReadout(nights[1], 'price'), 'Price $101K a game');
-  assert.equal(nightReadout(nights[1], 'price', 'short'), 'Credit $101K a game');
+  assert.equal(nightReadout(nights[1], 'price', 'short'), 'Price $101K a game');
   assert.match(chartSummary(nights, 'dividends'), /High \$400K on Oct 28, low -\$20K on Oct 26\./);
   const shortNights = nights.map((night) => ({ ...night, net: sideNet('short', night.dividend, night.price) }));
   assert.match(chartSummary(shortNights, 'dividends', 'short'), /stayed under his price in 2 of them, which is what a short wants/);
@@ -684,9 +690,146 @@ test('the chart read-out is captioned as a sentence, not three labels (walk 3 T1
   const yours = { date: '2025-10-27', source: 'yours' as const };
   const market = { date: '2025-10-24', source: 'market' as const };
   assert.equal(readoutCaption(yours, 'dividends', 'long', true), 'Latest game, Oct 27, against your price');
-  assert.equal(readoutCaption(yours, 'dividends', 'short', false), 'Oct 27 game, against your credit');
+  assert.equal(readoutCaption(yours, 'dividends', 'short', false), 'Oct 27 game, against your price');
   assert.equal(readoutCaption(market, 'dividends', 'long', false), 'Oct 24 game, against his market price');
   assert.equal(readoutCaption(yours, 'price', 'long', true), 'Latest game, Oct 27, against your price');
   // A game at his market price in the Price view has nothing to set against it.
   assert.equal(readoutCaption(market, 'price', 'long', true), 'Latest game, Oct 24, his market price');
+});
+
+test("a held player's value is measured against the price you locked, like the Roster (walk 5 T4-02)", () => {
+  // Doncic: $488.5K a game last season, added at $417.5K; your own add and a week moved him to $431.5K.
+  const doncic = { currentGameCost: 431_500, priorSeasonValuePerGame: 488_500 };
+  const held = lastSeasonValue(doncic, 'long', { side: 'long', lockedGameCost: 417_500 });
+  assert.deepEqual(held, {
+    worth: 488_500,
+    edge: 71_000,
+    label: 'Value at your price',
+    caption: 'a game, against your $417.5K (now $431.5K)',
+  });
+  // The same +$71K the Market row showed before the add ("$71K over his price"), not +$57K at today's price.
+  assert.equal(lastYearEdgeAtToday(doncic), 57_000);
+  // Today's price only joins the caption once it reads differently from yours.
+  assert.equal(
+    lastSeasonValue({ currentGameCost: 417_540, priorSeasonValuePerGame: 488_500 }, 'long', { side: 'long', lockedGameCost: 417_500 }).caption,
+    'a game, against your $417.5K',
+  );
+  // A short you hold: your locked price against what he paid out.
+  const short = lastSeasonValue({ currentGameCost: 331_000, priorSeasonValuePerGame: 300_000 }, 'short', { side: 'short', lockedGameCost: 329_200 });
+  assert.equal(short.edge, 29_200);
+  assert.equal(short.label, 'Value at your price');
+  assert.equal(short.caption, 'a game for your short, against your $329.2K (now $331K)');
+  // No last season: nothing to measure, held or not.
+  assert.equal(lastSeasonValue({ currentGameCost: 100_000, priorSeasonValuePerGame: null }, 'long', { side: 'long', lockedGameCost: 99_000 }).edge, null);
+  // The Market's rule, to the dollar: printed dividend minus printed locked price
+  // ($488.5K − $417.5K = +$71K even when the raw figures carry odd dollars).
+  const odd = lastSeasonValue({ currentGameCost: 431_512, priorSeasonValuePerGame: 488_537 }, 'long', { side: 'long', lockedGameCost: 417_468 });
+  assert.equal(odd.edge, 71_000);
+  assert.equal(odd.edge, shownEdge({ currentGameCost: 417_468, priorSeasonValuePerGame: 488_537 }, 'long'));
+  assert.equal(lastSeasonValue({ currentGameCost: 331_000, priorSeasonValuePerGame: 300_000 }, 'short').edge, shownEdge({ currentGameCost: 331_000, priorSeasonValuePerGame: 300_000 }, 'short'));
+});
+
+test('a player you do not hold reads at today\'s price, and "Short instead" still flips it (walk 4 D1)', () => {
+  const duren = { currentGameCost: 176_000, priorSeasonValuePerGame: 207_500 };
+  assert.deepEqual(lastSeasonValue(duren, profileSide(null, 'long')), {
+    worth: 207_500,
+    edge: 31_500,
+    label: "Value at today's price",
+    caption: 'a game, against $176K now',
+  });
+  const flipped = lastSeasonValue(duren, profileSide(null, 'long', 'short'));
+  assert.equal(flipped.edge, -31_500);
+  assert.equal(flipped.label, "Value at today's price");
+  assert.equal(flipped.caption, 'a game for a short, against $176K now');
+  assert.equal(lastSeasonValue(duren, profileSide(null, 'long', 'long')).edge, 31_500, 'Add instead flips back');
+  // Only a position on the side read counts as "your price".
+  assert.equal(lastSeasonValue(duren, 'long', { side: 'short', lockedGameCost: 150_000 }).label, "Value at today's price");
+});
+
+function lastYearEdgeAtToday(player: { currentGameCost: number; priorSeasonValuePerGame: number }): number {
+  return player.priorSeasonValuePerGame - player.currentGameCost;
+}
+
+test('a short speaks of his price, never a "credit" or "market credit" of its own (walk 5 T1-11)', () => {
+  const nights: ProfileNight[] = [
+    { date: '2025-10-21', dividend: 120_000, price: 125_000, net: 5_000, source: 'yours', market: 121_000 },
+    { date: '2025-10-22', dividend: 90_000, price: 125_000, net: 35_000, source: 'yours', market: 124_000 },
+    { date: '2025-10-24', dividend: 150_000, price: 128_000, net: -22_000, source: 'market', market: 128_000 },
+  ];
+  const words = sideWords('short');
+  const texts = [
+    words.price, words.priceShort, words.netCaption, words.beat, words.legendGood, words.legendBad, words.legendLine,
+    words.missedCaption(2),
+    priceSourceCaption(summarizeNights(nights), 'short'),
+    priceSourceCaption(summarizeNights(nights.slice(2)), 'short'),
+    mixNote(nights, 'short') ?? '',
+    logPriceHeader(nights, 'short'),
+    logPriceHeader(nights.slice(2), 'short'),
+    ...nights.flatMap((night) => [
+      readoutCaption(night, 'dividends', 'short', true),
+      readoutCaption(night, 'price', 'short', false),
+      nightReadout(night, 'dividends', 'short'),
+      nightReadout(night, 'price', 'short'),
+      nightSourceLabel(night, 'short'),
+    ]),
+    priceStory(nights, 'short', 130_000, nights[0].date),
+    priceStory(nights.slice(2), 'short'),
+    chartSummary(nights, 'price', 'short'),
+    chartSummary(nights, 'dividends', 'short'),
+    chartLegend(nights, 'price', 'short').line,
+    chartLegend(nights, 'price', 'short').yours ?? '',
+    chartLegend(nights, 'dividends', 'short').line,
+    lastSeasonValue({ currentGameCost: 331_000, priorSeasonValuePerGame: 300_000 }, 'short').caption,
+  ];
+  for (const text of texts) assert.doesNotMatch(text, /credit/i, text);
+  // The chart caption and legend the tester read, now in price words.
+  assert.equal(readoutCaption(nights[2], 'dividends', 'short', true), 'Latest game, Oct 24, against his market price');
+  assert.equal(chartLegend(nights.slice(2), 'dividends', 'short').line, 'His market price');
+});
+
+test('the Price view names its high and low price on a scale, like the Score chart (walk 5 T2-08)', () => {
+  // Doncic, locked at $417.5K; his market price climbs from $418.5K to $431.5K.
+  const nights: ProfileNight[] = [
+    { date: '2025-10-21', dividend: 500_000, price: 417_500, net: 82_500, source: 'yours', market: 418_500 },
+    { date: '2025-10-22', dividend: 400_000, price: 417_500, net: -17_500, source: 'yours', market: 424_900 },
+    { date: '2025-10-24', dividend: 450_000, price: 417_500, net: 32_500, source: 'yours', market: 431_500 },
+  ];
+  const insets = { top: 12, right: 6, bottom: 12, left: 52 };
+  const model = profileChartModel(nights, 'price', 300, 176, insets);
+  assert.deepEqual(model.priceMarks.map((mark) => [mark.kind, mark.value]), [['high', 431_500], ['low', 417_500]]);
+  const [high, low] = model.priceMarks;
+  assert.ok(high.y < low.y, 'the high sits above the low');
+  assert.ok(high.y >= insets.top && low.y <= 176 - insets.bottom, 'both inside the plot');
+  assert.equal(high.y, model.anchors[2].y, 'the high mark is level with his top point');
+  // Three games already get a scale (the old in-plot labels waited for five).
+  assert.equal(model.high, null);
+  // A flat price has one mark; the dividends view has none.
+  const flat = profileChartModel(nights.map((night) => ({ ...night, market: 417_500 })), 'price', 300, 176, insets);
+  assert.equal(flat.priceMarks.length, 1);
+  assert.equal(profileChartModel(nights, 'dividends', 300, 176, insets).priceMarks.length, 0);
+  // Far apart, each mark's words sit on its line.
+  assert.equal(high.labelY, high.y);
+  assert.equal(low.labelY, low.y);
+  // One game: market $418.5K against your $417.5K draws two close lines; their words step apart.
+  const close = profileChartModel(nights.slice(0, 1), 'price', 300, 176, insets).priceMarks;
+  assert.deepEqual(close.map((mark) => mark.value), [418_500, 417_500]);
+  assert.ok(close[1].y - close[0].y < 16, 'the lines are close');
+  assert.ok(close[1].labelY - close[0].labelY >= 16, 'the words do not overlap');
+  assert.ok(close[0].labelY >= 7 && close[1].labelY <= 176 - 7);
+});
+
+test('chart dates sit under their game, and a lone game gets its date under its bar (walk 5 T2-15)', () => {
+  const one: ProfileNight[] = [{ date: '2025-10-21', dividend: 56_000, price: 371_000, net: -315_000, source: 'yours' }];
+  const model = profileChartModel(one, 'dividends', 300, 176, { top: 22, right: 6, bottom: 20, left: 6 });
+  const [only] = chartDateLabels(model.anchors.map((point) => point.x), 300, 64);
+  assert.equal(only.align, 'center');
+  assert.equal(only.left + 32, model.anchors[0].x, 'centred on the bar, not at the left edge');
+  // Many games: the first and the latest, hung from the chart's edges.
+  const xs = Array.from({ length: 20 }, (_, index) => 6 + (index + 0.5) * 14.4);
+  assert.deepEqual(chartDateLabels(xs, 300, 64).map((label) => [label.index, label.align]), [[0, 'left'], [19, 'right']]);
+  // Two games far apart: each date centred under its own bar.
+  assert.deepEqual(chartDateLabels([78, 222], 300, 64).map((label) => [label.index, label.align, label.left]), [[0, 'center', 46], [1, 'center', 190]]);
+  // Too close for both: the latest keeps its date.
+  assert.deepEqual(chartDateLabels([100, 120], 300, 64).map((label) => label.index), [1]);
+  assert.deepEqual(chartDateLabels([], 300, 64), []);
 });

@@ -24,6 +24,7 @@ import type {
   PerGameSettledResult,
 } from '../api/contracts';
 import { gamesCount, humanDate, money, moneyFine, signedMoneyFine } from '../copy/terms';
+import { shownEdge } from './marketView';
 import { currentResults, entryDay, lastYearEdge, type ValueSummary } from './perGameMetrics';
 import {
   selectHighLowPoints,
@@ -40,7 +41,7 @@ export interface ProfileNight {
   date: string;
   /** His dividend that night (can be negative after a bad game). */
   dividend: number;
-  /** What a game of him cost: the price on a roster, the credit on a short. */
+  /** What a game of him cost: his price (a short is credited it). */
   price: number;
   /** What that night made from the side you look from. */
   net: number;
@@ -148,7 +149,7 @@ export interface NightsSummary {
   games: number;
   /** Average dividend a game, or null before his first game. */
   avgDividend: number | null;
-  /** Average price (credit, for a short) a game over the same nights, or null. */
+  /** Average price a game over the same nights, or null. */
   avgPrice: number | null;
   /** Average net a game from the side you look from, or null. */
   avgNet: number | null;
@@ -161,7 +162,7 @@ export interface NightsSummary {
   /** How many of the nights are your own results. */
   yours: number;
   /**
-   * How many different locked prices (credits) your nights carry, as the
+   * How many different locked prices your nights carry, as the
    * reader sees them: more than one after a drop and re-add, when the average
    * mixes two stints.
    */
@@ -252,10 +253,15 @@ export function formVerdict(summary: NightsSummary, options: VerdictOptions = {}
   return `${lead}, ${moneyFine(Math.abs(avgNet))} a game ${avgNet > 0 ? 'ahead' : 'behind'} on average${forWho}.`;
 }
 
-/** Labels for the side you look from, so a short never reads as a roster spot. */
+/**
+ * Labels for the side you look from, so a short never reads as a roster spot.
+ * Both sides call what a game of him costs his price, as the Rules do ("each
+ * game you're credited his price"): a short's figures never invent a "credit"
+ * or a "market credit" beside it (walk 5 T1-11).
+ */
 export function sideWords(side: PerGamePositionSide): {
-  price: 'Price' | 'Credit';
-  priceShort: 'price' | 'credit';
+  price: 'Price';
+  priceShort: 'price';
   netCaption: string;
   beat: 'Beat his price' | 'Under his price';
   missedCaption: (count: number) => string;
@@ -275,14 +281,14 @@ export function sideWords(side: PerGamePositionSide): {
         legendLine: 'Price a game',
       }
     : {
-        price: 'Credit',
-        priceShort: 'credit',
-        netCaption: 'credit − dividend',
+        price: 'Price',
+        priceShort: 'price',
+        netCaption: 'price − dividend',
         beat: 'Under his price',
         missedCaption: (count) => (count === 0 ? 'never over' : `over ${count}`),
         legendGood: 'Under his price',
         legendBad: 'Over his price',
-        legendLine: 'Credit a game',
+        legendLine: 'Price a game',
       };
 }
 
@@ -294,11 +300,11 @@ export function sideWords(side: PerGamePositionSide): {
  */
 export function priceSourceCaption(
   summary: Pick<NightsSummary, 'games' | 'yours'> & Partial<Pick<NightsSummary, 'yourPrices'>>,
-  side: PerGamePositionSide,
+  // Both sides say "price" (walk 5 T1-11); kept so callers name the side they read.
+  _side: PerGamePositionSide,
 ): string {
-  const noun = side === 'long' ? 'price' : 'credit';
   if (summary.games === 0) return '';
-  if (summary.yours === summary.games) return (summary.yourPrices ?? 1) > 1 ? `average of your ${noun}s` : `your ${noun}`;
+  if (summary.yours === summary.games) return (summary.yourPrices ?? 1) > 1 ? 'average of your prices' : 'your price';
   if (summary.yours === 0) return 'his market price';
   return 'yours and market';
 }
@@ -332,10 +338,10 @@ function yourPrices(yours: readonly ProfileNight[]): YourPrices {
  * $104.3K." Null when every game is at one locked price, or none is yours,
  * since the price caption already says so.
  */
-export function mixNote(nights: readonly ProfileNight[], side: PerGamePositionSide): string | null {
+export function mixNote(nights: readonly ProfileNight[], _side: PerGamePositionSide): string | null {
   const yours = nights.filter((night) => night.source === 'yours');
   if (yours.length === 0) return null;
-  const noun = side === 'long' ? 'price' : 'credit';
+  const noun = 'price';
   const prices = yourPrices(yours);
   const these = `These ${gamesCount(nights.length)}`;
   if (yours.length === nights.length) {
@@ -418,17 +424,16 @@ export function logStatusNights(
 }
 
 /** The game log's price column header. */
-export function logPriceHeader(nights: readonly ProfileNight[], side: PerGamePositionSide): string {
+export function logPriceHeader(nights: readonly ProfileNight[], _side: PerGamePositionSide): string {
   const yours = nights.filter((night) => night.source === 'yours').length;
-  if (nights.length > 0 && yours === nights.length) return side === 'long' ? 'Your price' : 'Your credit';
+  if (nights.length > 0 && yours === nights.length) return 'Your price';
   if (yours === 0) return 'Market price';
-  return side === 'long' ? 'Price' : 'Credit';
+  return 'Price';
 }
 
-/** "your price" / "your credit" / "market price", for the chart read-out. */
-export function nightSourceLabel(night: Pick<ProfileNight, 'source'>, side: PerGamePositionSide): string {
-  if (night.source === 'market') return 'market price';
-  return side === 'long' ? 'your price' : 'your credit';
+/** "your price" or "market price", for the chart read-out (a short's too). */
+export function nightSourceLabel(night: Pick<ProfileNight, 'source'>, _side: PerGamePositionSide): string {
+  return night.source === 'market' ? 'market price' : 'your price';
 }
 
 /**
@@ -445,8 +450,7 @@ export function readoutCaption(
 ): string {
   const game = latest ? `Latest game, ${humanDate(night.date)}` : `${humanDate(night.date)} game`;
   if (night.source === 'market') {
-    const noun = side === 'long' ? 'price' : 'credit';
-    return metric === 'price' ? `${game}, his market ${noun}` : `${game}, against his market ${noun}`;
+    return metric === 'price' ? `${game}, his market price` : `${game}, against his market price`;
   }
   return `${game}, against ${nightSourceLabel(night, side)}`;
 }
@@ -546,12 +550,13 @@ export function isRecentRange(range: ProfileRange, shown: number, total: number)
  */
 export function priceStory(
   nights: readonly ProfileNight[],
-  side: PerGamePositionSide = 'long',
+  _side: PerGamePositionSide = 'long',
   now?: number,
   firstWithYou: string | null = null,
 ): string {
   if (nights.length === 0) return 'No games yet.';
-  const word = side === 'long' ? 'price' : 'credit';
+  // A short locks his price too (walk 5 T1-11).
+  const word = 'price';
   const mine = nights.filter((night) => night.source === 'yours');
   if (now !== undefined && nights.every((night) => night.market !== undefined)) {
     const first = nights[0];
@@ -699,6 +704,37 @@ export function lastSeasonFacts(
   };
 }
 
+/**
+ * Last season's value as the profile shows it (walk 5 T4-02). For a player
+ * you hold, it is measured against the price you locked, the figure the
+ * Roster and the Market's held row show ("Value +$71K at your price"), so
+ * your own add (which nudges his market price) never makes him look worse the
+ * moment you pick him. Today's price joins the caption once it differs from
+ * yours ("now $431.5K"). A player you do not hold reads at today's price,
+ * from the side the action bar offers ("Short instead" flips it).
+ *
+ * The figure is the Market's own rule (`shownEdge`): his dividend as printed
+ * minus the price as printed, so the profile and the row agree to the dollar.
+ */
+export function lastSeasonValue(
+  player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
+  side: PerGamePositionSide,
+  position: Pick<PerGamePosition, 'side' | 'lockedGameCost'> | null = null,
+): { worth: number | null; edge: number | null; label: string; caption: string } {
+  const facts = lastSeasonFacts(player, side);
+  if (!position || position.side !== side) {
+    return { worth: facts.worth, edge: shownEdge(player, side), label: "Value at today's price", caption: facts.edgeCaption };
+  }
+  const yours = moneyFine(position.lockedGameCost);
+  const now = moneyFine(player.currentGameCost);
+  return {
+    worth: facts.worth,
+    edge: shownEdge({ currentGameCost: position.lockedGameCost, priorSeasonValuePerGame: player.priorSeasonValuePerGame }, side),
+    label: 'Value at your price',
+    caption: `${side === 'long' ? 'a game' : 'a game for your short'}, against your ${yours}${now === yours ? '' : ` (now ${now})`}`,
+  };
+}
+
 /** Newest night first, for the game-by-game log. */
 export function gameLog(nights: readonly ProfileNight[], limit?: number): ProfileNight[] {
   const newest = [...nights].reverse();
@@ -742,6 +778,43 @@ export interface ProfileChartModel {
   /** Indices of the highest and lowest values, or null when not worth labelling. */
   high: number | null;
   low: number | null;
+  /**
+   * Price view: the scale's marks, the highest and lowest price drawn (his
+   * market line and your locked line) at their height, as the Score by night
+   * chart names its high and low (walk 5 T2-08). One mark when they read the
+   * same; none in the dividends view.
+   */
+  priceMarks: PriceMark[];
+}
+
+export interface PriceMark {
+  value: number;
+  /** Plot y of the value: where its guide line is drawn. */
+  y: number;
+  /**
+   * Where its words are centred: at its line, or stepped just clear of the
+   * other mark when a small move puts the lines close together.
+   */
+  labelY: number;
+  kind: 'high' | 'low';
+}
+
+/** A mark's words are about 14px tall: 16px between centres keeps them apart. */
+const MARK_GAP = 16;
+const MARK_HALF = 7;
+
+/** Steps two close marks' words apart, inside the chart's height. */
+function spreadMarks(marks: PriceMark[], height: number): PriceMark[] {
+  const clamp = (value: number) => Math.min(Math.max(value, MARK_HALF), Math.max(MARK_HALF, height - MARK_HALF));
+  if (marks.length < 2) return marks.map((mark) => ({ ...mark, labelY: clamp(mark.y) }));
+  const [high, low] = marks;
+  const mid = (high.y + low.y) / 2;
+  let up = low.y - high.y < MARK_GAP ? mid - MARK_GAP / 2 : high.y;
+  let down = low.y - high.y < MARK_GAP ? mid + MARK_GAP / 2 : low.y;
+  up = clamp(up);
+  down = clamp(Math.max(down, up + MARK_GAP));
+  up = Math.min(up, down - MARK_GAP);
+  return [{ ...high, labelY: up }, { ...low, labelY: down }];
 }
 
 /**
@@ -757,7 +830,7 @@ export function profileChartModel(
   insets: ChartInsets,
 ): ProfileChartModel {
   const empty: ProfileChartModel = {
-    slot: 0, bars: [], anchors: [], priceStepPath: '', priceLinePath: '', yourPricePath: '', zeroY: null, high: null, low: null,
+    slot: 0, bars: [], anchors: [], priceStepPath: '', priceLinePath: '', yourPricePath: '', zeroY: null, high: null, low: null, priceMarks: [],
   };
   const count = nights.length;
   const plotWidth = width - insets.left - insets.right;
@@ -774,9 +847,13 @@ export function profileChartModel(
 
   let low: number;
   let high: number;
+  let priceHigh = 0;
+  let priceLow = 0;
   if (metric === 'price') {
     low = Math.min(...values, ...yourPrices);
     high = Math.max(...values, ...yourPrices);
+    priceHigh = high;
+    priceLow = low;
     const pad = Math.max((high - low) * 0.2, Math.abs(high) * 0.02, 1);
     low -= pad;
     high += pad;
@@ -831,6 +908,14 @@ export function profileChartModel(
   const extrema = selectHighLowPoints(values);
   const flat = Math.max(...values) === Math.min(...values);
   const labelled = count >= 5 && !flat;
+  const priceMarks: PriceMark[] = metric !== 'price'
+    ? []
+    : spreadMarks(moneyFine(priceHigh) === moneyFine(priceLow)
+      ? [{ value: priceHigh, y: y(priceHigh), labelY: 0, kind: 'high' }]
+      : [
+          { value: priceHigh, y: y(priceHigh), labelY: 0, kind: 'high' },
+          { value: priceLow, y: y(priceLow), labelY: 0, kind: 'low' },
+        ], height);
 
   return {
     slot,
@@ -842,7 +927,35 @@ export function profileChartModel(
     zeroY,
     high: labelled ? extrema.high?.index ?? null : null,
     low: labelled ? extrema.low?.index ?? null : null,
+    priceMarks,
   };
+}
+
+export interface ChartDateLabel {
+  index: number;
+  /** Left edge of the label's box, in chart pixels. */
+  left: number;
+  align: 'left' | 'center' | 'right';
+}
+
+/**
+ * Where the chart's dates go: under his first and latest game, each centred
+ * on its bar or point and pulled inside the chart at the edges, so a date
+ * names the game above it. A lone game gets one date, under its bar (walk 5
+ * T2-15: "Oct 21" sat at the left edge while the bar stood in the middle).
+ * Two boxes that would touch keep only the latest.
+ */
+export function chartDateLabels(xs: readonly number[], width: number, boxWidth: number, gap = 4): ChartDateLabel[] {
+  if (xs.length === 0 || width <= 0) return [];
+  const maxLeft = Math.max(width - boxWidth, 0);
+  const place = (index: number): ChartDateLabel => {
+    const left = Math.min(Math.max(xs[index] - boxWidth / 2, 0), maxLeft);
+    return { index, left, align: left <= 0 ? 'left' : left >= maxLeft ? 'right' : 'center' };
+  };
+  const last = place(xs.length - 1);
+  if (xs.length === 1) return [last];
+  const first = place(0);
+  return Math.abs(last.left - first.left) < boxWidth + gap ? [last] : [first, last];
 }
 
 /** The night under a pointer at `x`, clamped to the plotted nights. */
@@ -906,9 +1019,9 @@ export function chartSummary(
 export function chartLegend(
   nights: readonly ProfileNight[],
   metric: ProfileMetric,
-  side: PerGamePositionSide = 'long',
+  _side: PerGamePositionSide = 'long',
 ): { line: string; yours: string | null } {
-  const noun = side === 'long' ? 'price' : 'credit';
+  const noun = 'price';
   const mine = nights.filter((night) => night.source === 'yours');
   const prices = new Set(mine.map((night) => moneyFine(night.price)));
   const yoursText = prices.size === 1 ? `Your ${noun} ${moneyFine(mine[0].price)}` : `Your ${noun}s`;
@@ -918,7 +1031,7 @@ export function chartLegend(
   }
   if (mine.length === nights.length && mine.length > 0) return { line: yoursText, yours: null };
   if (mine.length === 0) return { line: `His market ${noun}`, yours: null };
-  return { line: `${noun === 'price' ? 'Price' : 'Credit'}: yours or market`, yours: null };
+  return { line: 'Price: yours or market', yours: null };
 }
 
 /** The chart's read-out for one night: "Dividend $324K · price $104K · +$220K". */
@@ -929,7 +1042,7 @@ export function nightReadout(night: ProfileNight, metric: ProfileMetric, side: P
     if (night.market !== undefined && night.source === 'yours') {
       return `Market ${moneyFine(night.market)} · your ${words.priceShort} ${moneyFine(night.price)}`;
     }
-    return `${side === 'long' ? 'Price' : 'Credit'} ${moneyFine(night.market ?? night.price)} a game`;
+    return `Price ${moneyFine(night.market ?? night.price)} a game`;
   }
   return `Dividend ${moneyFine(night.dividend)} · ${words.priceShort} ${moneyFine(night.price)} · ${signedMoneyFine(night.net)}`;
 }

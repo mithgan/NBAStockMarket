@@ -17,7 +17,7 @@ import {
   confirmCloseButton,
   confirmCloseMessage,
   confirmCloseName,
-  exactMoney,
+  moneyFine,
   openVerb,
   perGame,
   rosterReopensLine,
@@ -167,7 +167,7 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
       );
     }
     const costs = fee > 0
-      ? `${held === 'long' ? 'Dropping him' : 'Closing the short'} costs ${exactMoney(fee)}.`
+      ? `${held === 'long' ? 'Dropping him' : 'Closing the short'} costs ${moneyFine(fee)}.`
       : held === 'long' ? 'Dropping him frees a roster spot.' : 'Closing frees a short slot.';
     return (
       <Bar note={rosterLocked ? lockLine : costs} warn={rosterLocked}>
@@ -248,10 +248,11 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
 
   const disabled = !row.canSubmit || pending || locked || rosterLocked;
   const reason = rosterLocked ? lockLine : row.unavailableReason;
-  const noun = side === 'long' ? 'price' : 'credit';
+  // Both sides lock his price: a short is credited it each game (walk 5
+  // T1-11: never a "credit" of his own). A no-break space keeps "$250 fee"
+  // on one line; the fee reads like every other figure ("$1.25K" from $1,000).
   const note = reason
-    // A no-break space keeps "$250 fee" on one line.
-    ?? `Locks his ${noun} at ${perGame(player.currentGameCost)}${fee > 0 ? ` · ${exactMoney(fee)} fee` : ''}`;
+    ?? `Locks his price at ${perGame(player.currentGameCost)}${fee > 0 ? ` · ${moneyFine(fee)} fee` : ''}`;
   const word = pending ? 'Wait' : rosterLocked ? 'Locked' : row.isFull ? 'Full' : openVerb(side);
   return (
     <Bar below={instead} note={note} warn={reason !== null}>

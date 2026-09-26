@@ -40,6 +40,7 @@ import {
   signedMoneyFine,
   unbrokenName,
 } from '../copy/terms';
+import { tierLabel } from '../data/marketView';
 import { currentResults, playerValue, positionValue } from '../data/perGameMetrics';
 import { splitPlayerName } from '../data/playerName';
 import {
@@ -48,7 +49,7 @@ import {
   holdingStatus,
   defaultRange,
   isRecentRange,
-  lastSeasonFacts,
+  lastSeasonValue,
   logPriceHeader,
   logCaption,
   logRows,
@@ -91,6 +92,13 @@ const LOG_SLACK = 2;
 
 /** Below this window height the action bar scrolls away with his name. */
 const PIN_BAR_MIN_HEIGHT = 500;
+
+/**
+ * Below this window width the game log's four columns would break figures and
+ * header words ("$327." / "6K" at 200% zoom, walk 5 T3-04): each game is a
+ * stacked row instead. Measured: the table reads whole from 320px up.
+ */
+const LOG_TABLE_MIN_WIDTH = 320;
 
 /** Once the name block has scrolled away, the top bar shows who this is. */
 const TITLE_AFTER_SCROLL = 72;
@@ -190,6 +198,12 @@ export function PerGamePlayerProfile({
   // gutters so four range tabs still get 44px each, and shrink Watch to its star.
   const inset = !wide && windowWidth < 240 ? styles.insetTight : null;
   const narrow = !wide && windowWidth < 300;
+  // 400% zoom (under 160px): the headshot gives way so his name has the whole
+  // line, and every figure takes a line of its own, so nothing is cut off at
+  // the sheet's edge or broken inside a word.
+  const tiny = !wide && windowWidth < 160;
+  const cell = [styles.cell, tiny && styles.cellFull];
+  const half = [styles.cellHalf, tiny && styles.cellFull];
 
   // "Short instead" / "Add instead" switch the action bar to the other side,
   // and the whole profile reads from the side the bar is on (walk 4 T1-03).
@@ -235,14 +249,15 @@ export function PerGamePlayerProfile({
   const quietNote = unsettledNote(stakeSummary);
   const quiet = useMemo(() => statusNights(results, viewSide), [results, viewSide]);
   const mix = mixNote(shown, viewSide);
-  const lastSeason = lastSeasonFacts(player, viewSide);
+  // Held: against the price you locked, like the Roster; otherwise today's price.
+  const lastSeason = lastSeasonValue(player, viewSide, position);
   // The log lists the range's games (the chart's games), plus your no-money nights in that window.
   const logQuiet = logStatusNights(quiet, range, shown);
   const logTotal = shown.length + logQuiet.length;
   const logCapped = logTotal > LOG_PREVIEW + LOG_SLACK;
   const log = logRows(shown, logQuiet, showAllGames || !logCapped ? undefined : LOG_PREVIEW);
   const priceHeader = logPriceHeader(shown, viewSide);
-  const mixedLog = priceHeader === 'Price' || priceHeader === 'Credit';
+  const mixedLog = priceHeader === 'Price';
   const title = narrow ? splitPlayerName(player.name).surname : player.name;
 
   // Space toggles a switch (the WAI-ARIA pattern screen readers teach), but
@@ -261,7 +276,8 @@ export function PerGamePlayerProfile({
 
   return (
     <View style={styles.root}>
-      <View style={styles.topBar}>
+      {/* At 400% zoom Close and the Watch star take the whole bar (44px each). */}
+      <View style={[styles.topBar, tiny && styles.topBarTight]}>
         <Pressable
           accessibilityLabel="Close player profile"
           accessibilityRole="button"
@@ -271,18 +287,19 @@ export function PerGamePlayerProfile({
           <CloseIcon size={18} />
         </Pressable>
         <View style={styles.titleSlot}>
-          {scrolled ? (
+          {scrolled && !tiny ? (
             <Text accessibilityElementsHidden importantForAccessibility="no" maxFontSizeMultiplier={1.3} style={styles.title}>
               {title}
             </Text>
           ) : null}
         </View>
-        {/* A switch, like the Market's star: one name ("Watch Nikola Jokic"),
-            its state on or off (the star fills, the chip turns gold), and Space
-            or Enter toggles it. The visible word stays "Watch" so the spoken
-            name always contains it. */}
+        {/* A switch, like the Market's star: its state on or off (the star
+            fills, the chip turns gold), and Space or Enter toggles it. The
+            word says the state too, "Watch" or "Watching" (walk 5 T1-10), and
+            the spoken name starts with the word shown ("Watching Nikola
+            Jokic"), so a voice command naming the button still finds it. */}
         <Pressable
-          accessibilityLabel={`Watch ${player.name}`}
+          accessibilityLabel={`${watching ? 'Watching' : 'Watch'} ${player.name}`}
           accessibilityRole="switch"
           accessibilityState={{ checked: watching }}
           aria-checked={watching}
@@ -293,7 +310,7 @@ export function PerGamePlayerProfile({
           <StarIcon filled={watching} />
           {narrow ? null : (
             <Text maxFontSizeMultiplier={1.3} style={[styles.watchText, watching && styles.watchTextOn]}>
-              Watch
+              {watching ? 'Watching' : 'Watch'}
             </Text>
           )}
         </Pressable>
@@ -316,15 +333,19 @@ export function PerGamePlayerProfile({
         <View style={[styles.identity, inset]}>
           {/* His name is the heading beside it: the headshot is not read too
               (walk 3 T3-32). */}
-          <View aria-hidden>
-            <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={56} />
-          </View>
+          {tiny ? null : (
+            <View aria-hidden>
+              <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={56} />
+            </View>
+          )}
           <View style={styles.identityCopy}>
             <Text accessibilityRole="header" {...headingLevel(2)} maxFontSizeMultiplier={1.4} style={styles.name}>
               {windowWidth >= 320 ? unbrokenName(player.name) : player.name}
             </Text>
             <View style={styles.metaLine}>
-              {player.tier ? <Text maxFontSizeMultiplier={1.4} style={styles.tier}>{player.tier.toUpperCase()}</Text> : null}
+              {/* The Market's words for the tier ("Role player", never a bare
+                  "ROLE"; walk 5 T4-07), drawn in capitals like the row's. */}
+              {player.tier ? <Text maxFontSizeMultiplier={1.4} style={styles.tier}>{tierLabel(player.tier)}</Text> : null}
               <Text maxFontSizeMultiplier={1.4} style={styles.priceNow}>{perGame(player.currentGameCost)}</Text>
             </View>
           </View>
@@ -343,8 +364,11 @@ export function PerGamePlayerProfile({
             </View>
           ) : null}
           <View style={styles.statusLine}>
-            {status.tag ? <Tag>{status.tag}</Tag> : null}
-            <Text maxFontSizeMultiplier={1.4} style={styles.statusText}>{status.text}</Text>
+            {/* At 400% zoom the tag is wider than the sheet: its words lead the sentence instead. */}
+            {status.tag && !tiny ? <Tag>{status.tag}</Tag> : null}
+            <Text maxFontSizeMultiplier={1.4} style={styles.statusText}>
+              {status.tag && tiny ? `${status.tag}. ${status.text}` : status.text}
+            </Text>
           </View>
           {stake && !held ? (
             <View style={styles.statusLine}>
@@ -369,7 +393,7 @@ export function PerGamePlayerProfile({
 
         <SectionHeader
           level={3}
-          right={nights.length > 0 ? <Text style={styles.sectionCount}>{gamesCount(nights.length)}</Text> : undefined}
+          right={nights.length > 0 && !tiny ? <Text style={styles.sectionCount}>{gamesCount(nights.length)}</Text> : undefined}
           style={[styles.sectionHeader, inset]}
           title="Game by game"
         />
@@ -405,19 +429,19 @@ export function PerGamePlayerProfile({
               <View style={[styles.grid, styles.gridTight]}>
                 <Figure
                   label="Dividend"
-                  style={styles.cell}
+                  style={cell}
                   value={<FineMoney signed={false} size={type.title} value={summary.avgDividend ?? 0} />}
                 />
                 <Figure
                   caption={priceSourceCaption(summary, viewSide)}
                   label={words.price}
-                  style={styles.cell}
+                  style={cell}
                   value={<FineMoney signed={false} size={type.title} value={summary.avgPrice ?? 0} />}
                 />
                 <Figure
                   caption={words.netCaption}
                   label="Profit"
-                  style={styles.cell}
+                  style={cell}
                   value={<FineMoney size={type.title} value={summary.avgNet ?? 0} />}
                 />
               </View>
@@ -425,25 +449,38 @@ export function PerGamePlayerProfile({
                 <Figure
                   caption={words.missedCaption(summary.games - summary.beat)}
                   label={words.beat}
-                  style={styles.cell}
+                  style={cell}
                   value={(
                     <Text maxFontSizeMultiplier={1.4} style={styles.statText}>
                       {`${summary.beat} of ${gamesCount(summary.games)}`}
                     </Text>
                   )}
                 />
-                <Figure
-                  caption={summary.best ? `${humanDate(summary.best.date)}\ndividend ${moneyFine(summary.best.dividend)}` : undefined}
-                  label="Best game"
-                  style={styles.cell}
-                  value={<FineMoney value={summary.best?.net ?? 0} />}
-                />
-                <Figure
-                  caption={summary.worst ? `${humanDate(summary.worst.date)}\ndividend ${moneyFine(summary.worst.dividend)}` : undefined}
-                  label="Worst game"
-                  style={styles.cell}
-                  value={<FineMoney value={summary.worst?.net ?? 0} />}
-                />
+                {/* One game is both his best and his worst: say it once
+                    (walk 5 T2-15), never a "best game" of -$315K. */}
+                {summary.games === 1 ? (
+                  <Figure
+                    caption={summary.best ? `${humanDate(summary.best.date)}\ndividend ${moneyFine(summary.best.dividend)}` : undefined}
+                    label="Only game"
+                    style={cell}
+                    value={<FineMoney value={summary.best?.net ?? 0} />}
+                  />
+                ) : (
+                  <>
+                    <Figure
+                      caption={summary.best ? `${humanDate(summary.best.date)}\ndividend ${moneyFine(summary.best.dividend)}` : undefined}
+                      label="Best game"
+                      style={cell}
+                      value={<FineMoney value={summary.best?.net ?? 0} />}
+                    />
+                    <Figure
+                      caption={summary.worst ? `${humanDate(summary.worst.date)}\ndividend ${moneyFine(summary.worst.dividend)}` : undefined}
+                      label="Worst game"
+                      style={cell}
+                      value={<FineMoney value={summary.worst?.net ?? 0} />}
+                    />
+                  </>
+                )}
               </View>
               <Segmented
                 accessibilityLabel="Chart shows"
@@ -479,13 +516,13 @@ export function PerGamePlayerProfile({
               <Figure
                 caption="a game"
                 label="Dividend last season"
-                style={styles.cellHalf}
+                style={half}
                 value={<Money signed={false} size="title" value={lastSeason.worth} />}
               />
               <Figure
-                caption={lastSeason.edgeCaption}
-                label="Value at today's price"
-                style={styles.cellHalf}
+                caption={lastSeason.caption}
+                label={lastSeason.label}
+                style={half}
                 value={<Money size="title" value={lastSeason.edge} />}
               />
             </View>
@@ -508,7 +545,7 @@ export function PerGamePlayerProfile({
               priceHeader={priceHeader}
               rows={log}
               showingAll={showAllGames}
-              side={viewSide}
+              stacked={!wide && windowWidth < LOG_TABLE_MIN_WIDTH}
               style={inset}
               total={logTotal}
             />
@@ -532,6 +569,10 @@ const styles = StyleSheet.create({
     paddingVertical: space.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
+  },
+  topBarTight: {
+    gap: 2,
+    paddingHorizontal: 2,
   },
   iconButton: {
     width: control.icon,
@@ -621,6 +662,7 @@ const styles = StyleSheet.create({
     fontSize: type.label,
     fontWeight: weight.heavy,
     letterSpacing: 1.1,
+    textTransform: 'uppercase',
   },
   priceNow: {
     color: colors.text,
@@ -738,6 +780,11 @@ const styles = StyleSheet.create({
     minWidth: 140,
     flexGrow: 1,
     paddingRight: space.sm,
+  },
+  cellFull: {
+    width: '100%',
+    minWidth: 0,
+    paddingRight: 0,
   },
   insetTight: {
     // 6px leaves each of the four range tabs 44px inside a 195px sheet.

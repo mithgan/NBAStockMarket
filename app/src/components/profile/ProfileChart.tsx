@@ -2,7 +2,7 @@
  * Game-by-game chart for the player profile.
  *
  * Dividends view: one bar per game for his dividend, rising from $0, with the
- * price a game as a dashed gold step line. Bars are green when that game was a
+ * price a game as a dashed gold step line (the theme's text-grade gold, `goldInk`). Bars are green when that game was a
  * gain for the side you look from (he beat his price on a roster, stayed
  * under it for a short) and a hollow red outline when it was a loss.
  * Price view: his market price game by game (solid gold), against your locked
@@ -26,8 +26,9 @@ import {
 import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 import type { PerGamePositionSide } from '../../api/contracts';
-import { humanDate, money } from '../../copy/terms';
+import { humanDate, money, moneyFine } from '../../copy/terms';
 import {
+  chartDateLabels,
   chartLegend,
   chartSummary,
   nightIndexAt,
@@ -43,6 +44,20 @@ import {
 import { colors, fonts, radius, space, type, weight } from '../../theme';
 
 const INSETS: ChartInsets = { top: 22, right: 6, bottom: 20, left: 6 };
+/**
+ * Price view: a gutter at the left for the scale's marks, his high and low
+ * price beside their guide lines, as on the Score by night chart (walk 5
+ * T2-08). A chart too narrow for a gutter (400% zoom) keeps the plot whole;
+ * the read-out above it names the price.
+ */
+const GUTTER = 52;
+const PRICE_INSETS: ChartInsets = { top: 12, right: 6, bottom: 12, left: GUTTER };
+const PRICE_INSETS_BARE: ChartInsets = { top: 12, right: 6, bottom: 12, left: 6 };
+const SCALE_MIN_WIDTH = 160;
+/** Half a mark's height: its words are about 14px tall. */
+const MARK_HALF = 7;
+/** A date label's box, centred under its game. */
+const DATE_BOX = 64;
 /** Outline width of a missed game's hollow bar. */
 const MISS_STROKE = 1.5;
 
@@ -69,9 +84,11 @@ export function ProfileChart({
   // preview, then pin, then his latest game.
   const [pinned, setPinned] = useState<number | null>(null);
   const [preview, setPreview] = useState<number | null>(null);
+  const scaled = metric === 'price' && width >= SCALE_MIN_WIDTH;
+  const insets = metric === 'price' ? (scaled ? PRICE_INSETS : PRICE_INSETS_BARE) : INSETS;
   const model = useMemo(
-    () => profileChartModel(nights, metric, width, height, INSETS),
-    [height, metric, nights, width],
+    () => profileChartModel(nights, metric, width, height, insets),
+    [height, insets, metric, nights, width],
   );
   const words = sideWords(side);
   const legend = chartLegend(nights, metric, side);
@@ -84,9 +101,9 @@ export function ProfileChart({
     setPreview(null);
   }, [signature]);
 
-  const latest = useRef({ model, count: nights.length, pinned });
-  latest.current = { model, count: nights.length, pinned };
-  const indexAt = (x: number) => nightIndexAt(x, latest.current.model.slot, INSETS.left, latest.current.count);
+  const latest = useRef({ model, count: nights.length, pinned, left: insets.left });
+  latest.current = { model, count: nights.length, pinned, left: insets.left };
+  const indexAt = (x: number) => nightIndexAt(x, latest.current.model.slot, latest.current.left, latest.current.count);
   const step = useCallback((key: string): boolean => {
     const { count, pinned: current } = latest.current;
     const next = steppedIndex(key, current ?? count - 1, count);
@@ -182,9 +199,13 @@ export function ProfileChart({
   // "Latest game, Oct 27, against your price": a sentence, not three labels.
   const caption = readoutCaption(shown, metric, side, active === null);
   const labelAnchor = (x: number) => (x < 60 ? 'start' : x > width - 60 ? 'end' : 'middle');
+  // The dividends view names its tallest and lowest bar in the plot; the
+  // price view has its scale in the gutter instead.
   const labels = ([['HIGH', model.high], ['LOW', model.low]] as const).filter(
-    (entry): entry is readonly ['HIGH' | 'LOW', number] => entry[1] !== null && active === null,
+    (entry): entry is readonly ['HIGH' | 'LOW', number] => entry[1] !== null && active === null && metric === 'dividends',
   );
+  const marks = scaled ? model.priceMarks : [];
+  const dates = chartDateLabels(model.anchors.map((point) => point.x), width, DATE_BOX);
   const zeroY = model.zeroY;
 
   return (
@@ -218,6 +239,18 @@ export function ProfileChart({
             {metric === 'dividends' && zeroY !== null ? (
               <Line stroke={colors.borderStrong} strokeWidth={1} x1={0} x2={width} y1={zeroY} y2={zeroY} />
             ) : null}
+            {marks.map((mark) => (
+              <Line
+                key={mark.kind}
+                stroke={colors.borderStrong}
+                strokeDasharray="1 4"
+                strokeWidth={1}
+                x1={insets.left}
+                x2={width - insets.right}
+                y1={mark.y}
+                y2={mark.y}
+              />
+            ))}
             {active !== null && anchor ? (
               <Line
                 stroke={colors.faint}
@@ -252,20 +285,23 @@ export function ProfileChart({
                 );
               })
               : null}
+            {/* His price line in the theme's text-grade gold (walk 5 T3-08):
+                the same gold on every dark theme, and in Light the darker ink
+                that reads on cream (the fill gold there was 1.95:1). */}
             <Path
               d={metric === 'dividends' ? model.priceStepPath : model.priceLinePath}
               fill="none"
-              stroke={colors.gold}
+              stroke={colors.goldInk}
               strokeDasharray={metric === 'dividends' ? '5 4' : undefined}
               strokeLinejoin="round"
-              strokeWidth={metric === 'dividends' ? 1.5 : 2.5}
+              strokeWidth={metric === 'dividends' ? 2 : 2.5}
             />
             {/* Price view: your locked price, dashed, against his market line. */}
             {metric === 'price' && model.yourPricePath ? (
               <Path d={model.yourPricePath} fill="none" stroke={colors.text} strokeDasharray="5 4" strokeWidth={1.5} />
             ) : null}
             {metric === 'price' && anchor ? (
-              <Circle cx={anchor.x} cy={anchor.y} fill={colors.gold} r={active === null ? 3.5 : 5} />
+              <Circle cx={anchor.x} cy={anchor.y} fill={colors.goldInk} r={active === null ? 3.5 : 5} />
             ) : null}
             {labels.map(([label, index]) => {
               const point = model.anchors[index];
@@ -292,10 +328,35 @@ export function ProfileChart({
             })}
           </Svg>
         ) : null}
+        {/* The scale: his high and low price beside their guide lines. */}
+        {marks.map((mark) => (
+          <Text
+            key={mark.kind}
+            maxFontSizeMultiplier={1.3}
+            style={[styles.mark, { top: mark.labelY - MARK_HALF }]}
+          >
+            {moneyFine(mark.value)}
+          </Text>
+        ))}
       </View>
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.axis}>
-        <Text style={styles.axisText}>{humanDate(nights[0].date)}</Text>
-        {nights.length > 1 ? <Text style={styles.axisText}>{humanDate(nights[nights.length - 1].date)}</Text> : null}
+        {/* Each date sits under its game; the end ones hang from their edge. */}
+        {dates.map(({ index, left, align }) => (
+          <Text
+            key={index}
+            maxFontSizeMultiplier={1.3}
+            style={[
+              styles.axisText,
+              align === 'right'
+                ? { right: 0, textAlign: 'right' }
+                : align === 'left'
+                  ? { left: 0, textAlign: 'left' }
+                  : { left, width: DATE_BOX, textAlign: 'center' },
+            ]}
+          >
+            {humanDate(nights[index].date)}
+          </Text>
+        ))}
       </View>
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.legend}>
         {metric === 'dividends' ? (
@@ -365,17 +426,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   axis: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: INSETS.left,
+    position: 'relative',
+    height: 16,
     marginTop: 2,
   },
   axisText: {
+    position: 'absolute',
+    top: 0,
+    lineHeight: 16,
     color: colors.faint,
     fontFamily: fonts.display,
     fontSize: type.label,
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
+  },
+  mark: {
+    position: 'absolute',
+    left: 0,
+    width: GUTTER - 6,
+    color: colors.faint,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.bold,
+    fontVariant: ['tabular-nums'],
+    lineHeight: MARK_HALF * 2,
   },
   legend: {
     flexDirection: 'row',
@@ -385,10 +459,12 @@ const styles = StyleSheet.create({
     rowGap: space.xs,
     marginTop: space.sm,
   },
+  // An item never runs past the chart's edge (400% zoom): its words wrap.
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    maxWidth: '100%',
   },
   swatchHollow: {
     borderWidth: MISS_STROKE,
@@ -404,7 +480,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 0,
     borderTopWidth: 2,
-    borderTopColor: colors.gold,
+    borderTopColor: colors.goldInk,
     borderStyle: 'dashed',
   },
   dashYours: {
@@ -414,6 +490,7 @@ const styles = StyleSheet.create({
     borderStyle: 'solid',
   },
   legendText: {
+    flexShrink: 1,
     color: colors.muted,
     fontSize: type.label,
   },
