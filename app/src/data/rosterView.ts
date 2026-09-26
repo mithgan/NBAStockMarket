@@ -459,14 +459,17 @@ export function chartSummary(series: readonly NightPoint[]): string {
   const nights = series.filter((point) => point.kind === 'night');
   if (nights.length === 0) return 'Your score chart starts at $0. It fills in after your first game night.';
   const end = series.at(-1)!;
-  const best = nights.reduce((top, point) => (point.cumulativePnl > top.cumulativePnl ? point : top));
-  const worst = nights.reduce((low, point) => (point.cumulativePnl < low.cumulativePnl ? point : low));
+  // High and low come from every point that is said, "now" included, so the
+  // lowest is never above the score it ends on (fees after the last night).
+  const said = end.kind === 'now' ? [...nights, end] : nights;
+  const best = said.reduce((top, point) => (point.cumulativePnl > top.cumulativePnl ? point : top));
+  const worst = said.reduce((low, point) => (point.cumulativePnl < low.cumulativePnl ? point : low));
   const span = nights.length === 1
     ? `after ${nights[0].label}`
     : `from ${nights[0].label} to ${nights.at(-1)!.label}`;
   return `Your score by night ${span}: started at $0, now ${signedMoney(end.cumulativePnl)}. `
-    + `Best ${signedMoney(best.cumulativePnl)} after ${best.label}, `
-    + `lowest ${signedMoney(worst.cumulativePnl)} after ${worst.label}.`;
+    + `Best ${signedMoney(best.cumulativePnl)} ${best.kind === 'now' ? 'now' : `after ${best.label}`}, `
+    + `lowest ${signedMoney(worst.cumulativePnl)} ${worst.kind === 'now' ? 'now' : `after ${worst.label}`}.`;
 }
 
 export interface AxisLabel {

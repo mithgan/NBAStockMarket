@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line } from 'react-native-svg';
 
 import type { PerGameRuleset } from '../api/contracts';
@@ -59,6 +59,9 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
  * Settings sheet. A modal panel rather than a screen so it can open from any
  * tab without disturbing the navigation state underneath it.
  */
+/** From this width Settings floats as a panel with a bottom edge, not a phone sheet. */
+const FLOATING_MIN_WIDTH = 720;
+
 export function SettingsSheet({
   onClose,
   onSignOut,
@@ -78,6 +81,7 @@ export function SettingsSheet({
   profile?: SettingsProfile;
   visible: boolean;
 }) {
+  const floating = useWindowDimensions().width >= FLOATING_MIN_WIDTH;
   const reducedMotion = useReducedMotion();
   const rules = ruleset ? perGameRulesPresentation(ruleset) : null;
   const { setVariant, variantId } = useDesignVariant();
@@ -116,7 +120,7 @@ export function SettingsSheet({
         onStartShouldSetResponder={() => true}
         style={styles.scrim}
       />
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, floating && styles.sheetFloating]}>
         <View style={styles.sheetHead}>
           <Text accessibilityRole="header" {...headingLevel(2)} style={styles.sheetTitle}>Settings</Text>
           <Pressable
@@ -305,6 +309,13 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     overflow: 'hidden',
+  },
+  // A desktop panel shows its bottom edge, so it reads as a scrolling panel
+  // rather than one cut off by the window.
+  sheetFloating: {
+    marginBottom: 24,
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
   },
   sheetHead: {
     minHeight: 52,
