@@ -29,11 +29,9 @@ import {
   confirmCloseMessage,
   exactMoney,
   money,
-  moneyFine,
   perGameShort,
   rosterReopensLine,
   signedMoney,
-  signedMoneyFine,
   unbrokenName,
   moneyCompact,
   signedMoneyCompact,
@@ -608,12 +606,13 @@ function MarketRow({
             ) : null}
           </View>
           <View style={[styles.cell, { width: columns.price }]}>
-            <Text maxFontSizeMultiplier={1.4} style={styles.cellValue}>{money(currentGameCost)}</Text>
-            {/* Your own price sits under today's, so the net column holds only net. */}
+            {/* A held row leads with your price, as on phones (walk 5 T2-16);
+                today's sits under it when your add has nudged it. */}
+            <Text maxFontSizeMultiplier={1.4} style={styles.cellValue}>{money(position ? position.lockedGameCost : currentGameCost)}</Text>
             {position && position.lockedGameCost !== currentGameCost ? (
-              <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>{`Yours ${moneyFine(position.lockedGameCost)}`}</Text>
+              <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>{`yours · now ${money(currentGameCost)}`}</Text>
             ) : position ? (
-              <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>Locked in</Text>
+              <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>yours, locked in</Text>
             ) : null}
           </View>
           {/* No last season: one calm dash in both columns (the row's name says it in words). */}
@@ -651,15 +650,13 @@ function MarketRow({
               ) : pastValue && pastValue.avgNet !== null && pastValue.games > 0 ? (
                 <>
                   <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, { color: TONE_COLOR[netTone(pastValue.avgNet)] }]}>
-                    {signedMoneyFine(pastValue.avgNet)}
+                    {signedMoneyCompact(pastValue.avgNet)}
                   </Text>
                   <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>
                     {pastValue.games === 1 ? '1 past game' : `${pastValue.games} past games`}
                   </Text>
                 </>
-              ) : (
-                <Text accessibilityLabel="none yet" maxFontSizeMultiplier={1.4} style={[styles.cellValue, styles.cellQuiet]}>—</Text>
-              )}
+              ) : null /* Nothing of yours here: an empty cell, not a wall of dashes (walk 5 T2-03). */}
             </View>
           ) : null}
         </Pressable>
@@ -836,6 +833,7 @@ export function PerGameMarketScreen({
     orderRef.current = { key: orderKey, ids: ordered.map((row) => row.player.playerId) };
     return ordered;
   }, [allRows, query, side, sort, reversed, watchedOnly, watchlist.watched, kept, orderKey]);
+  const firstBlockedId = rows.find((row) => row.blockedByOpposingPosition)?.player.playerId ?? null;
   const positionValues = useMemo(
     () => valueByPosition(bootstrap?.settledResults ?? []),
     [bootstrap?.settledResults],
@@ -1230,7 +1228,20 @@ export function PerGameMarketScreen({
         ref={listRef}
         renderItem={({ item }) => {
           const actionKey = `position:${item.side}:${item.player.playerId}`;
+          // Players held on the other side sit at the end whatever the sort;
+          // a line says why, so the order does not look broken (walk 5 T2-19).
+          const divider = item.player.playerId === firstBlockedId ? (
+            <View style={[styles.blockedDivider, { paddingLeft: layout === 'table' ? space.lg : space.md }]}>
+              <Text maxFontSizeMultiplier={1.4} style={styles.blockedDividerText}>
+                {side === 'short'
+                  ? 'On your roster: to short one of them, drop him there first'
+                  : 'Shorted: to add one of them, close his short first'}
+              </Text>
+            </View>
+          ) : null;
           return (
+          <>
+          {divider}
           <MemoMarketRow
             columns={columns}
             currentValue={item.position ? positionValues.get(item.position.positionId) : undefined}
@@ -1253,6 +1264,7 @@ export function PerGameMarketScreen({
             slotLimit={slots.limit}
             moves={moves}
           />
+          </>
           );
         }}
         // Every scroll is recorded, so a quick switch away keeps the exact spot.
@@ -1443,6 +1455,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingBottom: space.md,
     marginTop: -space.xs,
+  },
+  blockedDivider: {
+    paddingVertical: space.sm,
+    paddingRight: space.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  blockedDividerText: {
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
   },
   explainerSlot: {
     // A quiet button's height, whichever it holds (sentence or order note).

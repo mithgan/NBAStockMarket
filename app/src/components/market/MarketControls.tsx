@@ -281,7 +281,7 @@ export function ControlsToggle({
  * One style for every label (capitals, the same weight and colour, up to two
  * lines, set on the bottom edge). Player, Price a game, Dividend last season
  * and Value are sort buttons with a mark (↕, or the gold arrow of the sort in
- * use); Your net a game is a plain label. Pressing another column chooses it
+ * use); Your profit a game is a plain label. Pressing another column chooses it
  * in its natural order; pressing the column in use reverses it, as a table
  * header does, and its button's name says the order ("sorted lowest first").
  * Value and Dividend last season explain themselves on hover and focus.
@@ -336,7 +336,7 @@ export function MarketColumnHeader({
         />
         {columns.yours > 0 ? (
           <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.headerCell, styles.headerPlain, { width: columns.yours }]}>
-            <Text maxFontSizeMultiplier={1.4} style={[styles.headerText, styles.headerTextNumber]}>{'Your net a\u00A0game'}</Text>
+            <Text maxFontSizeMultiplier={1.4} style={[styles.headerText, styles.headerTextNumber]}>{'Your profit a\u00A0game'}</Text>
           </View>
         ) : null}
         <View style={{ width: columns.action }} />
@@ -378,10 +378,13 @@ function SortHeader({
   // order when pressed, as a table header does; another column is chosen at
   // its natural order. One target per column is also a full-size one (the
   // arrow alone was 24px wide, the label 40px).
+  // The sort mark rides on the label's last line, right after its words, in
+  // every column (it floated above the words, before some labels and after
+  // others; walk 5 T2-01, T2-13). The button's name says the order.
   const mark = (
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.markSlot} {...({ 'aria-hidden': true } as object)}>
-      <Text style={[styles.mark, on && styles.markOn]}>{on ? (ascending ? '↑' : '↓') : '↕'}</Text>
-    </View>
+    <Text aria-hidden style={[styles.mark, styles.markInline, on && styles.markOn]}>
+      {`\u00A0${on ? (ascending ? '↑' : '↓') : '↕'}`}
+    </Text>
   );
   const press = on ? onFlip : () => onChoose(columnKey);
   return (
@@ -410,11 +413,10 @@ function SortHeader({
         ]}
         {...(explain ? ({ 'aria-describedby': explainId } as object) : {})}
       >
-        {number ? mark : null}
         <Text maxFontSizeMultiplier={1.4} style={[styles.headerText, number && styles.headerTextNumber, on && styles.headerTextOn, number && styles.headerTextShrink]}>
           {label}
+          {mark}
         </Text>
-        {number ? null : mark}
       </Pressable>
       {explain ? (
         <View pointerEvents="none" style={[styles.explain, !(hovered || focused) && styles.explainHidden]}>
@@ -660,19 +662,15 @@ const styles = StyleSheet.create({
   headerTextShrink: {
     flexShrink: 1,
   },
-  markSlot: {
-    width: 24,
-    minHeight: control.height,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 8,
-  },
   mark: {
     color: colors.faint,
     fontFamily: fonts.display,
     fontSize: type.label,
     fontWeight: weight.heavy,
     lineHeight: 14,
+  },
+  markInline: {
+    lineHeight: undefined,
   },
   markOn: {
     color: colors.goldInk,
