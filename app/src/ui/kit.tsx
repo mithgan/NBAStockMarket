@@ -479,7 +479,9 @@ function ConfirmDialogBody({
       {/* A plain view, not a button: tapping outside cancels, but the scrim
           never takes keyboard focus. */}
       <View
-        onResponderRelease={onCancel}
+        // The second click of a double click on the button that opened the
+        // dialog lands here: the same guard as the buttons keeps it open.
+        onResponderRelease={guard(onCancel)}
         onStartShouldSetResponder={() => true}
         style={styles.dialogScrim}
       />
