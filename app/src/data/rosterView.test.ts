@@ -11,6 +11,7 @@ import { buildPnlSeries, pnlChartDomain } from '../state/perGameState';
 import { scoreBreakdown } from './perGameMetrics';
 import {
   axisLabelIndexes,
+  axisMoney,
   breakdownParts,
   breakdownPrecision,
   chartSummary,
@@ -406,6 +407,16 @@ test('x-axis dates never touch: the most recent date wins a crowded axis', () =>
   const edges = placeAxisLabels([30, 290], [0, 1], 320, 64);
   assert.deepEqual(edges.map((label) => label.align), ['left', 'right']);
   for (let i = 1; i < edges.length; i += 1) assert.ok(edges[i].left - edges[i - 1].left >= 64);
+});
+
+test('value marks fit the gutter: three significant figures at most', () => {
+  assert.equal(axisMoney(-348_300), '-$348K');
+  assert.equal(axisMoney(1_062_500), '+$1.06M');
+  assert.equal(axisMoney(-8_046_000), '-$8.05M');
+  assert.equal(axisMoney(9_500), '+$9.5K');
+  assert.equal(axisMoney(999_700), '+$1M');
+  assert.equal(axisMoney(250), '+$250');
+  assert.equal(axisMoney(0), '$0');
 });
 
 test('the y-axis marks $0 and the season high and low, dropping a mark that would crowd another', () => {

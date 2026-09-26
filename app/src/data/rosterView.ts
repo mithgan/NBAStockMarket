@@ -506,6 +506,24 @@ export interface ValueTick {
 }
 
 /**
+ * A value mark's words on the chart's narrow left gutter: three significant
+ * figures at most ("-$348K", "+$1.06M", "+$9.5K"), so a mark always fits on
+ * one line. The exact figure is one tap away in the reading.
+ */
+export function axisMoney(value: number): string {
+  const rounded = Math.round(value);
+  if (rounded === 0) return '$0';
+  const sign = rounded < 0 ? '-' : '+';
+  const abs = Math.abs(rounded);
+  const trim = (text: string) => text.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+  let body: string;
+  if (abs >= 999_500) body = `$${trim((abs / 1_000_000).toPrecision(3))}M`;
+  else if (abs >= 1_000) body = `$${trim((abs / 1_000).toPrecision(3))}K`;
+  else body = `$${abs}`;
+  return `${sign}${body}`;
+}
+
+/**
  * The y-axis marks: $0 always, the season's high when it is above $0 and its
  * low when it is below. A mark that would crowd one already placed (less than
  * `minGap` px apart) is dropped; $0 is placed first, so it always stays.

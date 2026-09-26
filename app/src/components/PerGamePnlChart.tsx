@@ -6,6 +6,7 @@ import type { PerGameLedgerEntry } from '../api/contracts';
 import { humanDay, signedMoney } from '../copy/terms';
 import {
   axisLabelIndexes,
+  axisMoney,
   chartSummary,
   hasNights,
   nearestIndex,
@@ -256,7 +257,7 @@ export function PerGamePnlChart({
             maxFontSizeMultiplier={1.3}
             style={[styles.tickLabel, { top: Math.min(Math.max(tick.y - 7, 0), plotHeight - 14) }]}
           >
-            {tick.kind === 'zero' ? '$0' : signedMoney(tick.value)}
+            {tick.kind === 'zero' ? '$0' : axisMoney(tick.value)}
           </Text>
         ))}
       </View>
