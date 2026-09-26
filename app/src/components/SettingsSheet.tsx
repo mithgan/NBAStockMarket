@@ -46,13 +46,20 @@ function SettingsIcon({ color }: { color: string }) {
   );
 }
 
+/** Narrower than this (a phone at 200% zoom) the Settings word gives the wordmark its room. */
+const SETTINGS_CAPTION_MIN_WIDTH = 320;
+
 export function SettingsButton({ onPress }: { onPress: () => void }) {
   // Named in words under the icon, as Rules is (walk 9 T1-05): the sliders
   // alone did not say Settings. The word is the button's name (voice
-  // control users say what they see), so no aria-label repeats it.
+  // control users say what they see), so no aria-label repeats it. Where the
+  // bar has no room for it (195px at 200% zoom cut "databallr") the icon
+  // carries the name.
+  const { width } = useWindowDimensions();
+  const captioned = width >= SETTINGS_CAPTION_MIN_WIDTH;
   return (
     <Pressable
-      accessibilityLabel={Platform.OS === 'web' ? undefined : 'Settings'}
+      accessibilityLabel={Platform.OS === 'web' && captioned ? undefined : 'Settings'}
       accessibilityRole="button"
       onPress={() => {
         // A double tap on a sheet's Done must not reopen Settings (walk 6 T4-12).
@@ -67,7 +74,9 @@ export function SettingsButton({ onPress }: { onPress: () => void }) {
       ]}
     >
       <SettingsIcon color={colors.muted} />
-      <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.iconButtonLabel}>Settings</Text>
+      {captioned ? (
+        <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.iconButtonLabel}>Settings</Text>
+      ) : null}
     </Pressable>
   );
 }
