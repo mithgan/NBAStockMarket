@@ -428,8 +428,11 @@ export function PerGameProvider({
         const one = moved.length === 1;
         const prices = moved.map((entry) => (entry.cost === null ? null : moneyCompact(entry.cost)));
         const known = prices.every((price) => price !== null);
-        const again = `${verb === 'shorted' ? 'Short' : 'Add'} ${one ? 'him' : 'them'} again if you still want ${one ? 'him' : 'them'}.`;
-        parts.push(`${nameList(moved.map((entry) => entry.name))} ${one ? 'was' : 'were'} not ${verb}: ${one ? 'his price' : 'their prices'} moved${known ? ` to ${nameList(prices as string[])} a game` : ''}. ${again}`);
+        // The new price is the whole message: the row's Add (or Short) is one
+        // tap away, so no "again if you still want him" line (walk 11 T1-09:
+        // five lines at 390px, held until closed).
+        const again = known ? '' : ` ${verb === 'shorted' ? 'Short' : 'Add'} ${one ? 'him' : 'them'} again at the new price if you still want ${one ? 'him' : 'them'}.`;
+        parts.push(`${nameList(moved.map((entry) => entry.name))} ${one ? 'was' : 'were'} not ${verb}: ${one ? 'his price' : 'their prices'} moved${known ? ` to ${nameList(prices as string[])} a game` : ''}.${again}`);
       }
       // The games' own notice is inside this one: it is not said again.
       silentNotice.current = null;

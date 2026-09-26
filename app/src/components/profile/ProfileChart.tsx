@@ -373,7 +373,7 @@ export function ProfileChart({
           </Text>
         ))}
       </View>
-      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.axis}>
+      <View accessibilityElementsHidden aria-hidden importantForAccessibility="no-hide-descendants" style={styles.axis}>
         {/* Each date sits under its game; the end ones hang from their edge. */}
         {dates.map(({ index, left, align }) => (
           <Text
@@ -392,7 +392,7 @@ export function ProfileChart({
           </Text>
         ))}
       </View>
-      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.legend}>
+      <View accessibilityElementsHidden aria-hidden importantForAccessibility="no-hide-descendants" style={styles.legend}>
         {metric === 'dividends' ? (
           <>
             <View style={styles.legendItem}>

@@ -331,7 +331,7 @@ export function PerGamePlayerProfile({
         </Pressable>
         <View style={styles.titleSlot}>
           {scrolled && !tiny ? (
-            <Text accessibilityElementsHidden importantForAccessibility="no" maxFontSizeMultiplier={1.3} style={styles.title}>
+            <Text accessibilityElementsHidden aria-hidden importantForAccessibility="no" maxFontSizeMultiplier={1.3} style={styles.title}>
               {title}
             </Text>
           ) : null}

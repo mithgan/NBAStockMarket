@@ -242,6 +242,9 @@ function successNoticeMs(message: string): number {
  * Screen readers hear every notice through the always-mounted live region in
  * AppBody, not through this view.
  */
+/** The notice strip's element, the second skip link's landing. */
+const LATEST_NOTICE_ID = 'latest-notice';
+
 function NoticeToast({
   message,
   onDismiss,
@@ -391,6 +394,8 @@ function NoticeToast({
     return (
       <Pressable
         ref={noticeRef}
+        nativeID={LATEST_NOTICE_ID}
+        {...(tinyDock ? ({ role: 'region', 'aria-label': 'Latest notice' } as object) : null)}
         // Hidden from screen readers (the live region spoke it), except at
         // 400% zoom, where its words are a focus stop of their own.
         accessibilityElementsHidden={!tinyDock}
@@ -407,7 +412,12 @@ function NoticeToast({
     );
   }
   return (
-    <View ref={noticeRef} style={boxStyle}>
+    <View
+      ref={noticeRef}
+      nativeID={LATEST_NOTICE_ID}
+      {...(placement === 'dock' ? ({ role: 'region', 'aria-label': 'Latest notice', tabIndex: -1 } as object) : null)}
+      style={boxStyle}
+    >
       {words}
       <Pressable
         accessibilityLabel={`Dismiss: ${message}`}
@@ -430,15 +440,15 @@ function NoticeToast({
  * First stop for the Tab key: jump past the brand bar, tabs and practice
  * controls straight to the screen. Invisible until focused.
  */
-function SkipLink() {
+function SkipLink({ label = 'Skip to content', onJump = focusScreen }: { label?: string; onJump?: () => void } = {}) {
   const [focused, setFocused] = useState(false);
   const jump = () => {
     if (typeof document === 'undefined') return;
-    (document.getElementById('app-screen') as HTMLElement | null)?.focus?.();
+    onJump();
   };
   return (
     <Pressable
-      accessibilityLabel="Skip to content"
+      accessibilityLabel={label}
       accessibilityRole="link"
       onBlur={() => setFocused(false)}
       onFocus={() => setFocused(true)}
@@ -458,9 +468,26 @@ function SkipLink() {
       // the link's minimum height and padding are dropped with it.
       style={[styles.skipLink, !focused && visuallyHidden, !focused && styles.skipLinkHidden]}
     >
-      <Text style={styles.skipLinkText}>Skip to content</Text>
+      <Text style={styles.skipLinkText}>{label}</Text>
     </Pressable>
   );
+}
+
+function focusScreen(): void {
+  (document.getElementById('app-screen') as HTMLElement | null)?.focus?.();
+}
+
+/**
+ * The notice strip above the tab bar (short windows, 200-400% zoom) comes
+ * after the whole screen in Tab order: at 400% its "more ▾" was the 59th stop
+ * (walk 11 T3-05). A second skip link, there only while the strip is, lands
+ * on its first control (its words, "more ▾" or ×), else on the strip itself.
+ */
+function focusLatestNotice(): void {
+  const box = document.getElementById(LATEST_NOTICE_ID);
+  if (!box) return;
+  const first = box.querySelector<HTMLElement>('[tabindex="0"], button, [role="button"]');
+  (first ?? box).focus?.();
 }
 
 /**
@@ -959,6 +986,7 @@ function AppBody() {
       <AmbientFields />
       <VariantTexture />
       <SkipLink />
+      {notice && noticePlacement === 'dock' ? <SkipLink label="Skip to the latest notice" onJump={focusLatestNotice} /> : null}
       {/* Databallr brand bar: gold wordmark, a rule, then the product name.
           In a short window it folds away; the status row carries Settings. */}
       {short ? null : (
@@ -1419,9 +1447,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   // In the brand bar the × is a full 44px target like every other control
-  // (walk 9 T1-18: it was 44x40 at the screen's top edge).
+  // (walk 9 T1-18: it was 44x40 at the screen's top edge). It reaches into the
+  // box's 1px padding and border, so a notice with × is exactly as tall as
+  // one without and the practice row never jumps 4px (walk 11 T4-07).
   noticeDismissBar: {
     minHeight: 44,
+    marginVertical: -2,
   },
   // Under the words at 400% zoom: short, so the screen keeps what it can.
   // Under the words at 400% zoom: a 44px target that reaches into the space
@@ -1523,12 +1554,16 @@ const styles = StyleSheet.create({
   tabTextNarrow: {
     fontSize: type.label,
   },
-  // Off screen and unseen: the tab words at their natural width.
+  // Unseen: the tab words at their natural width. No height of its own, so
+  // the stacked words never reach past a short window's bottom edge (at
+  // 195x422 they made the whole page scroll 5px: walk 11 T3-03).
   tabWordMeasure: {
     pointerEvents: 'none',
     position: 'absolute',
     left: 0,
     top: 0,
+    height: 0,
+    overflow: 'hidden',
     opacity: 0,
     alignItems: 'flex-start',
   },
