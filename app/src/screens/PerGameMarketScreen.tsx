@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   FlatList,
   type NativeScrollEvent,
@@ -47,6 +47,7 @@ import {
   collapseControls,
   echoQuery,
   feeHint,
+  feeLine,
   filterMarketRows,
   fullActionName,
   fullNote,
@@ -71,11 +72,13 @@ import {
   rowKicker,
   rowProfileLabel,
   ROOMY_MIN_HEIGHT,
+  sameMarketRowProps,
+  tierLabel,
   SEARCH_NEEDS_LETTERS,
   searchHasLetters,
   rosterPickReason,
   SHORT_WINDOW_BELOW,
-  slotSummary,
+  slotLine,
   flippedSortNote,
   sortedLine,
   sortMarketRows,
@@ -86,7 +89,7 @@ import {
   type MarketSort,
   type SignalTone,
 } from '../data/marketView';
-import { marketMemory, openingSide, rememberMarket } from '../data/marketViewMemory';
+import { MARKET_DEFAULT_SORT, marketMemory, openingSide, rememberMarket } from '../data/marketViewMemory';
 import type { ValueSummary } from '../data/perGameMetrics';
 import { positionSlotHint } from '../data/perGameRules';
 import { splitPlayerName } from '../data/playerName';
@@ -154,6 +157,23 @@ function SameHeight({ children, ghosts }: { children: ReactNode; ghosts: ReactNo
   );
 }
 
+/** The context's moves, behind one stable object so a row's props do not change with every snapshot. */
+type MarketMoves = Pick<ReturnType<typeof usePerGame>, 'closePosition' | 'dismissNotice' | 'notify' | 'openPosition'>;
+
+/** True once `on` has lasted `ms`; false as soon as it clears. */
+function useLastedFor(on: boolean, ms: number): boolean {
+  const [lasted, setLasted] = useState(false);
+  useEffect(() => {
+    if (!on) {
+      setLasted(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setLasted(true), ms);
+    return () => clearTimeout(timer);
+  }, [on, ms]);
+  return on && lasted;
+}
+
 const TONE_COLOR: Record<SignalTone, string> = {
   gain: colors.green,
   loss: colors.red,
@@ -176,6 +196,12 @@ function MarketRow({
   watched,
   onToggleWatch,
   dimmed = false,
+  pending,
+  locked,
+  rosterLocked,
+  rosterLockGameDate,
+  slotLimit,
+  moves,
 }: {
   row: PerGameMarketRow;
   layout: MarketLayout;
@@ -198,14 +224,19 @@ function MarketRow({
   onToggleWatch: (playerId: string) => void;
   /** Unwatched while the Watching filter is on: kept in place, dimmed, until the filter changes. */
   dimmed?: boolean;
+  /** This row's own move is on its way. */
+  pending: boolean;
+  /** Another move is still on its way (said only once it takes a moment). */
+  locked: boolean;
+  rosterLocked: boolean;
+  rosterLockGameDate: string | null;
+  /** How many players this side holds at most (the FULL note says it). */
+  slotLimit: number;
+  moves: MarketMoves;
 }) {
-  const { bootstrap, closePosition, dismissNotice, notify, openPosition, pendingActions } = usePerGame();
+  const { closePosition, dismissNotice, notify, openPosition } = moves;
   const { player, position, side } = row;
-  const actionKey = `position:${side}:${player.playerId}`;
-  const pending = pendingActions.has(actionKey);
-  const locked = pendingActions.has('account-mutation');
-  const rosterLocked = bootstrap?.ruleset.rosterMutationsLocked ?? true;
-  const rosterLockHint = rosterLockMessage(bootstrap?.ruleset.rosterLockGameDate ?? null);
+  const rosterLockHint = rosterLockMessage(rosterLockGameDate);
   const disabled = !row.canSubmit || pending || locked || rosterLocked || seasonOver;
   const currentGameCost = player.currentGameCost;
   const priorSeasonValuePerGame = player.priorSeasonValuePerGame;
@@ -220,7 +251,7 @@ function MarketRow({
       {whole(surname)}
       {/* One span, kept together, so a wrapped line never splits it. */}
       <Text style={tierAfter ? styles.tierInline : styles.chevron}>
-        {tierAfter ? `\u2002${tierAfter.toUpperCase()}\u00A0›` : '\u2002›'}
+        {tierAfter ? `\u2002${tierLabel(tierAfter)}\u00A0›` : '\u2002›'}
       </Text>
     </>
   );
@@ -371,21 +402,27 @@ function MarketRow({
                 ? fullActionName(side, player.name)
                 : actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}
           // While the confirm strip is open the row's own button rests, so a
-          // second tap in the same spot does nothing.
-          disabled={resting && !fullOffer}
+          // second tap in the same spot does nothing. FULL and LOCKED rest
+          // too, drawn alike (dashed, full-contrast words): not now, press to
+          // learn why (walk 4 T4-14, T1-24).
+          disabled={resting}
+          // "Added ✓" / "Dropped ✓": a move that just worked, in the success
+          // colour, never the dashed "unavailable" look (walk 4 T2-03).
+          done={justOpened || justClosed}
           focusableWhenDisabled
-          // LOCKED answers a tap with why and when, as on the Roster.
-          onDisabledPress={rosterLocked
-            ? () => notify(`${rosterReopensLine(bootstrap?.ruleset.rosterLockGameDate ?? null)}. Moves pause while those games are played.`)
-            : undefined}
-          label={word}
-          onPress={() => {
-            if (fullOffer) {
-              // One message at a time: the note replaces the last notice (walk 3 T3-15).
+          onDisabledPress={fullOffer
+            // FULL opens a note under the row: why, and "Choose who to drop".
+            // One message at a time: it replaces the last notice (walk 3 T3-15).
+            ? () => {
               dismissNotice();
               setNoting((open) => !open);
-              return;
             }
+            // LOCKED answers a tap with why and when, as on the Roster.
+            : rosterLocked
+              ? () => notify(`${rosterReopensLine(rosterLockGameDate)}. Moves pause while those games are played.`)
+              : undefined}
+          label={word}
+          onPress={() => {
             if (disabled) return;
             if (justOpened || justClosed) return;
             if (confirming) return;
@@ -404,7 +441,7 @@ function MarketRow({
               });
             }
           }}
-          style={[!table && styles.phoneButton, fullOffer && styles.fullButton]}
+          style={!table ? styles.phoneButton : undefined}
           textStyle={styles.buttonText}
           width={large ? undefined : actionWidth}
         />
@@ -444,7 +481,6 @@ function MarketRow({
       style={table ? styles.stripTable : undefined}
     />
   ) : null;
-  const slotLimit = side === 'long' ? bootstrap?.account.longSlots.limit ?? 0 : bootstrap?.account.shortSlots.limit ?? 0;
   const note = noting && fullOffer ? (() => {
     const { message, action: actionLabel } = fullNote(side, player.name, slotLimit);
     return (
@@ -474,7 +510,8 @@ function MarketRow({
   }, [dimmed, table]);
   const keptLine = dimmed ? (
     <View style={[styles.keptLine, table && styles.stripTable]}>
-      <Text maxFontSizeMultiplier={1.4} style={styles.keptText}>No longer watching ·</Text>
+      {/* Names him, so the line reads whole beside a dimmed row (walk 4 T2-14). */}
+      <Text maxFontSizeMultiplier={1.4} style={styles.keptText}>{`No longer watching ${given}\u00A0·`}</Text>
       <Button
         accessibilityLabel={`Watch ${player.name} again`}
         label="Watch again"
@@ -636,12 +673,37 @@ function MarketRow({
   );
 }
 
+/**
+ * A row draws again only when what it shows changes (its player, position,
+ * flags or the layout): an Add redraws its own row, not all thirty (walk 4
+ * T4-11). Its callbacks are stable, so they never force a redraw.
+ */
+const MemoMarketRow = memo(MarketRow, (prev, next) => sameMarketRowProps(prev, next));
+
+/** A move that settles within this long never dims every other row's button. */
+const MOVE_LOCK_SHOWN_AFTER_MS = 150;
+
 export function PerGameMarketScreen({
   initialSide = 'long',
 }: {
   initialSide?: PerGamePositionSide;
 }) {
-  const { bootstrap } = usePerGame();
+  const perGame = usePerGame();
+  const { bootstrap, pendingActions } = perGame;
+  // The rows get the context's moves through one object that never changes,
+  // so a snapshot (every Add) does not hand thirty rows new props.
+  const latestPerGame = useRef(perGame);
+  latestPerGame.current = perGame;
+  const moves = useMemo<MarketMoves>(() => ({
+    closePosition: (position) => latestPerGame.current.closePosition(position),
+    dismissNotice: () => latestPerGame.current.dismissNotice(),
+    notify: (text) => latestPerGame.current.notify(text),
+    openPosition: (intent) => latestPerGame.current.openPosition(intent),
+  }), []);
+  // One move at a time: the others' buttons rest while it is on its way, but
+  // only once it takes a moment. A practice move lands in the same frame, and
+  // dimming then undimming every row doubled the work of each Add.
+  const moveLocked = useLastedFor(pendingActions.has('account-mutation'), MOVE_LOCK_SHOWN_AFTER_MS);
   const { fontScale, height, width } = useWindowDimensions();
   const watchlist = useWatchlist();
   // Side, sort, search, Watching and your place in the list come back after a
@@ -676,6 +738,9 @@ export function PerGameMarketScreen({
     }
     toggleWatchlist(playerId);
   }, [bootstrap, isWatched, toggleWatchlist, watchedOnly]);
+  const latestToggleWatch = useRef(toggleWatch);
+  latestToggleWatch.current = toggleWatch;
+  const toggleWatchStable = useCallback((playerId: string) => latestToggleWatch.current(playerId), []);
   const [reversed, setReversed] = useState(remembered.reversed);
   useEffect(() => {
     rememberMarket({ query, side, sort, reversed, watchedOnly });
@@ -852,7 +917,8 @@ export function PerGameMarketScreen({
 
   if (!bootstrap) return null;
   const slots = side === 'long' ? bootstrap.account.longSlots : bootstrap.account.shortSlots;
-  const rosterLocked = bootstrap.ruleset.rosterMutationsLocked;
+  // Locked until the ruleset says otherwise.
+  const rosterLocked = bootstrap?.ruleset.rosterMutationsLocked ?? true;
   const lockDate = bootstrap.ruleset.rosterLockGameDate;
   const fee = bootstrap.ruleset.transactionFeeDollars;
   // The Roster's rule: practice ends on its last day, a live season when no
@@ -869,7 +935,7 @@ export function PerGameMarketScreen({
     lockGameDate: lockDate,
     full: slots.remaining === 0,
   });
-  const filtersOn = query.trim() !== '' || sort !== 'price' || reversed || watchedOnly;
+  const filtersOn = query.trim() !== '' || sort !== MARKET_DEFAULT_SORT || reversed || watchedOnly;
   const profilePlayer = profileId
     ? bootstrap.market.find((row) => row.playerId === profileId) ?? null
     : null;
@@ -907,7 +973,7 @@ export function PerGameMarketScreen({
   const slotRight = slotBeside && !rowToolbar && !folded;
   const slotStatus = (
     <View style={[styles.slotStatus, !slotBeside && styles.slotStatusUnder, rowToolbar && styles.slotStatusWide, folded && styles.slotStatusFolded]}>
-      <Text maxFontSizeMultiplier={1.4} style={[styles.slotText, slotRight && styles.textRight]}>{unbrokenTail(slotSummary(side, slots))}</Text>
+      <Text maxFontSizeMultiplier={1.4} style={[styles.slotText, slotRight && styles.textRight]}>{slotLine(side, slots)}</Text>
       {status.kind === 'lock' ? (
         <View style={styles.lockLine}>
           <LockIcon />
@@ -918,7 +984,7 @@ export function PerGameMarketScreen({
       ) : null}
       {/* What a move costs, where the side is chosen (none while moves are locked or over). */}
       {status.kind === null || status.kind === 'full' ? (
-        feeHint(side, fee) ? <Text maxFontSizeMultiplier={1.4} style={[styles.feeText, slotRight && styles.textRight]}>{feeHint(side, fee)}</Text> : null
+        feeHint(side, fee) ? <Text maxFontSizeMultiplier={1.4} style={[styles.feeText, slotRight && styles.textRight]}>{feeLine(side, fee)}</Text> : null
       ) : null}
     </View>
   );
@@ -966,7 +1032,8 @@ export function PerGameMarketScreen({
           <View style={styles.foldedRow}>
             {foldWide ? sideToggle : null}
             {slotStatus}
-            <ControlsToggle active={filtersOn} onToggle={() => setControlsOpen((open) => !open)} open={controlsOpen} />
+            {/* Landscape has room to say it in words (walk 4 T1-10). */}
+            <ControlsToggle active={filtersOn} labelled={foldWide} onToggle={() => setControlsOpen((open) => !open)} open={controlsOpen} />
           </View>
           {shortExplainer}
           {controlsOpen ? (
@@ -1094,8 +1161,10 @@ export function PerGameMarketScreen({
         }}
         onViewableItemsChanged={onViewableItemsChanged}
         ref={listRef}
-        renderItem={({ item }) => (
-          <MarketRow
+        renderItem={({ item }) => {
+          const actionKey = `position:${item.side}:${item.player.playerId}`;
+          return (
+          <MemoMarketRow
             columns={columns}
             currentValue={item.position ? positionValues.get(item.position.positionId) : undefined}
             fee={fee}
@@ -1104,14 +1173,21 @@ export function PerGameMarketScreen({
             wholeNames={keepNamesWhole(width)}
             width={width}
             onAnnounce={announce}
-            onToggleWatch={toggleWatch}
+            onToggleWatch={toggleWatchStable}
             watched={watchlist.isWatched(item.player.playerId)}
             dimmed={watchedOnly && kept.includes(item.player.playerId) && !watchlist.isWatched(item.player.playerId)}
             onOpenProfile={openProfile}
             pastValue={item.position ? undefined : pastValues.get(item.player.playerId)}
             row={item}
+            pending={pendingActions.has(actionKey)}
+            locked={moveLocked}
+            rosterLocked={rosterLocked}
+            rosterLockGameDate={lockDate}
+            slotLimit={slots.limit}
+            moves={moves}
           />
-        )}
+          );
+        }}
         // Every scroll is recorded, so a quick switch away keeps the exact spot.
         scrollEventThrottle={16}
         style={styles.list}
@@ -1548,10 +1624,6 @@ const styles = StyleSheet.create({
   buttonText: {
     letterSpacing: 0.5,
     textAlign: 'center',
-  },
-  fullButton: {
-    // Tappable (it explains itself) but reads as unavailable.
-    opacity: 0.6,
   },
   stripTable: {
     // Under a wide row the strip keeps the row's inset and lines its buttons

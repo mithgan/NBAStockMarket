@@ -182,12 +182,17 @@ export function searchKey(text: string): string {
     .trim();
 }
 
-/** What the Market asks for when a search has no letters or digits left ("🏀", "'", "-"). */
+/** What the Market asks for when a search has no letters ("🏀", "'", "-", "23"). */
 export const SEARCH_NEEDS_LETTERS = "Type part of a player's name";
 
-/** Whether a search has anything to look for once its symbols are dropped. */
+/**
+ * Whether a search has a letter to look for. Names have no digits, so a
+ * jersey number ("23", "123") gets the same hint as "!!" rather than "no
+ * listed player matches", which suggested the player was missing (walk 4
+ * T2-19, T4-10, T1-15).
+ */
 export function searchHasLetters(query: string): boolean {
-  return /[\p{L}\p{N}]/u.test(searchKey(query));
+  return /\p{L}/u.test(searchKey(query));
 }
 
 /**
@@ -245,7 +250,8 @@ export function filterMarketRows<T extends { player: PerGameMarketPlayer }>(
   }: { query: string; watchedOnly: boolean; watched: readonly string[] },
 ): T[] {
   if (query.trim() !== '' && !searchHasLetters(query)) return [];
-  const words = searchKey(query).split(/\s+/).map((word) => word.replace(/-/g, '')).filter(Boolean);
+  // A number beside a name ("luka 77") cannot match a name: it is left out.
+  const words = searchKey(query).split(/\s+/).map((word) => word.replace(/-/g, '')).filter((word) => /\p{L}/u.test(word));
   const initials = words.length === 1 && /^\p{L}{2,4}$/u.test(words[0]) ? words[0] : null;
   const watchedSet = new Set(watched);
   return rows.filter((row) => {
@@ -526,10 +532,15 @@ export const COLLAPSE_CONTROLS_BELOW = 300;
  * behind the same toggle, so at least three players show (walk 3 T4-16). The
  * table keeps its one-row toolbar.
  */
-export const COLLAPSE_CONTROLS_BELOW_HEIGHT = 450;
+export const COLLAPSE_CONTROLS_BELOW_HEIGHT = 500;
 
-export function collapseControls(width: number, height = Infinity, table = false): boolean {
-  return width < COLLAPSE_CONTROLS_BELOW || (!table && height < COLLAPSE_CONTROLS_BELOW_HEIGHT);
+/**
+ * Folded below 300px wide, or below 500px tall at any width: a 1280x440
+ * laptop window kept the full toolbar and showed about three rows (walk 4
+ * T2-18). `table` is kept for callers; the rule no longer depends on it.
+ */
+export function collapseControls(width: number, height = Infinity, _table = false): boolean {
+  return width < COLLAPSE_CONTROLS_BELOW || height < COLLAPSE_CONTROLS_BELOW_HEIGHT;
 }
 
 /**
@@ -557,7 +568,17 @@ export const KICKER_TIER_MIN_WIDTH = 380;
  * with "·" (walk 3 T2-12).
  */
 export function rowKicker(given: string, tier: string | null | undefined, width: number): string {
-  return [given, width >= KICKER_TIER_MIN_WIDTH ? tier : null].filter(Boolean).join('\u00A0· ');
+  return [given, width >= KICKER_TIER_MIN_WIDTH ? tierLabel(tier) : null].filter(Boolean).join('\u00A0· ');
+}
+
+/**
+ * The tier in words where a row shows it: "Role player", "Starter", "Star".
+ * A bare "ROLE" beside a first name read like part of his name (walk 4
+ * T1-21). "Role player" never breaks inside.
+ */
+export function tierLabel(tier: string | null | undefined): string {
+  const word = spokenTier(tier);
+  return word ? `${word[0].toUpperCase()}${word.slice(1)}`.replace(' ', '\u00A0') : '';
 }
 
 /** The tier as a word aloud: "role player", "starter", "star" (walk 3 T3-30). */
@@ -763,8 +784,78 @@ export function rosterPickReason(playerName: string, side: 'long' | 'short' = 'l
     : `Pick a short to close to make room for ${playerName}.`;
 }
 
+/**
+ * The slot line as the toolbar prints it: "0 of 10" and "on your roster"
+ * each stay whole, so a narrow phone breaks only between them, never
+ * "0 of 10 on / your roster" (walk 4 T1-11).
+ */
+export function slotLine(side: PerGamePositionSide, slots: Pick<PerGameSlotSummary, 'used' | 'limit'>): string {
+  const count = `${slots.used}\u00A0of\u00A0${slots.limit}`;
+  return `${count} ${slotSummary(side, slots).slice(`${slots.used} of ${slots.limit} `.length).replace(/ /g, '\u00A0')}`;
+}
+
+/** The fee line as the toolbar prints it: it breaks only after the amount ("$250" / "to add or drop"). */
+export function feeLine(side: PerGamePositionSide, fee: number): string {
+  return feeHint(side, fee).replace(/ /g, '\u00A0').replace('\u00A0', ' ');
+}
+
 /** The fee, said where the side is chosen: "$250 to add or drop". Empty with no fee. */
 export function feeHint(side: PerGamePositionSide, fee: number): string {
   if (fee <= 0) return '';
   return side === 'long' ? `${exactMoney(fee)} to add or drop` : `${exactMoney(fee)} to short or close`;
+}
+
+/** Two flat records (a player, a position, a value summary) hold the same values. */
+export function sameFlat(a: object | null | undefined, b: object | null | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every((key) => Object.is(left[key], right[key]));
+}
+
+interface RowFields {
+  player: object;
+  position: object | null;
+  side: string;
+  isFull: boolean;
+  blockedByOpposingPosition: boolean;
+  canSubmit: boolean;
+  unavailableReason: string | null;
+}
+
+/**
+ * A market row shows the same thing: its player, its position and its own
+ * flags hold the same values. Every snapshot rebuilds the row objects, so
+ * identity alone would redraw all thirty rows for one Add (walk 4 T4-11).
+ */
+export function sameMarketRow(a: RowFields, b: RowFields): boolean {
+  return a === b || (
+    a.side === b.side
+    && a.isFull === b.isFull
+    && a.blockedByOpposingPosition === b.blockedByOpposingPosition
+    && a.canSubmit === b.canSubmit
+    && a.unavailableReason === b.unavailableReason
+    && sameFlat(a.player, b.player)
+    && sameFlat(a.position, b.position)
+  );
+}
+
+/** Row props compared by value: records field by field, everything else (flags, stable callbacks) by identity. */
+const FLAT_ROW_PROPS = new Set(['columns', 'currentValue', 'pastValue']);
+
+/**
+ * Whether a market row can skip a redraw: only the row an Add, a Drop or a
+ * star touched draws again, not the whole list (walk 4 T4-11). A callback
+ * that is not stable simply redraws the row, so a wrong answer is never stale.
+ */
+export function sameMarketRowProps(prev: Readonly<Record<string, unknown>>, next: Readonly<Record<string, unknown>>): boolean {
+  const keys = Object.keys(next);
+  if (keys.length !== Object.keys(prev).length) return false;
+  return keys.every((key) => {
+    if (key === 'row') return sameMarketRow(prev.row as RowFields, next.row as RowFields);
+    if (FLAT_ROW_PROPS.has(key)) return sameFlat(prev[key] as object | undefined, next[key] as object | undefined);
+    return Object.is(prev[key], next[key]);
+  });
 }

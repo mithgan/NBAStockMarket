@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { countsAsPress } from '../components/market/lastActivation';
-import { forgetMarket, marketMemory, openingSide, rememberMarket } from './marketViewMemory';
+import { forgetMarket, MARKET_DEFAULT_SORT, marketMemory, openingSide, rememberMarket } from './marketViewMemory';
 
 test('the market keeps side, sort, search and place for the session (T2-50, T4-16)', () => {
   forgetMarket();
@@ -40,4 +40,15 @@ test('the tab bar\'s arrow, Home and End keys count as a frame press, so the sid
   }
   assert.equal(countsAsPress('Tab', true), false);
   assert.equal(countsAsPress('a', true), false);
+});
+
+test("a new fan's Market opens on Value, highest first; a choice made since wins (walk 4 NYI-6)", () => {
+  forgetMarket();
+  assert.equal(MARKET_DEFAULT_SORT, 'value');
+  assert.equal(marketMemory().sort, 'value');
+  assert.equal(marketMemory().reversed, false, 'Value in its natural order: highest first');
+  rememberMarket({ sort: 'price' });
+  assert.equal(marketMemory().sort, 'price', 'a remembered choice wins for the session');
+  forgetMarket();
+  assert.equal(marketMemory().sort, 'value', 'Restart starts fresh');
 });

@@ -23,9 +23,16 @@ export interface MarketMemory {
   lastInitialSide: PerGamePositionSide | null;
 }
 
+/**
+ * A new fan's Market opens on Value, highest first: the game's main signal
+ * (last season's dividend against today's price) instead of the cheapest
+ * rookie with no last season (walk 4 NYI-6). A choice made since wins.
+ */
+export const MARKET_DEFAULT_SORT: MarketSort = 'value';
+
 const FRESH: MarketMemory = {
   side: 'long',
-  sort: 'price',
+  sort: MARKET_DEFAULT_SORT,
   reversed: false,
   query: '',
   watchedOnly: false,

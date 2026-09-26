@@ -252,11 +252,14 @@ export function ControlsToggle({
   open,
   active,
   onToggle,
+  labelled = false,
 }: {
   open: boolean;
   /** A search, a non-default sort or the Watching filter is on. */
   active: boolean;
   onToggle: () => void;
+  /** Say "Search & sort" beside the icon (a wide, short window has the room). */
+  labelled?: boolean;
 }) {
   return (
     <Pressable
@@ -264,9 +267,10 @@ export function ControlsToggle({
       accessibilityRole="button"
       aria-expanded={open}
       onPress={onToggle}
-      style={({ pressed }) => [styles.toggle, (open || active) && styles.toggleOn, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.toggle, labelled && styles.toggleLabelled, (open || active) && styles.toggleOn, pressed && styles.pressed]}
     >
       <SearchIcon />
+      {labelled ? <Text maxFontSizeMultiplier={1.3} style={styles.toggleText}>{'Search & sort'}</Text> : null}
       {active ? <View style={styles.toggleDot} /> : null}
     </Pressable>
   );
@@ -471,6 +475,20 @@ const styles = StyleSheet.create({
     borderColor: colors.controlBorder,
     borderRadius: radius.sm,
     backgroundColor: colors.background,
+  },
+  toggleLabelled: {
+    width: 'auto',
+    flexDirection: 'row',
+    gap: space.xs,
+    paddingHorizontal: space.md,
+  },
+  toggleText: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.heavy,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   toggleOn: {
     borderColor: colors.goldLine,

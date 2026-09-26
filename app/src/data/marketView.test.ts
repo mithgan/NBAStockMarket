@@ -39,11 +39,17 @@ import {
   spokenTier,
   rowActions,
   rowKicker,
+  tierLabel,
   rowProfileLabel,
   rosterPickReason,
+  sameFlat,
+  sameMarketRow,
+  sameMarketRowProps,
   searchKey,
   shownAmount,
   slotSummary,
+  slotLine,
+  feeLine,
   sortAscending,
   sortDirection,
   sortMarketRows,
@@ -288,8 +294,13 @@ test('below 380px the kicker drops the tier so the given name and price share a 
   assert.equal(rowKicker('Karl-Anthony', 'star', 360), 'Karl-Anthony');
   assert.equal(rowKicker('Karl-Anthony', 'star', 379), 'Karl-Anthony');
   // The space before the dot does not break: no line starts with "·" (T2-12).
-  assert.equal(rowKicker('Karl-Anthony', 'star', 380), 'Karl-Anthony\u00A0· star');
-  assert.equal(rowKicker('Nikola', 'star', 1440), 'Nikola\u00A0· star');
+  assert.equal(rowKicker('Karl-Anthony', 'star', 380), 'Karl-Anthony\u00A0· Star');
+  assert.equal(rowKicker('Nikola', 'star', 1440), 'Nikola\u00A0· Star');
+  // The tier in words, never a bare "ROLE" beside a name (walk 4 T1-21).
+  assert.equal(rowKicker('Kon', 'role', 390), 'Kon\u00A0· Role\u00A0player');
+  assert.equal(tierLabel('role'), 'Role\u00A0player');
+  assert.equal(tierLabel('starter'), 'Starter');
+  assert.equal(tierLabel(null), '');
   assert.equal(rowKicker('Nikola', 'star', 195), 'Nikola');
   assert.equal(rowKicker('Nene', '', 390), 'Nene', 'no tier, no separator');
 });
@@ -302,8 +313,12 @@ test('search, sort and Watching fold behind one toggle below 300px', () => {
   // Short windows fold too (T4-16), except the table, whose toolbar is one row.
   assert.equal(collapseControls(600, 400), true);
   assert.equal(collapseControls(844, 390), true);
-  assert.equal(collapseControls(600, 450), false);
-  assert.equal(collapseControls(1280, 420, true), false);
+  assert.equal(collapseControls(600, 450), true);
+  assert.equal(collapseControls(600, 500), false);
+  // Any width: a short laptop window folds too (walk 4 T2-18, 1280x440 and 1280x480).
+  assert.equal(collapseControls(1280, 440, true), true);
+  assert.equal(collapseControls(1280, 480, true), true);
+  assert.equal(collapseControls(1280, 800, true), false);
 });
 
 test('layout: a table from 768px, the phone row below, one column under 300px or with big text', () => {
@@ -513,4 +528,62 @@ test('a reversed sort runs the other way, words included; no last season still g
   assert.equal(sortAscending('value'), false);
   assert.equal(sortAscending('value', true), true);
   assert.equal(sortAscending('name', true), false);
+});
+
+test('a market row redraws only when what it shows changes (walk 4 T4-11)', () => {
+  const base = {
+    player: player({ playerId: 'a', name: 'Kon Knueppel', currentGameCost: 111_500, quoteVersion: 3 }),
+    side: 'long',
+    position: null,
+    isFull: false,
+    blockedByOpposingPosition: false,
+    canSubmit: true,
+    unavailableReason: null,
+  };
+  const onPress = () => undefined;
+  const props = { row: base, width: 390, pending: false, locked: false, onToggleWatch: onPress, currentValue: undefined, columns: { avatar: 34, gap: 8 } };
+  // A new snapshot rebuilds every row object with the same values: no redraw.
+  const rebuilt = { ...props, row: { ...base, player: { ...base.player } }, columns: { avatar: 34, gap: 8 } };
+  assert.equal(sameMarketRowProps(props, rebuilt), true);
+  // What the row shows, or its own move state, changing: a redraw.
+  assert.equal(sameMarketRowProps(props, { ...props, pending: true }), false);
+  assert.equal(sameMarketRowProps(props, { ...props, row: { ...base, player: { ...base.player, currentGameCost: 111_800 } } }), false);
+  assert.equal(sameMarketRowProps(props, { ...props, row: { ...base, player: { ...base.player, quoteVersion: 4 } } }), false, 'the quote an Add sends stays fresh');
+  assert.equal(sameMarketRowProps(props, { ...props, row: { ...base, isFull: true } }), false);
+  assert.equal(sameMarketRowProps(props, { ...props, currentValue: { games: 1, avgNet: 500 } }), false);
+  // A callback that is not stable redraws the row rather than keep a stale one.
+  assert.equal(sameMarketRowProps(props, { ...props, onToggleWatch: () => undefined }), false);
+  const held = { ...base, position: { positionId: 'x', lockedGameCost: 111_500 } };
+  assert.equal(sameMarketRow(held, { ...held, position: { positionId: 'x', lockedGameCost: 111_500 } }), true);
+  assert.equal(sameMarketRow(held, { ...held, position: { positionId: 'y', lockedGameCost: 111_500 } }), false);
+  assert.equal(sameFlat(null, undefined), false);
+  assert.equal(sameFlat({ a: 1 }, { a: 1, b: 2 }), false);
+});
+
+test('search: digits alone are not a name, so they get the names hint (walk 4 T2-19, T4-10, T1-15)', () => {
+  const list = [
+    { player: player({ playerId: 'l', name: 'Luka Doncic' }) },
+    { player: player({ playerId: 'b', name: 'Bam Adebayo' }) },
+  ];
+  const find = (query: string) => ids(filterMarketRows(list, { query, watchedOnly: false, watched: [] }));
+  for (const query of ['123', '23', ' 7 ', '#23', '1-2']) {
+    assert.equal(searchHasLetters(query), false, query);
+    assert.equal(find(query), '', query);
+    assert.equal(listCountLine({ query, count: 0, total: 30, watchedOnly: false }), `${SEARCH_NEEDS_LETTERS}.`, query);
+  }
+  // A number beside a name is left out, so the name still finds him.
+  assert.equal(find('luka 77'), 'l');
+  assert.equal(find('77 bam'), 'b');
+  assert.equal(searchHasLetters('luka 77'), true);
+});
+
+test('the slot line never breaks mid-phrase (walk 4 T1-11)', () => {
+  assert.equal(slotLine('long', { used: 0, limit: 10 }), '0\u00A0of\u00A010 on\u00A0your\u00A0roster');
+  assert.equal(slotLine('short', { used: 1, limit: 5 }), '1\u00A0of\u00A05 shorts');
+  assert.equal(slotLine('short', { used: 0, limit: 1 }), '0\u00A0of\u00A01 short');
+  // One break point each: after the count, after the amount.
+  assert.equal(slotLine('long', { used: 3, limit: 10 }).split(' ').length, 2);
+  assert.equal(feeLine('long', 250), '$250 to\u00A0add\u00A0or\u00A0drop');
+  assert.equal(feeLine('short', 250), '$250 to\u00A0short\u00A0or\u00A0close');
+  assert.equal(feeLine('long', 0), '');
 });
