@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vi
 import Svg, { Circle, Line } from 'react-native-svg';
 
 import type { PerGameRuleset } from '../api/contracts';
-import { chromeFolded, sheetFloats, sheetNarrow } from '../data/chromeView';
+import { appearanceTagUnder, chromeFolded, sheetFloats, sheetNarrow } from '../data/chromeView';
 import { perGameRulesPresentation, rulesSummary } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { tapsSettling } from '../web/tapSettle';
@@ -114,6 +114,9 @@ export function SettingsSheet({
   // title, gutters narrow so headings wrap between words, and each theme's
   // swatch sits under its name (walk 3 T3-31).
   const narrow = sheetNarrow(width);
+  // Short of 300px (200% zoom), "IN USE" goes under the theme's name, so the
+  // name and its description keep the width (walk 6 T3-15).
+  const tagUnder = appearanceTagUnder(width);
   const reducedMotion = useReducedMotion();
   const practiceRules = usePracticeRulesContext();
   const rules = ruleset ? perGameRulesPresentation(ruleset, practiceRules) : null;
@@ -225,15 +228,17 @@ export function SettingsSheet({
                 // A small preview of the theme itself: its page, a card with
                 // a line of text, and its gain, loss and accent colours, so
                 // themes can be told apart before trying them. "Match device"
-                // shows Default and Light side by side.
+                // shows Default and Light side by side, each half a smaller
+                // card with its gain and loss marks, inside the same 44px box
+                // (three full-size marks ran 7px out of it).
                 const preview = (theme: DesignVariant, half?: 'left' | 'right') => (
                   <View style={[styles.swatch, half && styles.swatchHalf, half === 'left' && styles.swatchLeft, half === 'right' && styles.swatchRight, { backgroundColor: theme.palette.background }]}>
-                    <View style={[styles.swatchCard, { backgroundColor: theme.palette.surface }]}>
-                      <View style={[styles.swatchLine, { backgroundColor: theme.palette.text }]} />
-                      <View style={styles.swatchMarks}>
-                        <View style={[styles.swatchMark, { backgroundColor: theme.palette.green }]} />
-                        <View style={[styles.swatchMark, { backgroundColor: theme.palette.red }]} />
-                        <View style={[styles.swatchMark, { backgroundColor: theme.palette.gold }]} />
+                    <View style={[styles.swatchCard, half && styles.swatchCardHalf, { backgroundColor: theme.palette.surface }]}>
+                      <View style={[styles.swatchLine, half && styles.swatchLineHalf, { backgroundColor: theme.palette.text }]} />
+                      <View style={[styles.swatchMarks, half && styles.swatchMarksHalf]}>
+                        <View style={[styles.swatchMark, half && styles.swatchMarkHalf, { backgroundColor: theme.palette.green }]} />
+                        <View style={[styles.swatchMark, half && styles.swatchMarkHalf, { backgroundColor: theme.palette.red }]} />
+                        {half ? null : <View style={[styles.swatchMark, { backgroundColor: theme.palette.gold }]} />}
                       </View>
                     </View>
                   </View>
@@ -244,7 +249,7 @@ export function SettingsSheet({
                     {preview(VARIANTS.light, 'right')}
                   </View>
                 ) : preview(variant);
-                const inUse = selected ? <Text style={styles.check}>IN USE</Text> : null;
+                const inUse = selected ? <Text style={[styles.check, tagUnder && !narrow && styles.checkUnder]}>IN USE</Text> : null;
                 return (
                   <Pressable
                     key={choice}
@@ -265,8 +270,11 @@ export function SettingsSheet({
                     {narrow ? null : swatch}
                     <View style={[styles.choiceCopy, narrow && styles.choiceCopyNarrow]}>
                       <Text style={[styles.choiceName, selected && styles.choiceNameSelected]}>{name}</Text>
-                      {/* Narrow, the blurb wraps in full rather than stopping at "…". */}
-                      <Text numberOfLines={narrow ? undefined : 2} style={styles.choiceBlurb}>{blurb}</Text>
+                      {tagUnder && !narrow ? inUse : null}
+                      {/* The whole description at every width: cut at two
+                          lines, High contrast lost "Gains in blue, losses in
+                          orange" at 200% zoom (walk 6 T3-15). */}
+                      <Text style={styles.choiceBlurb}>{blurb}</Text>
                     </View>
                     {narrow ? (
                       // The swatch under the name, so the name keeps the width.
@@ -274,7 +282,7 @@ export function SettingsSheet({
                         {swatch}
                         {inUse}
                       </View>
-                    ) : inUse}
+                    ) : tagUnder ? null : inUse}
                   </Pressable>
                 );
               })}
@@ -589,8 +597,13 @@ const styles = StyleSheet.create({
   },
   swatchHalf: {
     width: 22,
-    padding: 3,
+    padding: 2,
+    overflow: 'hidden',
   },
+  swatchCardHalf: { paddingHorizontal: 2 },
+  swatchLineHalf: { width: 10 },
+  swatchMarksHalf: { gap: 2 },
+  swatchMarkHalf: { width: 4, height: 4 },
   swatchLeft: {
     borderTopRightRadius: 0,
     borderBottomRightRadius: 0,
@@ -659,6 +672,11 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
     letterSpacing: 1,
     flexShrink: 0,
+  },
+  // Under the theme's name in a tight row, before its description.
+  checkUnder: {
+    alignSelf: 'flex-start',
+    marginTop: 2,
   },
   factRow: {
     minHeight: 40,

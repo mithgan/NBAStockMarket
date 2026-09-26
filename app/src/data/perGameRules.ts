@@ -1,5 +1,5 @@
 import type { PerGamePositionSide, PerGameRuleset } from '../api/contracts';
-import { LOCK_EXPLAINER, ROSTER_EXPLAINER, SHORT_EXPLAINER } from '../copy/terms';
+import { LOCK_EXPLAINER, moneyFine, ROSTER_EXPLAINER, SHORT_EXPLAINER, signedMoneyFine } from '../copy/terms';
 import { formatMoney } from '../format';
 
 /** What net points are, in box-score terms a fan already knows. */
@@ -10,20 +10,40 @@ export const NET_POINTS_EXPLAINER =
 export const GOAL_EXPLAINER =
   'Finish the season with the highest score on the Leaders board. Your score comes from the NBA players you add to your roster.';
 
-/** Where a dividend comes from, for each dividend basis. */
-const DIVIDEND_RAW = "A player's dividend comes from his net points each game.";
-const DIVIDEND_PROJECTION = "A player's dividend comes from how far his net points beat his pregame projection.";
+/**
+ * Scoring in three short lines a fan can skim (walk 6 T1-03): pay his price
+ * and collect his dividend; what the dividend is, with the real rate; beat the
+ * price and you profit. The first and last are the loop the Market and
+ * Results say (ROSTER_EXPLAINER), split around the rate.
+ */
+const PAY_LINE = ROSTER_EXPLAINER.slice(0, ROSTER_EXPLAINER.indexOf('. ') + 1);
+const PROFIT_LINE = ROSTER_EXPLAINER.slice(ROSTER_EXPLAINER.indexOf('. ') + 2);
+
+/** What a dividend is, for each dividend basis, at the real rate in K ("× $40K"). */
+function dividendLine(rate: number, raw: boolean): string {
+  const each = moneyFine(rate);
+  return raw
+    ? `His dividend is his net points each game × ${each}.`
+    : `His dividend is how far his net points beat his pregame projection, × ${each}.`;
+}
+
+/** The worked game's label, set apart in the Rules sheet. */
+export const EXAMPLE_LEAD = 'Example: ';
 
 /**
- * One night worked through with the real rate, so "$40,000 per net point"
- * connects to prices like "$117K a game": 3.5 net points pay $140,000; at a
- * $118,000 price that game made $22,000.
+ * One game worked through with the real rate, in K like the rest of the app
+ * (walk 6 T1-03: exact dollars read in another style), so "$40K per net
+ * point" connects to prices like "$117K a game": "Example: 3.5 net points =
+ * $140K dividend; price $118K; profit +$22K."
  */
 function workedExample(rate: number, raw: boolean): string {
   const dividend = Math.round(3.5 * rate);
-  const price = Math.round((dividend * 0.84) / 1000) * 1000;
+  // The profit in whole thousands and the price the rest, so the three
+  // figures add up as shown at any rate ($140K, $118K, +$22K at $40K).
+  const profit = Math.round((dividend * 0.16) / 1000) * 1000;
+  const price = dividend - profit;
   const points = raw ? '3.5 net points' : '3.5 net points above his projection';
-  return `For example, a game of ${points} pays a ${formatMoney(dividend)} dividend; at a ${formatMoney(price)} price, you made ${formatMoney(dividend - price)}.`;
+  return `${EXAMPLE_LEAD}${points} = ${moneyFine(dividend)} dividend; price ${moneyFine(price)}; profit ${signedMoneyFine(dividend - price)}.`;
 }
 
 /** Why prices move, and why yours does not. */
@@ -67,7 +87,17 @@ export function perGameRulesPresentation(rules: PerGameRuleset, practice: Practi
   const goal = practice
     ? `${GOAL_EXPLAINER.slice(0, goalEnd)} ${practiceGoalText(practice)}${GOAL_EXPLAINER.slice(goalEnd)}`
     : GOAL_EXPLAINER;
+  // The Rules sheet draws Scoring from these parts: the three lines, what
+  // net points are, the example set apart, then the luck line. The
+  // explanation below holds the same words in the same order.
+  const scoring: ScoringParts = {
+    lines: [PAY_LINE, dividendLine(rules.dividendDollarsPerNetPoint, raw), PROFIT_LINE],
+    netPoints: NET_POINTS_EXPLAINER,
+    example: workedExample(rules.dividendDollarsPerNetPoint, raw),
+    luck: LUCK_EXPLAINER,
+  };
   return {
+    scoring,
     facts: [
       { label: 'Starting score', value: '$0' },
       { label: 'Dividend basis', value: raw ? 'His net points each game' : 'His net points above projection' },
@@ -82,7 +112,7 @@ export function perGameRulesPresentation(rules: PerGameRuleset, practice: Practi
     // where dividends come from, net points, then one worked night, which
     // used "net points" before they were explained); shorts and bad games;
     // fees; prices; locks. rulesSections cuts it there and names each part.
-    explanation: `${goal} ${ROSTER_EXPLAINER} ${raw ? DIVIDEND_RAW : DIVIDEND_PROJECTION} ${NET_POINTS_EXPLAINER} ${workedExample(rules.dividendDollarsPerNetPoint, raw)} ${LUCK_EXPLAINER} ${SHORT_EXPLAINER} ${NEGATIVE_DIVIDEND_EXPLAINER} ${FEES_LEAD}, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
+    explanation: `${goal} ${scoring.lines.join(' ')} ${scoring.netPoints} ${scoring.example} ${scoring.luck} ${SHORT_EXPLAINER} ${NEGATIVE_DIVIDEND_EXPLAINER} ${FEES_LEAD}, minus a ${formatMoney(rules.transactionFeeDollars)} fee each time you add or drop a player, or open or close a short. ${PRICE_EXPLAINER} ${LOCK_EXPLAINER}`,
     /** Plain definitions of the words the screens use. */
     glossary: [
       { term: 'Price', meaning: 'What one game of a player costs. The price you add him at stays locked while you hold him.' },
@@ -95,10 +125,17 @@ export function perGameRulesPresentation(rules: PerGameRuleset, practice: Practi
           : `A bet that he comes in under his price. It lasts ${rules.shortTermDays} ${rules.shortTermDays === 1 ? 'day' : 'days'}, then ends by itself.`,
       },
       { term: 'Tier', meaning: 'Star, starter or role: how good the market thinks he is. Pricier tiers are not always better value.' },
-      { term: 'Dividend last season', meaning: 'What he paid out a game last season: the market\'s best guide to what he is worth.' },
+      // A guide, not a promise: over a season players paid out well under
+      // last season, which the old "best guide to what he is worth" hid
+      // (walk 6 T2-16).
+      {
+        term: 'Dividend last season',
+        meaning: 'What he paid out a game last season: a guide, not a promise. Players usually pay out less than last season, and prices already expect part of that.',
+      },
+      // One definition with the held rows, which use your locked price (walk 6 T1-13).
       {
         term: 'Value',
-        meaning: "Last season's dividend against his price today. On the Roster side it is dividend minus price; on the Short side, price minus dividend. A plus figure is good for the side you are on.",
+        meaning: "Last season's dividend against his price today. On the Roster side it is dividend minus price; on the Short side, price minus dividend. A plus figure is good for the side you are on. For a player you hold, it is measured against the price you locked.",
       },
       { term: 'Net points', meaning: 'His box score in one number. Scoring and hustle add; turnovers, misses and minutes take away.' },
       { term: 'Roster lock', meaning: "Some nights, moves pause while that night's games are played." },
@@ -120,7 +157,7 @@ const FEES_LEAD = 'Your score adds up those games';
  * (walk 5 T1-09, T3-13: one run of text with no headings to jump by).
  */
 const SECTION_STARTS: ReadonlyArray<readonly [string, string]> = [
-  ['Scoring', ROSTER_EXPLAINER],
+  ['Scoring', PAY_LINE],
   ['Shorts', SHORT_EXPLAINER],
   ['Fees', FEES_LEAD],
   ['Prices', PRICE_EXPLAINER],
@@ -166,5 +203,17 @@ export function rulesParagraphs(explanation: string): string[] {
 export function rulesSummary(explanation: string): string | null {
   const goal = rulesSections(explanation)[0]?.text;
   if (!goal) return null;
-  return explanation.includes(ROSTER_EXPLAINER) && !goal.includes(ROSTER_EXPLAINER) ? `${goal} ${ROSTER_EXPLAINER}` : goal;
+  return explanation.includes(PAY_LINE) && !goal.includes(PAY_LINE) ? `${goal} ${ROSTER_EXPLAINER}` : goal;
+}
+
+/** Scoring's parts, as the Rules sheet draws them (walk 6 T1-03). */
+export interface ScoringParts {
+  /** Pay his price and collect his dividend; what the dividend is; beat the price and you profit. */
+  lines: string[];
+  /** What net points are. */
+  netPoints: string;
+  /** "Example: 3.5 net points = $140K dividend; price $118K; profit +$22K." */
+  example: string;
+  /** Single games are noisy. */
+  luck: string;
 }

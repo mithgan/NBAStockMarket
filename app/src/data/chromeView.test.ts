@@ -489,3 +489,92 @@ test('wide windows float Rules and Settings under the frame, never on it (walk 5
   assert.equal(floatTopFor(null), null);
   assert.equal(floatTopFor(Number.NaN), null);
 });
+
+test('a tight Appearance row puts IN USE under the theme name, never beside a squeezed name (walk 6 T3-15)', async () => {
+  const { appearanceTagUnder, sheetNarrow } = await import('./chromeView');
+  // A 390px phone at 200% zoom (195px) and at 150% (260px): under the name.
+  assert.equal(appearanceTagUnder(195), true);
+  assert.equal(appearanceTagUnder(260), true);
+  // A phone, and 1280 at 400% zoom (320px): beside, where the words keep 176px or more.
+  assert.equal(appearanceTagUnder(320), false);
+  assert.equal(appearanceTagUnder(390), false);
+  // 400% zoom (98px) is the narrow sheet, where the swatch and the tag sit under the words.
+  assert.equal(sheetNarrow(98), true);
+  // Descriptions are never cut to two lines; the pair swatch's halves hide what does not fit.
+  const sheet = readFileSync(resolve(import.meta.dirname, '../components/SettingsSheet.tsx'), 'utf8');
+  assert.doesNotMatch(sheet, /numberOfLines=\{narrow \? undefined : 2\}/);
+  assert.match(sheet, /swatchHalf: \{[^}]*overflow: 'hidden'/);
+});
+
+test('a run of presses played back to back has one notice and one row figure for all of it (walk 6 T4-N2, T2-09)', async () => {
+  const { resultSpan, runNotice } = await import('./chromeView');
+  // Two weeks: the second pressed while the first played.
+  const weeks = [
+    { step: 'week' as const, from: '2025-10-20' },
+    { step: 'week' as const, from: '2025-10-27', runFrom: '2025-10-20' },
+  ];
+  assert.deepEqual(resultSpan(weeks, '2025-11-03'), {
+    after: '2025-10-20', through: '2025-11-03', label: 'Oct 21–Nov 3', nobody: false,
+  });
+  // While the queued week plays, the row keeps the first week.
+  assert.equal(resultSpan(weeks, '2025-10-27')?.label, 'Oct 21–27');
+  // Two nights run together read as their span; one night alone as its date.
+  const nights = [
+    { step: 'night' as const, from: '2025-10-21' },
+    { step: 'night' as const, from: '2025-10-22', runFrom: '2025-10-21' },
+  ];
+  assert.equal(resultSpan(nights, '2025-10-23')?.label, 'Oct 22–23');
+  assert.equal(resultSpan([{ step: 'night' as const, from: '2025-10-22' }], '2025-10-23')?.label, 'Oct 23');
+  // The notice counts the run after its span; a single press is left as it is.
+  assert.equal(
+    runNotice(['week', 'week'], 'Oct 21–Nov 3 games: your score rose $890.5K. Moves pause for the Nov 5 games.'),
+    'Oct 21–Nov 3 games (2 weeks): your score rose $890.5K. Moves pause for the Nov 5 games.',
+  );
+  assert.equal(
+    runNotice(['night', 'week'], 'Oct 23–30 games: your score rose $370K.'),
+    'Oct 23–30 games (1 night and 1 week): your score rose $370K.',
+  );
+  assert.equal(runNotice(['night', 'night', 'night'], 'Oct 21–23 games: none of your players played.'),
+    'Oct 21–23 games (3 nights): none of your players played.');
+  assert.equal(runNotice(['week'], 'Oct 21–27 games: your score rose $454K.'), 'Oct 21–27 games: your score rose $454K.');
+  // A run that ends the season keeps the season's own notice.
+  assert.equal(runNotice(['week', 'week'], 'Season complete. Final score +$4.95M, #1 of 5.'),
+    'Season complete. Final score +$4.95M, #1 of 5.');
+});
+
+test('the hint line keeps its place once its night is in (walk 6 T4-13)', async () => {
+  const { gamesInLine, HINT_HOLD_IDLE_MS } = await import('./chromeView');
+  assert.equal(gamesInLine('Oct 21'), 'Oct 21 games in.');
+  assert.equal(gamesInLine('Oct 21–27'), 'Oct 21–27 games in.');
+  assert.ok(HINT_HOLD_IDLE_MS >= 2000);
+});
+
+test('a tiny row keeps "Day 1 of 174" on one line where it has room, and capitals are spoken in sentence case (walk 6 T3-05, T3-09)', async () => {
+  const { practiceDayTinyText, spokenLabel } = await import('./chromeView');
+  const day1 = practiceProgress(OPENING_EVE, '2025-10-21');
+  // 1280x1024 at 400% zoom (320px): one line, held together.
+  assert.equal(practiceDayTinyText(day1, 320), 'Day 1 of 174');
+  assert.equal(practiceDayTinyText(practiceProgress(OPENING_EVE, '2026-04-12'), 320), 'Season complete');
+  // 390x844 at 400% zoom (98px): the two short lines.
+  assert.equal(practiceDayTinyText(day1, 98), 'Day 1\nof 174');
+  assert.equal(spokenLabel('OPEN FEE'), 'Open fee');
+  assert.equal(spokenLabel('SHORT TERM'), 'Short term');
+  assert.equal(spokenLabel('SCORE'), 'Score');
+});
+
+test('Play to the end asks what it plays and what stays, in days (walk 6 T2-N1, T4-N3)', async () => {
+  const { PLAY_TO_END_LABEL, playToEndQuestion } = await import('./chromeView');
+  assert.deepEqual(playToEndQuestion(158, false), {
+    title: 'Play the remaining 158 days now?',
+    lines: ['Your roster and shorts stay as they are; no moves between nights.'],
+    confirmLabel: 'Play to the end',
+    cancelLabel: 'Not now',
+  });
+  assert.equal(playToEndQuestion(1, false).title, 'Play the remaining 1 day now?');
+  // Nobody to play for: it says the score won't move.
+  assert.deepEqual(playToEndQuestion(174, true).lines, [
+    'Your roster and shorts stay as they are; no moves between nights.',
+    "Nobody is on your roster, so your score won't move.",
+  ]);
+  assert.equal(PLAY_TO_END_LABEL, 'Play to the end');
+});

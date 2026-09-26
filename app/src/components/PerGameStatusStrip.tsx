@@ -31,18 +31,20 @@ import {
   noGamesWords,
   playedBetween,
   practiceDayShort,
+  CHROME_TINY_DAY_ONE_LINE_MIN_WIDTH,
   practiceDayText,
-  practiceDayTiny,
+  practiceDayTinyText,
   practiceProgress,
   type PracticeProgress,
   resultSpan,
   sheetFloats,
   sheetNarrow,
   shortTermText,
+  spokenLabel,
   statusSummary,
 } from '../data/chromeView';
 import { earningsBetween } from '../data/perGameMetrics';
-import { perGameRulesPresentation, positionSlotHint, rulesSections } from '../data/perGameRules';
+import { EXAMPLE_LEAD, perGameRulesPresentation, positionSlotHint, rulesSections, type ScoringParts } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
 import { openSettings, registerRulesOpener } from '../state/uiActions';
@@ -236,10 +238,11 @@ export function PerGameStatusStrip() {
   );
   const day = tiny && progress ? (
     // Two short lines over the progress bar (and the padlock on a locked
-    // night), in the width More leaves.
-    <View key="day" style={styles.dayTiny}>
+    // night), in the width More leaves; from 240px "Day 1 of 174" on one
+    // line with the bar beside it (walk 6 T3-05).
+    <View key="day" style={width >= CHROME_TINY_DAY_ONE_LINE_MIN_WIDTH ? styles.dayFact : styles.dayTiny}>
       <Text maxFontSizeMultiplier={1.2} style={[styles.fact, styles.factLabel, styles.tight]}>
-        {practiceDayTiny(progress)}
+        {practiceDayTinyText(progress, width)}
       </Text>
       <View style={styles.dayTinyMarks}>
         {meter}
@@ -544,6 +547,29 @@ function ProgressMeter({ progress, tiny = false }: { progress: PracticeProgress;
 }
 
 /**
+ * Scoring in steps a fan can skim: three short lines (pay his price and
+ * collect his dividend; what the dividend is; beat the price and you profit),
+ * what net points are, then one game worked through, set apart, in K. It was
+ * one 11-line paragraph with the example buried at its end (walk 6 T1-03).
+ */
+function ScoringText({ scoring }: { scoring: ScoringParts }) {
+  const example = scoring.example.startsWith(EXAMPLE_LEAD) ? scoring.example.slice(EXAMPLE_LEAD.length) : scoring.example;
+  return (
+    <>
+      <View style={styles.scoringLines}>
+        {scoring.lines.map((line) => <Text key={line} style={styles.paragraph}>{line}</Text>)}
+      </View>
+      <Text style={styles.paragraph}>{scoring.netPoints}</Text>
+      <View style={styles.example}>
+        <Text style={styles.exampleLabel}>Example</Text>
+        <Text style={styles.paragraph}>{example}</Text>
+      </View>
+      <Text style={styles.paragraph}>{scoring.luck}</Text>
+    </>
+  );
+}
+
+/**
  * The rules, over the screen. Plain English first (the shared rules copy, in
  * short paragraphs: dividends and net points, the roster, shorts, the score,
  * bad games), then the numbers a player checks before a move.
@@ -636,7 +662,9 @@ function RulesSheet({
             {rulesSections(presentation.explanation).map((section) => (
               <View key={section.heading} style={styles.rulesSection}>
                 <Text accessibilityRole="header" {...headingLevel(3)} style={styles.sectionTitle}>{section.heading}</Text>
-                <Text style={styles.paragraph}>{section.text}</Text>
+                {section.heading === 'Scoring' ? <ScoringText scoring={presentation.scoring} /> : (
+                  <Text style={styles.paragraph}>{section.text}</Text>
+                )}
               </View>
             ))}
           </View>
@@ -647,7 +675,13 @@ function RulesSheet({
             <View aria-label="At a glance" role="list" style={styles.factList}>
               {facts.map((fact) => (
                 <View key={fact.label} role="listitem" style={styles.factRow}>
-                  <Text role="term" style={[styles.factName, narrow && styles.factNameNarrow]}>{fact.label}</Text>
+                  {/* Drawn in capitals, spoken in sentence case ("Open fee"):
+                      capitals reach a screen reader as capitals, and some
+                      spell "SCORE" out (walk 6 T3-09). */}
+                  <Text role="term" style={[styles.factName, narrow && styles.factNameNarrow]}>
+                    <Text aria-hidden>{fact.label}</Text>
+                    <Text style={styles.spokenTerm}>{spokenLabel(fact.label)}</Text>
+                  </Text>
                   {/* Narrow, a phrase held together ("$40,000 for each net point")
                       is wider than the sheet, so it may wrap between its words. */}
                   <Text role="definition" style={styles.factValue}>{narrow ? fact.value.replace(/\u00a0/g, ' ') : fact.value}</Text>
@@ -981,6 +1015,24 @@ const styles = StyleSheet.create({
   rulesSection: {
     gap: space.xs,
   },
+  // Scoring's three short lines sit close, one idea a line.
+  scoringLines: {
+    gap: 2,
+  },
+  // The worked game, set apart by a gold rule, not a card.
+  example: {
+    gap: 2,
+    marginVertical: space.xs,
+    paddingLeft: space.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.goldInk,
+  },
+  exampleLabel: {
+    color: colors.goldInk,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.bold,
+  },
   sectionTitle: {
     color: colors.text,
     fontFamily: fonts.display,
@@ -1017,6 +1069,15 @@ const styles = StyleSheet.create({
   // Narrow, the name takes its own width and the value wraps under it.
   factNameNarrow: {
     width: 'auto',
+  },
+  // A term's spoken name: out of sight, and not in capitals.
+  spokenTerm: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    overflow: 'hidden',
+    opacity: 0,
+    textTransform: 'none',
   },
   glossary: {
     gap: space.sm,

@@ -174,6 +174,33 @@ export function practiceQuestion(
     };
 }
 
+/** The practice control that plays the rest of the season (walk 6 T2-N1, T4-N3). */
+export const PLAY_TO_END_LABEL = 'Play to the end';
+
+/**
+ * The question "Play to the end" asks: what it plays and what stays as it
+ * is. Practice makes its schedule night by night, so the rest of the season
+ * is counted in days ("Day 16 of 174" leaves 158). With nobody on the roster
+ * it says the score won't move. Escape or "Not now" keeps the season.
+ */
+export function playToEndQuestion(remainingDays: number, emptyRoster: boolean): {
+  title: string;
+  lines: string[];
+  confirmLabel: string;
+  cancelLabel: string;
+} {
+  const days = Math.max(1, remainingDays);
+  return {
+    title: `Play the remaining ${days} ${days === 1 ? 'day' : 'days'} now?`,
+    lines: [
+      'Your roster and shorts stay as they are; no moves between nights.',
+      ...(emptyRoster ? ["Nobody is on your roster, so your score won't move."] : []),
+    ],
+    confirmLabel: PLAY_TO_END_LABEL,
+    cancelLabel: 'Not now',
+  };
+}
+
 /**
  * The last day of the practice season's track: day 174 after opening-night eve
  * ("2025-10-20" gives "2026-04-12"). Practice plays no night once a night on or
@@ -339,6 +366,12 @@ export interface PracticeAdvance {
   from: string | null;
   /** Nobody on the roster or shorts when it was pressed (Play anyway). */
   emptyRoster?: boolean;
+  /**
+   * A press queued behind another plays straight after it, as one run: the
+   * settled date the run started from, so the row names the whole run
+   * ("Oct 21–Nov 3 games"), as its notice does (walk 6 T4-N2).
+   */
+  runFrom?: string | null;
 }
 
 /** The games the status row's figure covers: after `after`, through `through`. */
@@ -383,15 +416,41 @@ export function resultSpan(
   // Who you held through the games is who you held when you pressed, as the
   // notice after them counts it.
   const nobody = landed?.emptyRoster ?? emptyNow;
-  if (landed?.from && landed.step === 'week' && daysBetween(landed.from, lastSettled) > 1) {
+  // A run of presses played back to back is reported whole, from where the
+  // run started (walk 6 T4-N2).
+  const run = landed?.from && landed.runFrom && landed.runFrom < landed.from ? landed.runFrom : null;
+  const from = run ?? landed?.from;
+  if (from && (run || landed?.step === 'week') && daysBetween(from, lastSettled) > 1) {
     return {
-      after: landed.from,
+      after: from,
       through: lastSettled,
-      label: dateSpanText(shiftDay(landed.from, 1), lastSettled),
+      label: dateSpanText(shiftDay(from, 1), lastSettled),
       nobody,
     };
   }
   return { after: shiftDay(lastSettled, -1), through: lastSettled, label: humanDate(lastSettled), nobody };
+}
+
+/**
+ * The notice after a run of presses that played back to back (a press made
+ * while a night or week played is queued and plays straight after it). The
+ * notice then covers the whole run and counts it: "Oct 21–Nov 3 games (2
+ * weeks): your score rose $500.5K." It named only the last step, so a second
+ * week played with no sign (walk 6 T4-N2, T2-09). `notice` is the notice for
+ * the run's whole span (state/perGameNotices.refreshNotice from the bootstrap
+ * before the run); one without a games span (season complete) is kept as is.
+ */
+export function runNotice(steps: readonly ('night' | 'week')[], notice: string): string {
+  if (steps.length < 2) return notice;
+  const nights = steps.filter((step) => step === 'night').length;
+  const weeks = steps.length - nights;
+  const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const label = nights > 0 && weeks > 0
+    ? `${count(nights, 'night')} and ${count(weeks, 'week')}`
+    : nights > 0 ? count(nights, 'night') : count(weeks, 'week');
+  const marker = ' games: ';
+  const at = notice.indexOf(marker);
+  return at < 0 ? notice : `${notice.slice(0, at)} games (${label}): ${notice.slice(at + marker.length)}`;
 }
 
 /** Whether any of your players played after `after`, through `through` (games, not fees). */
@@ -525,6 +584,19 @@ export function sheetNarrow(width: number): boolean {
 }
 
 /**
+ * Below this width Settings' "IN USE" tag leaves the right edge of its theme
+ * row and sits under the theme's name, so the name and its description get
+ * the row's width. Beside them at 195px (a phone at 200% zoom) it squeezed
+ * the words to 51px: "Defaul / t", and High contrast's "Gains in blue, losses
+ * in orange" was cut (walk 6 T3-15).
+ */
+export const APPEARANCE_TAG_BESIDE_MIN_WIDTH = 300;
+
+export function appearanceTagUnder(width: number): boolean {
+  return width < APPEARANCE_TAG_BESIDE_MIN_WIDTH;
+}
+
+/**
  * Where the Rules and Settings sheets start: at the top of the status row,
  * which is the bottom of the brand bar, so the sheet's top edge never slices
  * a line of the frame in half behind the scrim (at a fixed 64px the top
@@ -561,6 +633,28 @@ export function floatTopFor(frameBottom: number | null | undefined): number | nu
 /** The day count in a tiny row, in two short lines: "Day 16" over "of 174". */
 export function practiceDayTiny(progress: PracticeProgress): string {
   return progress.complete ? 'Season\nover' : `Day ${progress.day}\nof ${progress.total}`;
+}
+
+/**
+ * From this width a tiny row (a window at 400% zoom) has room for the day on
+ * one line with the progress bar beside it: at 320px "Day 1 / of 174" took
+ * two lines and the bar a third, beside 200px of empty row (walk 6 T3-05).
+ * The 98px row keeps the two short lines.
+ */
+export const CHROME_TINY_DAY_ONE_LINE_MIN_WIDTH = 240;
+
+export function practiceDayTinyText(progress: PracticeProgress, width: number): string {
+  return width >= CHROME_TINY_DAY_ONE_LINE_MIN_WIDTH ? keepTogether(practiceDayText(progress)) : practiceDayTiny(progress);
+}
+
+/**
+ * A label drawn in capitals ("OPEN FEE") in sentence case, for screen
+ * readers: capitals reach them as capitals (CSS ones too), and some spell a
+ * short all-caps word letter by letter (walk 6 T3-09).
+ */
+export function spokenLabel(label: string): string {
+  const lower = label.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 /**
@@ -612,6 +706,23 @@ export const EMPTY_ROSTER_HINT = "Add a player first. +1 night plays the next ni
 export function readyHint(nextGameDate: string | null | undefined): string {
   return nextGameDate ? `Ready. +1 night plays the ${humanDate(nextGameDate)} games.` : "Ready. +1 night plays the next night's games.";
 }
+
+/**
+ * The hint line once the night it promised is in: "Oct 21 games in." (or
+ * "Oct 21–27 games in." after a week). The line keeps its place through the
+ * press, so the frame does not get shorter under the finger (it went at
+ * once and the list jumped 24px; walk 6 T4-13), and goes once the player
+ * pauses (HINT_HOLD_IDLE_MS) or scrolls.
+ */
+export function gamesInLine(label: string): string {
+  return `${keepTogether(label)} games in.`;
+}
+
+/**
+ * How long the player must leave the screen alone (no tap, key or wheel)
+ * before the held line goes. It never goes while a night plays or waits.
+ */
+export const HINT_HOLD_IDLE_MS = 3000;
 
 /**
  * Once the player has answered "Play anyway" to the empty-roster question,
