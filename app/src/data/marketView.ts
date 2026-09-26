@@ -942,7 +942,10 @@ export function searchResultLine(query: string, count: number): string {
  * What a screen reader hears when the list changes, once typing pauses: a
  * search's matches; right after a search is cleared, that the list is back
  * ("Search cleared. Showing all 30 players."); the Watching filter's count against
- * everyone ("Watching: 0 players. Show everyone to see all 30.").
+ * everyone, naming the button that is really there (walk 8 T2-07): "Show all
+ * 30" under a list ("Watching: 1 player. Show all 30 to see everyone."), or
+ * the empty list's "Show everyone" ("Watching: 0 players. Show everyone to
+ * see all 30.").
  */
 export function listCountLine({
   query,
@@ -950,6 +953,7 @@ export function listCountLine({
   total,
   watchedOnly,
   cleared = false,
+  listed = count,
 }: {
   query: string;
   count: number;
@@ -958,13 +962,19 @@ export function listCountLine({
   watchedOnly: boolean;
   /** The search was just emptied. */
   cleared?: boolean;
+  /** Rows on screen, kept (unwatched, dimmed) rows too; defaults to `count`. */
+  listed?: number;
 }): string {
   const players = (n: number) => `${n} ${n === 1 ? 'player' : 'players'}`;
   if (query && !searchHasLetters(query)) return `${SEARCH_NEEDS_LETTERS}.`;
   if (query) return searchResultLine(query, count);
   // Says the list is whole again, in the words the list uses (walk 6 T3-N4).
   if (cleared) return watchedOnly ? `Search cleared. Watching: ${players(count)}.` : `Search cleared. Showing all ${players(count)}.`;
-  if (watchedOnly) return `Watching: ${players(count)}. Show everyone to see all ${total}.`;
+  if (watchedOnly) {
+    return listed > 0
+      ? `Watching: ${players(count)}. Show all ${total} to see everyone.`
+      : `Watching: ${players(count)}. Show everyone to see all ${total}.`;
+  }
   return `Showing all ${players(count)}.`;
 }
 
@@ -998,6 +1008,22 @@ export function stillFilteredLine({ query, count, total, watchedOnly }: { query:
 /** The line under a searched list, on screen as well as aloud: "6 players match "ja"" (walk 7 T3-19). */
 export function searchFooterLine(query: string, count: number): string {
   return searchResultLine(query, count).replace(/\.$/, '');
+}
+
+/**
+ * The line right under the folded panel's search box, so what a search found
+ * is in view while you type (walk 8 T3-11: at 200% zoom the open panel filled
+ * the screen and the one match sat below it). Names one or two matches, in
+ * list order ("1 player: Shai Gilgeous-Alexander"), counts more ("7 players
+ * match "le""). Null until the box holds letters.
+ */
+export function searchMatchLine(query: string, names: readonly string[]): string | null {
+  const text = query.trim();
+  if (!text || !searchHasLetters(text)) return null;
+  const count = names.length;
+  if (count === 0) return `No players match "${echoQuery(text)}"`;
+  if (count <= 2) return `${count} ${count === 1 ? 'player' : 'players'}: ${names.join(', ')}`;
+  return `${count} players match "${echoQuery(text)}"`;
 }
 
 /**
@@ -1101,10 +1127,19 @@ export function spokenForNote(side: PerGamePositionSide, takenBy: string, player
  * it as an offer.
  */
 export function fullActionName(side: PerGamePositionSide, playerName: string): string {
+  // Starts with the button's own words, "Full, make room" (walk 8 T1-11).
   return side === 'long'
-    ? `Roster full: drop a player to add ${playerName}`
-    : `Shorts full: close a short to short ${playerName}`;
+    ? `Full, make room: drop a player to add ${playerName}`
+    : `Full, make room: close a short to short ${playerName}`;
 }
+
+/**
+ * FULL's visible words on the Market: a way forward, not a switched-off
+ * button (walk 8 T1-11: the dashed FULL read as "nothing to do here"). Two
+ * lines that fit the 76px phone button; the press opens the note with
+ * "Choose who to drop".
+ */
+export const FULL_BUTTON_WORDS = 'Full\nmake room';
 
 /** What the Roster says when "Choose who to drop" brings its list forward. */
 export function rosterPickReason(playerName: string, side: 'long' | 'short' = 'long'): string {
@@ -1118,14 +1153,49 @@ export function rosterPickReason(playerName: string, side: 'long' | 'short' = 'l
  * each stay whole, so a narrow phone breaks only between them, never
  * "0 of 10 on / your roster" (walk 4 T1-11).
  */
-export function slotLine(side: PerGamePositionSide, slots: Pick<PerGameSlotSummary, 'used' | 'limit'>): string {
+export function slotLine(side: PerGamePositionSide, slots: Pick<PerGameSlotSummary, 'used' | 'limit'>, saving = 0): string {
+  // Adds still saving count too, so the number matches the ticked rows (walk
+  // 8 T2-08: "7 of 10" beside ten ticks): "10 of 10 \u00B7 3 saving". It is no
+  // longer than the plain line, so the toolbar never grows while you tap.
+  if (saving > 0) {
+    const used = Math.min(slots.used + saving, slots.limit);
+    return `${used}\u00A0of\u00A0${slots.limit} \u00B7\u00A0${saving}\u00A0saving`;
+  }
   const count = `${slots.used}\u00A0of\u00A0${slots.limit}`;
   return `${count} ${slotSummary(side, slots).slice(`${slots.used} of ${slots.limit} `.length).replace(/ /g, '\u00A0')}`;
 }
 
-/** The fee line as the toolbar prints it: it breaks only after the amount ("$250" / "to add or drop"). */
+/**
+ * A player whose Add (or Short) is still saving on the other side, as this
+ * side shows him meanwhile (walk 8 T4-07: the Short side painted "Shorted \u2713"
+ * on a roster add in flight): busy, in place, with no button, as he will be
+ * once it saves ("On your roster").
+ */
+export function otherSideSaving(side: PerGamePositionSide): { tag: string; reason: string } {
+  return side === 'short'
+    ? { tag: 'Adding to your roster\u2026', reason: 'His add to your roster is still saving.' }
+    : { tag: 'Shorting\u2026', reason: 'Your short on him is still saving.' };
+}
+
+/**
+ * The fee line as the toolbar prints it: one phrase, the amount never on a
+ * line of its own (walk 8 T1-10: "$250" / "to short or close" at 360 and
+ * 375). Where even a line can't hold it (zoom, text spacing) it breaks inside
+ * the words, "$250 to short" / "or close", never after the amount.
+ */
 export function feeLine(side: PerGamePositionSide, fee: number): string {
-  return feeHint(side, fee).replace(/ /g, '\u00A0').replace('\u00A0', ' ');
+  return feeHint(side, fee).replace(' ', '\u00A0').replace(/ (\S+)$/, '\u00A0$1');
+}
+
+/**
+ * Beside the side toggle on a narrow phone (340-389px) the slot column gets
+ * the room before the toggle grows, so "$250 to short or close" (124px)
+ * keeps one line at 360 and 375 (walk 8 T1-10).
+ */
+export const SLOT_ROOM_FIRST_BELOW = 390;
+
+export function slotRoomFirst(width: number): boolean {
+  return slotLineBeside(width) && width < SLOT_ROOM_FIRST_BELOW;
 }
 
 /** The fee, said where the side is chosen: "$250 to add or drop". Empty with no fee. */
@@ -1248,6 +1318,14 @@ export function resortName(night: string): string {
 export function sameOrder(a: readonly string[] | null | undefined, b: readonly string[] | null | undefined): boolean {
   if (!a || !b || a.length !== b.length) return false;
   return a.every((id, index) => id === b[index]);
+}
+
+/**
+ * The Watching switch's name: its visible words first ("WATCHING 2"), so
+ * voice control can say what it sees (walk 8 T3-16), then what it does.
+ */
+export function watchingToggleName(count: number): string {
+  return `Watching ${count}, show only players you watch`;
 }
 
 /** The line under a Watching list, said on screen as well as aloud: "Watching: 2 players" (walk 6 T1-12). */

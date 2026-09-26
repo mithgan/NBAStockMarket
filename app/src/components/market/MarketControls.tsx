@@ -12,12 +12,13 @@ import {
   orderButtonTitle,
   sortAscending,
   sortDirection,
+  watchingToggleName,
   type MarketColumnSet,
   type MarketSort,
   type MarketSortOption,
 } from '../../data/marketView';
 import { colors, control, fonts, radius, space, type, weight } from '../../theme';
-import { repeatSafe } from '../../ui/kit';
+import { repeatSafe, visuallyHidden } from '../../ui/kit';
 import { CloseIcon, SearchIcon, SortOrderIcon, StarIcon } from './icons';
 import { spaceToggles } from './switchKeys';
 
@@ -245,8 +246,9 @@ export function WatchingToggle({
 }) {
   return (
     <Pressable
-      // react-native-web drops hints, so the count rides in the name.
-      accessibilityLabel={`Watching only, ${count} ${count === 1 ? 'player' : 'players'}`}
+      // react-native-web drops hints, so the count rides in the name, after
+      // the visible words "Watching 2" (walk 8 T3-16, voice control).
+      accessibilityLabel={watchingToggleName(count)}
       accessibilityRole="switch"
       accessibilityState={{ checked: on }}
       aria-checked={on}
@@ -321,10 +323,16 @@ export function MarketColumnHeader({
   onChoose,
   onFlip,
   lead = 0,
+  tableRoles = false,
+  actionHeader = '',
 }: {
   columns: MarketColumnSet;
   /** Extra room before the avatar column (the rows' watch star). */
   lead?: number;
+  /** The header row of a table (walk 8 T3-09): columnheaders, aria-sort on the sorted one. */
+  tableRoles?: boolean;
+  /** The button column's header words, said only ("Add or drop"). */
+  actionHeader?: string;
   valueLabel: string;
   sort: MarketSort;
   reversed: boolean;
@@ -343,12 +351,18 @@ export function MarketColumnHeader({
     // A row of sort buttons over the list, not a table: the player rows are
     // buttons, not table rows, so a table role promised navigation it could
     // not deliver (walk 4 T3-01). Each button's name says its sort state.
-    <View accessibilityLabel="Sort by column" role="group">
-      <View style={[styles.columns, { gap: columns.gap }]}>
-        {lead > 0 ? <View style={{ width: lead }} /> : null}
+    // On a tall desktop the list is a table (walk 8 T3-09): this is its
+    // header row, each label a columnheader holding its sort button.
+    <View {...(tableRoles ? {} : ({ accessibilityLabel: 'Sort by column', role: 'group' } as object))}>
+      <View style={[styles.columns, { gap: columns.gap }]} {...(tableRoles ? ({ role: 'row' } as object) : {})}>
+        {lead > 0 ? (
+          <View style={{ width: lead }} {...(tableRoles ? ({ role: 'columnheader' } as object) : {})}>
+            {tableRoles ? <Text style={visuallyHidden}>Watch</Text> : null}
+          </View>
+        ) : null}
         <View style={{ width: columns.avatar }} />
-        <SortHeader columnKey="name" label="Player" onChoose={onChoose} onFlip={onFlip} reversed={reversed} sort={sort} />
-        <SortHeader columnKey="price" label={'Price a\u00A0game'} onChoose={onChoose} onFlip={onFlip} reversed={reversed} sort={sort} width={columns.price} />
+        <SortHeader columnKey="name" label="Player" onChoose={onChoose} onFlip={onFlip} reversed={reversed} sort={sort} tableRoles={tableRoles} />
+        <SortHeader columnKey="price" label={'Price a\u00A0game'} onChoose={onChoose} onFlip={onFlip} reversed={reversed} sort={sort} tableRoles={tableRoles} width={columns.price} />
         <SortHeader
           columnKey="dividend"
           explain={COLUMN_EXPLANATIONS.dividend}
@@ -359,6 +373,7 @@ export function MarketColumnHeader({
           onFlip={onFlip}
           reversed={reversed}
           sort={sort}
+          tableRoles={tableRoles}
           width={columns.lastSeason}
         />
         <SortHeader
@@ -371,6 +386,7 @@ export function MarketColumnHeader({
           onFlip={onFlip}
           reversed={reversed}
           sort={sort}
+          tableRoles={tableRoles}
           width={columns.edge}
         />
         {columns.yours > 0 ? (
@@ -378,11 +394,15 @@ export function MarketColumnHeader({
             explain={COLUMN_EXPLANATIONS.yours}
             label={'Your profit a\u00A0game'}
             onTip={onTip}
+            tableRoles={tableRoles}
             tipShown={tip?.key === 'yours'}
             width={columns.yours}
           />
         ) : null}
-        <View style={{ width: columns.action }} />
+        {/* At season end the rows have no button: an empty spacer, no header. */}
+        <View style={{ width: columns.action }} {...(tableRoles && columns.action > 0 ? ({ role: 'columnheader' } as object) : {})}>
+          {tableRoles && columns.action > 0 && actionHeader ? <Text style={visuallyHidden}>{actionHeader}</Text> : null}
+        </View>
       </View>
     </View>
   );
@@ -406,16 +426,18 @@ function PlainHeader({
   explain,
   tipShown,
   onTip,
+  tableRoles = false,
 }: {
   label: string;
   width: number;
   explain: string;
   tipShown: boolean;
   onTip: (key: TipKey, by: TipSource, on: boolean) => void;
+  tableRoles?: boolean;
 }) {
   const [explainId] = useState(() => `market-column-explain-${(explainIds += 1)}`);
   return (
-    <View style={[styles.headerCell, { width }]}>
+    <View style={[styles.headerCell, { width }]} {...(tableRoles ? ({ role: 'columnheader' } as object) : {})}>
       <Pressable
         // A real control with a name and a role, like its neighbours (walk 7
         // T3-01: a focusable stop with no role read as nothing): a press
@@ -459,8 +481,11 @@ function SortHeader({
   reversed,
   onChoose,
   onFlip,
+  tableRoles = false,
 }: {
   columnKey: MarketSort;
+  /** A table's columnheader, with aria-sort while it is the sort (walk 8 T3-09). */
+  tableRoles?: boolean;
   label: string;
   /** A number column's width; none for the Player column, which takes the rest. */
   width?: number;
@@ -494,7 +519,10 @@ function SortHeader({
   // column in use reversed twice and ended where it started).
   const press = repeatSafe(on ? onFlip : () => onChoose(columnKey));
   return (
-    <View style={[styles.headerCell, number ? { width } : styles.columnPlayer]}>
+    <View
+      style={[styles.headerCell, number ? { width } : styles.columnPlayer]}
+      {...(tableRoles ? ({ role: 'columnheader', ...(on ? { 'aria-sort': ascending ? 'ascending' : 'descending' } : {}) } as object) : {})}
+    >
       <Pressable
         accessibilityLabel={on ? `${words}, sorted ${sortDirection(columnKey, reversed)}` : `${words}, sort by ${words.toLowerCase()}`}
         accessibilityRole="button"

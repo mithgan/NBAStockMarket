@@ -440,15 +440,17 @@ test('spoken counts say what the filter did, and that a cleared search is back (
   const base = { query: '', count: 30, total: 30, watchedOnly: false };
   assert.equal(listCountLine(base), 'Showing all 30 players.');
   assert.equal(listCountLine({ ...base, count: 0, watchedOnly: true }), 'Watching: 0 players. Show everyone to see all 30.');
-  assert.equal(listCountLine({ ...base, count: 1, watchedOnly: true }), 'Watching: 1 player. Show everyone to see all 30.');
+  // Walk 8 T2-07: names the button under the list, "Show all 30".
+  assert.equal(listCountLine({ ...base, count: 1, watchedOnly: true }), 'Watching: 1 player. Show all 30 to see everyone.');
   assert.equal(listCountLine({ ...base, cleared: true }), 'Search cleared. Showing all 30 players.');
   assert.equal(listCountLine({ ...base, query: 'zz', count: 0 }), 'No players match "zz".');
   assert.equal(listCountLine({ ...base, query: 'le', count: 7 }), '7 players match "le".');
 });
 
 test('FULL is named for why it cannot add him, never as an offer (T1-24, T4-06, T3-19)', () => {
-  assert.equal(fullActionName('long', 'Tyrese Maxey'), 'Roster full: drop a player to add Tyrese Maxey');
-  assert.equal(fullActionName('short', 'Luka Doncic'), 'Shorts full: close a short to short Luka Doncic');
+  // Walk 8 T1-11: the name starts with the button's words, "Full, make room".
+  assert.equal(fullActionName('long', 'Tyrese Maxey'), 'Full, make room: drop a player to add Tyrese Maxey');
+  assert.equal(fullActionName('short', 'Luka Doncic'), 'Full, make room: close a short to short Luka Doncic');
   for (const side of ['long', 'short'] as const) {
     // The visible word is in the name (voice control); the harness's offer test misses it.
     assert.match(fullActionName(side, 'x'), /full/i);
@@ -615,8 +617,9 @@ test('the slot line never breaks mid-phrase (walk 4 T1-11)', () => {
   assert.equal(slotLine('short', { used: 0, limit: 1 }), '0\u00A0of\u00A01 short');
   // One break point each: after the count, after the amount.
   assert.equal(slotLine('long', { used: 3, limit: 10 }).split(' ').length, 2);
-  assert.equal(feeLine('long', 250), '$250 to\u00A0add\u00A0or\u00A0drop');
-  assert.equal(feeLine('short', 250), '$250 to\u00A0short\u00A0or\u00A0close');
+  // Walk 8 T1-10: the amount stays with its words; any break falls inside them.
+  assert.equal(feeLine('long', 250), '$250\u00A0to add or\u00A0drop');
+  assert.equal(feeLine('short', 250), '$250\u00A0to short or\u00A0close');
   assert.equal(feeLine('long', 0), '');
 });
 

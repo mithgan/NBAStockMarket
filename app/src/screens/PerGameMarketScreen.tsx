@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import {
   FlatList,
   type NativeScrollEvent,
@@ -15,6 +15,7 @@ import type { PerGamePositionSide } from '../api/contracts';
 import { isMockActive, mockPlayerTrends, mockSeasonStart } from '../api/mockPerGameClient';
 import { FullNote } from '../components/market/FullNote';
 import { LockIcon, StarIcon } from '../components/market/icons';
+import { ListEnd, SkipLink } from '../components/market/SkipLink';
 import { listenForActivations, pressedInScreen } from '../components/market/lastActivation';
 import { spaceToggles } from '../components/market/switchKeys';
 import { useAriaDisabled } from '../components/market/useAriaDisabled';
@@ -49,6 +50,7 @@ import {
   feeLine,
   filterMarketRows,
   fullActionName,
+  FULL_BUTTON_WORDS,
   fullNote,
   headerStatus,
   heldDetail,
@@ -68,7 +70,9 @@ import {
   marketSortOptions,
   netTone,
   nextSortState,
+  otherSideSaving,
   slotLineBeside,
+  slotRoomFirst,
   foldedSlotBeside,
   fullTierFits,
   rowActions,
@@ -101,6 +105,7 @@ import {
   listHeading,
   surnameFontSize,
   searchFooterLine,
+  searchMatchLine,
   stillFilteredLine,
   valueLineParts,
   watchingLine,
@@ -147,6 +152,8 @@ const LOCK_LINE_ROOMY_WIDTH = 1280;
 const ROW_PAD = 6;
 /** A second press on Drop/Close this soon after it opened its question is the same tap bouncing (the Roster's 400 ms). */
 const QUESTION_DOUBLE_TAP_MS = 400;
+/** Folds the one FULL note that is open, if any (walk 8 T4-09: one at a time). */
+let openFullNote: (() => void) | null = null;
 
 /** The tag a player carries when he is held on a side. */
 function sideTag(side: PerGamePositionSide): 'On your roster' | 'Shorted' {
@@ -255,6 +262,9 @@ function MarketRow({
   onToggleWatch,
   dimmed = false,
   pending,
+  ownSaving,
+  busyElsewhere,
+  tableRoles = false,
   lastSlotTo,
   onClaimSlot,
   onReleaseSlot,
@@ -290,6 +300,12 @@ function MarketRow({
   dimmed?: boolean;
   /** This row's own move is on its way (or waiting its turn). */
   pending: boolean;
+  /** An Add pressed on this side of this screen is still saving: "Added ✓" holds, even after a side switch. */
+  ownSaving: boolean;
+  /** A row of the tall desktop's table (walk 8 T3-09): row and cells for screen readers. */
+  tableRoles?: boolean;
+  /** His Add (or Short) on the other side is still saving: busy here, with no button (walk 8 T4-07). */
+  busyElsewhere: { tag: string; reason: string } | null;
   /** Another player's Add still saving takes this side's last free slot: FULL now, says whose. */
   lastSlotTo: string | null;
   /** Claims a free slot for this row's press; the name of whose Add took the last one when none is left. */
@@ -358,10 +374,13 @@ function MarketRow({
   // laptop): "Added ✓" shows while the move is on its way, and a move that
   // fails reverts it while the notice says why.
   const [optimistic, setOptimistic] = useState<'open' | 'close' | null>(null);
-  const shownHeld = optimistic === 'open' ? true : optimistic === 'close' ? false : position !== null;
+  // Rows are keyed by side, so the tick stays on the side it was pressed on
+  // (walk 8 T4-07); coming back to that side while it saves shows it again.
+  const opening = optimistic === 'open' || (optimistic === null && ownSaving && !position);
+  const shownHeld = opening ? true : optimistic === 'close' ? false : position !== null;
   // Held for as long as the move is on its way (a queued move can outlast the
   // cooldown), then for the cooldown once it lands.
-  const justOpened = optimistic === 'open' || (cooling && lastAction.current === 'open' && position !== null);
+  const justOpened = opening || (cooling && lastAction.current === 'open' && position !== null);
   const justClosed = optimistic === 'close' || (cooling && lastAction.current === 'close' && position === null);
 
   // Drop and Close ask in a strip under the row (fee, what stays, what coming
@@ -389,24 +408,22 @@ function MarketRow({
   useEffect(() => {
     if (!fullOffer) setNoting(false);
   }, [fullOffer]);
+  // One FULL note open at a time: opening another folds the last one, which
+  // leaves focus where it is, on the new note (walk 8 T4-09).
+  const [foldNote] = useState(() => () => setNoting(false));
+  useEffect(() => {
+    if (!noting) return undefined;
+    if (openFullNote && openFullNote !== foldNote) openFullNote();
+    openFullNote = foldNote;
+    return () => {
+      if (openFullNote === foldNote) openFullNote = null;
+    };
+  }, [noting, foldNote]);
   useEffect(() => {
     if (confirming || noting || !refocus.current) return;
     refocus.current = false;
     (actionRef.current as unknown as { focus?: () => void } | null)?.focus?.();
   }, [confirming, noting]);
-  // The button rests (dimmed, taps ignored, still in the Tab order) while it
-  // cannot act, and says so to assistive tech. With its question open it does
-  // not rest: it looks pressed, as on the Roster, and a second tap folds the
-  // question like Keep (walk 6 T4-05, T1-14: dashed read as "you can't").
-  const resting = disabled || justOpened || justClosed;
-  useAriaDisabled(actionRef, resting);
-  const askedAt = useRef(0);
-  useEffect(() => {
-    const node = actionRef.current as unknown as { setAttribute?: (name: string, value: string) => void; removeAttribute?: (name: string) => void } | null;
-    if (!node?.setAttribute || !node.removeAttribute) return;
-    if (position) node.setAttribute('aria-expanded', confirming ? 'true' : 'false');
-    else node.removeAttribute('aria-expanded');
-  });
   const word = actionWord({
     side,
     held: shownHeld,
@@ -416,14 +433,45 @@ function MarketRow({
     justOpened,
     justClosed,
   });
+  // FULL is a way to make room, not a switched-off button (walk 8 T1-11): a
+  // live, solid-edged button whose press opens the note. LOCKED rests, dashed.
+  const fullButton = word === 'Full' && fullOffer;
+  // The button rests (dimmed, taps ignored, still in the Tab order) while it
+  // cannot act, and says so to assistive tech. With its question open it does
+  // not rest: it looks pressed, as on the Roster, and a second tap folds the
+  // question like Keep (walk 6 T4-05, T1-14: dashed read as "you can't").
+  const resting = (disabled || justOpened || justClosed) && !fullButton;
+  useAriaDisabled(actionRef, resting);
+  const askedAt = useRef(0);
+  useEffect(() => {
+    const node = actionRef.current as unknown as { setAttribute?: (name: string, value: string) => void; removeAttribute?: (name: string) => void } | null;
+    if (!node?.setAttribute || !node.removeAttribute) return;
+    // Only Drop/Close (its question) and FULL (its note) open something; the
+    // "Added ✓" beat is neither, so it is never "collapsed" (walk 8 T3-04).
+    if (position && !resting) node.setAttribute('aria-expanded', confirming ? 'true' : 'false');
+    else if (fullButton) node.setAttribute('aria-expanded', noting ? 'true' : 'false');
+    else node.removeAttribute('aria-expanded');
+  });
+  // A double tap opens the note once (a toggle, walk 6 T4-11).
+  const toggleNote = repeatSafe(() => {
+    dismissNotice();
+    setNoting((open) => !open);
+  });
 
   // One line of meaning under the name: your stake when you hold him on this
   // side, the other side's tag when that blocks this side, otherwise last
   // season against his price today.
   const signal = valueSignal(player, side);
   const held = position ? heldDetail(currentValue, position.lockedGameCost) : null;
-  const blocked = row.blockedByOpposingPosition && !position;
-  const tagText = position ? sideTag(side) : blocked ? sideTag(side === 'long' ? 'short' : 'long') : null;
+  // His move on the other side still saving: shown as he will be once it
+  // saves (no button here), in place, saying it is on its way.
+  const busy = busyElsewhere !== null && !position && !row.blockedByOpposingPosition;
+  const blocked = (row.blockedByOpposingPosition || busy) && !position;
+  const tagText = position
+    ? sideTag(side)
+    : busy && busyElsewhere
+      ? busyElsewhere.tag
+      : blocked ? sideTag(side === 'long' ? 'short' : 'long') : null;
   const table = layout === 'table';
   const large = layout === 'large';
   const actionWidth = table ? columns.action : PHONE_ACTION_WIDTH;
@@ -539,7 +587,7 @@ function MarketRow({
       : position && held
         ? `${tagText}, ${held.text}, ${heldValuePhrase(player, side, position.lockedGameCost)}`
         : [signal.lead?.replace(/ ·$/, ''), signal.text].filter(Boolean).join(', '),
-    reason: blocked ? row.unavailableReason : null,
+    reason: blocked ? (busy && busyElsewhere ? busyElsewhere.reason : row.unavailableReason) : null,
     // A held row's name leads with your price, as the row shows it.
     locked: position && !blocked ? position.lockedGameCost : null,
   });
@@ -551,8 +599,10 @@ function MarketRow({
   };
   // At season end the row is quiet: no button at all, and the header's one
   // line says the season is over.
+  const cellRole = table && tableRoles ? ({ role: 'cell' } as object) : {};
   const action = !rowActions(seasonOver) ? null : (
     <View
+      {...cellRole}
       accessibilityState={{ disabled }}
       style={[
         styles.actionCell,
@@ -581,27 +631,24 @@ function MarketRow({
                   : fullActionName(side, player.name)
                 : actionName(position ? 'close' : 'open', side, player.name, currentGameCost)}
           // While the confirm strip is open the row's own button looks
-          // pressed and a later tap folds it (a bounce does nothing). FULL
-          // and LOCKED rest, drawn alike (dashed, full-contrast words): not
-          // now, press to learn why (walk 4 T4-14, T1-24).
+          // pressed and a later tap folds it (a bounce does nothing). LOCKED
+          // rests (dashed, full-contrast words): not now, press to learn why
+          // (walk 4 T4-14, T1-24). FULL is live: it opens its note.
           disabled={resting}
           // "Added ✓" / "Dropped ✓": a move that just worked, in the success
           // colour, never the dashed "unavailable" look (walk 4 T2-03).
           done={justOpened || justClosed}
           focusableWhenDisabled
-          onDisabledPress={fullOffer
+          // LOCKED answers a tap with why and when, as on the Roster.
+          onDisabledPress={rosterLocked ? () => notify(lockNotice(rosterLockGameDate)) : undefined}
+          label={fullButton ? FULL_BUTTON_WORDS : word}
+          onPress={() => {
             // FULL opens a note under the row: why, and "Choose who to drop".
             // One message at a time: it replaces the last notice (walk 3 T3-15).
-            ? () => {
-              dismissNotice();
-              setNoting((open) => !open);
+            if (fullButton) {
+              toggleNote();
+              return;
             }
-            // LOCKED answers a tap with why and when, as on the Roster.
-            : rosterLocked
-              ? () => notify(lockNotice(rosterLockGameDate))
-              : undefined}
-          label={word}
-          onPress={() => {
             if (disabled) return;
             if (justOpened || justClosed) return;
             if (confirming) {
@@ -646,8 +693,8 @@ function MarketRow({
             }
           }}
           // "Dropped ✓" and "Shorted ✓" fit the phone button on one line (walk 5 T4-03).
-          style={[!table && styles.phoneButton, !table && (justOpened || justClosed) && styles.phoneButtonDone, confirming && styles.buttonArmed]}
-          textStyle={[styles.buttonText, (justOpened || justClosed) && styles.buttonTextDone, confirming && styles.buttonTextArmed]}
+          style={[!table && styles.phoneButton, !table && (justOpened || justClosed || fullButton) && styles.phoneButtonDone, confirming && styles.buttonArmed, fullButton && noting && styles.buttonArmed]}
+          textStyle={[styles.buttonText, (justOpened || justClosed) && styles.buttonTextDone, fullButton && styles.buttonTextFull, (confirming || (fullButton && noting)) && styles.buttonTextArmed]}
           width={large ? undefined : actionWidth}
         />
       )}
@@ -738,10 +785,37 @@ function MarketRow({
 
   if (table) {
     const tableEdge = rowValueEdge(player, side, position);
+    // The table's cells as a screen reader moves through them (walk 8
+    // T3-09): the star, the player (his profile button), each figure in its
+    // column, the button. The figures drawn inside the profile button are
+    // its presentational children, so each column also gets a said-only cell.
+    const yoursWords = position && currentValue && currentValue.avgNet !== null && currentValue.games > 0
+      ? `${signedMoneyCompact(currentValue.avgNet)}, ${currentValue.games === 1 ? '1 game' : `${currentValue.games} games`}`
+      : position
+        ? 'No games yet'
+        : pastValue && pastValue.avgNet !== null && pastValue.games > 0
+          ? `${signedMoneyCompact(pastValue.avgNet)}, ${pastValue.games === 1 ? '1 past game' : `${pastValue.games} past games`}`
+          : 'not held';
+    const saidCells = tableRoles ? [
+      position ? `${money(position.lockedGameCost)}, ${heldPriceCaption(position.lockedGameCost, currentGameCost)}` : money(currentGameCost),
+      priorSeasonValuePerGame === null ? 'no last season' : moneyCompact(priorSeasonValuePerGame),
+      tableEdge === null
+        ? 'no last season'
+        : `${netTone(tableEdge) === 'even' ? 'Even' : signedMoneyCompact(tableEdge)}${position ? ', at your price' : ''}`,
+      ...(columns.yours > 0 ? [yoursWords] : []),
+    ] : [];
+    // A strip or note under the row spans the table's width as a row of its own.
+    const spanCount = 5 + (columns.yours > 0 ? 1 : 0) + (action ? 1 : 0);
+    const fullRow = (node: ReactNode) => (node && tableRoles ? (
+      <View role="row">
+        <View role="cell" {...({ 'aria-colspan': spanCount } as object)}>{node}</View>
+      </View>
+    ) : node);
     return (
       <>
-      <View style={[styles.row, styles.rowTable]} {...playerMarker(player.playerId)}>
+      <View style={[styles.row, styles.rowTable]} {...playerMarker(player.playerId)} {...(tableRoles ? ({ role: 'row' } as object) : {})}>
         {dimmed ? <View pointerEvents="none" style={styles.dimMarker} /> : null}
+        <View style={styles.starWrap} {...cellRole}>
         <Pressable
           ref={starRef}
           accessibilityLabel={`Watch ${player.name}`}
@@ -755,6 +829,8 @@ function MarketRow({
         >
           <StarIcon filled={watched} size={18} />
         </Pressable>
+        </View>
+        <View style={styles.profileWrap} {...cellRole}>
         <Pressable
           accessibilityLabel={label}
           accessibilityRole="button"
@@ -844,11 +920,17 @@ function MarketRow({
             </View>
           ) : null}
         </Pressable>
+        </View>
+        {saidCells.map((words, index) => (
+          <View key={index} role="cell" style={visuallyHidden}>
+            <Text>{words}</Text>
+          </View>
+        ))}
         {action}
       </View>
-      {keptLine}
-      {strip}
-      {note}
+      {fullRow(keptLine)}
+      {fullRow(strip)}
+      {fullRow(note)}
       </>
     );
   }
@@ -979,11 +1061,14 @@ export function PerGameMarketScreen({
   // Opened from the keyboard, the panel puts focus in its search box, so
   // typing searches at once (walk 6 T3-02); a tap leaves focus where it was.
   const openedByKey = useRef(false);
-  const toggleControls = useCallback(() => {
+  // A double tap opens it once and leaves it open (walk 8 T4-05: in
+  // landscape the second tap shut it again at 150 and 250 ms), as the other
+  // toggles do; a key press always acts.
+  const toggleControls = useMemo(() => repeatSafe(() => {
     const opening = !controlsOpenRef.current;
     openedByKey.current = opening && !pressedByPointer();
     setControlsOpen(opening);
-  }, []);
+  }), []);
   const controlsOpenRef = useRef(controlsOpen);
   controlsOpenRef.current = controlsOpen;
   // Escape anywhere in the open panel, the toggle included, folds it and
@@ -1035,6 +1120,8 @@ export function PerGameMarketScreen({
   }, [allRows, bootstrap, side, claims, pendingActions]);
   const slotRef = useRef(slotView);
   slotRef.current = slotView;
+  // One object per side, so a busy row's props compare equal between snapshots.
+  const busyTag = useMemo(() => otherSideSaving(side), [side]);
   const claimSlot = useCallback((rowSide: PerGamePositionSide, playerId: string): string | null => {
     const view = slotRef.current;
     if (view.side !== rowSide) return null;
@@ -1168,6 +1255,11 @@ export function PerGameMarketScreen({
 
   // Your place in the list: the first player you can see, and the offset.
   const listRef = useRef<FlatList<PerGameMarketRow>>(null);
+  // "Skip to the end of the list" lands here (walk 8 T3-I1).
+  const listEndRef = useRef<View>(null);
+  const skipToEnd = useCallback(() => {
+    (listEndRef.current as unknown as { focus?: () => void } | null)?.focus?.();
+  }, []);
   const place = useRef({ anchorId: remembered.anchorId, offset: remembered.offset });
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
@@ -1311,10 +1403,12 @@ export function PerGameMarketScreen({
     }
     const note = watchNote.current;
     watchNote.current = null;
-    const line = listCountLine({ query: searchText, count: spokenCount, total: totalCount, watchedOnly, cleared });
+    // Names the button that is really there: "Show all 30" under a list,
+    // "Show everyone" in an empty one (walk 8 T2-07).
+    const line = listCountLine({ query: searchText, count: spokenCount, total: totalCount, watchedOnly, cleared, listed: resultCount });
     const timer = setTimeout(() => announce(note ? `${note} ${line}` : line), note ? 150 : 700);
     return () => clearTimeout(timer);
-  }, [searchText, spokenCount, totalCount, watchedOnly, announce]);
+  }, [searchText, spokenCount, totalCount, watchedOnly, announce, resultCount]);
   // Opened with a search or the Watching filter still on (coming back to the
   // Market): said once, so a listener knows why the list is short (walk 7
   // T3-19); the line under the list shows it too.
@@ -1406,7 +1500,7 @@ export function PerGameMarketScreen({
       ]}
       // In the folded column a flex basis would become a height, so it only sizes rows.
       stacked={width < 140}
-      style={rowToolbar || foldWide ? styles.sideToggleWide : folded || !slotLineBeside(width) ? undefined : styles.sideToggle}
+      style={rowToolbar || foldWide ? styles.sideToggleWide : folded || !slotLineBeside(width) ? undefined : [styles.sideToggle, slotRoomFirst(width) && styles.sideToggleSnug]}
       value={side}
     />
   );
@@ -1420,9 +1514,23 @@ export function PerGameMarketScreen({
   const slotRight = slotBeside && !rowToolbar && !folded;
   // Folded and too narrow to share the search button's row: a line of its own.
   const slotOwnLine = folded && !foldWide && !foldedSlotBeside(width);
+  // Adds still saving on this side count, so the number matches the ticks
+  // (walk 8 T2-08); the saving line sits over an invisible copy of the plain
+  // one, so the toolbar keeps its height while you tap.
+  const savingCount = slotView.side === side ? slotView.saving.length : 0;
+  const slotTextStyle = [styles.slotText, slotRight && styles.textRight];
+  const slotCount = savingCount > 0 ? (
+    <View style={styles.slotSaving}>
+      <SameHeight ghosts={[<Text key="plain" maxFontSizeMultiplier={1.4} style={slotTextStyle}>{slotLine(side, { used: Math.min(slots.used + savingCount, slots.limit), limit: slots.limit })}</Text>]}>
+        <Text maxFontSizeMultiplier={1.4} style={slotTextStyle}>{slotLine(side, slots, savingCount)}</Text>
+      </SameHeight>
+    </View>
+  ) : (
+    <Text maxFontSizeMultiplier={1.4} style={slotTextStyle}>{slotLine(side, slots)}</Text>
+  );
   const slotStatus = (
     <View style={[styles.slotStatus, !slotBeside && styles.slotStatusUnder, rowToolbar && styles.slotStatusWide, rowToolbar && width >= LOCK_LINE_ROOMY_WIDTH && styles.slotStatusRoomy, folded && !slotOwnLine && styles.slotStatusFolded]}>
-      <Text maxFontSizeMultiplier={1.4} style={[styles.slotText, slotRight && styles.textRight]}>{slotLine(side, slots)}</Text>
+      {slotCount}
       {status.kind === 'lock' ? (
         <View style={styles.lockLine}>
           <LockIcon />
@@ -1439,6 +1547,9 @@ export function PerGameMarketScreen({
   );
   // "Search players" is cut in the narrow field below 360px (walk 5 T4-13).
   const searchPlaceholder = width < 360 ? 'Search' : 'Search players';
+  const searchMatch = folded && controlsOpen && !foldWide
+    ? searchMatchLine(query, rows.map((row) => row.player.name))
+    : null;
   const sortToggle = (
     <SortControl
       onChoose={chooseSort}
@@ -1464,6 +1575,31 @@ export function PerGameMarketScreen({
     <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{side === 'short' ? shortWords : ROSTER_EXPLAINER}</Text>
   );
 
+  // Anything else inside the table (a divider, the footer, an empty list)
+  // is a row of its own, one cell across (walk 8 T3-09).
+  const tableSpan = 5 + (columns.yours > 0 ? 1 : 0) + (rowActions(seasonOver) ? 1 : 0);
+  const spanRow = (node: ReactElement | null): ReactElement | null => (pinned && node ? (
+    <View role="row">
+      <View role="cell" {...({ 'aria-colspan': tableSpan } as object)}>{node}</View>
+    </View>
+  ) : node);
+  const columnHeader = wide ? (
+    <MarketColumnHeader
+      // The button column's header, said only.
+      actionHeader={side === 'long' ? 'Add or drop' : 'Short or close'}
+      // No button column at season end, so the labels line up with quiet rows.
+      columns={rowActions(seasonOver) ? columns : { ...columns, action: 0 }}
+      // One name for this figure everywhere: the toolbar's sort, this
+      // header and its accessible name all say "Value".
+      valueLabel="Value"
+      lead={STAR_LEAD}
+      onChoose={chooseSort}
+      onFlip={flipOrder}
+      reversed={reversed}
+      sort={sort}
+      tableRoles={pinned}
+    />
+  ) : null;
   const listHeader = (
     <View style={styles.header}>
       <View style={visuallyHidden}>
@@ -1500,6 +1636,9 @@ export function PerGameMarketScreen({
             ) : (
               <>
                 <MarketSearch focusOnMount={openedByKey.current} onChange={setQuery} onEscapeEmpty={closeControls} placeholder={searchPlaceholder} value={query} />
+                {/* What the search found, in view while you type: the open
+                    panel fills a 200% zoom screen (walk 8 T3-11). */}
+                {searchMatch ? <Text maxFontSizeMultiplier={1.4} style={styles.watchingFooterText}>{searchMatch}</Text> : null}
                 {sortToggle}
                 {watchingToggle}
               </>
@@ -1508,7 +1647,7 @@ export function PerGameMarketScreen({
         </View>
       ) : (
         <View style={styles.controls}>
-          <View style={[styles.controlRow, !slotBeside && styles.controlStack]}>
+          <View style={[styles.controlRow, !slotBeside && styles.controlStack, slotRoomFirst(width) && styles.controlRowSnug]}>
             {sideToggle}
             {slotStatus}
           </View>
@@ -1547,20 +1686,10 @@ export function PerGameMarketScreen({
           <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="secondary" />
         </View>
       ) : null}
-      {wide ? (
-        <MarketColumnHeader
-          // No button column at season end, so the labels line up with quiet rows.
-          columns={rowActions(seasonOver) ? columns : { ...columns, action: 0 }}
-          // One name for this figure everywhere: the toolbar's sort, this
-          // header and its accessible name all say "Value".
-          valueLabel="Value"
-          lead={STAR_LEAD}
-          onChoose={chooseSort}
-          onFlip={flipOrder}
-          reversed={reversed}
-          sort={sort}
-        />
-      ) : null}
+      {/* After the toolbar, before the column labels: past the thirty rows in
+          one press (two or three Tab stops each, walk 8 T3-I1). */}
+      {resultCount > 0 ? <SkipLink label="Skip to the end of the list" onPress={skipToEnd} /> : null}
+      {wide && !pinned ? columnHeader : null}
       {/* A heading to jump to the players, with their count (walk 7 T3-13). */}
       {resultCount > 0 ? (
         <View style={visuallyHidden}>
@@ -1619,7 +1748,9 @@ export function PerGameMarketScreen({
 
   // Under a Watching list, the count and the way back to everyone, on screen
   // as well as aloud (walk 6 T1-12: 450px of empty space under two rows).
-  const watchingFooter = watchedOnly && !trimmed && spokenCount > 0 ? (
+  // Kept (unwatched, dimmed) rows count here: with every listed row
+  // unwatched, "Show all 30" is still the way back (walk 8 T2-07).
+  const watchingFooter = watchedOnly && !trimmed && resultCount > 0 ? (
     <View style={[styles.watchingFooter, { paddingHorizontal: wide ? space.lg : space.md }]}>
       <Text maxFontSizeMultiplier={1.4} style={styles.watchingFooterText}>{watchingLine(spokenCount)}</Text>
       <Button
@@ -1648,15 +1779,26 @@ export function PerGameMarketScreen({
   return (
     <>
       {pinned ? listHeader : null}
+      {/* On a tall desktop the column labels and the rows are one table for
+          screen readers (walk 8 T3-09); the labels stay put over the rows. */}
+      <View style={styles.list} {...(pinned ? ({ role: 'table', 'aria-label': listHeading(side, spokenCount, totalCount) } as object) : {})}>
+      {pinned && columnHeader ? <View style={styles.tableHeader}>{columnHeader}</View> : null}
       <FlatList
         contentContainerStyle={styles.content}
         data={rows}
         extraData={[layout, columns, positionValues, pastValues, fee, width, seasonOver, watchlist.watched, kept, watchedOnly]}
         initialNumToRender={Math.min(Math.max(rows.length, 18), WHOLE_LIST_MAX)}
         keyboardShouldPersistTaps="handled"
-        keyExtractor={(row) => row.player.playerId}
-        ListEmptyComponent={emptyState}
-        ListFooterComponent={watchingFooter ?? searchFooter}
+        // One row per side: a press's "Added ✓" never follows him to the
+        // other side's row (walk 8 T4-07).
+        keyExtractor={(row) => `${row.side}:${row.player.playerId}`}
+        ListEmptyComponent={spanRow(emptyState)}
+        ListFooterComponent={(
+          <>
+            {spanRow(resultCount > 0 ? <ListEnd label="End of the list" ref={listEndRef} /> : null)}
+            {spanRow(watchingFooter ?? searchFooter)}
+          </>
+        )}
         ListHeaderComponent={pinned ? null : listHeader}
         onScroll={onScroll}
         onScrollToIndexFailed={({ index, averageItemLength }) => {
@@ -1671,6 +1813,9 @@ export function PerGameMarketScreen({
         ref={listRef}
         renderItem={({ item }) => {
           const actionKey = `position:${item.side}:${item.player.playerId}`;
+          const otherKey = `position:${item.side === 'long' ? 'short' : 'long'}:${item.player.playerId}`;
+          const savingElsewhere = !item.position && !item.blockedByOpposingPosition
+            && (claims.includes(otherKey) || pendingActions.has(otherKey) || pendingActions.has(`queued:${otherKey}`));
           // Players held on the other side sit at the end whatever the sort;
           // a line says why, so the order does not look broken (walk 5 T2-19).
           const divider = item.player.playerId === firstBlockedId ? (
@@ -1684,7 +1829,7 @@ export function PerGameMarketScreen({
           ) : null;
           return (
           <>
-          {divider}
+          {spanRow(divider)}
           <MemoMarketRow
             columns={columns}
             currentValue={item.position ? positionValues.get(item.position.positionId) : undefined}
@@ -1703,6 +1848,8 @@ export function PerGameMarketScreen({
             pastValue={item.position ? undefined : pastValues.get(item.player.playerId)}
             row={item}
             pending={pendingActions.has(actionKey) || pendingActions.has(`queued:${actionKey}`)}
+            ownSaving={claims.includes(actionKey)}
+            busyElsewhere={savingElsewhere ? busyTag : null}
             lastSlotTo={item.position ? null : lastSlotTakenBy(slotView.remaining, slotView.saving, item.player.playerId)}
             onClaimSlot={claimSlot}
             onReleaseSlot={releaseSlot}
@@ -1710,6 +1857,7 @@ export function PerGameMarketScreen({
             rosterLockGameDate={lockDate}
             slotLimit={slots.limit}
             moves={moves}
+            tableRoles={pinned}
           />
           </>
           );
@@ -1719,6 +1867,7 @@ export function PerGameMarketScreen({
         style={styles.list}
         windowSize={9}
       />
+      </View>
       <View style={visuallyHidden}>
         <Text accessibilityLiveRegion="polite">{announcement}</Text>
       </View>
@@ -1751,6 +1900,11 @@ const styles = StyleSheet.create({
     // Pinned above the list, it stays over the rows on the web.
     zIndex: 1,
   },
+  tableHeader: {
+    backgroundColor: colors.surface,
+    // Its column notes open upward, over the toolbar's sentence.
+    zIndex: 2,
+  },
   controls: {
     gap: space.sm,
     paddingHorizontal: space.lg,
@@ -1762,6 +1916,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: space.sm,
+  },
+  controlRowSnug: {
+    // The slot lines are right-aligned, so a 4px gap still reads as space.
+    columnGap: space.xs,
   },
   controlStack: {
     flexDirection: 'column',
@@ -1819,6 +1977,12 @@ const styles = StyleSheet.create({
   sideToggleWide: {
     width: 212,
   },
+  sideToggleSnug: {
+    // 340-389px: the slot column takes the room first, so the fee phrase
+    // keeps one line (walk 8 T1-10); "ROSTER SIDE" still fits at 196px.
+    flexGrow: 0,
+    flexBasis: 196,
+  },
   slotStatus: {
     flexGrow: 1,
     flexShrink: 1,
@@ -1828,6 +1992,9 @@ const styles = StyleSheet.create({
   },
   textRight: {
     textAlign: 'right',
+  },
+  slotSaving: {
+    alignSelf: 'stretch',
   },
   slotStatusUnder: {
     alignItems: 'flex-start',
@@ -2026,6 +2193,16 @@ const styles = StyleSheet.create({
     // The watch star sits before the avatar (see STAR_LEAD).
     paddingLeft: space.sm,
   },
+  starWrap: {
+    // The star's cell: it keeps the star centred on the row, as before.
+    justifyContent: 'center',
+  },
+  profileWrap: {
+    // The player's cell takes the row's room; the profile button fills it.
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+  },
   starCell: {
     width: control.height,
     minHeight: control.height,
@@ -2055,10 +2232,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   kickerPriceLine: {
-    // One line: the given name is cut short before the price or the tier
-    // moves (walk 6 T4-06).
+    // One line while the given name fits beside the price; a longer one is
+    // never cut (walk 8 T3-07: "KARL…" at 320px): the price keeps the top
+    // right and the whole given name takes the line under it, just above
+    // the surname. (wrap-reverse puts the wrapped price line on top.)
     flexDirection: 'row',
-    flexWrap: 'nowrap',
+    flexWrap: 'wrap-reverse',
     alignItems: 'baseline',
     columnGap: space.sm,
   },
@@ -2232,6 +2411,11 @@ const styles = StyleSheet.create({
   },
   buttonTextDone: {
     letterSpacing: 0,
+  },
+  buttonTextFull: {
+    // "FULL" over "MAKE ROOM", both whole in the 76px phone button.
+    letterSpacing: 0,
+    lineHeight: 14,
   },
   // The Roster's "question open" look: this is what you are deciding.
   buttonArmed: {
