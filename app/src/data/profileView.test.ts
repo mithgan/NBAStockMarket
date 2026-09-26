@@ -1042,8 +1042,11 @@ test('the Price view leads with two cells and one plain line; the move is the ca
   assert.equal(priceCompare('short', 236_000, 225_000).cells[1].label, 'New shorts get');
   const night = (date: string, market: number): ProfileNight => ({ date, dividend: 300_000, price: 259_000, net: 41_000, source: 'yours', market });
   const barnes = [night('2025-10-22', 259_600), night('2025-10-27', 259_700)];
-  assert.equal(priceMoveLine(barnes, 259_800, '2025-10-22'), 'Market price up 0.1% since his first game with you.');
-  assert.equal(priceMoveLine(barnes, 259_600, null), 'Market price the same as at his Oct 22 game.');
+  // The caption reads the plotted line, first point to last (walk 10 T1-09).
+  assert.equal(priceMoveLine(barnes, 259_800, '2025-10-22'), 'Market price the same at his latest game as at his first game with you.');
+  assert.equal(priceMoveLine(barnes, 259_600, null), 'Market price the same at his latest game as at his Oct 22 game.');
+  // One game draws no line: measured to today's price, as before.
+  assert.equal(priceMoveLine(barnes.slice(0, 1), 259_800, '2025-10-22'), 'Market price up 0.1% since his first game with you.');
   assert.equal(priceMoveLine([{ date: '2025-10-22', dividend: 1, price: 2, net: -1, source: 'market' }], 3, null), null, 'no market price: no line');
 });
 
@@ -1103,4 +1106,12 @@ test('LOW sits just above its own bar like HIGH, never under the $0 axis (walk 9
   const under = profileChartModel(dip.map((value, index) => bar(days[index], value)), 'dividends', 300, 176, insets);
   const dipLow = extremeLabels(under, dip, 300, 176, (value) => moneyFine(value)).find((label) => label.kind === 'LOW');
   assert.ok(dipLow && dipLow.y > under.bars[1].y + under.bars[1].height, 'under the end of a bar below $0');
+});
+
+test('the Price caption matches its plotted line, not today\'s price (walk 10 T1-09)', () => {
+  const night = (date: string, market: number): ProfileNight => ({ date, dividend: 400_000, price: 418_500, net: 0, source: 'yours', market });
+  // The tester's Luka: $418.5K at Oct 21, $413.5K at Oct 27, new buyers pay $418.2K today.
+  const luka = [night('2025-10-21', 418_500), night('2025-10-23', 416_000), night('2025-10-27', 413_500)];
+  assert.equal(priceMoveLine(luka, 418_200, '2025-10-21'), 'Market price down 1.2% from his first game with you to his latest.');
+  assert.equal(priceMoveLine(luka.slice(1), 418_200, '2025-10-21'), 'Market price down 0.6% from his Oct 23 game to his latest.');
 });

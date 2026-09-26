@@ -20,6 +20,11 @@ import {
   revealScroll,
   playerFeedSource,
   closeScroll,
+  clearOfBottom,
+  mathTitle,
+  stickyNightIndices,
+  newestPlace,
+  NEWEST_CORNER_RESERVE,
   monthAnchors,
   nightSummaryWrapped,
   settlementLines,
@@ -852,4 +857,50 @@ test('Results comes back to the night you were reading, unless there is news (wa
   assert.equal(resumeNight(place, { lastSettled: '2026-04-13', filtered: false, nightDates }), null, 'new games since: the newest night');
   assert.equal(resumeNight(place, { lastSettled: '2026-04-12', filtered: true, nightDates }), null, "one player's games start at his newest");
   assert.equal(resumeNight(place, { lastSettled: '2026-04-12', filtered: false, nightDates: nightDates.slice(0, 2) }), null, 'a night no longer listed');
+});
+
+test('far down, Back to newest docks under the list, or waits in a corner in a short window (walk 10 T3-06)', () => {
+  assert.equal(newestPlace({ wide: true, height: 200 }), 'side');
+  // A phone at 200% zoom keeps the dock with the month.
+  assert.equal(newestPlace({ wide: false, height: 422 }), 'dock');
+  // A laptop at 400% zoom (320x200): a 44px corner button, not a 60px bar.
+  assert.equal(newestPlace({ wide: false, height: 200 }), 'corner');
+  assert.equal(NEWEST_CORNER_RESERVE, 52);
+});
+
+test('a focused row the way back would hide scrolls into the clear, its top kept in view (walk 10 T3-06)', () => {
+  // Clear already: nothing moves.
+  assert.equal(clearOfBottom({ top: 60, bottom: 100, viewTop: 48, viewBottom: 312 }), 0);
+  // The dock arrived under a focused row: it rises by what the dock hides.
+  assert.equal(clearOfBottom({ top: 238, bottom: 362, viewTop: 70, viewBottom: 312 }), 50);
+  // The corner button: the row ends above its reserve.
+  assert.equal(clearOfBottom({ top: 60, bottom: 100, viewTop: 48, viewBottom: 155, reserve: 52 }), 0);
+  assert.equal(clearOfBottom({ top: 70, bottom: 110, viewTop: 48, viewBottom: 155, reserve: 52 }), 7);
+  // Taller than the room: its top (name and figure) stays at the top of the list.
+  assert.equal(clearOfBottom({ top: 74, bottom: 155, viewTop: 48, viewBottom: 155, reserve: 52 }), 26);
+  // Its top already under the frame: back down to show the name.
+  assert.equal(clearOfBottom({ top: 34, bottom: 118, viewTop: 48, viewBottom: 155, reserve: 52 }), -14);
+  // Scrolled away by hand: never pulled back.
+  assert.equal(clearOfBottom({ top: -300, bottom: -220, viewTop: 48, viewBottom: 155, reserve: 52 }), 0);
+  assert.equal(clearOfBottom({ top: 600, bottom: 680, viewTop: 48, viewBottom: 155, reserve: 52 }), 0);
+});
+
+test('an opened row whose headline gave way carries a one-line title (walk 10 T3-10)', () => {
+  assert.equal(mathTitle({ name: 'Scottie Barnes', side: 'long', date: '2025-10-27', net: 121_000 }), 'Scottie Barnes · Oct 27 · +$121K');
+  assert.equal(mathTitle({ name: 'Cade Cunningham', side: 'short', date: '2025-10-24', net: 72_500 }), 'Cade Cunningham, short · Oct 24 · +$72.5K');
+  assert.equal(mathTitle({ name: 'Luka Doncic', side: 'long', date: null, net: null }), 'Luka Doncic');
+  assert.equal(mathTitle({ name: 'Luka Doncic', side: 'long', date: '2025-10-21', net: 0.2 }), 'Luka Doncic · Oct 21 · $0');
+});
+
+test('in a tall window each night header stays pinned while its rows scroll (walk 10 T4-N3)', () => {
+  const night = (date: string) => ({ type: 'night', key: `n-${date}`, night: { date } }) as unknown as ResultsFeedItem;
+  const row = (key: string) => ({ type: 'result', key, date: '', result: {} }) as unknown as ResultsFeedItem;
+  const items = [night('2026-03-08'), row('a'), row('b'), night('2026-03-07'), row('c')];
+  assert.deepEqual(stickyNightIndices(items, 844), [0, 3]);
+  // The phone list's title block comes first: the list counts it.
+  assert.deepEqual(stickyNightIndices(items, 844, 1), [1, 4]);
+  // 200% (422px) and 400% (200px): rows keep the height.
+  assert.equal(stickyNightIndices(items, 422), undefined);
+  assert.equal(stickyNightIndices(items, 200), undefined);
+  assert.equal(stickyNightIndices([row('a')], 844), undefined);
 });

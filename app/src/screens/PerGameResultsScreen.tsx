@@ -52,6 +52,11 @@ import {
   resumeNight,
   revealScroll,
   closeScroll,
+  clearOfBottom,
+  mathTitle,
+  newestPlace,
+  NEWEST_CORNER_RESERVE,
+  stickyNightIndices,
   playerFeedSource,
   type MonthAnchor,
   type NightSummary,
@@ -198,6 +203,7 @@ function ResultRow({
   playerName,
   result,
   rule,
+  titled = false,
 }: {
   equation: SettlementEquation;
   expanded: boolean;
@@ -208,6 +214,8 @@ function ResultRow({
   playerName: string;
   result: PerGameSettledResult;
   rule: DividendRule;
+  /** Its headline gave way above the math (high zoom): the math carries a one-line title. */
+  titled?: boolean;
 }) {
   const wrapRef = useRef<View>(null);
   const buttonRef = useRef<View>(null);
@@ -343,6 +351,12 @@ function ResultRow({
             },
           } : {}) as object}
         >
+          {titled ? (
+            // Seen only: the group's name already says it to screen readers.
+            <Text aria-hidden style={styles.mathTitle}>
+              {mathTitle({ name: playerName, side: result.side, date: result.gameDate, net: model.net })}
+            </Text>
+          ) : null}
           <SettlementBreakdown basis={basis} lines={math.lines} net={math.net} side={result.side} wide={columns} />
         </View>
       ) : null}
@@ -425,6 +439,33 @@ function FeeActivityRow({
 /** The element id of a day's header, so a month jump can move focus to it. */
 function nightAnchorId(date: string): string {
   return `results-day-${date || 'undated'}`;
+}
+
+/**
+ * Where a day's header sits in the feed (web). Pinned under the frame (a tall
+ * window, walk 10 T4-N3) it reads as at the top wherever the feed is: its
+ * place is right under the cell before it.
+ */
+function naturalTop(node: HTMLElement, scroller: HTMLElement): number {
+  let cell: HTMLElement | null = node;
+  while (cell && cell !== scroller && getComputedStyle(cell).position !== 'sticky') cell = cell.parentElement;
+  if (!cell || cell === scroller) return node.getBoundingClientRect().top;
+  const before = cell.previousElementSibling;
+  return before ? before.getBoundingClientRect().bottom : cell.getBoundingClientRect().top;
+}
+
+/**
+ * The top of the feed a row can be read from (web): under the day header
+ * pinned there, if any (walk 10 T4-N3), else the feed's own top edge.
+ */
+function readableTop(scroller: HTMLElement): number {
+  const top = Math.max(scroller.getBoundingClientRect().top, 0);
+  let below = top;
+  scroller.querySelectorAll<HTMLElement>('[id^="results-day-"]').forEach((header) => {
+    const box = header.getBoundingClientRect();
+    if (box.top <= top + 1 && box.bottom > below) below = box.bottom;
+  });
+  return below;
 }
 
 /**
@@ -616,7 +657,7 @@ function settleOnDay(
   const node = document.getElementById(id);
   let held = steady;
   if (scroller && node) {
-    const off = node.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    const off = naturalTop(node, scroller) - scroller.getBoundingClientRect().top;
     const below = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
     if (Math.abs(off) <= 1 || (off > 0 && below <= 1)) {
       held += 1;
@@ -713,7 +754,7 @@ function useInsetRing() {
 export function PerGameResultsScreen() {
   useInsetRing();
   const { bootstrap } = usePerGame();
-  const { fontScale, width } = useWindowDimensions();
+  const { fontScale, width, height } = useWindowDimensions();
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   // Days whose fee rows are listed; every "Roster moves" line starts folded.
   const [openFees, setOpenFees] = useState<ReadonlySet<string>>(() => new Set());
@@ -767,9 +808,19 @@ export function PerGameResultsScreen() {
   // What the reading place is recorded against, for the viewability callback.
   const placeNow = useRef({ visible, filtered: false, lastSettled: null as string | null });
   placeNow.current = { visible, filtered: onlyId !== null, lastSettled: bootstrap?.game.lastSettledDate ?? null };
+  // A tall window pins the night you are reading under the frame (walk 10
+  // T4-N3); phones count the title block above the feed.
+  const stickyIndices = useMemo(
+    () => stickyNightIndices(visible, height, width >= DESKTOP_MIN_WIDTH ? 0 : 1),
+    [visible, height, width],
+  );
+  const stickyNow = useRef(false);
+  stickyNow.current = stickyIndices !== undefined;
   const moves = useMemo(() => movesByDay(feed), [feed]);
   const anchors = useMemo(() => monthAnchors(visible), [visible]);
-  const extraData = useMemo(() => ({ expanded, openFees }), [expanded, openFees]);
+  // The opened row whose headline gave way (high zoom): its math carries a one-line title.
+  const [titled, setTitled] = useState<string | null>(null);
+  const extraData = useMemo(() => ({ expanded, openFees, titled }), [expanded, openFees, titled]);
   // A row opens and closes on the same spot: a double tap's second tap used
   // to close the math it had just opened (walk 6 T4-11), so it acts once.
   // Opening one also asks it to bring its math into view once it is drawn.
@@ -797,7 +848,8 @@ export function PerGameResultsScreen() {
     if (!scroller || typeof scroller.scrollBy !== 'function' || !row || typeof row.getBoundingClientRect !== 'function') return;
     const view = scroller.getBoundingClientRect();
     const box = row.getBoundingClientRect();
-    const viewTop = Math.max(view.top, 0);
+    // Under the night header pinned at the top, when there is one.
+    const viewTop = stickyNow.current ? readableTop(scroller) : Math.max(view.top, 0);
     const behavior = stillMotion.current ? 'auto' : 'smooth';
     if (!open) {
       const back = closeScroll({ rowTop: box.top, viewTop });
@@ -814,9 +866,14 @@ export function PerGameResultsScreen() {
       viewBottom: Math.min(view.bottom, window.innerHeight),
     });
     if (by > 0) scroller.scrollBy({ top: by, behavior });
+    const math = row.lastElementChild as HTMLElement | null;
+    // The headline scrolls away above the math (high zoom): the math shows
+    // whose it is on a line of its own (walk 10 T3-10).
+    const gaveWay = by > 0 && headline !== null && math !== null && math !== headline
+      && headline.getBoundingClientRect().bottom - by <= viewTop + 1;
+    setTitled(gaveWay ? key : null);
     // The row that holds focus scrolls out of view (400% zoom): focus goes
     // to its math, which Escape returns from (walk 9 T3-10).
-    const math = row.lastElementChild as HTMLElement | null;
     const active = typeof document === 'undefined' ? null : document.activeElement;
     if (by > 0 && headline && math && math !== headline && active && headline.contains(active)
       && headline.getBoundingClientRect().bottom - by <= viewTop + 1) {
@@ -931,6 +988,73 @@ export function PerGameResultsScreen() {
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
   }, [far, wideScreen]);
+  // Far down, the way back docks under the list, or (a short window, e.g.
+  // 400% zoom) waits in its corner (walk 10 T3-06). As it arrives, and on each
+  // Tab while it is there, the row the keyboard is on ends in the clear above
+  // it instead of cut off under it.
+  const place = newestPlace({ wide: wideScreen, height });
+  useEffect(() => {
+    if (!far || place === 'side' || typeof document === 'undefined') return undefined;
+    // Clear of the corner button with room for the focus ring drawn around a row.
+    const reserve = place === 'corner' ? NEWEST_CORNER_RESERVE + 4 : 0;
+    const scroller = () => (listRef.current as unknown as { getScrollableNode?: () => unknown } | null)
+      ?.getScrollableNode?.() as HTMLElement | null | undefined;
+    const clear = () => {
+      const node = scroller();
+      const active = document.activeElement as HTMLElement | null;
+      if (!node || !active || active === node || !node.contains(active)) return;
+      if (typeof active.matches === 'function' && !active.matches(':focus-visible')) return;
+      const view = node.getBoundingClientRect();
+      const box = active.getBoundingClientRect();
+      const by = clearOfBottom({
+        top: box.top,
+        bottom: box.bottom,
+        // Under the night header pinned at the top, when there is one.
+        viewTop: stickyNow.current ? readableTop(node) : view.top,
+        viewBottom: Math.min(view.bottom, window.innerHeight),
+        reserve,
+      });
+      if (by !== 0) node.scrollBy({ top: by });
+    };
+    let frame = requestAnimationFrame(clear);
+    const onFocus = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(clear);
+    };
+    const node = scroller();
+    node?.addEventListener('focusin', onFocus);
+    return () => {
+      cancelAnimationFrame(frame);
+      node?.removeEventListener('focusin', onFocus);
+    };
+  }, [far, place]);
+  // A row the keyboard lands on is never left under the pinned night header:
+  // Shift+Tab up the feed scrolls it into the clear below the header.
+  const sticky = stickyIndices !== undefined;
+  useEffect(() => {
+    if (!sticky || typeof document === 'undefined') return undefined;
+    const node = (listRef.current as unknown as { getScrollableNode?: () => unknown } | null)
+      ?.getScrollableNode?.() as HTMLElement | null | undefined;
+    if (!node) return undefined;
+    let frame = 0;
+    const clear = () => {
+      const active = document.activeElement as HTMLElement | null;
+      if (!active || active === node || !node.contains(active) || active.id.startsWith('results-day-')) return;
+      if (typeof active.matches === 'function' && !active.matches(':focus-visible')) return;
+      const under = readableTop(node) - active.getBoundingClientRect().top;
+      if (under > 0.5) node.scrollBy({ top: -Math.round(under) });
+    };
+    const onFocus = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(clear);
+    };
+    node.addEventListener('focusin', onFocus);
+    return () => {
+      cancelAnimationFrame(frame);
+      node.removeEventListener('focusin', onFocus);
+    };
+    // A layout switch (desktop, phone, short window) draws the list anew.
+  }, [sticky, place]);
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = event.nativeEvent.contentOffset.y > Math.max(600, listHeight.current * FAR_SCREENS);
     setFar((was) => (was === next ? was : next));
@@ -1019,6 +1143,7 @@ export function PerGameResultsScreen() {
         playerName={perGamePlayerName(bootstrap, item.result.playerId, item.result.positionId)}
         result={item.result}
         rule={rule}
+        titled={titled === item.key}
       />
     );
   };
@@ -1128,6 +1253,7 @@ export function PerGameResultsScreen() {
       onViewableItemsChanged={onViewableItemsChanged}
       renderItem={renderItem}
       scrollEventThrottle={100}
+      stickyHeaderIndices={stickyIndices}
       style={[styles.list, landing ? styles.listLanding : styles.listLanded]}
       viewabilityConfig={viewabilityConfig}
       windowSize={landing ? JUMP_BATCH : 9}
@@ -1188,6 +1314,25 @@ export function PerGameResultsScreen() {
   const here = width >= DOCK_MONTH_MIN_WIDTH
     ? anchors.find((anchor) => anchor.key === currentMonth)?.name ?? null
     : null;
+  // A short window (400% zoom): no bar across the list, a small button in its
+  // corner; the feed keeps the rows the keyboard lands on clear of it.
+  if (place === 'corner') {
+    return (
+      <View style={styles.screen}>
+        {list}
+        {far ? (
+          <View style={[styles.corner, { right: edges(layout).right }]}>
+            <Button
+              accessibilityLabel="Back to the newest night"
+              label="↑ Newest"
+              onPress={backToNewest}
+            />
+          </View>
+        ) : null}
+        {profile}
+      </View>
+    );
+  }
   return (
     <View style={styles.screen}>
       {list}
@@ -1290,6 +1435,11 @@ const styles = StyleSheet.create({
   sideBack: {
     marginTop: space.lg,
     alignItems: 'flex-start',
+  },
+  // 400% zoom: the way back in the list's corner, over its bottom padding.
+  corner: {
+    position: 'absolute',
+    bottom: NEWEST_CORNER_RESERVE - 44,
   },
   // Phone: over the list's bottom padding, clear of the last row.
   dock: {
@@ -1451,6 +1601,13 @@ const styles = StyleSheet.create({
   },
   breakdown: {
     paddingBottom: space.md,
+  },
+  mathTitle: {
+    paddingTop: space.sm,
+    color: colors.text,
+    fontFamily: fonts.body,
+    fontSize: type.body,
+    fontWeight: weight.bold,
   },
   rowBody: {
     minWidth: 0,

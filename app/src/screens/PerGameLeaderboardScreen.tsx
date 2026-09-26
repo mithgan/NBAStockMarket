@@ -21,6 +21,7 @@ import {
   type Standing,
 } from '../data/leadersView';
 import { isSeasonOver } from '../data/marketView';
+import { rankLine } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
 import { colors, fonts, headingStyle, labelStyle, space, type, weight } from '../theme';
 import { EmptyState, headingLevel, Tag, visuallyHidden } from '../ui/kit';
@@ -195,6 +196,7 @@ function PastSeasons({ lines }: { lines: readonly PastSeasonLine[] }) {
                 <NetMoney size="body" value={line.score} />
                 {line.place ? <Text style={styles.pastPlace}>{line.place}</Text> : null}
               </View>
+              {line.note ? <Text style={styles.pastNote}>{line.note}</Text> : null}
             </Seen>
           </View>
         ))}
@@ -292,8 +294,13 @@ export function PerGameLeaderboardScreen() {
       {practiceRivals ? <Text style={styles.subtitle}>Practice rivals are computer players.</Text> : null}
     </View>
   );
-  // Practice only: the seasons finished earlier this visit.
-  const seasons = isMockActive() ? pastSeasonLines(readPastSeasons(practiceSession)) : [];
+  // Practice only: the seasons finished earlier this visit, and this one as
+  // soon as it is over (the place as the season's record will keep it).
+  const finishedOn = bootstrap.game.lastSettledDate;
+  const finishedNow = final && finishedOn
+    ? { score: bootstrap.account.cumulativePnl, rank: rankLine(bootstrap.leaderboard), finishedOn }
+    : null;
+  const seasons = isMockActive() ? pastSeasonLines(readPastSeasons(practiceSession), finishedNow) : [];
   const standingBlock = (
     <StandingBlock
       accountScore={bootstrap.account.cumulativePnl}
@@ -444,6 +451,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     columnGap: space.sm,
+  },
+  // "This season", on its own line under the season that just finished.
+  pastNote: {
+    flexBasis: '100%',
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
   },
   pastPlace: {
     color: colors.muted,

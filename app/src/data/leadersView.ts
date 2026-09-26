@@ -271,12 +271,13 @@ export function feesOnly(lag: number, feeDollars?: number): number | null {
 
 /**
  * Why the board's figure for you differs from your score, or null when the
- * two read the same. The board counts moves once the next games settle, so a
- * gap of whole fees names both figures and the fee between them (walk 9
- * T2-10: "The board adds today's $250 fee" beside two equal "+$194K" read
- * like a second charge to come): "Board +$194.3K · your score +$194K: today's
- * $250 fee joins the board after the next games." Anything else keeps the
- * board's figure. Screen readers hear it through `spokenLagLine`.
+ * two read the same. The board counts moves once the next games settle. A
+ * gap of whole fees: the You row already shows your score, so the note names
+ * the fee and no second score (walk 10 T1-08, T2-09: a "Board +$101.8K"
+ * figure appeared nowhere on the board): "Your score includes today's $250
+ * fee; rivals' scores change after the next games." Anything else keeps the
+ * board's figure, which the You row shows too. Screen readers hear it
+ * through `spokenLagLine`.
  */
 export function lagLine(standing: Standing, feeDollars?: number): string | null {
   const lag = boardLag(standing);
@@ -286,19 +287,19 @@ export function lagLine(standing: Standing, feeDollars?: number): string | null 
   // Two figures that read alike: a note between them would only confuse.
   if (board === yours) return null;
   const fees = feesOnly(lag, feeDollars);
-  const both = `Board ${board} · your score ${yours}`;
-  if (fees === 1) return `${both}: today's ${money(-lag)} fee joins the board after the next games.`;
-  if (fees !== null) return `${both}: today's ${money(-lag)} in fees join the board after the next games.`;
+  const later = "rivals' scores change after the next games.";
+  if (fees === 1) return `Your score includes today's ${money(-lag)} fee; ${later}`;
+  if (fees !== null) return `Your score includes today's ${money(-lag)} in fees; ${later}`;
   return `The board still has you at ${board} until the next games settle.`;
 }
 
 /**
- * `lagLine` as a screen reader hears it after "your score +$194K": the score
- * is not said twice ("Board +$194.3K: today's $250 fee joins the board after
- * the next games").
+ * `lagLine` as a screen reader hears it after "your score +$194K": "which
+ * includes today's $250 fee; …", no closing full stop, and a score is never
+ * said twice.
  */
 export function spokenLagLine(line: string): string {
-  return line.replace(/ · your score [^:]+/, '').replace(/\.$/, '');
+  return line.replace(/ · your score [^:]+/, '').replace(/^Your score includes /, 'which includes ').replace(/\.$/, '');
 }
 
 // ---------------------------------------------------------------------------
@@ -320,6 +321,8 @@ export interface PastSeasonLine {
   key: string;
   /** "Season 2": numbered in the order played this visit. */
   label: string;
+  /** "This season" under the season that just finished on screen, else null. */
+  note: string | null;
   score: number;
   /** "#1 of 5", or null when the season ended off the board. */
   place: string | null;
@@ -356,20 +359,27 @@ export function readPastSeasons(session: unknown): PastSeason[] {
  * score and place, newest first, numbered in the order they were played (the
  * list comes oldest first). Seasons finished on the same day keep that
  * order, so a practice calendar's shared last day still sorts right.
+ *
+ * `finishedNow` is the season on screen once it is over: it joins the list at
+ * once, marked "this season" (walk 10 T2-15: it appeared only after the next
+ * season began). Alone it adds nothing the final standing does not say, so it
+ * joins only a list that already has a season.
  */
-export function pastSeasonLines(seasons: readonly PastSeason[]): PastSeasonLine[] {
-  return seasons
-    .map((season, index) => ({ season, number: index + 1 }))
+export function pastSeasonLines(seasons: readonly PastSeason[], finishedNow: PastSeason | null = null): PastSeasonLine[] {
+  const all = finishedNow && seasons.length > 0 ? [...seasons, finishedNow] : seasons;
+  return all
+    .map((season, index) => ({ season, number: index + 1, now: season === finishedNow }))
     .sort((left, right) => right.season.finishedOn.localeCompare(left.season.finishedOn) || right.number - left.number)
-    .map(({ season, number }) => {
+    .map(({ season, number, now }) => {
       const score = Math.round(season.score) === 0 ? '$0' : signedMoney(season.score);
       const place = season.rank && season.rank.trim() ? season.rank.trim() : null;
       return {
         key: `season-${number}`,
         label: `Season ${number}`,
+        note: now ? 'This season' : null,
         score: season.score,
         place,
-        spoken: `Season ${number}: ${score}${place ? `, ${spokenRanks(place)}` : ''}`,
+        spoken: `Season ${number}${now ? ', this season' : ''}: ${score}${place ? `, ${spokenRanks(place)}` : ''}`,
       };
     });
 }

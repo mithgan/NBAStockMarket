@@ -238,7 +238,7 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
         // Switch the bar, don't trade: the terms, the main button and the
         // profile's figures change, and focus moves to that button.
         onSwitchSide(otherSide);
-        setTimeout(() => focusView(openRef.current), 0);
+        setTimeout(() => focusView(openRef.current, true), 0);
       })}
       style={styles.instead}
       variant="quiet"
@@ -305,8 +305,13 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
   );
 }
 
-function focusView(node: unknown) {
-  (node as { focus?: (options?: object) => void } | null)?.focus?.({ preventScroll: true });
+function focusView(node: unknown, reveal = false) {
+  const view = node as { focus?: (options?: object) => void; scrollIntoView?: (options?: object) => void } | null;
+  view?.focus?.({ preventScroll: true });
+  // The bar's new main button after a side switch comes fully into view: the
+  // bar grows a line or two, and on a short window (a phone at 200% zoom) its
+  // lower edge and focus ring sat under the bottom of the screen (walk 10 T3-12).
+  if (reveal) view?.scrollIntoView?.({ block: 'nearest' });
 }
 
 /**

@@ -26,7 +26,7 @@ import type {
   PerGameSettledResult,
   DividendBasis,
 } from '../api/contracts';
-import { exactMoney } from '../copy/terms';
+import { exactMoney, humanDate, signedMoney } from '../copy/terms';
 import type { SettlementEquation } from '../state/perGameState';
 import { currentResults, entryDay, nightTotals, summarizeValue } from './perGameMetrics';
 
@@ -602,6 +602,79 @@ export function revealScroll({ rowTop, rowBottom, mathTop = rowTop, viewTop, vie
  */
 export function closeScroll({ rowTop, viewTop }: { rowTop: number; viewTop: number }): number {
   return rowTop < viewTop - 0.5 ? Math.round(rowTop - viewTop) : 0;
+}
+
+/**
+ * An opened row's math, when its headline has given way at high zoom (walk
+ * 10 T3-10): one line that says whose it is, "Scottie Barnes · Oct 27 ·
+ * +$121K", so the math never stands without its name. A short says so.
+ */
+export function mathTitle({ name, side, date, net }: {
+  name: string;
+  side: PerGamePositionSide;
+  date: string | null;
+  net: number | null;
+}): string {
+  return [
+    side === 'short' ? `${name}, short` : name,
+    date ? humanDate(date) : null,
+    net === null ? null : Math.round(net) === 0 ? '$0' : signedMoney(net),
+  ].filter(Boolean).join(' · ');
+}
+
+/**
+ * Far down a long season the rows at the top had no date on screen (walk 10
+ * T4-N3): in a tall enough window each night's header stays pinned under the
+ * frame while its rows scroll under it, and the next night's header takes its
+ * place. A short window (a phone at 200%, a laptop at 400%) keeps its height
+ * for the rows. The list's own indices: `offset` is 1 when a list header
+ * comes first (the FlatList counts it).
+ */
+export const STICKY_NIGHTS_MIN_HEIGHT = 500;
+
+export function stickyNightIndices(items: readonly ResultsFeedItem[], height: number, offset = 0): number[] | undefined {
+  if (height < STICKY_NIGHTS_MIN_HEIGHT) return undefined;
+  const indices = items.flatMap((item, index) => (item.type === 'night' ? [index + offset] : []));
+  return indices.length > 0 ? indices : undefined;
+}
+
+/**
+ * Far down the feed, where "Back to newest" goes (walk 10 T3-06): the desktop
+ * side column; a dock under the list with the month; or, in a short window (a
+ * laptop at 400% zoom leaves about 200px), a small corner button, so the list
+ * keeps its height instead of a 60px bar taking half of what is left.
+ */
+export type NewestPlace = 'side' | 'dock' | 'corner';
+/** Shorter windows than this get the corner button. */
+export const NEWEST_CORNER_MAX_HEIGHT = 360;
+/** The corner button's height and the gap under it: the feed keeps rows clear of it. */
+export const NEWEST_CORNER_RESERVE = 44 + 8;
+
+export function newestPlace({ wide, height }: { wide: boolean; height: number }): NewestPlace {
+  if (wide) return 'side';
+  return height < NEWEST_CORNER_MAX_HEIGHT ? 'corner' : 'dock';
+}
+
+/**
+ * A focused row the list's edges now hide (the way back just arrived under
+ * it, or a Tab put it there): how far to scroll so it ends `reserve` px above
+ * the list's bottom, never pushing its top out of view; a row taller than the
+ * room keeps its top (name and figure) in view. Negative is up; 0 when it is
+ * already clear, or not on screen at all (a row scrolled away by hand is
+ * never pulled back).
+ */
+export function clearOfBottom({ top, bottom, viewTop, viewBottom, reserve = 0 }: {
+  top: number;
+  bottom: number;
+  viewTop: number;
+  viewBottom: number;
+  reserve?: number;
+}): number {
+  if (bottom <= viewTop || top >= viewBottom) return 0;
+  if (top < viewTop - 0.5) return Math.round(top - viewTop);
+  const over = bottom - (viewBottom - reserve);
+  if (over <= 0.5) return 0;
+  return Math.max(0, Math.round(Math.min(over, top - viewTop)));
 }
 
 /**

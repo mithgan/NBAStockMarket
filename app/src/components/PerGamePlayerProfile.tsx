@@ -48,7 +48,6 @@ import {
   formVerdict,
   headerPrice,
   holdingStatus,
-  moveSaving,
   defaultRange,
   isRecentRange,
   lastSeasonValue,
@@ -247,10 +246,12 @@ export function PerGamePlayerProfile({
   );
   // No games yet: say since when ("No games since you added him (Oct 20)");
   // "at this price" only when he already played for you at another price.
-  const { bootstrap, pendingActions } = usePerGame();
-  // While his move saves the header says so, as the bar does (walk 8 T4-11).
+  const { bootstrap } = usePerGame();
+  // While his move saves, the action bar says so once ("Adding…" and "Saving
+  // your add of Luka Doncic…"); the header keeps saying where you stand until
+  // it lands (walk 10 T4-09: three lines said one thing).
   // Held: the header leads with your price and this line names the market's (walk 9 T1-01).
-  const status = holdingStatus(position, viewSide, moveSaving(pendingActions, viewSide, player.playerId), player.currentGameCost);
+  const status = holdingStatus(position, viewSide, false, player.currentGameCost);
   const ledger = bootstrap?.ledger.items;
   const opened = useMemo(() => (position ? {
     since: positionOpenedDay(ledger ?? [], position.positionId),

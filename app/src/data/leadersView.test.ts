@@ -309,8 +309,8 @@ test('a board figure that differs only by fees says why, and the row shows one f
   // The tester's case: -$121.3K your score, the board's -$121K before the $250 drop fee.
   const rows = board([['Ava', 300_000], ['Ben', 100_000], ['Cal', -50_000], ['You', -121_050, true], ['Dee', -400_000]]);
   const standing = leaderStanding(rows, -121_300);
-  assert.equal(lagLine(standing, 250), "Board -$121K · your score -$121.3K: today's $250 fee joins the board after the next games.");
-  assert.equal(lagLine(leaderStanding(rows, -121_550), 250), "Board -$121K · your score -$121.5K: today's $500 in fees join the board after the next games.");
+  assert.equal(lagLine(standing, 250), "Your score includes today's $250 fee; rivals' scores change after the next games.");
+  assert.equal(lagLine(leaderStanding(rows, -121_550), 250), "Your score includes today's $500 in fees; rivals' scores change after the next games.");
   // Anything but whole fees keeps the board's own figure.
   assert.equal(lagLine(leaderStanding(rows, -121_300), 300), 'The board still has you at -$121K until the next games settle.');
   assert.equal(lagLine(leaderStanding(rows, -121_050), 250), null, 'in step: no line');
@@ -330,8 +330,8 @@ test('the fee note names both figures, and only when they read apart (walk 9 T2-
   // The tester's case: +$194.25K on the board, a $250 add since: +$194K.
   const rows = board([['Ava', 203_190], ['You', 194_250, true], ['Ben', 20_000], ['Cal', -5_000], ['Dee', -90_000]]);
   const line = lagLine(leaderStanding(rows, 194_000), 250);
-  assert.equal(line, "Board +$194.3K · your score +$194K: today's $250 fee joins the board after the next games.");
-  assert.equal(spokenLagLine(line ?? ''), "Board +$194.3K: today's $250 fee joins the board after the next games", 'the score is said just before it');
+  assert.equal(line, "Your score includes today's $250 fee; rivals' scores change after the next games.");
+  assert.equal(spokenLagLine(line ?? ''), "which includes today's $250 fee; rivals' scores change after the next games", 'said after the score, never a second one');
   // A fee that leaves both figures reading "+$1.23M": nothing to compare, no note.
   const big = board([['Ava', 2_000_000], ['You', 1_234_567, true]]);
   assert.equal(lagLine(leaderStanding(big, 1_234_317), 250), null);
@@ -349,4 +349,32 @@ test('a level board lists you first, then everyone else A to Z (walk 9 T2-05)', 
   // Once the games settle the board's own order returns.
   const played = board([['Fast Break FC', 90_000], ['Deep Threes', 40_000], ['You', 10_000, true]]);
   assert.deepEqual(boardList(played, 10_000).map((entry) => entry.row.displayName), ['Fast Break FC', 'Deep Threes', 'You']);
+});
+
+test('Leaders shows one figure for your score: the fee note names no board figure the board does not show (walk 10 T1-08, T2-09)', () => {
+  // The tester's case: +$101.75K on the board, a $250 add since: +$101.5K on the You row.
+  const rows = board([['Ava', 202_900], ['You', 101_750, true], ['Ben', 20_000], ['Cal', -5_000], ['Dee', -90_000]]);
+  const standing = leaderStanding(rows, 101_500);
+  const line = lagLine(standing, 250) ?? '';
+  const you = boardList(rows, 101_500, 250).find((entry) => entry.row.isCurrentUser);
+  assert.equal(you?.score, 101_500);
+  assert.equal(you?.boardScore, null, 'the You row shows one figure');
+  // Every score the note names is one the board shows: none at all.
+  assert.doesNotMatch(line, /[+-]\$101\.8K|Board/);
+  assert.match(line, /includes today's \$250 fee/);
+  assert.doesNotMatch(spokenLagLine(line), /\$101/);
+});
+
+test('the season that just finished joins "Your seasons this visit" at once, marked this season (walk 10 T2-15)', async () => {
+  const { pastSeasonLines } = await import('./leadersView');
+  const first = { score: 5_500_000, rank: '#1 of 5', finishedOn: '2026-04-12' };
+  const now = { score: 783_800, rank: '#3 of 5', finishedOn: '2026-04-12' };
+  const lines = pastSeasonLines([first], now);
+  assert.deepEqual(lines.map((line) => [line.label, line.note]), [['Season 2', 'This season'], ['Season 1', null]]);
+  assert.equal(lines[0].spoken, 'Season 2, this season: +$783.8K, third of 5');
+  assert.equal(lines[0].place, '#3 of 5');
+  // The first season alone: the final standing already says it, no list.
+  assert.deepEqual(pastSeasonLines([], now), []);
+  // Not over yet: the list as before.
+  assert.deepEqual(pastSeasonLines([first], null).map((line) => line.label), ['Season 1']);
 });

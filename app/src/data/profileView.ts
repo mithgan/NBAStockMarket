@@ -720,11 +720,22 @@ export function priceCompare(side: PerGamePositionSide, now: number, locked: num
       };
 }
 
-/** His market price's move over the games shown, as the chart's caption: "Market price up 0.1% since his first game with you." */
+/**
+ * His market price's move over the games shown, as the chart's caption, read
+ * from the line it sits under: its first point to its last (walk 10 T1-09: a
+ * caption measured to today's price said "down 0.1%" under a line that fell
+ * 1.2%). "Market price down 1.2% from his first game with you to his latest."
+ * One game draws no line: its caption measures to today's price.
+ */
 export function priceMoveLine(nights: readonly ProfileNight[], now: number, firstWithYou: string | null): string | null {
   const first = nights[0];
   if (!first || first.market === undefined) return null;
   const since = first.date === firstWithYou ? 'his first game with you' : `his ${humanDate(first.date)} game`;
+  const last = nights[nights.length - 1];
+  if (nights.length > 1 && last.market !== undefined) {
+    const change = priceChange(first.market, last.market);
+    return change ? `Market price ${change} from ${since} to his latest.` : `Market price the same at his latest game as at ${since}.`;
+  }
   const change = priceChange(first.market, now);
   return change ? `Market price ${change} since ${since}.` : `Market price the same as at ${since}.`;
 }
