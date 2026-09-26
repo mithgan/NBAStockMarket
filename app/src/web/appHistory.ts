@@ -88,8 +88,10 @@ export function useSheetHistory(visible: boolean, onClose: () => void): void {
     window.addEventListener('popstate', onPop);
     return () => {
       // The tap that closed the sheet (on the scrim) must not also press what
-      // was under the scrim, such as +1 night in a landscape phone's frame.
-      settleTaps(450);
+      // was under the scrim, such as +1 night in a landscape phone's frame:
+      // that spot is quieted. A click anywhere else, or anything after an
+      // Escape or Done, is a new choice and acts at once (walk 6 T2-01).
+      settleTaps(0, 450);
       window.removeEventListener('popstate', onPop);
       openSheets = Math.max(0, openSheets - 1);
       if (openSheets === 0) setBackgroundInert(false);
