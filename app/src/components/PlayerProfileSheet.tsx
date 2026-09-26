@@ -8,7 +8,7 @@ import type {
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
-import { panelDockRight } from '../data/profileView';
+import { panelDockRight, type ProfileMetric, type ProfileRange } from '../data/profileView';
 import type { TrendPoint } from '../data/trendPresentation';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useWatchlist } from '../state/watchlist';
@@ -81,6 +81,7 @@ export function PlayerProfileSheet({
   side,
   watching,
   onToggleWatch,
+  initialView,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -93,6 +94,8 @@ export function PlayerProfileSheet({
   side?: PerGamePositionSide;
   watching?: boolean;
   onToggleWatch?: () => void;
+  /** Opens in this chart view and range: Results' "Back to <player>" (walk 9 T1-17). */
+  initialView?: { metric: ProfileMetric; range: ProfileRange | null };
 }) {
   const reducedMotion = useReducedMotion();
   const ownWatchlist = useWatchlist();
@@ -133,6 +136,7 @@ export function PlayerProfileSheet({
       >
         <PerGamePlayerProfile
           dividendRate={dividendRate}
+          initialView={initialView}
           latestSettledDate={latestSettledDate}
           onClose={onClose}
           onToggleWatch={onToggleWatch ?? (() => ownWatchlist.toggle(playerId))}

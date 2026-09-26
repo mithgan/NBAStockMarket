@@ -3,7 +3,17 @@
  * player's games. The request waits here until Results takes it, so it lands
  * whether Results is on screen already or opens next.
  */
-export type PlayerGames = { playerId: string; playerName: string };
+import type { PerGamePositionSide } from '../../api/contracts';
+import type { ProfileMetric, ProfileRange } from '../../data/profileView';
+
+/**
+ * The profile as it was when "See his games" was pressed (walk 9 T1-17), so
+ * "Back to <player>" reopens him in the same view: the chart's metric, the
+ * range picked (null: his default) and the side read from.
+ */
+export type ProfileView = { metric: ProfileMetric; range: ProfileRange | null; side: PerGamePositionSide | null };
+
+export type PlayerGames = { playerId: string; playerName: string; from?: ProfileView };
 
 let pending: PlayerGames | null = null;
 const listeners = new Set<(request: PlayerGames) => void>();
@@ -27,4 +37,20 @@ export function onPlayerGames(listener: (request: PlayerGames) => void): () => v
   return () => {
     listeners.delete(listener);
   };
+}
+
+/**
+ * Set while Results shows one player's games asked for from his profile:
+ * reopens that profile in the view it was in. For the frame's Back (walk 9
+ * T1-17): Back from his games should return to his profile.
+ */
+let reopen: (() => boolean) | null = null;
+
+export function setProfileReopen(next: (() => boolean) | null): void {
+  reopen = next;
+}
+
+/** Reopen the profile "See his games" came from; false when Results has none to return to. */
+export function reopenGamesProfile(): boolean {
+  return reopen ? reopen() : false;
 }

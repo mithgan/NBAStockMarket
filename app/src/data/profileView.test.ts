@@ -7,6 +7,13 @@ import { shownEdge } from './marketView';
 import { positionValue } from './perGameMetrics';
 import {
   buildProfileNights,
+  extremeLabels,
+  headerPrice,
+  priceChartHeight,
+  priceCompare,
+  priceDriftCaption,
+  priceMoveLine,
+  PRICE_MIN_HEIGHT,
   chartDateLabels,
   chartLegend,
   chartSummary,
@@ -487,8 +494,9 @@ test('holding status and stake line say where you stand, from the same numbers a
   // A short leads with its own result (walk-1 T1-44).
   assert.deepEqual(stakeLine({ games: 3, total: -699_200 }, true, 'short'), { lead: 'Your short:', total: '-$699.2K over 3 games', tone: 'loss' });
   // No games yet (walk-2 T2-11): since when, and "at this price" only for a re-add.
-  assert.deepEqual(stakeLine({ games: 0, total: 0 }, true, 'long', { since: '2025-10-20' }), { lead: 'No games since you added him (Oct 20)', total: null, tone: 'none' });
-  assert.equal(stakeLine({ games: 0, total: 0 }, true, 'short', { since: '2025-10-20' })?.lead, 'No games since you shorted him (Oct 20)');
+  // "(Oct 20)" is bound with a no-break space, so it never splits at 320px (walk 9 T4-07).
+  assert.deepEqual(stakeLine({ games: 0, total: 0 }, true, 'long', { since: '2025-10-20' }), { lead: 'No games since you added him (Oct\u00a020)', total: null, tone: 'none' });
+  assert.equal(stakeLine({ games: 0, total: 0 }, true, 'short', { since: '2025-10-20' })?.lead, 'No games since you shorted him (Oct\u00a020)');
   assert.equal(stakeLine({ games: 0, total: 0 }, true)?.lead, 'No games since you added him');
   assert.deepEqual(stakeLine({ games: 0, total: 0 }, true, 'long', { since: '2025-10-25', readd: true }), { lead: 'No games yet at this price', total: null, tone: 'none' });
   assert.deepEqual(stakeLine({ games: 3, total: -60_000 }, false), { lead: 'Before, with you:', total: '-$60K over 3 games', tone: 'loss' });
@@ -1010,4 +1018,89 @@ test('on a monitor wider than the app, the profile panel docks to the app column
   assert.equal(panelDockRight(1200), 0);
   assert.equal(panelDockRight(1024), 0);
   assert.equal(panelDockRight(1921), 360, 'whole pixels');
+});
+
+test('a held player leads with your price, the market second (walk 9 T1-01)', () => {
+  const luka = { side: 'long' as const, lockedGameCost: 417_500, expiresOn: null };
+  assert.equal(headerPrice(luka, 418_500), 'Yours $417.5K a game');
+  assert.equal(headerPrice(null, 418_500), '$418.5K a game');
+  assert.deepEqual(holdingStatus(luka, 'long', false, 418_500), { tag: 'On your roster', text: 'Locked in, market now $418.5K' });
+  assert.deepEqual(holdingStatus(luka, 'long', false, 417_520), { tag: 'On your roster', text: 'Locked in, the same as the market' });
+  assert.deepEqual(holdingStatus({ side: 'short', lockedGameCost: 112_500, expiresOn: '2025-11-12' }, 'short', false, 115_000), {
+    tag: 'Shorted',
+    text: 'Credited each game, ends Nov 12, market now $115K',
+  });
+  // Saving still says so, whatever the market.
+  assert.equal(holdingStatus(luka, 'long', true, 418_500).text, 'Dropping him from your roster…');
+});
+
+test('the Price view leads with two cells and one plain line; the move is the caption (walk 9 T1-08)', () => {
+  assert.deepEqual(priceCompare('long', 259_800, 259_000), {
+    cells: [{ label: 'You pay', value: '$259K' }, { label: 'New buyers pay', value: '$259.8K' }],
+    line: 'Your price never changes while you hold him.',
+  });
+  assert.equal(priceCompare('short', 236_000, 225_000).cells[1].label, 'New shorts get');
+  const night = (date: string, market: number): ProfileNight => ({ date, dividend: 300_000, price: 259_000, net: 41_000, source: 'yours', market });
+  const barnes = [night('2025-10-22', 259_600), night('2025-10-27', 259_700)];
+  assert.equal(priceMoveLine(barnes, 259_800, '2025-10-22'), 'Market price up 0.1% since his first game with you.');
+  assert.equal(priceMoveLine(barnes, 259_600, null), 'Market price the same as at his Oct 22 game.');
+  assert.equal(priceMoveLine([{ date: '2025-10-22', dividend: 1, price: 2, net: -1, source: 'market' }], 3, null), null, 'no market price: no line');
+});
+
+test('a small price drift centres on your line on a shorter chart, with a caption (walk 9 T2-03)', () => {
+  const insets = { top: 12, right: 6, bottom: 12, left: 52 };
+  const night = (date: string, market: number, source: 'yours' | 'market' = 'yours'): ProfileNight => ({
+    date, dividend: 500_000, price: source === 'yours' ? 417_500 : market, net: 0, source, market,
+  });
+  // Doncic: $413.5K to $422.9K around your $417.5K.
+  const luka = [night('2025-10-21', 418_500), night('2025-10-24', 413_500), night('2025-10-28', 422_900), night('2025-11-03', 420_000)];
+  const height = priceChartHeight(luka, 176, insets);
+  assert.equal(height, PRICE_MIN_HEIGHT, 'a 1.3% drift draws on the shortest chart');
+  const model = profileChartModel(luka, 'price', 316, height, insets, 176);
+  const lockedY = Number(model.yourPricePath.split(' ')[2]);
+  assert.ok(Math.abs(lockedY - height / 2) < 0.5, `your line sits mid-chart (y ${lockedY} of ${height})`);
+  // The scale is the full chart's: a 1% move is as tall as on a 176px chart.
+  const full = profileChartModel(luka, 'price', 316, 176, insets, 176);
+  const tall = (m: typeof model) => m.anchors[2].y - m.anchors[1].y;
+  assert.ok(Math.abs(tall(model) - tall(full)) < 0.5, `the same scale (${tall(model)} vs ${tall(full)})`);
+  // Last 5 or With you: your line stays in the middle.
+  const lastTwo = profileChartModel(luka.slice(2), 'price', 316, priceChartHeight(luka.slice(2), 176, insets), insets, 176);
+  assert.ok(Math.abs(Number(lastTwo.yourPricePath.split(' ')[2]) - PRICE_MIN_HEIGHT / 2) < 0.5);
+  assert.equal(priceDriftCaption(luka), 'Within 1.3% of your price in these games.');
+  // A real move keeps the whole chart and says nothing about flatness.
+  const slide = [night('2025-10-21', 417_500), night('2025-11-03', 330_000)];
+  assert.equal(priceChartHeight(slide, 176, insets), 176);
+  assert.equal(priceDriftCaption(slide), null);
+  // Not held: the range of his prices.
+  const watched = [night('2025-10-21', 300_000, 'market'), night('2025-10-24', 303_000, 'market')];
+  assert.equal(priceDriftCaption(watched), 'A 1.0% range in these games.');
+  assert.equal(priceDriftCaption(luka.slice(0, 1)), null, 'one game: no caption');
+});
+
+test('LOW sits just above its own bar like HIGH, never under the $0 axis (walk 9 T2-02, T1-07)', () => {
+  const insets = { top: 22, right: 6, bottom: 20, left: 52 };
+  const bar = (date: string, dividend: number): ProfileNight => ({ date, dividend, price: 417_500, net: dividend - 417_500, source: 'yours' });
+  const days = ['2025-10-21', '2025-10-22', '2025-10-24', '2025-10-26', '2025-10-28', '2025-10-30', '2025-11-01', '2025-11-02', '2025-11-03'];
+  const values = [612_000, 428_000, 612_000, 520_000, 560_000, 430_000, 590_000, 450_000, 585_000];
+  const luka = days.map((date, index) => bar(date, values[index]));
+  const model = profileChartModel(luka, 'dividends', 356, 176, insets);
+  const labels = extremeLabels(model, values, 356, 176, (value) => moneyFine(value));
+  const low = labels.find((label) => label.kind === 'LOW');
+  const high = labels.find((label) => label.kind === 'HIGH');
+  assert.equal(low?.text, 'LOW $428K');
+  assert.ok(low && model.zeroY !== null && low.y < model.zeroY, `LOW (y ${low?.y}) is above the $0 axis (y ${model.zeroY})`);
+  assert.ok(low && low.y <= model.bars[low.index].y && low.y > model.bars[low.index].y - 12, 'just above its bar');
+  assert.ok(high && high.y <= model.bars[high.index].y);
+  // Two close values side by side step apart, HIGH on top.
+  const close = [500_000, 480_000, 490_000, 495_000, 485_000];
+  const tight = profileChartModel(close.map((value, index) => bar(days[index], value)), 'dividends', 300, 176, insets);
+  const [a, b] = extremeLabels(tight, close, 300, 176, (value) => moneyFine(value));
+  assert.deepEqual([a.kind, a.index, b.kind, b.index], ['HIGH', 0, 'LOW', 1], 'side by side');
+  assert.ok(b.y - a.y >= 13, `stepped apart (HIGH y ${a.y}, LOW y ${b.y})`);
+  assert.ok(a.y >= 12, 'inside the chart');
+  // A game below zero: LOW hangs under the end of its bar.
+  const dip = [200_000, -50_000, 150_000, 120_000, 90_000];
+  const under = profileChartModel(dip.map((value, index) => bar(days[index], value)), 'dividends', 300, 176, insets);
+  const dipLow = extremeLabels(under, dip, 300, 176, (value) => moneyFine(value)).find((label) => label.kind === 'LOW');
+  assert.ok(dipLow && dipLow.y > under.bars[1].y + under.bars[1].height, 'under the end of a bar below $0');
 });

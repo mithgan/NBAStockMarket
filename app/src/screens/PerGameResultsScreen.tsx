@@ -1,6 +1,7 @@
 import { Children, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -25,11 +26,12 @@ import {
   signedMoney,
   unbrokenName,
 } from '../copy/terms';
-import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
+import { isMockActive, mockPlayerTrends, mockSeasonStart } from '../api/mockPerGameClient';
 import { PlayerAvatar } from '../components/PlayerAvatar';
+import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
 import { Disclosure, DisclosureSpace, DISCLOSURE_WIDTH } from '../components/results/Disclosure';
 import { NetMoney } from '../components/results/NetMoney';
-import { onPlayerGames, takePlayerGames, type PlayerGames } from '../components/results/playerGames';
+import { onPlayerGames, setProfileReopen, takePlayerGames, type PlayerGames } from '../components/results/playerGames';
 import { SettlementBreakdown } from '../components/results/SettlementBreakdown';
 import { practiceProgress } from '../data/chromeView';
 import { isSeasonOver } from '../data/marketView';
@@ -47,11 +49,13 @@ import {
   nightTotalPending,
   readingMonth,
   resultRowModel,
+  resumeNight,
   revealScroll,
   closeScroll,
   playerFeedSource,
   type MonthAnchor,
   type NightSummary,
+  type ReadingPlace,
   type ResultRowModel,
   type ResultsFeedItem,
 } from '../data/resultsView';
@@ -206,6 +210,7 @@ function ResultRow({
   rule: DividendRule;
 }) {
   const wrapRef = useRef<View>(null);
+  const buttonRef = useRef<View>(null);
   useEffect(() => {
     onOpened?.(wrapRef.current, expanded);
     // Only a press counts (the feed checks); the callback changes every render.
@@ -305,6 +310,7 @@ function ResultRow({
   return (
     <View ref={wrapRef} style={[styles.rowLine, expanded && styles.rowOpen]}>
       <Pressable
+        ref={buttonRef}
         accessibilityHint={expanded ? 'Hides the math.' : 'Shows how this result was worked out.'}
         accessibilityLabel={label}
         accessibilityRole="button"
@@ -319,7 +325,24 @@ function ResultRow({
         {body}
       </Pressable>
       {expanded ? (
-        <View style={[styles.breakdown, { paddingLeft: edge.text, paddingRight: edge.right }]}>
+        <View
+          style={[styles.breakdown, { paddingLeft: edge.text, paddingRight: edge.right }]}
+          // At 400% the math comes to the top and its row scrolls away: focus
+          // moves here (its ring drawn inside) and Escape takes it back to
+          // the row (walk 9 T3-10; see revealOpened).
+          {...(Platform.OS === 'web' ? {
+            tabIndex: -1,
+            role: 'group',
+            'aria-label': `${label}: the math`,
+            dataSet: { ring: 'inset' },
+            onKeyDown: (event: { key: string; preventDefault: () => void; stopPropagation: () => void }) => {
+              if (event.key !== 'Escape') return;
+              event.preventDefault();
+              event.stopPropagation();
+              (buttonRef.current as unknown as HTMLElement | null)?.focus?.();
+            },
+          } : {}) as object}
+        >
           <SettlementBreakdown basis={basis} lines={math.lines} net={math.net} side={result.side} wide={columns} />
         </View>
       ) : null}
@@ -430,7 +453,9 @@ function NightHeader({ night, layout }: { night: NightSummary; layout: Layout })
       accessible
       nativeID={nightAnchorId(night.date)}
       {...headingLevel(2)}
-      {...({ tabIndex: -1 } as object)}
+      // A month jump lands focus here, flush with the feed's top and left
+      // edges: its ring is drawn inside, or it cannot be seen (walk 9 T3-09).
+      {...({ tabIndex: -1, dataSet: { ring: 'inset' } } as object)}
       style={[
         styles.groupHeader,
         { paddingLeft: edge.left, paddingRight: edge.right },
@@ -539,6 +564,13 @@ function firstStopAfter(node: HTMLElement): Element | null {
 
 /** Set while Results is on screen: scroll back to the newest night. */
 let showNewest: (() => void) | null = null;
+
+/**
+ * The night you were reading when Results last left the screen (walk 9
+ * T2-N6): tabs unmount their screen, so it is kept here, and Results opens
+ * there again by its tab unless new games have settled (`resumeNight`).
+ */
+let readingPlace: ReadingPlace | null = null;
 
 /**
  * Scroll Results back to its newest night (what re-pressing the active
@@ -661,7 +693,25 @@ function MonthJump({
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Web: Results' own focus targets draw their ring inside (walk 9 T3-09,
+ * T3-10), like the frame's full-width rows: a jumped-to night heading sits
+ * flush with the feed's edges and an opened row's math at its top, where
+ * the frame's outside ring was clipped. `[data-ring="inset"]` marks them.
+ */
+const INSET_RING_ID = 'results-inset-ring';
+function useInsetRing() {
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined' || document.getElementById(INSET_RING_ID)) return;
+    const style = document.createElement('style');
+    style.id = INSET_RING_ID;
+    style.textContent = '[data-ring="inset"][tabindex]:focus-visible { outline-offset: -3px !important; }';
+    document.head.appendChild(style);
+  }, []);
+}
+
 export function PerGameResultsScreen() {
+  useInsetRing();
   const { bootstrap } = usePerGame();
   const { fontScale, width } = useWindowDimensions();
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
@@ -675,6 +725,8 @@ export function PerGameResultsScreen() {
   // "See his games" from a profile (walk 8 T2-I4): one player's games until
   // "Show all players"; the default feed is every player's, as before.
   const [only, setOnly] = useState<PlayerGames | null>(() => takePlayerGames());
+  // Where you were reading when you left by another tab (walk 9 T2-N6).
+  const [resumeAt] = useState<ReadingPlace | null>(() => readingPlace);
   useEffect(() => onPlayerGames(() => {
     const request = takePlayerGames();
     if (request) setOnly(request);
@@ -695,8 +747,26 @@ export function PerGameResultsScreen() {
     setOnly(null);
     focusWhenReady(TITLE_ID);
   }), []);
+  // Asked for from his profile (walk 9 T1-17): "Back to <player>" reopens it
+  // here, in the view it was in, and the frame's Back can do the same
+  // (`reopenGamesProfile`). Closing it leaves his games as they were.
+  const [profileOpen, setProfileOpen] = useState(false);
+  const from = only?.from ?? null;
+  useEffect(() => {
+    if (!from) return undefined;
+    const reopenHere = () => {
+      setProfileOpen(true);
+      return true;
+    };
+    setProfileReopen(reopenHere);
+    return () => setProfileReopen(null);
+  }, [from]);
+  const backToProfile = useMemo(() => repeatSafe(() => setProfileOpen(true)), []);
   // A day's moves render inside their fold, as one list (walk 3 T3-32).
   const visible = useMemo(() => foldedFeed(feed), [feed]);
+  // What the reading place is recorded against, for the viewability callback.
+  const placeNow = useRef({ visible, filtered: false, lastSettled: null as string | null });
+  placeNow.current = { visible, filtered: onlyId !== null, lastSettled: bootstrap?.game.lastSettledDate ?? null };
   const moves = useMemo(() => movesByDay(feed), [feed]);
   const anchors = useMemo(() => monthAnchors(visible), [visible]);
   const extraData = useMemo(() => ({ expanded, openFees }), [expanded, openFees]);
@@ -744,6 +814,14 @@ export function PerGameResultsScreen() {
       viewBottom: Math.min(view.bottom, window.innerHeight),
     });
     if (by > 0) scroller.scrollBy({ top: by, behavior });
+    // The row that holds focus scrolls out of view (400% zoom): focus goes
+    // to its math, which Escape returns from (walk 9 T3-10).
+    const math = row.lastElementChild as HTMLElement | null;
+    const active = typeof document === 'undefined' ? null : document.activeElement;
+    if (by > 0 && headline && math && math !== headline && active && headline.contains(active)
+      && headline.getBoundingClientRect().bottom - by <= viewTop + 1) {
+      math.focus({ preventScroll: true });
+    }
   }, []);
   // A day's moves opened near the bottom come into view the same way.
   const openFeesNow = useRef(openFees);
@@ -778,7 +856,7 @@ export function PerGameResultsScreen() {
     };
   }, [backToNewest]);
 
-  const jumpTo = useCallback((anchor: MonthAnchor) => {
+  const jumpTo = useCallback((anchor: Pick<MonthAnchor, 'index' | 'date'>, options: { focus?: boolean } = {}) => {
     jumpRetries.current = 0;
     const seq = ++jumpSeq.current;
     const id = nightAnchorId(anchor.date);
@@ -797,7 +875,20 @@ export function PerGameResultsScreen() {
         if (current()) setLanding(false);
       },
     });
-    focusWhenReady(id, current);
+    // Coming back to your place by tab (T2-N6) leaves focus with the screen.
+    if (options.focus !== false) focusWhenReady(id, current);
+  }, []);
+  // Back by tab: the night you were reading, once (walk 9 T2-N6).
+  useEffect(() => {
+    const date = resumeNight(resumeAt, {
+      lastSettled: placeNow.current.lastSettled,
+      filtered: placeNow.current.filtered,
+      nightDates: placeNow.current.visible.flatMap((item) => (item.type === 'night' ? [item.night.date] : [])),
+    });
+    const index = date ? placeNow.current.visible.findIndex((item) => item.type === 'night' && item.night.date === date) : -1;
+    if (date && index > 0) jumpTo({ index, date }, { focus: false });
+    // Once, on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // A far month is not measured yet: land near it at once by estimate (rows
   // measured so far give the average height), so the rows around it render
@@ -845,9 +936,19 @@ export function PerGameResultsScreen() {
     setFar((was) => (was === next ? was : next));
   }, []);
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    const top = viewableItems.find((token) => token.isViewable)?.item as ResultsFeedItem | undefined;
+    const token = viewableItems.find((each) => each.isViewable);
+    const top = token?.item as ResultsFeedItem | undefined;
     const date = !top ? null : top.type === 'night' ? top.night.date : top.date;
     setCurrentMonth(date ? date.slice(0, 7) : null);
+    // Keep the night you are reading (its heading, at or above the top row)
+    // for a return by tab; none at the newest night or on one player's games.
+    const { visible: items, filtered, lastSettled } = placeNow.current;
+    if (filtered) return;
+    let at = token?.index ?? 0;
+    while (at > 0 && items[at]?.type !== 'night') at -= 1;
+    const heading = items[at];
+    const newest = items.findIndex((item) => item.type === 'night');
+    readingPlace = at > newest && heading?.type === 'night' ? { date: heading.night.date, lastSettled } : null;
   }).current;
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 10 }).current;
   if (!bootstrap) return null;
@@ -958,6 +1059,14 @@ export function PerGameResultsScreen() {
             label="Show all players"
             onPress={showAll}
           />
+          {only.from ? (
+            <Button
+              accessibilityLabel={`Back to ${only.playerName}'s profile`}
+              label={`Back to ${only.playerName}`}
+              onPress={backToProfile}
+              variant="quiet"
+            />
+          ) : null}
         </View>
       ) : null}
       {quietLastNight && lastSettled && !only ? (
@@ -1025,11 +1134,48 @@ export function PerGameResultsScreen() {
     />
   );
 
+  // His profile, reopened from "Back to <player>" in the view it was in.
+  const profileId = profileOpen && only ? only.playerId : null;
+  const profilePosition = profileId
+    ? bootstrap.positions.find((row) => row.playerId === profileId && row.status === 'active') ?? null
+    : null;
+  const profileStint = profileId
+    ? profilePosition ?? [...bootstrap.positions].reverse().find((row) => row.playerId === profileId) ?? null
+    : null;
+  const profilePlayer = profileId
+    ? bootstrap.market.find((row) => row.playerId === profileId)
+      ?? (profileStint
+        ? {
+            playerId: profileStint.playerId,
+            name: profileStint.playerName,
+            tier: '',
+            quoteVersion: 0,
+            currentGameCost: profileStint.lockedGameCost,
+            priorSeasonValuePerGame: null,
+          }
+        : null)
+    : null;
+  const profile = only?.from ? (
+    <PlayerProfileSheet
+      dividendRate={bootstrap.ruleset.dividendDollarsPerNetPoint}
+      initialView={only.from}
+      latestSettledDate={bootstrap.game.lastSettledDate}
+      onClose={() => setProfileOpen(false)}
+      player={profilePlayer}
+      position={profilePosition}
+      results={profileId ? bootstrap.settledResults.filter((result) => result.playerId === profileId) : []}
+      side={only.from.side ?? undefined}
+      trends={profileId !== null && isMockActive() ? mockPlayerTrends(profileId) : undefined}
+      visible={profileId !== null && profilePlayer !== null}
+    />
+  ) : null;
+
   if (wide) {
     return (
       <View style={styles.split}>
         <View style={styles.side}>{header}</View>
         {list}
+        {profile}
       </View>
     );
   }
@@ -1051,6 +1197,7 @@ export function PerGameResultsScreen() {
           <View style={styles.dockBack}>{back}</View>
         </View>
       ) : null}
+      {profile}
     </View>
   );
 }

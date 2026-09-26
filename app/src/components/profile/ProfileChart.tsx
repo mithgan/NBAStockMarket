@@ -32,10 +32,12 @@ import {
   chartLegend,
   chartSummary,
   drawsHollow,
+  extremeLabels,
   missStroke,
   missSwatchHollow,
   nightIndexAt,
   nightReadout,
+  priceChartHeight,
   profileChartModel,
   readoutCaption,
   sideWords,
@@ -101,9 +103,12 @@ export function ProfileChart({
   const insets = metric === 'price'
     ? (scaled ? PRICE_INSETS : PRICE_INSETS_BARE)
     : gutter ? DIVIDEND_INSETS : INSETS;
+  // A small price drift draws on a shorter chart at the same scale, centred
+  // on your locked line (walk 9 T2-03).
+  const plotHeight = metric === 'price' ? priceChartHeight(nights, height, insets) : height;
   const model = useMemo(
-    () => profileChartModel(nights, metric, width, height, insets),
-    [height, insets, metric, nights, width],
+    () => profileChartModel(nights, metric, width, plotHeight, insets, height),
+    [height, insets, metric, nights, plotHeight, width],
   );
   const words = sideWords(side);
   const legend = chartLegend(nights, metric, side);
@@ -222,12 +227,11 @@ export function ProfileChart({
   // game night's price shows only for a game you pick (walk 8 T1-07: three
   // prices for one day). The slider still reads his latest game, never empty.
   const idlePrice = metric === 'price' && active === null;
-  const labelAnchor = (x: number) => (x < 60 ? 'start' : x > width - 60 ? 'end' : 'middle');
-  // The dividends view names its tallest and lowest bar in the plot; the
-  // price view has its scale in the gutter instead.
-  const labels = ([['HIGH', model.high], ['LOW', model.low]] as const).filter(
-    (entry): entry is readonly ['HIGH' | 'LOW', number] => entry[1] !== null && active === null && metric === 'dividends',
-  );
+  // The dividends view names its tallest and lowest bar, each just above its
+  // own bar (walk 9 T2-02); the price view has its scale in the gutter instead.
+  const labels = metric === 'dividends' && active === null
+    ? extremeLabels(model, nights.map((night) => night.dividend), width, plotHeight, money)
+    : [];
   const marks = scaled ? model.priceMarks : [];
   const dates = chartDateLabels(model.anchors.map((point) => point.x), width, DATE_BOX);
   const zeroY = model.zeroY;
@@ -256,12 +260,12 @@ export function ProfileChart({
         }}
         onLayout={onLayout}
         ref={attach}
-        style={[styles.plot, { height }]}
+        style={[styles.plot, { height: plotHeight }]}
         tabIndex={0}
         {...responder.panHandlers}
       >
         {width > 0 ? (
-          <Svg height={height} width={width}>
+          <Svg height={plotHeight} width={width}>
             {metric === 'dividends' && zeroY !== null ? (
               <Line stroke={colors.borderStrong} strokeWidth={1} x1={gutter ? insets.left - 4 : 0} x2={width} y1={zeroY} y2={zeroY} />
             ) : null}
@@ -285,7 +289,7 @@ export function ProfileChart({
                 x1={anchor.x}
                 x2={anchor.x}
                 y1={4}
-                y2={height - 4}
+                y2={plotHeight - 4}
               />
             ) : null}
             {metric === 'dividends'
@@ -332,36 +336,28 @@ export function ProfileChart({
             {metric === 'price' && anchor ? (
               <Circle cx={anchor.x} cy={anchor.y} fill={colors.goldInk} r={active === null ? 3.5 : 5} />
             ) : null}
-            {labels.map(([label, index]) => {
-              const point = model.anchors[index];
-              const value = metric === 'price' ? nights[index].market ?? nights[index].price : nights[index].dividend;
-              const base = metric === 'dividends' && zeroY !== null
-                ? (label === 'HIGH' ? Math.min(point.y, zeroY) : Math.max(point.y, zeroY))
-                : point.y;
-              const y = label === 'HIGH' ? base - 7 : base + 15;
-              return (
-                <G key={label}>
-                  <SvgText
-                    fill={colors.muted}
-                    fontFamily={fonts.display}
-                    fontSize={11}
-                    fontWeight="700"
-                    textAnchor={labelAnchor(point.x)}
-                    x={point.x}
-                    y={Math.max(12, Math.min(height - 3, y))}
-                  >
-                    {`${label} ${money(value)}`}
-                  </SvgText>
-                </G>
-              );
-            })}
+            {labels.map((label) => (
+              <G key={label.kind}>
+                <SvgText
+                  fill={colors.muted}
+                  fontFamily={fonts.display}
+                  fontSize={11}
+                  fontWeight="700"
+                  textAnchor={label.anchor}
+                  x={label.x}
+                  y={label.y}
+                >
+                  {label.text}
+                </SvgText>
+              </G>
+            ))}
           </Svg>
         ) : null}
         {/* Dividends: the $0 line named beside it (walk 7 T1-08). */}
         {metric === 'dividends' && gutter && zeroY !== null ? (
           <Text
             maxFontSizeMultiplier={1.3}
-            style={[styles.mark, styles.zeroMark, { top: Math.min(Math.max(zeroY - MARK_HALF, 0), height - MARK_HALF * 2) }]}
+            style={[styles.mark, styles.zeroMark, { top: Math.min(Math.max(zeroY - MARK_HALF, 0), plotHeight - MARK_HALF * 2) }]}
           >
             $0
           </Text>

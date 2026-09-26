@@ -663,6 +663,8 @@ export function holdingStatus(
   side: PerGamePositionSide = 'long',
   /** His move on this side is saving (or waiting its turn): the header says so (walk 8 T4-11). */
   saving = false,
+  /** His market price now: the line then names it beside "Locked in" (walk 9 T1-01). */
+  market?: number,
 ): HoldingStatus {
   if (!position) {
     if (saving) return { tag: null, text: side === 'long' ? 'Adding him to your roster…' : 'Opening your short on him…' };
@@ -673,11 +675,58 @@ export function holdingStatus(
       ? { tag: 'On your roster', text: 'Dropping him from your roster…' }
       : { tag: 'Shorted', text: 'Closing your short on him…' };
   }
+  const until = position.expiresOn ? `, ends ${humanDate(position.expiresOn)}` : '';
+  if (market !== undefined) {
+    // The header leads with your price ("Yours $417.5K a game"; walk 9
+    // T1-01), so this line says it is locked and where the market is now.
+    const same = moneyFine(market) === moneyFine(position.lockedGameCost);
+    const now = same ? 'the same as the market' : `market now ${moneyFine(market)}`;
+    return position.side === 'long'
+      ? { tag: 'On your roster', text: `Locked in, ${now}` }
+      : { tag: 'Shorted', text: `Credited each game${until}, ${now}` };
+  }
   if (position.side === 'long') {
     return { tag: 'On your roster', text: `Locked in at ${moneyFine(position.lockedGameCost)} a game` };
   }
-  const until = position.expiresOn ? `, ends ${humanDate(position.expiresOn)}` : '';
   return { tag: 'Shorted', text: `Credited ${moneyFine(position.lockedGameCost)} a game${until}` };
+}
+
+/**
+ * The price beside his name (walk 9 T1-01): yours when you hold him ("Yours
+ * $417.5K a game"), since the market's can move the moment you add him and
+ * read like a bigger charge; otherwise the market's ("$418.5K a game").
+ */
+export function headerPrice(position: Pick<PerGamePosition, 'lockedGameCost'> | null, now: number): string {
+  return position ? `Yours ${perGame(position.lockedGameCost)}` : perGame(now);
+}
+
+/**
+ * The Price view's lead for a player you hold (walk 9 T1-08): one comparison
+ * in two cells, then one plain line; the move since his first game is the
+ * chart's caption (`priceMoveLine`).
+ */
+export function priceCompare(side: PerGamePositionSide, now: number, locked: number): {
+  cells: [{ label: string; value: string }, { label: string; value: string }];
+  line: string;
+} {
+  return side === 'long'
+    ? {
+        cells: [{ label: 'You pay', value: moneyFine(locked) }, { label: 'New buyers pay', value: moneyFine(now) }],
+        line: 'Your price never changes while you hold him.',
+      }
+    : {
+        cells: [{ label: 'You get', value: moneyFine(locked) }, { label: 'New shorts get', value: moneyFine(now) }],
+        line: 'Your credit never changes while the short is open.',
+      };
+}
+
+/** His market price's move over the games shown, as the chart's caption: "Market price up 0.1% since his first game with you." */
+export function priceMoveLine(nights: readonly ProfileNight[], now: number, firstWithYou: string | null): string | null {
+  const first = nights[0];
+  if (!first || first.market === undefined) return null;
+  const since = first.date === firstWithYou ? 'his first game with you' : `his ${humanDate(first.date)} game`;
+  const change = priceChange(first.market, now);
+  return change ? `Market price ${change} since ${since}.` : `Market price the same as at ${since}.`;
 }
 
 /** The app's column on a wide screen (App.tsx `styles.app.maxWidth`): the frame never grows past it. */
@@ -786,7 +835,8 @@ export function stakeLine(
     if (!held) return null;
     if (opened.readd) return { lead: 'No games yet at this price', total: null, tone: 'none' };
     const verb = side === 'long' ? 'added' : 'shorted';
-    const day = opened.since ? ` (${humanDate(opened.since)})` : '';
+    // "(Oct 20)" stays on one line at 320px (walk 9 T4-07).
+    const day = opened.since ? ` (${humanDate(opened.since).replace(/ /g, '\u00a0')})` : '';
     return { lead: `No games since you ${verb} him${day}`, total: null, tone: 'none' };
   }
   const tone: StakeTone = Math.abs(summary.total) < EVEN_BAND ? 'even' : summary.total > 0 ? 'gain' : 'loss';
@@ -962,6 +1012,125 @@ function spreadMarks(marks: PriceMark[], height: number): PriceMark[] {
  */
 export const PRICE_MIN_SPAN = 0.16;
 
+/** Room around a small drift: the band fills at most about 60% of a shrunk Price chart. */
+const PRICE_ROOM = 1.6;
+/** The least height of a Price chart shrunk to a small drift (walk 9 T2-03). */
+export const PRICE_MIN_HEIGHT = 96;
+
+interface PriceFrame {
+  /** Your locked price (the latest, when you held him in these games), else the middle of the prices. */
+  centre: number;
+  /** The farthest price from the centre, in dollars. */
+  dev: number;
+  /** Every price sits well inside the least span: the chart centres on `centre` and shrinks. */
+  small: boolean;
+  held: boolean;
+  spread: number;
+}
+
+function priceFrame(nights: readonly ProfileNight[]): PriceFrame | null {
+  if (nights.length === 0) return null;
+  const values = nights.map((night) => night.market ?? night.price);
+  const yours = nights.filter((night) => night.source === 'yours').map((night) => night.price);
+  const all = [...values, ...yours];
+  const held = yours.length > 0;
+  const top = Math.max(...all);
+  const bottom = Math.min(...all);
+  const centre = held ? yours[yours.length - 1] : (top + bottom) / 2;
+  if (!(centre > 0)) return null;
+  const dev = Math.max(...all.map((value) => Math.abs(value - centre)));
+  return { centre, dev, small: dev * 1.25 <= (centre * PRICE_MIN_SPAN) / 2, held, spread: top - bottom };
+}
+
+/**
+ * The Price chart's height (walk 9 T2-03): a small drift keeps the full
+ * chart's scale (a 1% move is as tall as ever) on a shorter chart, so the
+ * band is not a thin line in a tall, empty box; a real move gets the whole
+ * height. Never under `PRICE_MIN_HEIGHT`.
+ */
+export function priceChartHeight(nights: readonly ProfileNight[], fullHeight: number, insets: ChartInsets): number {
+  const frame = priceFrame(nights);
+  if (!frame || !frame.small) return fullHeight;
+  const fullPlot = fullHeight - insets.top - insets.bottom;
+  const perDollar = fullPlot / (frame.centre * PRICE_MIN_SPAN);
+  const plot = 2 * Math.max(frame.dev * PRICE_ROOM * perDollar, MARK_GAP);
+  return Math.round(Math.min(fullHeight, Math.max(PRICE_MIN_HEIGHT, plot + insets.top + insets.bottom)));
+}
+
+/**
+ * Why a Price chart looks flat (walk 9 T2-03): "Within 1.3% of your price in
+ * these games." Null for a real move, or a single game.
+ */
+export function priceDriftCaption(nights: readonly ProfileNight[]): string | null {
+  const frame = priceFrame(nights);
+  if (!frame || !frame.small || nights.length < 2) return null;
+  // Rounded up, so "within" stays true.
+  const within = (amount: number) => (Math.ceil((amount / frame.centre) * 1000) / 10).toFixed(1);
+  if (frame.held) {
+    return frame.dev < 1 ? 'His market price matched your price in these games.' : `Within ${within(frame.dev)}% of your price in these games.`;
+  }
+  return frame.spread < 1 ? 'His price held steady in these games.' : `A ${within(frame.spread)}% range in these games.`;
+}
+
+export interface ExtremeLabel {
+  kind: 'HIGH' | 'LOW';
+  index: number;
+  text: string;
+  x: number;
+  y: number;
+  anchor: 'start' | 'middle' | 'end';
+}
+
+/** A label's baseline sits this far above a bar's top; 13px apart, two labels never touch. */
+const LABEL_ABOVE = 7;
+const LABEL_BELOW = 15;
+const LABEL_STEP = 13;
+const LABEL_MIN_Y = 12;
+
+/**
+ * Where the Dividends chart's HIGH and LOW labels sit (walk 9 T2-02, T1-07):
+ * each just above its own bar's top, as HIGH always was, and just under the
+ * end of a bar below $0; never under the $0 axis, where LOW read like an axis
+ * mark. Two labels that would touch step apart, the higher value's on top.
+ */
+export function extremeLabels(
+  model: Pick<ProfileChartModel, 'bars' | 'high' | 'low'>,
+  dividends: readonly number[],
+  width: number,
+  height: number,
+  format: (value: number) => string,
+): ExtremeLabel[] {
+  const anchorAt = (x: number): ExtremeLabel['anchor'] => (x < 60 ? 'start' : x > width - 60 ? 'end' : 'middle');
+  const clampY = (y: number) => Math.max(LABEL_MIN_Y, Math.min(height - 3, y));
+  const labels = ([['HIGH', model.high], ['LOW', model.low]] as const)
+    .filter((entry): entry is readonly ['HIGH' | 'LOW', number] => entry[1] !== null && model.bars[entry[1]] !== undefined)
+    .map(([kind, index]) => {
+      const bar = model.bars[index];
+      const x = bar.x + bar.width / 2;
+      const below = dividends[index] < 0;
+      const y = below ? bar.y + bar.height + LABEL_BELOW : bar.y - LABEL_ABOVE;
+      return { kind, index, text: `${kind} ${format(dividends[index])}`, x, y: clampY(y), anchor: anchorAt(x) };
+    });
+  if (labels.length < 2) return labels;
+  const extent = (label: ExtremeLabel) => {
+    const size = label.text.length * 6.6;
+    const left = label.anchor === 'start' ? label.x : label.anchor === 'end' ? label.x - size : label.x - size / 2;
+    return [left - 2, left + size + 2];
+  };
+  const [first, second] = labels;
+  const [a0, a1] = extent(first);
+  const [b0, b1] = extent(second);
+  if (a1 < b0 || b1 < a0 || Math.abs(first.y - second.y) >= LABEL_STEP) return labels;
+  // Too close: HIGH (the higher value) goes on top, LOW under it.
+  const high = first.kind === 'HIGH' ? first : second;
+  const low = high === first ? second : first;
+  const upper = Math.max(LABEL_MIN_Y, Math.min(high.y, low.y - LABEL_STEP));
+  return [
+    { ...high, y: upper },
+    { ...low, y: clampY(Math.max(low.y, upper + LABEL_STEP)) },
+  ];
+}
+
 /**
  * Geometry for the profile chart. The dividends view draws one bar per game
  * from $0 and his price as a dashed step line, so every bar that clears the
@@ -973,6 +1142,8 @@ export function profileChartModel(
   width: number,
   height: number,
   insets: ChartInsets,
+  /** Price view: the chart's full height, when `height` is shrunk to a small drift (`priceChartHeight`). */
+  fullHeight: number = height,
 ): ProfileChartModel {
   const empty: ProfileChartModel = {
     slot: 0, bars: [], anchors: [], priceStepPath: '', priceLinePath: '', yourPricePath: '', zeroY: null, high: null, low: null, priceMarks: [],
@@ -1006,7 +1177,16 @@ export function profileChartModel(
     // A minimum span around the middle (walk 8 T2-06: a 2.5% drift drew as a
     // plunge from top to bottom): a few percent reads as a few percent.
     const span = Math.abs(mid) * PRICE_MIN_SPAN;
-    if (high - low < span) {
+    const frame = priceFrame(nights);
+    if (frame?.small) {
+      // A small drift centres on your locked line (walk 9 T2-03: the band
+      // sat at the top or the bottom, jumping as the range changed), at the
+      // full chart's scale on a chart shrunk to fit it.
+      const fullPlot = fullHeight - insets.top - insets.bottom;
+      const half = ((frame.centre * PRICE_MIN_SPAN) / 2) * Math.min(1, plotHeight / Math.max(1, fullPlot));
+      low = frame.centre - half;
+      high = frame.centre + half;
+    } else if (high - low < span) {
       low = mid - span / 2;
       high = mid + span / 2;
     }

@@ -70,6 +70,19 @@ export function boardIsLevel(rows: readonly PerGameLeaderboardRow[]): boolean {
   return rows.length > 0 && rows.every((row) => Math.abs(row.cumulativePnl) < 1);
 }
 
+/**
+ * A level board's order (walk 9 T2-05): nobody is ahead yet, so the server's
+ * order must not read as places ("Fast Break FC, Deep Threes, You…" read as
+ * "you are third"). You come first, then everyone else A to Z.
+ */
+export function levelOrder(rows: readonly PerGameLeaderboardRow[]): PerGameLeaderboardRow[] {
+  return [...rows].sort((left, right) => (
+    Number(right.isCurrentUser) - Number(left.isCurrentUser)
+    || left.displayName.localeCompare(right.displayName, 'en', { sensitivity: 'base' })
+    || left.entryId.localeCompare(right.entryId)
+  ));
+}
+
 function gapTo(row: PerGameLeaderboardRow, score: number, rank = row.rank): BoardGap {
   return { rank, name: row.displayName, gap: Math.abs(row.cumulativePnl - score) };
 }
@@ -131,9 +144,10 @@ export function boardList(
   /** The fee a move costs: a gap of whole fees is explained by the standing, and the row shows one figure (walk 8 T3-06). */
   feeDollars?: number,
 ): BoardEntry[] {
-  // A level board (before the first games) keeps everyone at $0 together.
+  // A level board (before the first games) keeps everyone at $0 together,
+  // you first and the rest A to Z: no order that reads as places.
   const level = boardIsLevel(rows);
-  const scored = sortBoard(rows).map((row, order) => {
+  const scored = (level ? levelOrder(rows) : sortBoard(rows)).map((row, order) => {
     const live = row.isCurrentUser && accountScore !== undefined && !level ? accountScore : row.cumulativePnl;
     return { row, order, score: live };
   });
@@ -145,7 +159,9 @@ export function boardList(
       score,
       place: 1 + scores.filter((other) => other > score).length,
       tied: scores.filter((other) => other === score).length > 1,
-      boardScore: row.isCurrentUser && Math.abs(score - row.cumulativePnl) >= 1 && feesOnly(score - row.cumulativePnl, feeDollars) === null
+      // A board figure that reads the same as the score shown says nothing new.
+      boardScore: row.isCurrentUser && signedMoney(score) !== signedMoney(row.cumulativePnl)
+        && feesOnly(score - row.cumulativePnl, feeDollars) === null
         ? row.cumulativePnl
         : null,
     }));
@@ -254,18 +270,35 @@ export function feesOnly(lag: number, feeDollars?: number): number | null {
 }
 
 /**
- * Why the board's figure for you differs from your score, or null when they
- * agree. The board counts moves once the next games settle, so a gap of
- * whole fees says so, with the amount (walk 8 T3-06: "-$121.3K" beside
- * "board -$121K" read like a mistake); anything else keeps the board's figure.
+ * Why the board's figure for you differs from your score, or null when the
+ * two read the same. The board counts moves once the next games settle, so a
+ * gap of whole fees names both figures and the fee between them (walk 9
+ * T2-10: "The board adds today's $250 fee" beside two equal "+$194K" read
+ * like a second charge to come): "Board +$194.3K · your score +$194K: today's
+ * $250 fee joins the board after the next games." Anything else keeps the
+ * board's figure. Screen readers hear it through `spokenLagLine`.
  */
 export function lagLine(standing: Standing, feeDollars?: number): string | null {
   const lag = boardLag(standing);
   if (lag === null || standing.kind !== 'ranked') return null;
+  const board = signedMoney(standing.boardScore);
+  const yours = signedMoney(standing.score);
+  // Two figures that read alike: a note between them would only confuse.
+  if (board === yours) return null;
   const fees = feesOnly(lag, feeDollars);
-  if (fees === 1) return `The board adds today's ${money(-lag)} fee after the next games.`;
-  if (fees !== null) return `The board adds today's ${money(-lag)} in fees after the next games.`;
-  return `The board still has you at ${signedMoney(standing.boardScore)} until the next games settle.`;
+  const both = `Board ${board} · your score ${yours}`;
+  if (fees === 1) return `${both}: today's ${money(-lag)} fee joins the board after the next games.`;
+  if (fees !== null) return `${both}: today's ${money(-lag)} in fees join the board after the next games.`;
+  return `The board still has you at ${board} until the next games settle.`;
+}
+
+/**
+ * `lagLine` as a screen reader hears it after "your score +$194K": the score
+ * is not said twice ("Board +$194.3K: today's $250 fee joins the board after
+ * the next games").
+ */
+export function spokenLagLine(line: string): string {
+  return line.replace(/ · your score [^:]+/, '').replace(/\.$/, '');
 }
 
 // ---------------------------------------------------------------------------

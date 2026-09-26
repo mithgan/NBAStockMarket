@@ -842,3 +842,14 @@ test("Results can show one player's games, his nights totalled alone (walk 8 T2-
   // The default feed is untouched.
   assert.equal(buildResultsFeed(all).filter((item) => item.type === 'result').length, 3);
 });
+
+test('Results comes back to the night you were reading, unless there is news (walk 9 T2-N6)', async () => {
+  const { resumeNight } = await import('./resultsView');
+  const nightDates = ['2026-04-12', '2026-01-31', '2025-12-31'];
+  const place = { date: '2025-12-31', lastSettled: '2026-04-12' };
+  assert.equal(resumeNight(place, { lastSettled: '2026-04-12', filtered: false, nightDates }), '2025-12-31');
+  assert.equal(resumeNight(null, { lastSettled: '2026-04-12', filtered: false, nightDates }), null, 'nothing kept: the newest night');
+  assert.equal(resumeNight(place, { lastSettled: '2026-04-13', filtered: false, nightDates }), null, 'new games since: the newest night');
+  assert.equal(resumeNight(place, { lastSettled: '2026-04-12', filtered: true, nightDates }), null, "one player's games start at his newest");
+  assert.equal(resumeNight(place, { lastSettled: '2026-04-12', filtered: false, nightDates: nightDates.slice(0, 2) }), null, 'a night no longer listed');
+});

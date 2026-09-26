@@ -36,7 +36,6 @@ import {
   gamesCount,
   humanDate,
   moneyFine,
-  perGame,
   signedMoneyFine,
   unbrokenName,
 } from '../copy/terms';
@@ -47,6 +46,7 @@ import {
   buildProfileNights,
   firstGamePreview,
   formVerdict,
+  headerPrice,
   holdingStatus,
   moveSaving,
   defaultRange,
@@ -59,6 +59,9 @@ import {
   mixNote,
   pastStintLead,
   positionOpenedDay,
+  priceCompare,
+  priceDriftCaption,
+  priceMoveLine,
   priceSourceCaption,
   priceStory,
   profileSide,
@@ -176,6 +179,8 @@ export interface PerGamePlayerProfileProps {
   onClose: () => void;
   /** Desktop panel: roomier chart and wider controls. */
   wide?: boolean;
+  /** Opens in this chart view and range (Results' "Back to <player>"; walk 9 T1-17). */
+  initialView?: { metric: ProfileMetric; range: ProfileRange | null };
 }
 
 export function PerGamePlayerProfile({
@@ -190,10 +195,12 @@ export function PerGamePlayerProfile({
   onToggleWatch,
   onClose,
   wide = false,
+  initialView,
 }: PerGamePlayerProfileProps) {
   // The range you picked; until then, the default for his games (see defaultRange).
-  const [picked, setPicked] = useState<ProfileRange | null>(null);
-  const [metric, setMetric] = useState<ProfileMetric>('dividends');
+  // Reopened from Results ("Back to <player>"; walk 9 T1-17): in the view it was in.
+  const [picked, setPicked] = useState<ProfileRange | null>(initialView?.range ?? null);
+  const [metric, setMetric] = useState<ProfileMetric>(initialView?.metric ?? 'dividends');
   const [showAllGames, setShowAllGames] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -242,7 +249,8 @@ export function PerGamePlayerProfile({
   // "at this price" only when he already played for you at another price.
   const { bootstrap, pendingActions } = usePerGame();
   // While his move saves the header says so, as the bar does (walk 8 T4-11).
-  const status = holdingStatus(position, viewSide, moveSaving(pendingActions, viewSide, player.playerId));
+  // Held: the header leads with your price and this line names the market's (walk 9 T1-01).
+  const status = holdingStatus(position, viewSide, moveSaving(pendingActions, viewSide, player.playerId), player.currentGameCost);
   const ledger = bootstrap?.ledger.items;
   const opened = useMemo(() => (position ? {
     since: positionOpenedDay(ledger ?? [], position.positionId),
@@ -276,10 +284,19 @@ export function PerGamePlayerProfile({
   // Results lists your games with him (any side): offer them there, his alone.
   const inResults = results.some((row) => row.playerId === player.playerId);
   const seeGames = () => {
-    showPlayerGames({ playerId: player.playerId, playerName: player.name });
+    showPlayerGames({ playerId: player.playerId, playerName: player.name, from: { metric, range: picked, side: viewSide } });
     closeThen(onClose, () => openTab('plays'));
   };
   const preview = firstGamePreview(viewSide, live ? 'yours' : 'season');
+  // The Price view (walk 9 T1-08, T2-03): held, one comparison leads and the
+  // move since his first game shown is the chart's caption, with a word on a
+  // flat-looking chart.
+  const firstWithYou = nights.find((night) => night.source === 'yours')?.date ?? null;
+  const compare = position ? priceCompare(position.side, player.currentGameCost, position.lockedGameCost) : null;
+  const priceCaption = [
+    compare ? priceMoveLine(shown, player.currentGameCost, firstWithYou) : null,
+    priceDriftCaption(shown),
+  ].filter(Boolean).join(' ');
 
   // Space toggles a switch (the WAI-ARIA pattern screen readers teach), but
   // react-native-web only presses buttons on Space; without this the sheet
@@ -371,7 +388,7 @@ export function PerGamePlayerProfile({
               {/* The Market's words for the tier ("Role player", never a bare
                   "ROLE"; walk 5 T4-07), drawn in capitals like the row's. */}
               {player.tier ? <Text maxFontSizeMultiplier={1.4} style={styles.tier}>{tierLabel(player.tier)}</Text> : null}
-              <Text maxFontSizeMultiplier={1.4} style={styles.priceNow}>{perGame(player.currentGameCost)}</Text>
+              <Text maxFontSizeMultiplier={1.4} style={styles.priceNow}>{headerPrice(position, player.currentGameCost)}</Text>
             </View>
           </View>
         </View>
@@ -520,12 +537,31 @@ export function PerGamePlayerProfile({
                 style={[styles.metric, wide && styles.metricWide]}
                 value={metric}
               />
-              {metric === 'price' ? (
+              {metric === 'price' && compare ? (
+                // One comparison in two cells, then one plain line (walk 9 T1-08).
+                <View style={styles.compare}>
+                  <View style={styles.grid}>
+                    {compare.cells.map((item) => (
+                      <Figure
+                        caption="a game"
+                        key={item.label}
+                        label={item.label}
+                        style={half}
+                        value={<Text maxFontSizeMultiplier={1.4} style={styles.compareValue}>{item.value}</Text>}
+                      />
+                    ))}
+                  </View>
+                  <Text maxFontSizeMultiplier={1.4} style={styles.note}>{compare.line}</Text>
+                </View>
+              ) : metric === 'price' ? (
                 <Text maxFontSizeMultiplier={1.4} style={styles.note}>
-                  {priceStory(shown, viewSide, player.currentGameCost, nights.find((night) => night.source === 'yours')?.date ?? null, position?.lockedGameCost ?? null)}
+                  {priceStory(shown, viewSide, player.currentGameCost, firstWithYou, position?.lockedGameCost ?? null)}
                 </Text>
               ) : null}
               <ProfileChart height={wide ? 200 : 176} metric={metric} nights={shown} side={viewSide} />
+              {metric === 'price' && priceCaption ? (
+                <Text maxFontSizeMultiplier={1.4} style={styles.chartCaption}>{priceCaption}</Text>
+              ) : null}
             </>
           ) : (
             // Say plainly what will fill this once he plays (walk 7 T1-04).
@@ -644,18 +680,23 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  // The Watch pill ends on the body's 16px gutter, and the close X's glyph
+  // starts on it (walk 9 T1-12: the pill jutted 8px past the buttons below).
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
-    paddingHorizontal: space.sm,
+    paddingLeft: space.xs,
+    paddingRight: space.lg,
     paddingVertical: space.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
+  // Sides named, so they win over topBar's own sides (a shorthand would not).
   topBarTight: {
     gap: 2,
-    paddingHorizontal: 2,
+    paddingLeft: 2,
+    paddingRight: 2,
   },
   iconButton: {
     width: control.icon,
@@ -861,6 +902,23 @@ const styles = StyleSheet.create({
   },
   figure: {
     minWidth: 0,
+  },
+  compare: {
+    gap: space.sm,
+    marginBottom: space.sm,
+  },
+  compareValue: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.heavy,
+    fontVariant: ['tabular-nums'],
+  },
+  chartCaption: {
+    marginTop: space.sm,
+    color: colors.muted,
+    fontSize: type.label,
+    lineHeight: 16,
   },
   figureLabel: {
     letterSpacing: 0.5,

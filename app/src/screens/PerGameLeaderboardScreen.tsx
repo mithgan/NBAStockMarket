@@ -12,6 +12,7 @@ import {
   pastSeasonLines,
   readPastSeasons,
   sortBoard,
+  spokenLagLine,
   spokenPlace,
   spokenRanks,
   standingLines,
@@ -141,7 +142,7 @@ function StandingBlock({
   const spoken = [
     placeWords(standing),
     `${final ? 'final score' : 'your score'} ${scoreWords(standing.score)}`,
-    ...(lagLine ? [lagLine.replace(/\.$/, '')] : []),
+    ...(lagLine ? [spokenLagLine(lagLine)] : []),
     // "$12K behind #2" is said "$12K behind second place".
     ...lines.map(spokenRanks),
   ].join(', ');
@@ -228,7 +229,9 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
           <Text style={[styles.rank, compact && styles.rankCompact]}>{level ? '–' : `#${place}`}</Text>
         </Seen>
       </View>
-      <View role="cell" style={[styles.nameCell, compact && styles.nameCompact]}>
+      {/* The row's header (walk 9 T3-02): moving down the Score column, a
+          screen reader names whose score it is. */}
+      <View role="rowheader" style={[styles.nameCell, compact && styles.nameCompact]}>
         <Spoken>{who}</Spoken>
         <Seen style={styles.nameSeen}>
           <Text style={styles.name}>{row.displayName}</Text>

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { boardLag, boardList, closeCallNotes, feesOnly, lagLine, leaderStanding, ordinalWords, sortBoard, spokenPlace, spokenRanks, standingLines, standingPlace, type Standing } from './leadersView';
+import { boardLag, boardList, closeCallNotes, feesOnly, lagLine, leaderStanding, levelOrder, ordinalWords, sortBoard, spokenLagLine, spokenPlace, spokenRanks, standingLines, standingPlace, type Standing } from './leadersView';
 
 function board(scores: Array<[string, number, boolean?]>): PerGameLeaderboardRow[] {
   return scores.map(([displayName, cumulativePnl, isCurrentUser], index) => ({
@@ -148,7 +148,8 @@ test('the list shows a tie as one shared place, matching "Tied for #2"', () => {
 test('while the board lags, your row sits at the score shown, with the board figure as a note', () => {
   // Day 0 after one add: everyone is level at $0 until the first games, fees or not.
   const day0 = boardList(board([['Ava', 0], ['Ben', 0], ['You', 0, true], ['Cal', 0], ['Dee', 0]]), -250);
-  assert.deepEqual(listed(day0), ['#1= Ava 0', '#1= Ben 0', '#1= You 0', '#1= Cal 0', '#1= Dee 0']);
+  // You first, the rest A to Z: no order that reads as places (walk 9 T2-05).
+  assert.deepEqual(listed(day0), ['#1= You 0', '#1= Ava 0', '#1= Ben 0', '#1= Cal 0', '#1= Dee 0']);
   const standing = leaderStanding(board([['Ava', 0], ['Ben', 0], ['You', 0, true], ['Cal', 0], ['Dee', 0]]), -250);
   assert.deepEqual(standing, { kind: 'level', of: 5, score: -250 }, 'no last place on a level board');
 
@@ -308,8 +309,8 @@ test('a board figure that differs only by fees says why, and the row shows one f
   // The tester's case: -$121.3K your score, the board's -$121K before the $250 drop fee.
   const rows = board([['Ava', 300_000], ['Ben', 100_000], ['Cal', -50_000], ['You', -121_050, true], ['Dee', -400_000]]);
   const standing = leaderStanding(rows, -121_300);
-  assert.equal(lagLine(standing, 250), "The board adds today's $250 fee after the next games.");
-  assert.equal(lagLine(leaderStanding(rows, -121_550), 250), "The board adds today's $500 in fees after the next games.");
+  assert.equal(lagLine(standing, 250), "Board -$121K · your score -$121.3K: today's $250 fee joins the board after the next games.");
+  assert.equal(lagLine(leaderStanding(rows, -121_550), 250), "Board -$121K · your score -$121.5K: today's $500 in fees join the board after the next games.");
   // Anything but whole fees keeps the board's own figure.
   assert.equal(lagLine(leaderStanding(rows, -121_300), 300), 'The board still has you at -$121K until the next games settle.');
   assert.equal(lagLine(leaderStanding(rows, -121_050), 250), null, 'in step: no line');
@@ -323,4 +324,29 @@ test('a board figure that differs only by fees says why, and the row shows one f
   assert.equal(you(boardList(rows, -121_300, 250))?.score, -121_300);
   assert.equal(you(boardList(rows, -121_300))?.boardScore, -121_050, 'no fee given: the note as before');
   assert.equal(you(boardList(rows, -121_300, 300))?.boardScore, -121_050);
+});
+
+test('the fee note names both figures, and only when they read apart (walk 9 T2-10)', () => {
+  // The tester's case: +$194.25K on the board, a $250 add since: +$194K.
+  const rows = board([['Ava', 203_190], ['You', 194_250, true], ['Ben', 20_000], ['Cal', -5_000], ['Dee', -90_000]]);
+  const line = lagLine(leaderStanding(rows, 194_000), 250);
+  assert.equal(line, "Board +$194.3K · your score +$194K: today's $250 fee joins the board after the next games.");
+  assert.equal(spokenLagLine(line ?? ''), "Board +$194.3K: today's $250 fee joins the board after the next games", 'the score is said just before it');
+  // A fee that leaves both figures reading "+$1.23M": nothing to compare, no note.
+  const big = board([['Ava', 2_000_000], ['You', 1_234_567, true]]);
+  assert.equal(lagLine(leaderStanding(big, 1_234_317), 250), null);
+  // The same goes for any other gap, and for the row's own "board" note.
+  assert.equal(lagLine(leaderStanding(big, 1_234_267), 300), null);
+  const you = boardList(big, 1_234_267, 300).find((entry) => entry.row.isCurrentUser);
+  assert.equal(you?.boardScore, null, 'a board note reading "+$1.23M" under "+$1.23M" says nothing');
+  assert.equal(you?.score, 1_234_267);
+});
+
+test('a level board lists you first, then everyone else A to Z (walk 9 T2-05)', () => {
+  const rows = board([['Fast Break FC', 0], ['deep Threes', 0], ['You', 0, true], ['Glass Cleaners', 0], ['Pick and Roll Club', 0]]);
+  assert.deepEqual(levelOrder(rows).map((row) => row.displayName), ['You', 'deep Threes', 'Fast Break FC', 'Glass Cleaners', 'Pick and Roll Club']);
+  assert.deepEqual(boardList(rows, -250, 250).map((entry) => entry.row.displayName), ['You', 'deep Threes', 'Fast Break FC', 'Glass Cleaners', 'Pick and Roll Club']);
+  // Once the games settle the board's own order returns.
+  const played = board([['Fast Break FC', 90_000], ['Deep Threes', 40_000], ['You', 10_000, true]]);
+  assert.deepEqual(boardList(played, 10_000).map((entry) => entry.row.displayName), ['Fast Break FC', 'Deep Threes', 'You']);
 });

@@ -603,3 +603,28 @@ export function revealScroll({ rowTop, rowBottom, mathTop = rowTop, viewTop, vie
 export function closeScroll({ rowTop, viewTop }: { rowTop: number; viewTop: number }): number {
   return rowTop < viewTop - 0.5 ? Math.round(rowTop - viewTop) : 0;
 }
+
+/**
+ * Where you were reading Results when you left it by another tab (walk 9
+ * T2-N6): the night at the top of the feed. Null at the newest night.
+ */
+export interface ReadingPlace {
+  /** The night at the top of the feed, "2025-12-31". */
+  date: string;
+  /** The last settled night then: new games since mean the newest night is news. */
+  lastSettled: string | null;
+}
+
+/**
+ * The night to come back to when Results opens again by its tab, or null for
+ * the newest night: nothing kept, a filtered feed (one player's games, which
+ * starts at his newest), new games settled since you left, or a night no
+ * longer in the feed.
+ */
+export function resumeNight(
+  place: ReadingPlace | null,
+  now: { lastSettled: string | null; filtered: boolean; nightDates: readonly string[] },
+): string | null {
+  if (!place || now.filtered || place.lastSettled !== now.lastSettled) return null;
+  return now.nightDates.includes(place.date) ? place.date : null;
+}
