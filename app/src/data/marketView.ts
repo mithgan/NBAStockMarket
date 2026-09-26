@@ -91,7 +91,7 @@ export function orderButtonTitle(sort: MarketSort, reversed: boolean): string {
 
 /** What the table's Value and Dividend last season headers explain on hover and focus. */
 export const COLUMN_EXPLANATIONS = {
-  value: "Last season's dividend minus today's price, for this side",
+  value: "Last season's dividend minus his price (yours once you hold him), for this side",
   dividend: 'What he paid out a game last season',
 } as const;
 
@@ -113,7 +113,7 @@ function compareNames(left: string, right: string): number {
  * Ties fall back to price, then name, so the order never shuffles between
  * renders.
  */
-export function sortMarketRows<T extends { player: PerGameMarketPlayer }>(
+export function sortMarketRows<T extends MarketSortRow>(
   rows: readonly T[],
   sort: MarketSort,
   side: PerGamePositionSide,
@@ -127,7 +127,27 @@ export function sortMarketRows<T extends { player: PerGameMarketPlayer }>(
   return [...known.reverse(), ...ordered.filter((row) => !known.includes(row))];
 }
 
-function sortForward<T extends { player: PerGameMarketPlayer }>(
+/** A row the market can sort: its player, and your position on this side if you hold him. */
+export interface MarketSortRow {
+  player: PerGameMarketPlayer;
+  position?: { lockedGameCost: number } | null;
+}
+
+/**
+ * The Value a row shows, as printed: last season's dividend against the price
+ * you locked once you hold him (the Roster's figure, walk 5 T4-02, T1-02),
+ * against today's price otherwise. A short is the other way round (locked
+ * credit minus dividend). Null with no last season.
+ */
+export function rowValueEdge(
+  player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
+  side: PerGamePositionSide,
+  position?: { lockedGameCost: number } | null,
+): number | null {
+  return shownEdge(position ? { ...player, currentGameCost: position.lockedGameCost } : player, side);
+}
+
+function sortForward<T extends MarketSortRow>(
   rows: readonly T[],
   sort: MarketSort,
   side: PerGamePositionSide,
@@ -137,9 +157,10 @@ function sortForward<T extends { player: PerGameMarketPlayer }>(
   const sorted = [...rows];
   if (sort === 'name') return sorted.sort((left, right) => byName(left, right) || byPrice(left, right));
   if (sort === 'price') return sorted.sort((left, right) => byPrice(left, right) || byName(left, right));
+  // Value sorts by the figure each row prints (a held row's is at your price).
   const figure = sort === 'dividend'
     ? (row: T) => row.player.priorSeasonValuePerGame
-    : (row: T) => lastYearEdge(row.player, side);
+    : (row: T) => rowValueEdge(row.player, side, row.position);
   return sorted.sort((left, right) => {
     const leftEdge = figure(left);
     const rightEdge = figure(right);
@@ -250,16 +271,67 @@ export function filterMarketRows<T extends { player: PerGameMarketPlayer }>(
   if (query.trim() !== '' && !searchHasLetters(query)) return [];
   // A number beside a name ("luka 77") cannot match a name: it is left out.
   const words = searchKey(query).split(/\s+/).map((word) => word.replace(/-/g, '')).filter((word) => /\p{L}/u.test(word));
-  const initials = words.length === 1 && /^\p{L}{2,4}$/u.test(words[0]) ? words[0] : null;
   const watchedSet = new Set(watched);
-  return rows.filter((row) => {
-    if (watchedOnly && !watchedSet.has(row.player.playerId)) return false;
-    if (words.length === 0) return true;
+  const shown = rows.filter((row) => !watchedOnly || watchedSet.has(row.player.playerId));
+  if (words.length === 0) return shown;
+  // A fan's nickname for a listed player finds him alone ("wemby", "joker").
+  const nickname = nicknameFor(query);
+  if (nickname !== null) {
+    const found = shown.filter((row) => searchKey(row.player.name) === nickname);
+    if (found.length > 0) return found;
+  }
+  // Single letters with spaces between ("O G", "s g a") are initials or a
+  // name spelled out: they find OG Anunoby, not every name holding an O and
+  // a G (walk 5 T4-10).
+  if (words.length > 1 && words.every((word) => word.length === 1)) {
+    const letters = words.join('');
+    return shown.filter((row) => nameInitials(row.player.name).includes(letters)
+      || searchKey(row.player.name).split(/[\s-]+/).includes(letters));
+  }
+  const initials = words.length === 1 && /^\p{L}{2,4}$/u.test(words[0]) ? words[0] : null;
+  return shown.filter((row) => {
     const key = searchKey(row.player.name);
     const starts = runTogether(row.player.name);
     if (words.every((word) => key.includes(word) || starts.some((start) => start.startsWith(word)))) return true;
     return initials !== null && nameInitials(row.player.name).includes(initials);
   });
+}
+
+/**
+ * Nicknames fans type for well-known players (walk 5 T4-N3), each to one
+ * full name. Only whole nicknames count, so "ant" finds Anthony Edwards when
+ * he is listed and nobody else; when he is not, the search reads as letters.
+ */
+export const PLAYER_NICKNAMES: Readonly<Record<string, string>> = {
+  wemby: 'Victor Wembanyama',
+  joker: 'Nikola Jokic',
+  'the joker': 'Nikola Jokic',
+  'greek freak': 'Giannis Antetokounmpo',
+  'the greek freak': 'Giannis Antetokounmpo',
+  greekfreak: 'Giannis Antetokounmpo',
+  spida: 'Donovan Mitchell',
+  ant: 'Anthony Edwards',
+  'ant man': 'Anthony Edwards',
+  antman: 'Anthony Edwards',
+  dame: 'Damian Lillard',
+  'dame time': 'Damian Lillard',
+  klaw: 'Kawhi Leonard',
+  'the klaw': 'Kawhi Leonard',
+  swipa: "De'Aaron Fox",
+  durantula: 'Kevin Durant',
+  'slim reaper': 'Kevin Durant',
+  'the brow': 'Anthony Davis',
+  'king james': 'LeBron James',
+  'chef curry': 'Stephen Curry',
+  'the process': 'Joel Embiid',
+  'the beard': 'James Harden',
+};
+
+/** The player a nickname names, as a search key ("wemby" → "victor wembanyama"), or null. */
+export function nicknameFor(query: string): string | null {
+  const key = searchKey(query).replace(/[\s-]+/g, ' ');
+  const name = PLAYER_NICKNAMES[key];
+  return name ? searchKey(name) : null;
 }
 
 export type SignalTone = 'gain' | 'loss' | 'even' | 'none';
@@ -410,15 +482,53 @@ export function heldDetail(summary: ValueSummary | undefined, lockedGameCost: nu
 } {
   if (summary && summary.avgNet !== null && summary.games > 0) {
     // The Roster's per-game precision ("+$1.5K a game", not "+$1,473"), so
-    // the same figure reads the same on both screens (walk 4 T4-13).
+    // the same figure reads the same on both screens (walk 4 T4-13). One game
+    // is "+$194.5K in 1 game", not "a game over 1 game" (walk 5 T1-05).
     return {
-      text: `${signedMoneyCompact(summary.avgNet)} a game over ${summary.games === 1 ? '1 game' : `${summary.games} games`}`,
+      text: summary.games === 1
+        ? `${signedMoneyCompact(summary.avgNet)} in 1 game`
+        : `${signedMoneyCompact(summary.avgNet)} a game over ${summary.games} games`,
       tone: netTone(summary.avgNet),
     };
   }
   // His price box already shows your locked price ("yours $104.3K").
   return { text: 'no games yet', tone: 'none' };
 }
+
+/**
+ * A held phone row's second value line: his Value at the price you locked,
+ * then today's price ("Value +$71K at your price · now $418.5K"), so the
+ * figure matches the Roster's and today's price stays in view (walk 5 T4-02,
+ * T1-02, T2-06). The price box carries "/game"; the line leaves "a game" out,
+ * like an unheld row's "$71K over his price", so it fits one line at 320px.
+ */
+export function heldValueLine(
+  player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
+  side: PerGamePositionSide,
+  lockedGameCost: number,
+): { edge: number | null; value: string; now: string; tone: SignalTone } {
+  const edge = player.priorSeasonValuePerGame === null ? null : rowValueEdge(player, side, { lockedGameCost });
+  const now = `now ${money(player.currentGameCost)}`;
+  if (edge === null) return { edge, value: 'No last season', now, tone: 'none' };
+  const tone = netTone(edge);
+  return { edge, value: tone === 'even' ? 'Value even at your price' : `Value ${signedMoneyCompact(edge)} at your price`, now, tone };
+}
+
+/**
+ * An unheld phone row's two value lines, broken after "a game ·" on every
+ * row so every row has the same height (walk 5 T1-04); with no last season
+ * the second line still says something.
+ */
+export function unheldValueLines(signal: ValueSignal): { first: string; second: string } {
+  if (signal.lead === null) return { first: 'No last season ·', second: 'nothing to compare with his price' };
+  return { first: signal.lead, second: signal.text };
+}
+
+/**
+ * From this width the phone row's two value lines fit side by side (a phone
+ * turned sideways, 844x390): one line, so a short window shows more players.
+ */
+export const VALUE_ONE_LINE_MIN_WIDTH = 640;
 
 /**
  * The action button's visible word. A pending action waits; a lock or a full
@@ -448,9 +558,11 @@ export function actionWord({
   justClosed?: boolean;
 }): string {
   const verb = held ? closeVerb(side) : openVerb(side);
-  if (pending) return 'Wait';
+  // The press paints its result at once (walk 5 T2-18): the move is still on
+  // its way, so "Added ✓" comes before "Wait"; a failed move reverts it.
   if (held && justOpened) return side === 'long' ? 'Added ✓' : 'Shorted ✓';
   if (!held && justClosed) return side === 'long' ? 'Dropped ✓' : 'Closed ✓';
+  if (pending) return 'Wait';
   if (rosterLocked) return 'Locked';
   if (!held && full) return 'Full';
   return verb;
@@ -599,20 +711,78 @@ export function spokenTier(tier: string | null | undefined): string {
   return word === 'role' ? 'role player' : word;
 }
 
+/** The tier where "Role player" does not fit: "Role"; "Starter" and "Star" are already short. */
+export function shortTierLabel(tier: string | null | undefined): string {
+  const word = (tier ?? '').toLowerCase();
+  if (!word) return '';
+  return word === 'role' ? 'Role' : `${word[0].toUpperCase()}${word.slice(1)}`;
+}
+
+/** Where a phone row names the tier. */
+export interface RowTier {
+  /** The top line's words beside the price: "Luka · Star", or the given name alone. */
+  kicker: string;
+  /** The tier after the surname ("Star"), or '' when the top line carries it. */
+  after: string;
+}
+
+// Phone row geometry, from the row's own styles: the row's insets, avatar and
+// gap take 76px, the Add button and its gap 84px, and the widest price box
+// ("$417.5K/game", or "yours $417.5K") with its gap about 97px. Character
+// widths are generous averages for the kicker's 11px capitals and the
+// surname's 15px heavy type.
+const PHONE_BAND_INSET = 160;
+const PHONE_PRICE_BOX = 97;
+const KICKER_CHAR = 7.2;
+const SURNAME_CHAR = 8.6;
+
 /**
- * What a held row still says about value, aloud: "last season $120K a game,
- * $6.5K under today's price" (walk 3 T3-30: holding him used to drop it).
+ * The tier on a phone row, never dropped (walk 5 T1-03): beside the given
+ * name when that fits beside the price (in full, then short: "Role"),
+ * otherwise after the surname (in full, then short). Below 380px the surname
+ * is tried first, as before. Held and unheld price boxes are the same width,
+ * so the tier stays in its place when he is added.
+ */
+export function rowTier({
+  given,
+  surname,
+  tier,
+  width,
+}: {
+  given: string;
+  surname: string;
+  tier: string | null | undefined;
+  width: number;
+}): RowTier {
+  const full = tierLabel(tier);
+  if (!full) return { kicker: given, after: '' };
+  const short = shortTierLabel(tier);
+  const band = width - PHONE_BAND_INSET;
+  const kicker = (label: string) => `${given} · ${label.replace(' ', ' ')}`;
+  const fitsKicker = (label: string) => kicker(label).length * KICKER_CHAR <= band - PHONE_PRICE_BOX;
+  const fitsAfter = (label: string) => surname.length * SURNAME_CHAR + (label.length + 3) * KICKER_CHAR <= band;
+  const inKicker = [full, short].find(fitsKicker);
+  const afterName = [full, short].find(fitsAfter);
+  if (width < KICKER_TIER_MIN_WIDTH && afterName) return { kicker: given, after: afterName };
+  if (inKicker) return { kicker: kicker(inKicker), after: '' };
+  return { kicker: given, after: afterName ?? short };
+}
+
+/**
+ * What a held row says about value, aloud, at the price you locked: "value
+ * +$71K a game at your price, last season $488.5K a game, now $418.5K a
+ * game" (walk 5 T4-02; walk 3 T3-30: holding him used to drop it).
  */
 export function heldValuePhrase(
   player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
   side: PerGamePositionSide,
+  lockedGameCost: number,
 ): string {
-  const signal = valueSignal(player, side);
-  if (signal.edge === null || player.priorSeasonValuePerGame === null) return 'no last season';
-  const lead = `last season ${money(player.priorSeasonValuePerGame)} a game`;
-  if (signal.tone === 'even') return `${lead}, even with today's price`;
-  if (side === 'short') return `${lead}, ${signedMoneyCompact(signal.edge)} for a short at today's price`;
-  return `${lead}, ${moneyCompact(Math.abs(signal.edge))} ${signal.edge > 0 ? 'over' : 'under'} today's price`;
+  const now = `now ${perGame(player.currentGameCost)}`;
+  const edge = rowValueEdge(player, side, { lockedGameCost });
+  if (edge === null || player.priorSeasonValuePerGame === null) return `no last season, ${now}`;
+  const value = netTone(edge) === 'even' ? 'value even at your price' : `value ${signedMoneyCompact(edge)} a game at your price`;
+  return `${value}, last season ${money(player.priorSeasonValuePerGame)} a game, ${now}`;
 }
 
 export type MarketLayout = 'phone' | 'large' | 'table';
@@ -690,14 +860,18 @@ export function rowProfileLabel({
   price,
   detail,
   reason,
+  locked = null,
 }: {
   name: string;
   tier: string;
   price: number;
   detail: string;
   reason?: string | null;
+  /** The price you locked, for a player you hold: the name says "yours $417.5K a game", as the row shows (walk 5 T4-02). */
+  locked?: number | null;
 }): string {
-  const facts = [name, spokenTier(tier), perGame(price), detail].filter(Boolean).join(', ');
+  const priceWords = locked === null ? perGame(price) : `yours ${perGame(locked)}`;
+  const facts = [name, spokenTier(tier), priceWords, detail].filter(Boolean).join(', ');
   return reason ? `${facts}. ${reason} View profile` : `${facts}, View profile`;
 }
 

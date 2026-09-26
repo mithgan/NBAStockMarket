@@ -3,7 +3,7 @@
  * desktop column header. The screen composes them; the rows live with the
  * screen because their actions and locks are part of its contract.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import {
@@ -154,15 +154,22 @@ export function MarketSearch({
   value,
   onChange,
   style,
+  placeholder = 'Search players',
+  onEscapeEmpty,
 }: {
   value: string;
   onChange: (next: string) => void;
   style?: StyleProp<ViewStyle>;
+  /** "Search" where "Search players" would be cut (under 360px, walk 5 T4-13); the name stays "Search players". */
+  placeholder?: string;
+  /** Escape in the empty field: the folded panel closes and focus returns to its toggle. */
+  onEscapeEmpty?: () => void;
 }) {
   // The input itself carries the border so its own box is the full 44px; the
   // magnifier and the clear control sit over its padding. Clearing keeps the
   // keyboard up (focus goes back into the field); Escape clears a search, and
-  // a second Escape leaves the field.
+  // Escape in the empty field keeps focus there (it used to fall to the page,
+  // walk 5 T3-03), or closes the folded panel it sits in.
   const input = useRef<TextInput>(null);
   return (
     <View style={[styles.search, style]}>
@@ -177,9 +184,9 @@ export function MarketSearch({
         onKeyPress={(event) => {
           if (event.nativeEvent.key !== 'Escape') return;
           if (value.length > 0) onChange('');
-          else input.current?.blur();
+          else onEscapeEmpty?.();
         }}
-        placeholder="Search players"
+        placeholder={placeholder}
         placeholderTextColor={colors.faint}
         returnKeyType="search"
         style={[styles.searchInput, value.length > 0 && styles.searchInputClearable]}
@@ -253,6 +260,7 @@ export function ControlsToggle({
   active,
   onToggle,
   labelled = false,
+  buttonRef,
 }: {
   open: boolean;
   /** A search, a non-default sort or the Watching filter is on. */
@@ -260,9 +268,12 @@ export function ControlsToggle({
   onToggle: () => void;
   /** Say "Search & sort" beside the icon (a wide, short window has the room). */
   labelled?: boolean;
+  /** Where Escape in the folded search returns focus. */
+  buttonRef?: Ref<View>;
 }) {
   return (
     <Pressable
+      ref={buttonRef}
       accessibilityLabel={active ? 'Search and sort, filters on' : 'Search and sort'}
       accessibilityRole="button"
       aria-expanded={open}
@@ -304,6 +315,14 @@ export function MarketColumnHeader({
   onChoose: (sort: MarketSort) => void;
   onFlip: () => void;
 }) {
+  // One explanation at a time, the most recent of hover or keyboard focus;
+  // Escape hides it while focus stays (walk 5 T3-12, WCAG 1.4.13).
+  const [tip, setTip] = useState<{ key: MarketSort; by: TipSource } | null>(null);
+  const onTip = (key: MarketSort, by: TipSource, on: boolean) => {
+    if (by === 'escape') setTip(null);
+    else if (on) setTip({ key, by });
+    else setTip((current) => (current && current.key === key && current.by === by ? null : current));
+  };
   return (
     // A row of sort buttons over the list, not a table: the player rows are
     // buttons, not table rows, so a table role promised navigation it could
@@ -317,6 +336,8 @@ export function MarketColumnHeader({
         <SortHeader
           columnKey="dividend"
           explain={COLUMN_EXPLANATIONS.dividend}
+          onTip={onTip}
+          tipShown={tip?.key === 'dividend'}
           label={'Dividend last\u00A0season'}
           onChoose={onChoose}
           onFlip={onFlip}
@@ -327,6 +348,8 @@ export function MarketColumnHeader({
         <SortHeader
           columnKey="value"
           explain={COLUMN_EXPLANATIONS.value}
+          onTip={onTip}
+          tipShown={tip?.key === 'value'}
           label={valueLabel}
           onChoose={onChoose}
           onFlip={onFlip}
@@ -347,11 +370,15 @@ export function MarketColumnHeader({
 
 let explainIds = 0;
 
+type TipSource = 'hover' | 'focus' | 'escape';
+
 function SortHeader({
   columnKey,
   label,
   width,
   explain,
+  tipShown = false,
+  onTip,
   sort,
   reversed,
   onChoose,
@@ -362,6 +389,9 @@ function SortHeader({
   /** A number column's width; none for the Player column, which takes the rest. */
   width?: number;
   explain?: string;
+  /** This column's explanation is the one showing. */
+  tipShown?: boolean;
+  onTip?: (key: MarketSort, by: TipSource, on: boolean) => void;
   sort: MarketSort;
   reversed: boolean;
   onChoose: (sort: MarketSort) => void;
@@ -370,8 +400,6 @@ function SortHeader({
   const on = sort === columnKey;
   const number = width !== undefined;
   const words = label.replace(/\u00A0/g, ' ');
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
   const [explainId] = useState(() => `market-column-explain-${(explainIds += 1)}`);
   const ascending = sortAscending(columnKey, reversed);
   // The arrow is part of the header's one target: the column in use flips its
@@ -392,15 +420,14 @@ function SortHeader({
       <Pressable
         accessibilityLabel={on ? `${words}, sorted ${sortDirection(columnKey, reversed)}` : `${words}, sort by ${words.toLowerCase()}`}
         accessibilityRole="button"
-        onBlur={() => setFocused(false)}
-        // Keyboard focus shows the explanation; a click's focus does not
-        // leave it open over the first row.
+        onBlur={() => onTip?.(columnKey, 'focus', false)}
+        // Keyboard focus shows the explanation; a click's focus does not.
         onFocus={(event) => {
           const target = event.target as unknown as { matches?: (selector: string) => boolean };
-          setFocused(target.matches?.(':focus-visible') ?? true);
+          if (target.matches?.(':focus-visible') ?? true) onTip?.(columnKey, 'focus', true);
         }}
-        onHoverIn={() => setHovered(true)}
-        onHoverOut={() => setHovered(false)}
+        onHoverIn={() => onTip?.(columnKey, 'hover', true)}
+        onHoverOut={() => onTip?.(columnKey, 'hover', false)}
         onPress={press}
         style={(state) => [
           styles.headerInner,
@@ -411,7 +438,12 @@ function SortHeader({
           (state as { hovered?: boolean }).hovered === true && styles.hover,
           state.pressed && styles.pressed,
         ]}
-        {...(explain ? ({ 'aria-describedby': explainId } as object) : {})}
+        {...(explain ? ({
+          'aria-describedby': explainId,
+          onKeyDown: (event: KeyEvent) => {
+            if (event.key === 'Escape' && tipShown) onTip?.(columnKey, 'escape', false);
+          },
+        } as object) : {})}
       >
         <Text maxFontSizeMultiplier={1.4} style={[styles.headerText, number && styles.headerTextNumber, on && styles.headerTextOn, number && styles.headerTextShrink]}>
           {label}
@@ -419,7 +451,7 @@ function SortHeader({
         </Text>
       </Pressable>
       {explain ? (
-        <View pointerEvents="none" style={[styles.explain, !(hovered || focused) && styles.explainHidden]}>
+        <View pointerEvents="none" style={[styles.explain, !tipShown && styles.explainHidden]}>
           <Text nativeID={explainId} style={styles.explainText}>{explain}</Text>
         </View>
       ) : null}
@@ -677,8 +709,11 @@ const styles = StyleSheet.create({
     fontSize: type.caption,
   },
   explain: {
+    // Above the label, over the toolbar's sentence, so it never covers the
+    // first row's figures (walk 5 T3-12).
     position: 'absolute',
-    top: '100%',
+    bottom: '100%',
+    marginBottom: 2,
     right: 0,
     zIndex: 5,
     width: 220,

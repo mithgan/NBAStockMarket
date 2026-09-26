@@ -51,6 +51,7 @@ import {
   fullNote,
   headerStatus,
   heldDetail,
+  heldValueLine,
   heldValuePhrase,
   isSeasonOver,
   JUST_OPENED_MS,
@@ -69,6 +70,9 @@ import {
   rowActions,
   rowKicker,
   rowProfileLabel,
+  rowTier,
+  rowValueEdge,
+  shortTierLabel,
   ROOMY_MIN_HEIGHT,
   sameMarketRowProps,
   tierLabel,
@@ -81,6 +85,8 @@ import {
   sortedLine,
   sortMarketRows,
   keepListOrder,
+  unheldValueLines,
+  VALUE_ONE_LINE_MIN_WIDTH,
   valueByPosition,
   valueSignal,
   type MarketColumnSet,
@@ -122,6 +128,16 @@ function sideTag(side: PerGamePositionSide): 'On your roster' | 'Shorted' {
 /** Keep the last two words together ("Oct 31", "to add"), so no line ends in a lone word. */
 function unbrokenTail(text: string): string {
   return text.replace(/ (\S+)$/, '\u00A0$1');
+}
+
+/**
+ * Runs `run` once the browser has painted the frame a press drew: a timer
+ * after the next animation frame. A move's work (the whole app redraws with
+ * the new snapshot) then never holds back the button's own answer.
+ */
+function afterPaint(run: () => void): void {
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(run, 0));
+  else setTimeout(run, 0);
 }
 
 /** Why a locked button is dimmed, in the app's one lock sentence. */
@@ -242,15 +258,22 @@ function MarketRow({
   const { given, surname } = splitPlayerName(player.name);
   const whole = (text: string) => (wholeNames ? unbrokenName(text) : text);
   const kicker = whole(rowKicker(given, player.tier, width));
-  // Below 380px the tier leaves the kicker; it follows the surname instead,
-  // so every width says the same thing. The chevron says the row opens more.
-  const tierAfter = width < KICKER_TIER_MIN_WIDTH && player.tier ? player.tier : null;
+  // A phone row names the tier on every row, held or not: beside the given
+  // name where it fits beside the price, after the surname otherwise, in its
+  // short form ("Role") where the full one does not fit (walk 5 T1-03).
+  const phone = layout === 'phone';
+  const phoneTier = rowTier({ given, surname, tier: player.tier, width });
+  // Below 380px (the large-text row) the tier follows the surname, so every
+  // width says the same thing. The chevron says the row opens more.
+  const tierAfter = phone
+    ? phoneTier.after
+    : width < KICKER_TIER_MIN_WIDTH && player.tier ? tierLabel(player.tier) : '';
   const nameLine = (
     <>
       {whole(surname)}
       {/* One span, kept together, so a wrapped line never splits it. */}
       <Text style={tierAfter ? styles.tierInline : styles.chevron}>
-        {tierAfter ? `\u2002${tierLabel(tierAfter)}\u00A0›` : '\u2002›'}
+        {tierAfter ? `\u2002${tierAfter.replace(' ', '\u00A0')}\u00A0›` : '\u2002›'}
       </Text>
     </>
   );
@@ -261,8 +284,15 @@ function MarketRow({
   // cooldown starts on the tap and restarts when the add lands.
   const [cooling, startCooling] = useCooldown(JUST_OPENED_MS);
   const lastAction = useRef<'open' | 'close' | null>(null);
-  const justOpened = cooling && lastAction.current === 'open' && position !== null;
-  const justClosed = cooling && lastAction.current === 'close' && position === null;
+  // The press paints its result at once (walk 5 T2-18: 350 ms on a slow
+  // laptop): "Added ✓" shows while the move is on its way, and a move that
+  // fails reverts it while the notice says why.
+  const [optimistic, setOptimistic] = useState<'open' | 'close' | null>(null);
+  const shownHeld = optimistic === 'open' ? true : optimistic === 'close' ? false : position !== null;
+  // Held for as long as the move is on its way (a queued move can outlast the
+  // cooldown), then for the cooldown once it lands.
+  const justOpened = optimistic === 'open' || (cooling && lastAction.current === 'open' && position !== null);
+  const justClosed = optimistic === 'close' || (cooling && lastAction.current === 'close' && position === null);
 
   // Drop and Close ask in a strip under the row (fee, what stays, what coming
   // back costs). It waits for Keep, Escape or the costly button: no timeout.
@@ -300,7 +330,7 @@ function MarketRow({
   useAriaDisabled(actionRef, resting);
   const word = actionWord({
     side,
-    held: position !== null,
+    held: shownHeld,
     pending,
     rosterLocked,
     full: row.isFull,
@@ -319,38 +349,48 @@ function MarketRow({
   const large = layout === 'large';
   const actionWidth = table ? columns.action : PHONE_ACTION_WIDTH;
 
-  // A held row: your result so far, then his Value on this side, in the
-  // line the row keeps for it (it used to sit empty; walk 4 T4-03).
-  const heldValue = signal.edge === null ? 'no last season' : `Value ${signedMoneyCompact(signal.edge)} a game`;
-  const heldLine = (text: string, tone: SignalTone) => (
-    <View style={styles.detailLine}>
-      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.heldText]}>{`${sideTag(side)} ·`}</Text>
-      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[tone] }]}>{`${text} ·`}</Text>
-      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[signal.edge === null ? 'none' : signal.tone] }]}>
-        {heldValue}
-      </Text>
+  // A held row: your result so far, then his Value at the price you locked
+  // (the Roster's figure) and today's price (walk 5 T4-02, T1-02, T2-06).
+  // Every phone row breaks its value after the first line, so each row has
+  // the same height (walk 5 T1-04); a phone turned sideways keeps one line.
+  const oneLine = width >= VALUE_ONE_LINE_MIN_WIDTH;
+  const valueLines = (first: ReactNode, second: ReactNode) => (
+    <View style={oneLine ? styles.detailLine : styles.detailLines}>
+      {first}
+      {second}
     </View>
   );
-  const unheldLineFor = (shown: typeof signal) => (
-    <View style={styles.detailLine}>
-      {shown.lead ? <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>{shown.lead}</Text> : null}
-      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[shown.tone] }]}>
-        {priorSeasonValuePerGame === null ? 'No last season' : shown.text}
-      </Text>
-    </View>
+  const heldLine = (text: string, tone: SignalTone, value: ReturnType<typeof heldValueLine>) => valueLines(
+    <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.heldText]}>
+      {`${sideTag(side)} · `}
+      <Text style={{ color: TONE_COLOR[tone] }}>{text}</Text>
+      {' ·'}
+    </Text>,
+    <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[value.tone] }]}>
+      {value.value}
+      <Text style={styles.leadText}>{` · ${value.now}`}</Text>
+    </Text>,
   );
+  const unheldLineFor = (shown: typeof signal) => {
+    const lines = unheldValueLines(shown);
+    return valueLines(
+      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>{lines.first}</Text>,
+      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[shown.tone] }]}>{lines.second}</Text>,
+    );
+  };
   const unheldLine = unheldLineFor(signal);
   // The held row's invisible copy of its unheld line uses the price it was
   // added at, i.e. the words the row showed a moment before the Add, so the
-  // copy wraps exactly as they did (the Add nudges today's price, and a line
-  // that then fit on one line made the row shrink).
+  // copy wraps exactly as they did.
   const unheldGhost = position
     ? unheldLineFor(valueSignal({ ...player, currentGameCost: position.lockedGameCost }, side))
     : unheldLine;
+  // An unheld row's copy of its held line locks today's price, as an Add would.
+  const heldValue = heldValueLine(player, side, position ? position.lockedGameCost : currentGameCost);
   // What this row says now, over invisible copies of what it would say after
   // an Add (or a Drop), so its height never changes with the tap.
   const valueLine = position && held ? (
-    <SameHeight ghosts={[unheldGhost]}>{heldLine(held.text, held.tone)}</SameHeight>
+    <SameHeight ghosts={[unheldGhost]}>{heldLine(held.text, held.tone, heldValue)}</SameHeight>
   ) : blocked ? (
     <SameHeight ghosts={[unheldLine]}>
       <View style={styles.detailLine}>
@@ -358,18 +398,17 @@ function MarketRow({
       </View>
     </SameHeight>
   ) : (
-    <SameHeight ghosts={[heldLine(heldDetail(undefined, currentGameCost).text, 'none')]}>{unheldLine}</SameHeight>
+    <SameHeight ghosts={[heldLine(heldDetail(undefined, currentGameCost).text, 'none', heldValue)]}>{unheldLine}</SameHeight>
   );
 
-  // A held row leads with the price you locked: the big figure used to be
-  // today's market price, which moved when you added him (walk 4 T1-19).
-  // Today's price is in his profile; a second line here would make the row
-  // taller than its unheld self and move the rows below.
+  // A held row leads with the price you locked, "yours $417.5K" (walk 4
+  // T1-19); today's price is on its value line ("now $418.5K"). The held box
+  // leaves "/game" out, so it is no wider than an unheld one and the tier
+  // keeps its place beside the given name when he is added.
   const heldPriceBox = (amount: string) => (
     <View style={styles.priceBox}>
       <Text maxFontSizeMultiplier={1.6} style={styles.priceUnit}>{'yours '}</Text>
       <Text maxFontSizeMultiplier={1.6} style={styles.price}>{amount}</Text>
-      <Text maxFontSizeMultiplier={1.6} style={styles.priceUnit}>{`/${priceUnit}`}</Text>
     </View>
   );
   const marketPriceBox = (
@@ -379,19 +418,19 @@ function MarketRow({
     </View>
   );
   const priceBox = position ? heldPriceBox(perGameShort(position.lockedGameCost).split('/')[0]) : marketPriceBox;
-  // The phone row's top line in both states: held (first name, "yours $X")
-  // and not held (first name and tier, today's price). Each is drawn over an
-  // invisible copy of the other, so adding or dropping him never changes the
-  // row's height, whichever one wraps (a tier and price that did not fit
-  // beside each other moved every row below).
+  // The phone row's top line in both states: held (given name and tier,
+  // "yours $X") and not held (given name and tier, today's price). Each is
+  // drawn over an invisible copy of the other, so adding or dropping him
+  // never changes the row's height, whichever one wraps.
   const kickerLine = (kickerText: string, box: ReactNode) => (
     <View style={styles.kickerPriceLine}>
       <Text maxFontSizeMultiplier={1.6} style={[styles.kicker, styles.kickerShrink]}>{kickerText}</Text>
       <View style={styles.priceEnd}>{box}</View>
     </View>
   );
-  const heldTop = kickerLine(whole(rowKicker(given, null, width)), heldPriceBox(position ? perGameShort(position.lockedGameCost).split('/')[0] : priceAmount));
-  const unheldTop = kickerLine(kicker, marketPriceBox);
+  const phoneKicker = whole(phoneTier.kicker);
+  const heldTop = kickerLine(phoneKicker, heldPriceBox(position ? perGameShort(position.lockedGameCost).split('/')[0] : priceAmount));
+  const unheldTop = kickerLine(phoneKicker, marketPriceBox);
   const topLine = position
     ? <SameHeight ghosts={[unheldTop]}>{heldTop}</SameHeight>
     : <SameHeight ghosts={[heldTop]}>{unheldTop}</SameHeight>;
@@ -404,9 +443,11 @@ function MarketRow({
     detail: blocked
       ? ''
       : position && held
-        ? `${tagText}, ${held.text}, ${heldValuePhrase(player, side)}`
+        ? `${tagText}, ${held.text}, ${heldValuePhrase(player, side, position.lockedGameCost)}`
         : [signal.lead?.replace(/ ·$/, ''), signal.text].filter(Boolean).join(', '),
     reason: blocked ? row.unavailableReason : null,
+    // A held row's name leads with your price, as the row shows it.
+    locked: position && !blocked ? position.lockedGameCost : null,
   });
 
   const openProfile = () => {
@@ -471,19 +512,25 @@ function MarketRow({
               setConfirming(true);
             } else {
               lastAction.current = 'open';
+              setOptimistic('open');
               startCooling();
-              void openPosition({
-                playerId: player.playerId,
-                playerName: player.name,
-                side,
-                expectedQuoteVersion: player.quoteVersion,
-              }).then((opened) => {
-                if (opened) startCooling();
+              // The move starts once "Added ✓" is on screen.
+              afterPaint(() => {
+                void openPosition({
+                  playerId: player.playerId,
+                  playerName: player.name,
+                  side,
+                  expectedQuoteVersion: player.quoteVersion,
+                }).then((opened) => {
+                  setOptimistic(null);
+                  if (opened) startCooling();
+                }, () => setOptimistic(null));
               });
             }
           }}
-          style={!table ? styles.phoneButton : undefined}
-          textStyle={styles.buttonText}
+          // "Dropped ✓" and "Shorted ✓" fit the phone button on one line (walk 5 T4-03).
+          style={!table ? [styles.phoneButton, (justOpened || justClosed) && styles.phoneButtonDone] : undefined}
+          textStyle={[styles.buttonText, (justOpened || justClosed) && styles.buttonTextDone]}
           width={large ? undefined : actionWidth}
         />
       )}
@@ -514,9 +561,13 @@ function MarketRow({
       onConfirm={() => {
         closeStrip();
         lastAction.current = 'close';
+        setOptimistic('close');
         startCooling();
-        void closePosition(position).then((closed) => {
-          if (closed) startCooling();
+        afterPaint(() => {
+          void closePosition(position).then((closed) => {
+            setOptimistic(null);
+            if (closed) startCooling();
+          }, () => setOptimistic(null));
         });
       }}
       style={table ? styles.stripTable : undefined}
@@ -566,6 +617,7 @@ function MarketRow({
   ) : null;
 
   if (table) {
+    const tableEdge = rowValueEdge(player, side, position);
     return (
       <>
       <View style={[styles.row, styles.rowTable, dimmed && styles.rowDimmed]} {...rowMarker}>
@@ -594,7 +646,7 @@ function MarketRow({
                 word to keep the chip on the kicker's line (it is still spoken). */}
             <View style={styles.kickerLine}>
               <Text maxFontSizeMultiplier={1.4} style={styles.kicker}>
-                {position && columns.yours === 0 ? whole(rowKicker(given, null, width)) : kicker}
+                {position && columns.yours === 0 ? whole(shortTierLabel(player.tier) ? `${given}\u00A0· ${shortTierLabel(player.tier)}` : given) : kicker}
               </Text>
               {position ? <Tag style={styles.kickerTag}>{tagText}</Tag> : null}
             </View>
@@ -624,13 +676,17 @@ function MarketRow({
             )}
           </View>
           <View style={[styles.cell, { width: columns.edge }]}>
-            {signal.edge === null ? (
+            {tableEdge === null ? (
               <Text accessibilityLabel="no last season" maxFontSizeMultiplier={1.4} style={[styles.cellValue, styles.cellQuiet]}>—</Text>
             ) : (
-              <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, { color: TONE_COLOR[signal.tone] }]}>
-                {/* One style down the column: "+$8K" beside "+$25.5K" (walk 3 T2-03). */}
-                {signal.tone === 'even' ? 'Even' : signedMoneyCompact(signal.edge)}
-              </Text>
+              <>
+                <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, { color: TONE_COLOR[netTone(tableEdge)] }]}>
+                  {/* One style down the column: "+$8K" beside "+$25.5K" (walk 3 T2-03). */}
+                  {netTone(tableEdge) === 'even' ? 'Even' : signedMoneyCompact(tableEdge)}
+                </Text>
+                {/* A held row's Value is at the price you locked, the Roster's figure (walk 5 T4-02). */}
+                {position ? <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>at your price</Text> : null}
+              </>
             )}
           </View>
           {columns.yours > 0 ? (
@@ -791,6 +847,13 @@ export function PerGameMarketScreen({
   const [profileId, setProfileId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [controlsOpen, setControlsOpen] = useState(false);
+  // Escape in the folded panel's empty search closes the panel and returns
+  // focus to "Search & sort" (walk 5 T3-03).
+  const controlsToggleRef = useRef<View>(null);
+  const closeControls = useCallback(() => {
+    setControlsOpen(false);
+    setTimeout(() => (controlsToggleRef.current as unknown as { focus?: () => void } | null)?.focus?.(), 0);
+  }, []);
   // A short window (a phone turned sideways) gets the phone rows, which label
   // their own figures, so the table only shows where its labels fit.
   const layout = marketLayout(width, fontScale, height);
@@ -1041,6 +1104,8 @@ export function PerGameMarketScreen({
       ) : null}
     </View>
   );
+  // "Search players" is cut in the narrow field below 360px (walk 5 T4-13).
+  const searchPlaceholder = width < 360 ? 'Search' : 'Search players';
   const sortToggle = (
     <SortControl
       onChoose={chooseSort}
@@ -1073,7 +1138,7 @@ export function PerGameMarketScreen({
         <View style={[styles.controlsWide, !roomy && styles.controlsShort]}>
           {sideToggle}
           {slotStatus}
-          <MarketSearch onChange={setQuery} style={[styles.searchWide, wide && !roomy && styles.searchShort]} value={query} />
+          <MarketSearch onChange={setQuery} placeholder={searchPlaceholder} style={[styles.searchWide, wide && !roomy && styles.searchShort]} value={query} />
           {sortToggle}
           {watchingToggle}
         </View>
@@ -1086,19 +1151,19 @@ export function PerGameMarketScreen({
             {foldWide ? sideToggle : null}
             {slotStatus}
             {/* Landscape has room to say it in words (walk 4 T1-10). */}
-            <ControlsToggle active={filtersOn} labelled={foldWide} onToggle={() => setControlsOpen((open) => !open)} open={controlsOpen} />
+            <ControlsToggle active={filtersOn} buttonRef={controlsToggleRef} labelled={foldWide} onToggle={() => setControlsOpen((open) => !open)} open={controlsOpen} />
           </View>
           {shortExplainer}
           {controlsOpen ? (
             foldWide ? (
               <View style={styles.foldedOpenRow}>
-                <MarketSearch onChange={setQuery} style={styles.searchFlex} value={query} />
+                <MarketSearch onChange={setQuery} onEscapeEmpty={closeControls} placeholder={searchPlaceholder} style={styles.searchFlex} value={query} />
                 {sortToggle}
                 {watchingToggle}
               </View>
             ) : (
               <>
-                <MarketSearch onChange={setQuery} value={query} />
+                <MarketSearch onChange={setQuery} onEscapeEmpty={closeControls} placeholder={searchPlaceholder} value={query} />
                 {sortToggle}
                 {watchingToggle}
               </>
@@ -1114,7 +1179,7 @@ export function PerGameMarketScreen({
           {shortExplainer}
           {/* The two filters share a row; the sort and its order button get the next one whole. */}
           <View style={styles.filterRow}>
-            <MarketSearch onChange={setQuery} style={styles.searchFlex} value={query} />
+            <MarketSearch onChange={setQuery} placeholder={searchPlaceholder} style={styles.searchFlex} value={query} />
             {watchingToggle}
           </View>
           {sortToggle}
@@ -1129,14 +1194,16 @@ export function PerGameMarketScreen({
           {reversed ? (
             <View style={styles.flipNote}>
               <Text maxFontSizeMultiplier={1.4} style={styles.flipText}>{flippedSortNote(sort).text}</Text>
-              <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="quiet" />
+              <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="secondary" />
             </View>
           ) : sideExplainer}
         </View>
       ) : reversed && (!folded || controlsOpen) ? (
-        <View style={[styles.flipNote, wide && styles.flipNoteWide]}>
+        // On the list's gutter, with a reset that looks like the other small
+        // outlined buttons (walk 5 T1-15: the note touched the screen edge).
+        <View style={[styles.flipNote, styles.flipNoteGutter, folded && styles.flipNoteFolded]}>
           <Text maxFontSizeMultiplier={1.4} style={styles.flipText}>{flippedSortNote(sort).text}</Text>
-          <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="quiet" />
+          <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="secondary" />
         </View>
       ) : null}
       {wide ? (
@@ -1384,6 +1451,10 @@ const styles = StyleSheet.create({
   },
   slotStatusUnder: {
     alignItems: 'flex-start',
+    // In the stacked column a 110px basis became 110px of height: an empty
+    // band above the search at 320px (walk 5 T4-13).
+    flexGrow: 0,
+    flexBasis: 'auto',
   },
   slotStatusFolded: {
     flexBasis: 0,
@@ -1435,8 +1506,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     columnGap: space.sm,
   },
-  flipNoteWide: {
+  flipNoteGutter: {
     paddingHorizontal: space.lg,
+    paddingBottom: space.sm,
+    rowGap: space.xs,
+  },
+  flipNoteFolded: {
+    paddingHorizontal: space.sm,
   },
   flipText: {
     color: colors.goldInk,
@@ -1476,7 +1552,9 @@ const styles = StyleSheet.create({
   },
   searchWide: {
     flexGrow: 1,
-    flexBasis: 160,
+    // Leaves Watching room on the first row at 1024px, so the toolbar and
+    // its sentence take two rows before the table (walk 5 T2-14).
+    flexBasis: 120,
   },
   searchShort: {
     // Gives way first, so the toolbar keeps to one row on a laptop.
@@ -1650,6 +1728,11 @@ const styles = StyleSheet.create({
     fontSize: type.label,
     fontWeight: weight.bold,
   },
+  detailLines: {
+    // Two lines on every row: the break always falls after the first (walk 5 T1-04).
+    flexDirection: 'column',
+    rowGap: 0,
+  },
   detailLine: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1718,9 +1801,16 @@ const styles = StyleSheet.create({
     // "ADDED ✓" and "SEASON OVER" fit a 76px button on one and two lines.
     paddingHorizontal: 6,
   },
+  phoneButtonDone: {
+    // "DROPPED ✓" and "SHORTED ✓" keep one line in the same 76px (walk 5 T4-03).
+    paddingHorizontal: 2,
+  },
   buttonText: {
     letterSpacing: 0.5,
     textAlign: 'center',
+  },
+  buttonTextDone: {
+    letterSpacing: 0,
   },
   stripTable: {
     // Under a wide row the strip keeps the row's inset and lines its buttons

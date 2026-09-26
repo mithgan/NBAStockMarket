@@ -56,6 +56,13 @@ import {
   sortedLine,
   valueByPosition,
   valueSignal,
+  heldValueLine,
+  nicknameFor,
+  PLAYER_NICKNAMES,
+  rowTier,
+  rowValueEdge,
+  shortTierLabel,
+  unheldValueLines,
 } from './marketView';
 
 function player(overrides: Partial<PerGameMarketPlayer>): PerGameMarketPlayer {
@@ -208,7 +215,8 @@ test('a held row reads the current position only, like its Roster row (grader B1
   assert.equal(heldDetail(accountValueByPlayer(all, 'long').get('a'), 103_000).text, '+$105.3K a game over 12 games');
   const detail = heldDetail(positionValue(all, 'mock-position-12'), 103_000);
   // The Roster's precision (grader S-2): -$368.3K, not -$368K.
-  assert.deepEqual(detail, { text: '-$368.3K a game over 1 game', tone: 'loss' });
+  // One game reads "in 1 game" (walk 5 T1-05).
+  assert.deepEqual(detail, { text: '-$368.3K in 1 game', tone: 'loss' });
   // Right after a re-add, before the new stint plays: the locked price, not the old stint.
   // Right after a re-add the price box shows "yours $104.3K"; the line says no games yet.
   assert.deepEqual(heldDetail(positionValue(all, 'mock-position-13'), 104_250), { text: 'no games yet', tone: 'none' });
@@ -247,6 +255,9 @@ test('right after Add or Short the spot says so and never reads Drop or Close (T
   assert.equal(actionWord({ ...base, side: 'short', justOpened: true }), 'Shorted ✓');
   assert.equal(actionWord({ ...base, held: false, justClosed: true }), 'Dropped ✓');
   assert.equal(actionWord({ ...base, side: 'short', held: false, justClosed: true }), 'Closed ✓');
+  // The press paints its result while the move is still on its way (walk 5 T2-18).
+  assert.equal(actionWord({ ...base, held: true, justOpened: true, pending: true }), 'Added ✓');
+  assert.equal(actionWord({ ...base, held: false, justClosed: true, pending: true }), 'Dropped ✓');
   // A failed add leaves him unheld: the button offers Add again, not a check mark.
   assert.equal(actionWord({ ...base, held: false, justOpened: true }), 'Add');
   // The QA harness and screen readers find offers by their first word; these never match.
@@ -511,9 +522,10 @@ test('spoken rows say the tier as words, and held rows keep their value phrase (
   assert.equal(spokenTier('star'), 'star');
   assert.match(rowProfileLabel({ name: 'Kon Knueppel', tier: 'role', price: 111_500, detail: 'No last season' }), /^Kon Knueppel, role player, /);
   const gillespie = { currentGameCost: 126_500, priorSeasonValuePerGame: 120_000 };
-  assert.equal(heldValuePhrase(gillespie, 'long'), "last season $120K a game, $6.5K under today's price");
-  assert.equal(heldValuePhrase(gillespie, 'short'), "last season $120K a game, +$6.5K for a short at today's price");
-  assert.equal(heldValuePhrase({ currentGameCost: 90_000, priorSeasonValuePerGame: null }, 'long'), 'no last season');
+  // Held at the price you locked (walk 5 T4-02): today's price is said after it.
+  assert.equal(heldValuePhrase(gillespie, 'long', 126_500), 'value -$6.5K a game at your price, last season $120K a game, now $126.5K a game');
+  assert.equal(heldValuePhrase(gillespie, 'short', 126_500), 'value +$6.5K a game at your price, last season $120K a game, now $126.5K a game');
+  assert.equal(heldValuePhrase({ currentGameCost: 90_000, priorSeasonValuePerGame: null }, 'long', 89_000), 'no last season, now $90K a game');
 });
 
 test('a reversed sort runs the other way, words included; no last season still goes last (T2-N03)', () => {
@@ -604,4 +616,99 @@ test('a move never reorders the list under the finger', async () => {
   // A player new to the view goes at the end; no earlier order sorts afresh.
   assert.deepEqual(keepListOrder([row('a'), row('new'), row('b')], ['b', 'a']).map((r) => r.player.playerId), ['b', 'a', 'new']);
   assert.deepEqual(keepListOrder(resorted, null).map((r) => r.player.playerId), ['doncic', 'booker', 'barnes', 'duren']);
+});
+
+test('a held row measures Value at the price you locked, and sorts by the figure it shows (walk 5 T4-02, T1-02)', () => {
+  // Doncic: locked at $417.5K, his dividend $488.5K; your add nudged today's price to $418.5K.
+  const doncic = { currentGameCost: 418_500, priorSeasonValuePerGame: 488_500 };
+  assert.equal(rowValueEdge(doncic, 'long', { lockedGameCost: 417_500 }), 71_000);
+  assert.equal(rowValueEdge(doncic, 'long', null), 70_000, 'unheld: today\'s price');
+  assert.deepEqual(heldValueLine(doncic, 'long', 417_500), { edge: 71_000, value: 'Value +$71K at your price', now: 'now $418.5K', tone: 'gain' });
+  // A held short: locked credit minus his dividend.
+  assert.equal(heldValueLine({ currentGameCost: 150_000, priorSeasonValuePerGame: 120_000 }, 'short', 140_000).value, 'Value +$20K at your price');
+  assert.equal(heldValueLine({ currentGameCost: 90_000, priorSeasonValuePerGame: null }, 'long', 89_500).value, 'No last season');
+  assert.equal(heldValueLine({ currentGameCost: 100_200, priorSeasonValuePerGame: 100_000 }, 'long', 100_000).value, 'Value even at your price');
+  // Value sort: a held row sorts by its value at your price (+$71K), above a +$70.5K row at today's.
+  const market = [
+    { player: player({ playerId: 'x', currentGameCost: 100_000, priorSeasonValuePerGame: 170_500 }), position: null },
+    { player: player({ playerId: 'd', ...doncic }), position: { lockedGameCost: 417_500 } },
+  ];
+  assert.equal(ids(sortMarketRows(market, 'value', 'long')), 'dx');
+  assert.equal(ids(sortMarketRows(market.map((row) => ({ ...row, position: null })), 'value', 'long')), 'xd');
+});
+
+test('the name leads with your price on a held row (walk 5 T4-02)', () => {
+  assert.equal(
+    rowProfileLabel({ name: 'Luka Doncic', tier: 'star', price: 418_500, detail: 'On your roster', locked: 417_500 }),
+    'Luka Doncic, star, yours $417.5K a game, On your roster, View profile',
+  );
+  assert.equal(rowProfileLabel({ name: 'Luka Doncic', tier: 'star', price: 418_500, detail: '' }), 'Luka Doncic, star, $418.5K a game, View profile');
+});
+
+test('every phone row breaks its value in the same place, and one game reads "in 1 game" (walk 5 T1-04, T1-05)', () => {
+  const signal = valueSignal({ currentGameCost: 210_000, priorSeasonValuePerGame: 218_000 }, 'long');
+  assert.deepEqual(unheldValueLines(signal), { first: 'Dividend last season $218K a game ·', second: '$8K over his price' });
+  const none = unheldValueLines(valueSignal({ currentGameCost: 111_500, priorSeasonValuePerGame: null }, 'long'));
+  assert.equal(none.first, 'No last season ·');
+  assert.ok(none.second.length > 0, 'the second line is never empty');
+  const one = { games: 1, avgNet: 194_500 } as Parameters<typeof heldDetail>[0];
+  assert.equal(heldDetail(one, 417_500).text, '+$194.5K in 1 game');
+  assert.equal(heldDetail({ ...one, games: 2, avgNet: 1_473 } as Parameters<typeof heldDetail>[0], 417_500).text, '+$1.5K a game over 2 games');
+});
+
+test('a phone row always names the tier, short where the full word does not fit (walk 5 T1-03)', () => {
+  assert.equal(shortTierLabel('role'), 'Role');
+  assert.equal(shortTierLabel('starter'), 'Starter');
+  assert.equal(shortTierLabel(null), '');
+  const at = (given: string, surname: string, tier: string, width: number) => rowTier({ given, surname, tier, width });
+  for (const width of [320, 360, 375, 390, 412, 430, 844]) {
+    for (const [given, surname, tier] of [['Donovan', 'Clingan', 'role'], ['Derrick', 'White', 'role'], ['Giannis', 'Antetokounmpo', 'star'], ['Karl-Anthony', 'Towns', 'star'], ['Shai', 'Gilgeous-Alexander', 'star'], ["De'Aaron", 'Fox', 'starter']]) {
+      const placed = at(given, surname, tier, width);
+      assert.ok(placed.kicker !== given || placed.after !== '', `${given} at ${width} keeps his tier`);
+    }
+  }
+  // Wide phones keep it beside the given name, in full where it fits, short where not.
+  assert.deepEqual(at('Luka', 'Doncic', 'star', 390), { kicker: 'Luka\u00A0· Star', after: '' });
+  assert.deepEqual(at('Derrick', 'White', 'role', 390), { kicker: 'Derrick\u00A0· Role', after: '' });
+  assert.deepEqual(at('Derrick', 'White', 'role', 430), { kicker: 'Derrick\u00A0· Role\u00A0player', after: '' });
+  // Narrow phones put it after the surname; a long surname sends it back beside the given name.
+  assert.deepEqual(at('Scottie', 'Barnes', 'starter', 360), { kicker: 'Scottie', after: 'Starter' });
+  assert.deepEqual(at('Shai', 'Gilgeous-Alexander', 'star', 360), { kicker: 'Shai\u00A0· Star', after: '' });
+  assert.deepEqual(at('Nikola', 'Jokic', null as unknown as string, 390), { kicker: 'Nikola', after: '' });
+});
+
+test('spaced single letters are initials, and a few nicknames find their player alone (walk 5 T4-10, T4-N3)', () => {
+  const pool = [
+    { player: player({ playerId: 'og', name: 'OG Anunoby' }) },
+    { player: player({ playerId: 'dc', name: 'Donovan Clingan' }) },
+    { player: player({ playerId: 'cg', name: 'Collin Gillespie' }) },
+    { player: player({ playerId: 'sga', name: 'Shai Gilgeous-Alexander' }) },
+    { player: player({ playerId: 'wemby', name: 'Victor Wembanyama' }) },
+    { player: player({ playerId: 'jokic', name: 'Nikola Jokić' }) },
+    { player: player({ playerId: 'giannis', name: 'Giannis Antetokounmpo' }) },
+    { player: player({ playerId: 'spida', name: 'Donovan Mitchell' }) },
+    { player: player({ playerId: 'kat', name: 'Karl-Anthony Towns' }) },
+  ];
+  const find = (query: string) => filterMarketRows(pool, { query, watchedOnly: false, watched: [] }).map((row) => row.player.playerId).join(',');
+  assert.equal(find('O G'), 'og');
+  assert.equal(find('o g'), 'og');
+  assert.equal(find('s g a'), 'sga');
+  assert.equal(find('d c'), 'dc');
+  assert.equal(find('x z'), '');
+  assert.equal(find('wemby'), 'wemby');
+  assert.equal(find('Wemby'), 'wemby');
+  assert.equal(find('joker'), 'jokic');
+  assert.equal(find('the joker'), 'jokic');
+  assert.equal(find('greek freak'), 'giannis');
+  assert.equal(find('Greek-Freak'), 'giannis');
+  assert.equal(find('spida'), 'spida');
+  // Anthony Edwards is not listed here: "ant" reads as letters, as before.
+  assert.equal(find('ant'), 'giannis,kat');
+  assert.equal(find('sga'), 'sga');
+  // Every nickname names one player, and none is part of another's name.
+  for (const [nickname, name] of Object.entries(PLAYER_NICKNAMES)) {
+    assert.equal(nicknameFor(nickname), searchKey(name));
+  }
+  assert.equal(nicknameFor('wem'), null, 'only whole nicknames');
+  assert.equal(nicknameFor('luka'), null);
 });
