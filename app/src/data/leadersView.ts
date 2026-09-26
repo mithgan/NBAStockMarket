@@ -15,8 +15,7 @@
  * next score down takes the place after everyone above it ("1, 2, 2, 4").
  */
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { money } from '../copy/terms';
-import { formatAt, type PartPrecision } from './rosterView';
+import { money, signedMoney } from '../copy/terms';
 
 export interface BoardGap {
   rank: number;
@@ -82,28 +81,40 @@ export interface BoardEntry {
   tied: boolean;
   /** Your row only, while the board lags your score: the board's own figure, shown as a note. */
   boardScore: number | null;
-  /** How precisely to write the score so it never reads like a different score on the board. */
-  precision: PartPrecision;
+  /**
+   * Small notes under a score that reads the same as a different score next
+   * to it: "$191 ahead of #2" on the higher row, "$191 behind #1" on the
+   * lower. Empty when the score reads apart from its neighbours (or is an
+   * exact tie, which the shared place already says).
+   */
+  closeCalls: string[];
 }
 
-const PRECISIONS: PartPrecision[] = ['fine', 'fine3', 'exact'];
-
 /**
- * The least precision at which a score reads differently from every other,
- * different score on the board. The app's money format rounds millions to
- * $10K, so $4,504,000 and $4,496,000 would both read "+$4.5M" beside ranks
- * #1 and #2; those two rows read "+$4.504M" and "+$4.496M" instead, and the
- * rest of the board keeps the lighter format. Equal scores (a tie) read the
- * same, as they should.
+ * Every row keeps the app's one money format ("+$4.5M"), even when two
+ * different scores round to the same text. Such a pair gets a small note on
+ * each row instead, with the dollars between them: "$191 ahead of #2" on the
+ * higher one and "$191 behind #1" on the lower. An exact tie gets no note:
+ * the shared place already says it.
  */
-export function distinctPrecision(score: number, board: readonly number[]): PartPrecision {
-  const mine = Math.round(score);
-  const rivals = board.map((other) => Math.round(other)).filter((other) => other !== mine);
-  for (const precision of PRECISIONS) {
-    const text = formatAt(mine, precision, true);
-    if (rivals.every((other) => formatAt(other, precision, true) !== text)) return precision;
-  }
-  return 'exact';
+export function closeCallNotes(
+  entries: ReadonlyArray<{ score: number; place: number }>,
+): string[][] {
+  return entries.map(({ score }) => {
+    const text = signedMoney(score);
+    const higher = entries.filter((other) => Math.round(other.score) > Math.round(score));
+    const lower = entries.filter((other) => Math.round(other.score) < Math.round(score));
+    const notes: string[] = [];
+    if (higher.length > 0) {
+      const next = higher.reduce((best, other) => (other.score < best.score ? other : best));
+      if (signedMoney(next.score) === text) notes.push(`${money(next.score - score)} behind #${next.place}`);
+    }
+    if (lower.length > 0) {
+      const next = lower.reduce((best, other) => (other.score > best.score ? other : best));
+      if (signedMoney(next.score) === text) notes.push(`${money(score - next.score)} ahead of #${next.place}`);
+    }
+    return notes;
+  });
 }
 
 /**
@@ -123,7 +134,7 @@ export function boardList(
     return { row, order, score: live };
   });
   const scores = scored.map((entry) => entry.score);
-  return scored
+  const entries = scored
     .sort((left, right) => right.score - left.score || left.order - right.order)
     .map(({ row, score }) => ({
       row,
@@ -131,8 +142,9 @@ export function boardList(
       place: 1 + scores.filter((other) => other > score).length,
       tied: scores.filter((other) => other === score).length > 1,
       boardScore: row.isCurrentUser && Math.abs(score - row.cumulativePnl) >= 1 ? row.cumulativePnl : null,
-      precision: distinctPrecision(score, scores),
     }));
+  const notes = closeCallNotes(entries);
+  return entries.map((entry, index) => ({ ...entry, closeCalls: notes[index] }));
 }
 
 /**

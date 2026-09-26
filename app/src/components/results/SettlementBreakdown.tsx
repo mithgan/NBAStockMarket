@@ -33,7 +33,10 @@ export function SettlementBreakdown({
   /** Desktop: a receipt-width column aligned to the right, under the numbers. */
   wide: boolean;
 }) {
+  // Whose math this is, in the profile's words ("Your roster spot:").
+  const heading = side === 'short' ? 'Your short' : 'Your roster spot';
   const spoken = [
+    heading,
     ...(basis ? [`His dividend: ${basis}`] : []),
     ...lines.map((line) => `${line.label}: ${effect(line.amount)}`),
     `Profit: ${effect(net)}`,
@@ -41,7 +44,7 @@ export function SettlementBreakdown({
   return (
     <View style={[styles.box, wide && styles.boxWide]}>
       <View accessibilityLabel={`${spoken}.`} accessible>
-        <Text style={styles.heading}>For you</Text>
+        <Text style={styles.heading}>{heading}</Text>
         {basis ? (
           <Text style={styles.basis}>His dividend: {basis}</Text>
         ) : null}
@@ -79,7 +82,6 @@ const styles = StyleSheet.create({
     fontSize: type.label,
     fontWeight: weight.heavy,
     letterSpacing: 1.1,
-    textAlign: 'right',
     textTransform: 'uppercase',
   },
   basis: {

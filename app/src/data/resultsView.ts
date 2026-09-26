@@ -99,6 +99,8 @@ export type ResultsFeedItem =
       total: number;
       /** Every fee is an add or a drop. */
       moves: boolean;
+      /** Some of them opened or closed a short, so they are not all roster moves. */
+      shorts: boolean;
     }
   | {
       type: 'fee';
@@ -216,6 +218,7 @@ export function buildResultsFeed(
         count: fees.length,
         total: night.fees,
         moves: night.moves === fees.length,
+        shorts: fees.some((entry) => sideOf.get(entry.positionId) === 'short'),
       });
     }
     for (const entry of fees) {
@@ -328,9 +331,13 @@ export function nightTotalPending(night: NightSummary): boolean {
   return night.games === 0 && night.pending > 0;
 }
 
-/** The heading of a day's fees line: add and drop fees are "Roster moves". */
-export function feesLineName(moves: boolean): string {
-  return moves ? 'Roster moves' : 'Fees';
+/**
+ * The heading of a day's fees line: add and drop fees are "Roster moves", or
+ * just "Moves" once a short is among them (a short is not on your roster).
+ */
+export function feesLineName(moves: boolean, shorts = false): string {
+  if (!moves) return 'Fees';
+  return shorts ? 'Moves' : 'Roster moves';
 }
 
 // ---------------------------------------------------------------------------

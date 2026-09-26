@@ -24,10 +24,12 @@ import {
   signedMoney,
   unbrokenName,
 } from '../copy/terms';
+import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { Disclosure, DisclosureSpace, DISCLOSURE_WIDTH } from '../components/results/Disclosure';
 import { NetMoney } from '../components/results/NetMoney';
 import { SettlementBreakdown } from '../components/results/SettlementBreakdown';
+import { practiceProgress } from '../data/chromeView';
 import {
   buildResultsFeed,
   dividendBasisLine,
@@ -369,7 +371,9 @@ function nightAnchorId(date: string): string {
  * A day's header: its date and what your players made that night (games
  * only, the same figure as "Last night", labelled "Games" so nobody reads it
  * as the fees below too). A day with no games shows no figure; its moves fold
- * under their own line below.
+ * under their own line below. A day with nothing to say under its date (the
+ * moves before your first games) is just the date, so its moves line sits
+ * right under it instead of below an empty band.
  */
 function NightHeader({ night, layout }: { night: NightSummary; layout: Layout }) {
   const summary = nightSummaryWrapped(night);
@@ -381,9 +385,10 @@ function NightHeader({ night, layout }: { night: NightSummary; layout: Layout })
     ? ' games not settled yet.'
     : ` your players made ${netWords(night.total)}.`;
   const edge = edges(layout);
+  const bare = !played && !summary;
   return (
     <View
-      accessibilityLabel={`${title}:${totalWords}${spokenSummary ? ` ${spokenSummary}.` : ''}`}
+      accessibilityLabel={bare ? title : `${title}:${totalWords}${spokenSummary ? ` ${spokenSummary}.` : ''}`}
       accessibilityRole="header"
       accessible
       nativeID={nightAnchorId(night.date)}
@@ -393,6 +398,7 @@ function NightHeader({ night, layout }: { night: NightSummary; layout: Layout })
         styles.groupHeader,
         { paddingLeft: edge.left, paddingRight: edge.right },
         layout.columns && styles.groupHeaderColumns,
+        bare && styles.groupHeaderBare,
       ]}
     >
       <View style={[styles.groupCopy, layout.compact && styles.groupCopyCompact]}>
@@ -424,6 +430,7 @@ function FeesFold({
   moves,
   onToggle,
   open,
+  shorts,
   total,
 }: {
   count: number;
@@ -431,9 +438,10 @@ function FeesFold({
   moves: boolean;
   onToggle: () => void;
   open: boolean;
+  shorts: boolean;
   total: number;
 }) {
-  const name = feesLineName(moves);
+  const name = feesLineName(moves, shorts);
   const noun = moves ? (count === 1 ? 'move' : 'moves') : (count === 1 ? 'fee' : 'fees');
   return (
     <Pressable
@@ -604,6 +612,11 @@ export function PerGameResultsScreen() {
     && !nights.some((night) => night.date === lastSettled));
   // Moves made, but no games yet: the moves are the story, not "No results".
   const movesOnly = played.length === 0 && feed.length > 0;
+  // Games have been played, just none by your players: practice is past its opening
+  // eve (Day 0 settles no games); a live season has settled a night.
+  const nightsWithoutYou = movesOnly && (isMockActive()
+    ? practiceProgress(mockSeasonStart(), lastSettled).day > 0
+    : Boolean(lastSettled));
 
   const renderItem: ListRenderItem<ResultsFeedItem> = ({ item }) => {
     if (item.type === 'night') return <NightHeader layout={layout} night={item.night} />;
@@ -615,6 +628,7 @@ export function PerGameResultsScreen() {
           moves={item.moves}
           onToggle={() => toggleFees(item.date)}
           open={openFees.has(item.date)}
+          shorts={item.shorts}
           total={item.total}
         />
       );
@@ -670,7 +684,9 @@ export function PerGameResultsScreen() {
       ) : null}
       {movesOnly ? (
         <Text style={styles.note}>
-          No games yet. Results land here after each night of games. Your moves so far are below.
+          {nightsWithoutYou
+            ? 'None of your players has had a game yet. Results land here after each night they play. Your moves so far are below.'
+            : 'No games yet. Results land here after each night of games. Your moves so far are below.'}
         </Text>
       ) : null}
       {quietLastNight && lastSettled ? (
@@ -833,6 +849,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
+    // A wrapped header centres its lines too, instead of packing them at the top.
+    alignContent: 'center',
     columnGap: space.md,
     paddingVertical: space.sm,
     backgroundColor: colors.surface,
@@ -842,6 +860,10 @@ const styles = StyleSheet.create({
   },
   groupHeaderColumns: {
     minHeight: 56,
+  },
+  // Only a date (moves before the first games): as tall as the date itself.
+  groupHeaderBare: {
+    minHeight: 0,
   },
   groupCopy: {
     minWidth: 0,

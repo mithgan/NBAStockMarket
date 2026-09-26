@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { boardLag, boardList, distinctPrecision, leaderStanding, sortBoard, standingLines, standingPlace, type Standing } from './leadersView';
+import { boardLag, boardList, closeCallNotes, leaderStanding, sortBoard, standingLines, standingPlace, type Standing } from './leadersView';
 
 function board(scores: Array<[string, number, boolean?]>): PerGameLeaderboardRow[] {
   return scores.map(([displayName, cumulativePnl, isCurrentUser], index) => ({
@@ -209,13 +209,50 @@ test('a score that has moved past or level with a board row takes that place', (
   assert.deepEqual(standingLines(leading), ['$50K ahead of #2']);
 });
 
-test('scores that would read alike on the board get the digits that tell them apart', () => {
-  // "+$4.5M" twice beside #1 and #2 would look like a tie.
-  assert.equal(distinctPrecision(4_504_000, [4_504_000, 4_496_000, 1_200_000]), 'fine3');
-  assert.equal(distinctPrecision(4_496_000, [4_504_000, 4_496_000, 1_200_000]), 'fine3');
-  // Everyone else keeps the app's usual format.
-  assert.equal(distinctPrecision(1_200_000, [4_504_000, 4_496_000, 1_200_000]), 'fine');
-  // A tie reads the same, and dollars apart need exact dollars.
-  assert.equal(distinctPrecision(245_000, [245_000, 245_000]), 'fine');
-  assert.equal(distinctPrecision(245_000, [245_000, 245_040]), 'exact');
+test('scores that read alike keep the one format and say how far apart they are', () => {
+  // The walk-2 final board: "+$4.5M" twice beside #1 and #2 would look like a tie.
+  const rows = board([
+    ['Fast Break FC', 4_502_103],
+    ['Deep Threes', 4_501_912],
+    ['Glass Cleaners', 3_910_000],
+    ['You', -8_160_000, true],
+  ]);
+  const list = boardList(rows);
+  assert.deepEqual(list.map((entry) => entry.closeCalls), [
+    ['$191 ahead of #2'],
+    ['$191 behind #1'],
+    [],
+    [],
+  ]);
+  // No row switches to exact dollars: every entry is written the app's one way.
+  assert.equal('precision' in list[0], false);
+});
+
+test('a close call in the middle of three says both gaps, and a tie gets no note', () => {
+  assert.deepEqual(closeCallNotes([
+    { score: 4_504_000, place: 1 },
+    { score: 4_501_000, place: 2 },
+    { score: 4_498_000, place: 3 },
+    { score: 1_200_000, place: 4 },
+  ]), [
+    ['$3,000 ahead of #2'],
+    ['$3,000 behind #1', '$3,000 ahead of #3'],
+    ['$3,000 behind #2'],
+    [],
+  ]);
+  // An exact tie shares its place; a different score nearby is still told apart.
+  assert.deepEqual(closeCallNotes([
+    { score: 245_000, place: 1 },
+    { score: 245_000, place: 1 },
+    { score: 244_960, place: 3 },
+  ]), [['$40 ahead of #3'], ['$40 ahead of #3'], ['$40 behind #1']]);
+  // Scores that already read apart need nothing.
+  assert.deepEqual(closeCallNotes([{ score: 395_438, place: 1 }, { score: 395_188, place: 2 }]), [[], []]);
+});
+
+test('your row is told apart by the score shown, and a level board has no notes', () => {
+  const rows = board([['Ava', 125_100], ['You', 125_000, true]]);
+  assert.deepEqual(boardList(rows, 125_080).map((entry) => entry.closeCalls), [['$20 ahead of #2'], ['$20 behind #1']]);
+  const level = boardList(board([['Ava', 0], ['You', 0, true]]), -250);
+  assert.deepEqual(level.map((entry) => entry.closeCalls), [[], []]);
 });

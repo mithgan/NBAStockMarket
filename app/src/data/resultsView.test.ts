@@ -13,6 +13,7 @@ import {
   dividendBasisLine,
   feeDay,
   feedNights,
+  feesLineName,
   nightSummaryLine,
   nightTotalPending,
   resultRowModel,
@@ -646,6 +647,19 @@ test('moves made before your first games read as moves, not as a night nobody pl
     ['2025-10-21', false, '1 of 1 beat their price'],
     ['2025-10-20', true, ''],
   ]);
+});
+
+test('a day whose moves include a short is "Moves", not "Roster moves"', () => {
+  cursor = 750;
+  const adds = [0, 1].map((index) => fee({ entryId: `add-${index}`, positionId: `pos-${index}`, createdAt: '2025-10-20T23:45:00.000Z' }));
+  const short = fee({ entryId: 'short', positionId: 'pos-9', createdAt: '2025-10-20T23:50:00.000Z' });
+  const positions = [position('pos-0', 'long'), position('pos-1', 'long'), position('pos-9', 'short')];
+  const folds = (ledger: PerGameLedgerEntry[]) => buildResultsFeed(source([], ledger, positions), { lastSettledDate: '2025-10-20' })
+    .flatMap((item) => (item.type === 'fees' ? [feesLineName(item.moves, item.shorts)] : []));
+  assert.deepEqual(folds(adds), ['Roster moves']);
+  assert.deepEqual(folds([...adds, short]), ['Moves']);
+  assert.deepEqual(folds([short]), ['Moves']);
+  assert.equal(feesLineName(false, true), 'Fees', 'a penalty or account fee is still a fee');
 });
 
 test('fee rows stay folded under their day until that day is opened', () => {

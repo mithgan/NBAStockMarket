@@ -4,8 +4,6 @@ import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-n
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
 import { signedMoney } from '../copy/terms';
 import { NetMoney } from '../components/results/NetMoney';
-import { FineMoney } from '../components/roster/FineMoney';
-import { formatAt } from '../data/rosterView';
 import { practiceProgress } from '../data/chromeView';
 import {
   boardLag,
@@ -156,18 +154,19 @@ function StandingBlock({
 /**
  * One row of the board, read as one list item: "Rank 2, Deep Threes,
  * +$245K". On a level board (before the first games) no one has a rank yet.
+ * Every score keeps the app's one format; when two different scores read
+ * alike, each says how far apart they are ("$191 ahead of #2").
  */
 function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEntry; level: boolean }) {
-  const { row, place, tied, score, boardScore, precision } = entry;
-  // A score that would read like a different one on the board gets its digits.
-  const scoreText = precision === 'fine' ? scoreWords(score) : formatAt(score, precision, true);
+  const { row, place, tied, score, boardScore, closeCalls } = entry;
+  const scoreText = scoreWords(score);
   const you = row.isCurrentUser;
   // Practice names your row "You"; a YOU tag beside it would say it twice.
   const tagged = you && row.displayName.trim().toLowerCase() !== 'you';
   const who = `${row.displayName}${tagged ? ', you' : ''}`;
   const spoken = level
     ? `${who}, level at $0`
-    : `${tied ? 'Tied for' : 'Rank'} ${place}, ${who}, ${scoreText}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`;
+    : `${tied ? 'Tied for' : 'Rank'} ${place}, ${who}, ${scoreText}${closeCalls.map((note) => `, ${note}`).join('')}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`;
   return (
     <View role="listitem" style={[styles.item, you && styles.currentRow]}>
       <Spoken>{spoken}</Spoken>
@@ -178,7 +177,10 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
           {tagged ? <Tag tone="gold">You</Tag> : null}
         </View>
         <View style={[styles.scoreCell, compact && styles.scoreCompact]}>
-          {precision === 'fine' ? <NetMoney value={score} /> : <FineMoney precision={precision} value={score} />}
+          <NetMoney value={score} />
+          {level ? null : closeCalls.map((note) => (
+            <Text key={note} style={[styles.boardNote, styles.closeCall, compact && styles.boardNoteCompact]}>{note}</Text>
+          ))}
           {boardScore === null ? null : (
             <Text style={[styles.boardNote, compact && styles.boardNoteCompact]}>board {signedMoney(boardScore)}</Text>
           )}
@@ -202,6 +204,8 @@ export function PerGameLeaderboardScreen() {
   const level = standing.kind === 'level';
   // The list places you by the same score, with the board's figure as a note while it lags.
   const list = boardList(rows, bootstrap.account.cumulativePnl);
+  // Practice fills the board with computer rivals: say so once, quietly.
+  const practiceRivals = isMockActive() && rows.some((row) => !row.isCurrentUser);
   // The Roster's rule: practice ends on its last day, a live season when no games are left.
   const final = isSeasonOver({
     practiceComplete: isMockActive() && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete,
@@ -219,6 +223,7 @@ export function PerGameLeaderboardScreen() {
           ? 'The season is over. Ranked by total score; everyone started at $0.'
           : 'Ranked by total score. Everyone started the season at $0.'}
       </Text>
+      {practiceRivals ? <Text style={styles.subtitle}>Practice rivals are computer players.</Text> : null}
     </View>
   );
   const standingBlock = (
@@ -522,5 +527,9 @@ const styles = StyleSheet.create({
   },
   boardNoteCompact: {
     textAlign: 'left',
+  },
+  // Two different scores that read alike: how far apart they are, in muted ink.
+  closeCall: {
+    color: colors.muted,
   },
 });
