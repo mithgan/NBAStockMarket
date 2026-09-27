@@ -1121,7 +1121,7 @@ test('walk 11 T2-01: the Price view says one game rarely decides a price, in the
   const { PRICE_EXPLAINER } = await import('./perGameRules');
   assert.equal(
     priceMovesNote(),
-    "A player's price moves as people add and drop him and as his games add up: one game rarely decides it, so a price can dip after a great night.",
+    "A player's price moves as people add and drop him and as his games add up: one game rarely decides it, so a price can dip after a great night or rise after a poor one.",
   );
   assert.ok(PRICE_EXPLAINER.startsWith(priceMovesNote()));
 });

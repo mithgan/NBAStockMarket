@@ -8,7 +8,7 @@ export const NET_POINTS_EXPLAINER =
 
 /** What you are playing for, before how it works (walk 3 T1-04). */
 export const GOAL_EXPLAINER =
-  'Finish the season with the highest score on the Leaders board. Your score comes from the NBA players you add to your roster.';
+  'Finish the season with the highest score on the Leaders board. Your score comes from the NBA players you add to your roster. There is no budget: add any players you like; what counts is whether each one beats his price.';
 
 /**
  * Scoring in three short lines a fan can skim (walk 6 T1-03): pay his price
@@ -54,7 +54,7 @@ export const LUCK_EXPLAINER =
 // One game rarely decides a price: a player's price fell after a +$194.5K
 // night and read as the rules being wrong (walk 11 T2-01).
 export const PRICE_EXPLAINER =
-  "A player's price moves as people add and drop him and as his games add up: one game rarely decides it, so a price can dip after a great night. The price you add him at is locked for as long as you hold him.";
+  "A player's price moves as people add and drop him and as his games add up: one game rarely decides it, so a price can dip after a great night or rise after a poor one. The price you add him at is locked for as long as you hold him.";
 
 /**
  * Scoring's word on a bad game, beside what the dividend is: a roster-only
@@ -235,6 +235,17 @@ export interface ScoringParts {
  * The Rules' "Keyboard" section (walk 12 T3-N1): each key, then what it
  * does, in the rules' plain words. The chart said its keys on screen, but
  * nothing listed the rest (the skip links, the tabs' arrows, Escape).
+ */
+export const TOUCH_TIPS: ReadonlyArray<{ keys: string; does: string }> = [
+  { keys: 'Tap a row', does: "Opens that player's profile: his games, his price and the move you can make." },
+  { keys: 'Score chart', does: 'Tap a night to read it, or slide a finger along the chart; a swipe up or down scrolls the page.' },
+  { keys: 'Double tap', does: 'Counts once on the same button, so a quick second tap never adds, drops or plays twice.' },
+  { keys: 'Tap outside', does: 'Closes a sheet, a menu or a question without pressing anything under it.' },
+];
+
+/**
+ * The Rules' "Keyboard" section (walk 12 T3-N1) has a "Touch" section beside
+ * it on a touch screen (walk 13 T1-14: a phone's Rules ended with keys only).
  */
 export const KEYBOARD_KEYS: ReadonlyArray<{ keys: string; does: string }> = [
   { keys: 'Tab', does: 'Moves to the next control, and Shift+Tab to the one before. The first Tab offers Skip to content.' },

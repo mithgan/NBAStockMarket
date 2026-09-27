@@ -16,7 +16,7 @@ test('rules explain the actual basis, fees, expiry and zero starting score', () 
   // The loop and one worked night come first, with the real rate.
   // The goal first, then the loop and one worked night, with the real rate.
   assert.match(view.explanation, /^Finish the season with the highest score on the Leaders board\./);
-  assert.match(view.explanation, /Each game he plays, you pay his price and collect his dividend\./);
+  assert.match(view.explanation, /Each game a player plays, you pay his price and collect his dividend\./);
   assert.match(view.explanation, /Example: 3\.5 net points = \$43\.8K dividend; price \$36\.8K; profit \+\$7K\./);
   assert.equal(facts['Open fee'], '$750');
   assert.equal(facts['Drop fee'], '$750');
@@ -87,7 +87,7 @@ test('the rules read in steps: goal, scoring with the example after net points, 
   // Settings' lede: the goal and the loop in one breath.
   assert.equal(
     rulesSummary(explanation),
-    `${sections[0].text} Each game he plays, you pay his price and collect his dividend. Beat his price and you profit.`,
+    `${sections[0].text} Each game a player plays, you pay his price and collect his dividend. Beat his price and you profit.`,
   );
 });
 
@@ -96,7 +96,7 @@ test('Scoring reads as three short lines with the example set apart in K, and th
   const ruleset = { ...rules, dividendBasis: 'raw_net_points' as const, dividendDollarsPerNetPoint: 40000 };
   const view = perGameRulesPresentation(ruleset);
   assert.deepEqual(view.scoring.lines, [
-    'Each game he plays, you pay his price and collect his dividend.',
+    'Each game a player plays, you pay his price and collect his dividend.',
     'His dividend is his net points each game × $40K.',
     // A bad game's below-zero dividend, where a roster-only player looks (walk 8 T1-01).
     'A bad game can push his dividend below zero, and you pay that too.',
@@ -107,7 +107,7 @@ test('Scoring reads as three short lines with the example set apart in K, and th
   const scoring = rulesSections(view.explanation).find((section) => section.heading === 'Scoring');
   assert.equal(scoring?.text, [...view.scoring.lines, view.scoring.netPoints, view.scoring.example, view.scoring.luck].join(' '));
   // Settings' lede keeps the loop in one breath.
-  assert.match(rulesSummary(view.explanation) ?? '', /Each game he plays, you pay his price and collect his dividend\. Beat his price and you profit\.$/);
+  assert.match(rulesSummary(view.explanation) ?? '', /Each game a player plays, you pay his price and collect his dividend\. Beat his price and you profit\.$/);
   const meaning = (term: string) => view.glossary.find((entry) => entry.term === term)?.meaning ?? '';
   assert.match(meaning('Value'), /For a player you hold, it is measured against the price you locked\./);
   assert.match(meaning('Dividend last season'), /a guide, not a promise\. Players usually pay out less than last season, and prices already expect part of that\./);
@@ -119,7 +119,7 @@ test('Scoring reads as three short lines with the example set apart in K, and th
 test('Scoring says a bad game can push a dividend below zero, and a roster spot pays it (walk 8 T1-01)', () => {
   const view = perGameRulesPresentation(rules);
   assert.ok(view.scoring.lines.includes('A bad game can push his dividend below zero, and you pay that too.'));
-  const scoring = rulesParagraphs(view.explanation).find((paragraph) => paragraph.startsWith('Each game he plays'));
+  const scoring = rulesParagraphs(view.explanation).find((paragraph) => paragraph.startsWith('Each game a player plays'));
   assert.ok(scoring?.includes('below zero, and you pay that too'));
   assert.equal(rulesParagraphs(view.explanation).join(' '), view.explanation);
 });

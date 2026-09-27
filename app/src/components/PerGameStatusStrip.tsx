@@ -50,7 +50,7 @@ import {
   statusSummary,
 } from '../data/chromeView';
 import { earningsBetween } from '../data/perGameMetrics';
-import { EXAMPLE_LEAD, KEYBOARD_KEYS, perGameRulesPresentation, positionSlotHint, rulesSections, type ScoringParts } from '../data/perGameRules';
+import { EXAMPLE_LEAD, KEYBOARD_KEYS, perGameRulesPresentation, positionSlotHint, rulesSections, TOUCH_TIPS, type ScoringParts } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
 import { openSettings, registerRulesOpener } from '../state/uiActions';
@@ -792,6 +792,21 @@ function RulesSheet({
               ))}
             </View>
           </View>
+          {/* On a touch screen, its gestures first (walk 13 T1-14). */}
+          {Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+            && window.matchMedia('(pointer: coarse)').matches ? (
+            <View style={styles.glossary}>
+              <Text accessibilityRole="header" {...headingLevel(3)} style={styles.glossaryTitle}>Touch</Text>
+              <View aria-label="Touch" role="list" style={styles.glossaryList}>
+                {TOUCH_TIPS.map((entry) => (
+                  <View key={entry.keys} role="listitem" style={styles.glossaryRow}>
+                    <Text role="term" style={styles.glossaryTerm}>{entry.keys}</Text>
+                    <Text role="definition" style={styles.glossaryMeaning}>{entry.does}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
           {/* The keys, for anyone playing without a mouse (walk 12 T3-N1). */}
           {Platform.OS === 'web' ? (
             <View style={styles.glossary}>

@@ -39,10 +39,12 @@ import {
 import { ThemeProvider, useDesignVariant } from './src/theme/ThemeProvider';
 import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
 import { useKeepNotices } from './src/state/noticePreference';
+import { reduceMotionChosen } from './src/state/motionPreference';
 import { brandFontReady, installGlobalWebStyles } from './src/web/globalStyles';
 import { applyVariant } from './src/theme/applyVariant';
 import { startingVariant } from './src/theme/ThemeProvider';
 import { installFocusInView } from './src/web/focusInView';
+import { installScreenScroll } from './src/web/screenScroll';
 import { ignoreHeldKeys } from './src/web/keyRepeat';
 import { treatmentNavigation } from './src/web/treatmentNavigation';
 
@@ -51,6 +53,7 @@ installGlobalWebStyles();
 applyVariant(startingVariant());
 ignoreHeldKeys();
 installFocusInView();
+installScreenScroll();
 
 /** Circular databallr mark; radius is derived so it is never a card corner. */
 const BRAND_MARK_SIZE = 24;
@@ -499,6 +502,23 @@ function SkipLink({ label = 'Skip to content', onJump = focusScreen }: { label?:
   );
 }
 
+/** Back to the top of the screen's list (web): the tab pressed again. */
+function scrollScreenToTop(): void {
+  if (typeof document === 'undefined') return;
+  const screen = document.getElementById('app-screen');
+  if (!screen) return;
+  const scroller = [screen, ...Array.from(screen.querySelectorAll<HTMLElement>('*'))].find((node) => {
+    if (node.scrollTop <= 0) return false;
+    const style = getComputedStyle(node);
+    return /(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1;
+  });
+  if (!scroller) return;
+  const still = reduceMotionChosen()
+    || (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  // react-native-web gives a ScrollView's node its own scrollTo({ x, y }).
+  (Element.prototype.scrollTo as (this: Element, options: ScrollToOptions) => void).call(scroller, { top: 0, behavior: still ? 'auto' : 'smooth' });
+}
+
 function focusScreen(): void {
   (document.getElementById('app-screen') as HTMLElement | null)?.focus?.();
 }
@@ -620,8 +640,11 @@ function AppBody() {
   }, []);
   const changeTab = (tab: Tab) => {
     if (tab === activeTab) {
-      // Pressing Results again takes a long season back to its newest night.
+      // Pressing Results again takes a long season back to its newest night;
+      // any other tab pressed again goes back to its top, as phone apps do
+      // (walk 13 T1-16).
       if (tab === 'plays') scrollResultsToNewest();
+      else scrollScreenToTop();
       return;
     }
     pushTab(tab);

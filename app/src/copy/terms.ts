@@ -18,7 +18,9 @@ export const SHORT_EXPLAINER =
 
 /** How a roster spot works, in one breath. */
 export const ROSTER_EXPLAINER =
-  'Each game he plays, you pay his price and collect his dividend. Beat his price and you profit.';
+  // "A player", not "he": the Rules and Settings open with it before any
+  // player is named (walk 13 T1-03).
+  'Each game a player plays, you pay his price and collect his dividend. Beat his price and you profit.';
 
 /** Name of practice mode everywhere it is labelled. */
 export const PRACTICE_LABEL = 'Practice';
