@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
@@ -27,6 +27,7 @@ import { colors, fonts, headingStyle, labelStyle, space, type, weight } from '..
 import { EmptyState, headingLevel, Tag, visuallyHidden } from '../ui/kit';
 // Read through `readPastSeasons`, which checks what `pastSeasonResults()` gives.
 import * as practiceSession from '../web/practiceSession';
+import { setScrollPaneStop } from '../web/scrollPane';
 
 /**
  * At this width Leaders fills the frame like every other tab: your standing
@@ -267,6 +268,16 @@ export function PerGameLeaderboardScreen() {
   const pane = useRef({ height: 0, content: 0 });
   const [scrolls, setScrolls] = useState(false);
   const measure = useCallback(() => setScrolls(pane.current.content > pane.current.height + 1), []);
+  // Set on the pane's element itself: a role prop would change its tag
+  // (div <-> section) and redraw the whole board whenever it starts or stops
+  // scrolling, taking any focus inside it to the page.
+  const scrollRef = useRef<ScrollView>(null);
+  const paneName = useRef('Leaders');
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const node = (scrollRef.current as unknown as { getScrollableNode?: () => HTMLElement | null } | null)?.getScrollableNode?.();
+    setScrollPaneStop(node ?? null, scrolls ? `${paneName.current}, scrolls` : null);
+  });
   if (!bootstrap) return null;
   // Rows stack for large text and on very narrow screens; a phone reads one row per line.
   const compact = fontScale > 1.2 || width < STACK_MAX_WIDTH;
@@ -288,6 +299,7 @@ export function PerGameLeaderboardScreen() {
     lastSettledDate: bootstrap.game.lastSettledDate,
     nextGameDate: bootstrap.game.nextGameDate,
   });
+  paneName.current = final ? 'Final standings' : 'Leaders';
 
   const header = (
     <View style={styles.header}>
@@ -357,10 +369,8 @@ export function PerGameLeaderboardScreen() {
         pane.current.height = event.nativeEvent.layout.height;
         measure();
       }}
+      ref={scrollRef}
       style={styles.scroll}
-      {...(Platform.OS === 'web' && scrolls
-        ? { tabIndex: 0, role: 'region', 'aria-label': `${final ? 'Final standings' : 'Leaders'}, scrolls`, dataSet: { row: 'full' } }
-        : {}) as object}
     >
       {wide ? (
         <View style={styles.split}>

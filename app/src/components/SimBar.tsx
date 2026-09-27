@@ -2420,11 +2420,26 @@ function useBackToControlsLink(): void {
     link.setAttribute('tabindex', '0');
     link.setAttribute('data-practice-back', '');
     link.textContent = BACK_TO_CONTROLS_LABEL;
+    // Drawn over the foot of the screen, not in its flow: a link that took
+    // room as it appeared shrank the screen under it, so the Leaders board
+    // began to scroll, redrew its pane and the focus fell to the page.
     const shownStyle = [
-      'display:flex', 'align-items:center', 'min-height:44px', 'box-sizing:border-box', 'margin:8px 12px',
+      'position:absolute', 'left:12px', 'right:12px', 'bottom:8px', 'z-index:30',
+      'display:flex', 'align-items:center', 'min-height:44px', 'box-sizing:border-box', 'margin:0',
       'padding:10px 14px', 'border-radius:8px', `border:2px solid ${colors.focus}`, `background:${colors.surfaceRaised}`,
       `color:${colors.text}`, `font-family:${fonts.body}`, 'font-size:15px', 'font-weight:700', 'cursor:pointer',
     ].join(';');
+    // Moving an element takes its focus away: a screen drawn in while the
+    // link has focus waits until focus leaves before the link goes last again.
+    let keepLastOnBlur = false;
+    const keepLast = () => {
+      if (screen.lastElementChild === link) return;
+      if (document.activeElement === link) {
+        keepLastOnBlur = true;
+        return;
+      }
+      screen.appendChild(link);
+    };
     link.style.cssText = BACK_LINK_HIDDEN;
     const jump = (event: Event) => {
       event.preventDefault();
@@ -2435,6 +2450,11 @@ function useBackToControlsLink(): void {
     });
     link.addEventListener('blur', () => {
       link.style.cssText = BACK_LINK_HIDDEN;
+      if (keepLastOnBlur) {
+        keepLastOnBlur = false;
+        // After the focus has moved on.
+        setTimeout(keepLast, 0);
+      }
     });
     link.addEventListener('click', jump);
     link.addEventListener('keydown', (event) => {
@@ -2443,9 +2463,7 @@ function useBackToControlsLink(): void {
     screen.appendChild(link);
     linkRef.current = link;
     // A new screen drawn into the main region lands after it: keep it last.
-    const observer = new MutationObserver(() => {
-      if (screen.lastElementChild !== link) screen.appendChild(link);
-    });
+    const observer = new MutationObserver(keepLast);
     observer.observe(screen, { childList: true });
     return () => {
       observer.disconnect();

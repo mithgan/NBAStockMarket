@@ -248,7 +248,8 @@ input:focus-visible,
    items and rows that span the screen (their 2px ring fell off the edges). */
 #practice-more [role="button"]:focus-visible,
 [role="button"][aria-label$="View profile"]:focus-visible,
-[data-row="full"]:focus-visible {
+[data-row="full"]:focus-visible,
+[data-scroll-pane]:focus-visible {
   outline-offset: -3px !important;
 }
 
