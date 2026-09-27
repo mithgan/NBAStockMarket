@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { humanDate } from '../../copy/terms';
-import { formatAt, heroFontSize, spokenRanks, WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
+import { figuresKeptWithLabels, formatAt, heroFontSize, scoreArrangement, spokenRanks, WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
 import { colors, control, fonts, radius, space, type, weight } from '../../theme';
 import { headingLevel, Label, repeatSafe, visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -17,12 +17,6 @@ function StackRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/**
- * Phones stack the week and rank under the score at every score length; from
- * this width they sit beside it. Chosen by width alone, so the block keeps one
- * arrangement from night to night whatever the score's digits (walk 5 T1-12).
- */
-export const SCORE_BESIDE_MIN_WIDTH = 600;
 /** The measured fit never takes the hero below this (a 200% zoom phone with text spacing). */
 const HERO_FIT_MIN = 18;
 /**
@@ -40,7 +34,7 @@ const WHY_BESIDE_MIN_ROOM = 280;
  * Shrinks as soon as it overflows; grows back only with a clear margin, so it
  * never flickers between two sizes.
  */
-function useHeroFit(start: number, text: string) {
+function useHeroFit(start: number, text: string, max: number = type.hero) {
   const box = useRef<View>(null);
   const [fit, setFit] = useState<number | null>(null);
   // Before paint, so the first frame already shows the fitted size.
@@ -56,8 +50,8 @@ function useHeroFit(start: number, text: string) {
       if (!(room > 0) || !(need > 0) || !(current > 0)) return;
       let next = current;
       if (need > room) next = Math.floor((current * room * 0.98) / need);
-      else if (need < room * 0.9 && current < type.hero) next = Math.floor((current * room * 0.98) / need);
-      next = Math.max(HERO_FIT_MIN, Math.min(type.hero, next));
+      else if (need < room * 0.9 && current < max) next = Math.floor((current * room * 0.98) / need);
+      next = Math.max(HERO_FIT_MIN, Math.min(max, next));
       if (Math.abs(next - current) >= 1) setFit(next);
     };
     const observer = new ResizeObserver(measure);
@@ -65,7 +59,7 @@ function useHeroFit(start: number, text: string) {
     observer.observe(node);
     measure();
     return () => observer.disconnect();
-  }, [start, text]);
+  }, [start, text, max]);
   return { box, size: fit ?? start };
 }
 
@@ -98,11 +92,13 @@ export function ScoreHeader({
   nextGameDate,
   rank,
   parts,
+  exactLine = null,
   precision,
   slots,
   variant,
   valueLine = null,
   weekWords = null,
+  short = false,
 }: {
   title: string;
   score: number;
@@ -116,7 +112,13 @@ export function ScoreHeader({
   nextGameDate: string | null;
   rank: string | null;
   parts: readonly BreakdownPart[] | null;
-  /** The precision at which the parts visibly add up to the hero. */
+  /**
+   * How the parts add up to the score, every figure in dollars, when the
+   * parts as shown visibly disagree with it (`splitParts`): "Exactly
+   * -$2,076,500: roster -$2,074,000, fees -$2,500." Null otherwise.
+   */
+  exactLine?: string | null;
+  /** The parts' precision: `fine`, each at its own rounding, like the score. */
   precision: PartPrecision;
   slots: string | null;
   variant: 'compact' | 'narrow' | 'panel';
@@ -131,6 +133,13 @@ export function ScoreHeader({
    * games", "Oct 28–Nov 10 games"; walk 8 T2-01); WEEK_LABEL without it.
    */
   weekWords?: { label: string; spoken: string } | null;
+  /**
+   * A short window (the folded frame, `chromeFolded`: a phone on its side, a
+   * 853x533 laptop): the last-season paragraph folds behind "Why?" as on
+   * portrait phones, so your players are in the first view after a night
+   * (walk 14 T1-08).
+   */
+  short?: boolean;
 }) {
   const { width } = useWindowDimensions();
   const weekName = weekWords ?? { label: WEEK_LABEL, spoken: WEEK_LABEL.toLowerCase() };
@@ -144,10 +153,16 @@ export function ScoreHeader({
   // The Roster's one millions precision: "+$1.60M" beside "+$1.61M" (walk 7 T4-14).
   const scoreText = formatAt(score, 'fine', true);
   const estimate = variant === 'panel' ? type.hero : heroFontSize(scoreText, width - 2 * space.lg, type.hero);
-  const beside = variant === 'compact' && width >= SCORE_BESIDE_MIN_WIDTH;
-  const fold = started && Boolean(valueLine) && variant !== 'panel' && !beside;
+  // Chosen by width (and a short window) alone, so the block keeps one
+  // arrangement from night to night whatever the score's digits (walk 5
+  // T1-12). Tight: one band in a short window (walk 14 T1-08).
+  const arrangement = scoreArrangement(variant, width, short);
+  const beside = arrangement !== 'stacked';
+  const tight = arrangement === 'tight';
+  const fold = started && Boolean(valueLine) && variant !== 'panel' && (!beside || tight);
+  const heroMax = tight ? type.display : type.hero;
   const whyBeside = width - 2 * space.lg >= WHY_BESIDE_MIN_ROOM;
-  const { box: heroBox, size: heroSize } = useHeroFit(estimate, scoreText);
+  const { box: heroBox, size: heroSize } = useHeroFit(Math.min(estimate, heroMax), scoreText, heroMax);
   // Before any game settles there is no week to report and no standing to
   // claim; the next game date is the one useful fact.
   const facts = started ? (
@@ -191,7 +206,7 @@ export function ScoreHeader({
       aria-expanded={whyOpen}
       // A double tap opens it once, not open and shut (walk 6 T4-11).
       onPress={repeatSafe(() => setWhyOpen((open) => !open))}
-      style={({ pressed }) => [styles.why, !whyBeside && styles.whyLine, pressed && styles.whyPressed]}
+      style={({ pressed }) => [styles.why, beside ? styles.whyInRow : !whyBeside && styles.whyLine, pressed && styles.whyPressed]}
     >
       <Text maxFontSizeMultiplier={1.3} style={styles.whyText}>{whyOpen ? 'Why? \u25B4' : 'Why? \u203A'}</Text>
     </Pressable>
@@ -208,19 +223,30 @@ export function ScoreHeader({
     </>
   );
 
+  // Drawn in capitals, named in sentence case (walk 6 T3-09).
+  const heading = (
+    <Text accessibilityLabel={title} accessibilityRole="header" {...headingLevel(2)}>
+      <Label>{title}</Label>
+    </Text>
+  );
+  // One sentence for screen readers (walk 4 T3-12); the drawn figures
+  // below say the same and are hidden from them.
+  const spoken = <Text style={visuallyHidden}>{summary}</Text>;
+
   return (
-    <View style={styles.header}>
-      {/* Drawn in capitals, named in sentence case (walk 6 T3-09). */}
-      <Text accessibilityLabel={title} accessibilityRole="header" {...headingLevel(2)}>
-        <Label>{title}</Label>
-      </Text>
-      {/* One sentence for screen readers (walk 4 T3-12); the drawn figures
-          below say the same and are hidden from them. */}
-      <Text style={visuallyHidden}>{summary}</Text>
+    <View style={[styles.header, tight && styles.headerTight]}>
+      {tight ? null : heading}
+      {tight ? null : spoken}
       {beside ? (
-        <View aria-hidden style={styles.heroRow}>
-          <View ref={heroBox} style={styles.heroBeside}>{hero}</View>
-          {facts}
+        // Side by side: the score, "Why?" when folded (a short window), then
+        // the week and rank. Only the drawn figures are hidden from screen
+        // readers; "Why?" is a control.
+        <View style={styles.heroRow}>
+          {tight ? heading : null}
+          {tight ? spoken : null}
+          <View aria-hidden ref={heroBox} style={styles.heroBeside}>{hero}</View>
+          {why}
+          {facts ? <View aria-hidden style={styles.stackBeside}>{facts}</View> : null}
         </View>
       ) : (
         // Stacked: the score, "Why?" in the room beside it on a phone, then
@@ -237,7 +263,10 @@ export function ScoreHeader({
       )}
       {/* Why a cold start is not a broken signal, in words (signs, not colour). */}
       {started && valueLine && (!fold || whyOpen) ? <Text style={styles.valueLine}>{valueLine}</Text> : null}
-      {parts ? <ScoreParts parts={parts} precision={precision} title={title} variant={variant} /> : null}
+      {parts ? <ScoreParts parts={parts} precision={precision} title={title} variant={tight ? 'line' : variant} /> : null}
+      {/* Under the split it reconciles, in the caption size, only when the
+          figures as shown do not add up (walk 14 T4-01). */}
+      {parts && exactLine ? <Text style={styles.exactLine}>{figuresKeptWithLabels(exactLine)}</Text> : null}
       {slots ? <Text style={styles.slots}>{slots}</Text> : null}
     </View>
   );
@@ -245,9 +274,9 @@ export function ScoreHeader({
 
 /**
  * The score split by where it came from (Roster, Shorts, Closed, Fees), each
- * part the total of a list further down, at the precision at which the parts
- * visibly add up to the score above them. The score block shows it while the
- * season runs; at the season's end the result card carries it (walk 4 T2-07).
+ * part the total of a list further down, at its own rounding, as that list's
+ * total reads it (walk 14 T4-01). The score block shows it while the season
+ * runs; at the season's end the result card carries it (walk 4 T2-07).
  */
 export function ScoreParts({ title, parts, precision, variant, hidden = false }: {
   /** Names the split for screen readers: "Your score by source: …". */
@@ -256,19 +285,20 @@ export function ScoreParts({ title, parts, precision, variant, hidden = false }:
   hidden?: boolean;
   parts: readonly BreakdownPart[];
   precision: PartPrecision;
-  variant: 'compact' | 'narrow' | 'panel';
+  /** `line`: one line, each figure right after its label (a short window side by side). */
+  variant: 'compact' | 'narrow' | 'panel' | 'line';
 }) {
   return (
     <View
       accessibilityLabel={hidden ? undefined : `${title} by source: ${parts.map((part) => `${part.label} ${formatAt(part.value, precision, true)}`).join(', ')}`}
       accessible={!hidden}
       aria-hidden={hidden || undefined}
-      style={[styles.parts, variant === 'compact' && styles.partsGrid]}
+      style={[styles.parts, variant === 'compact' && styles.partsGrid, variant === 'line' && styles.partsLine]}
     >
       {parts.map((part) => (
         <View
           key={part.key}
-          style={[styles.part, variant === 'compact' && styles.partHalf]}
+          style={[styles.part, variant === 'compact' && styles.partHalf, variant === 'line' && styles.partInline]}
         >
           <Text style={variant === 'panel' ? styles.statementLabel : styles.partLabel}>{part.label}</Text>
           <FineMoney precision={precision} size="body" value={part.value} />
@@ -286,6 +316,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
+  },
+  headerTight: {
+    paddingTop: space.xs,
+    paddingBottom: space.xs,
   },
   // Side by side (600px and wider): one line, never wrapping; the score
   // takes the room the week and rank leave and fits it.
@@ -318,6 +352,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     marginRight: -space.sm,
     borderRadius: radius.sm,
+  },
+  // Between the score and the week and rank (a short window side by side).
+  whyInRow: {
+    marginRight: 0,
   },
   // Under the score (200% zoom): a line of its own, words at the left edge.
   whyLine: {
@@ -400,6 +438,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     columnGap: space.sm,
   },
+  /** One line (a short window side by side): pairs apart, each label with its figure. */
+  partsLine: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: space.xxl,
+    paddingTop: space.xs,
+  },
+  partInline: {
+    justifyContent: 'flex-start',
+  },
   /** Two parts a line; the gap between the pair is the grid's column gap. */
   partHalf: {
     // At most two a line: four in a row paired each value with the next
@@ -426,6 +474,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: type.caption,
     lineHeight: 17,
+  },
+  exactLine: {
+    marginTop: 4,
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    lineHeight: 17,
+    fontVariant: ['tabular-nums'],
   },
   feesOnly: {
     marginTop: -4,

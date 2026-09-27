@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp,
 import { humanDate } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
 import type { SeasonSummary } from '../../data/perGameMetrics';
-import { finalSummary, formatAt, tipTag, tipWords, welcomeAgainLine, welcomeDetails, welcomeSteps, type BreakdownPart, type PartPrecision, type TipVerdict } from '../../data/rosterView';
+import { figuresKeptWithLabels, finalSummary, formatAt, tipTag, tipWords, welcomeAgainLine, welcomeDetails, welcomeSteps, type BreakdownPart, type PartPrecision, type TipVerdict } from '../../data/rosterView';
 import { colors, control, fonts, headingStyle, radius, space, type, weight } from '../../theme';
 import { Button, headingLevel, Label, tapsSettling, visuallyHidden } from '../../ui/kit';
 import { SEASON_RESULT_HEADING_ID } from '../../ui/domMarkers';
@@ -136,9 +136,15 @@ export function WelcomeCard({
  * beside them, never on a row of its own above them (walk 7 T3-09). × hides
  * it, and it goes by itself after the first week.
  */
-export function FirstNightTip({ onOpenResults, onHide, side = 'long', verdict = 'profit', reading }: {
+export function FirstNightTip({ onOpenResults, onHide, side = 'long', verdict = 'profit', reading, slim = false }: {
   onOpenResults: () => void;
   onHide: () => void;
+  /**
+   * A short window (the folded frame): the band is its controls' height, so
+   * the score and a first row share the first view with the notice strip
+   * (walk 14 T1-08).
+   */
+  slim?: boolean;
   /** Who the tip speaks to: a shorts-only player gets the short's reading (`tipSide`, walk 8 T4-10). */
   side?: 'long' | 'short';
   /** The tag it explains: the one the rows show (`tipVerdict`, walk 9 T1-14). */
@@ -155,7 +161,7 @@ export function FirstNightTip({ onOpenResults, onHide, side = 'long', verdict = 
   const tiny = useWindowDimensions().width < 200;
   const results = <Button accessibilityLabel="Results: each game's math" label="Results" onPress={onOpenResults} />;
   return (
-    <View style={[styles.band, styles.tipBand, tiny && styles.bandTiny]}>
+    <View style={[styles.band, styles.tipBand, slim && styles.tipBandSlim, tiny && styles.bandTiny]}>
       <View style={[styles.headRow, styles.tipRowInline]}>
         <Text style={[styles.headText, styles.tipText]}>
           {tag ? <Text style={styles.tipTag}>{tag}</Text> : null}
@@ -227,8 +233,9 @@ export function SeasonCompleteCard({
    */
   actionFirst?: boolean;
   /**
-   * The final score exactly, when rounding hides a part ("Exactly
-   * +$4,129,750, fees -$750 included."; `exactFinalLine`); null otherwise.
+   * How the parts add up to the final score, every figure in dollars, when
+   * the parts as shown visibly disagree with it ("Exactly +$7,684,000:
+   * roster +$7,686,500, fees -$2,500."; `splitParts`); null otherwise.
    */
   exactLine?: string | null;
   /** What the moves were, from `movesLine`: "4 (3 adds, 1 short) · $1K in fees". */
@@ -237,7 +244,7 @@ export function SeasonCompleteCard({
   fees: number;
   /** The final score by source, from `breakdownParts`; null with nothing on record. */
   parts?: readonly BreakdownPart[] | null;
-  /** The precision at which the parts visibly add up to the final score. */
+  /** The parts' precision: `fine`, each at its own rounding, like the final score. */
   precision?: PartPrecision;
   /** The split's layout, as in the score block: two a line on a phone, a statement on desktop. */
   variant?: 'compact' | 'narrow' | 'panel';
@@ -295,7 +302,7 @@ export function SeasonCompleteCard({
       {split || valueLine ? (
         <View style={styles.split}>
           {split ? <ScoreParts hidden parts={split} precision={precision} title="Final score" variant={variant} /> : null}
-          {split && exactLine ? <Text style={styles.valueLine}>{exactLine}</Text> : null}
+          {split && exactLine ? <Text style={styles.valueLine}>{figuresKeptWithLabels(exactLine)}</Text> : null}
           {valueLine ? <Text style={styles.valueLine}>{valueLine}</Text> : null}
         </View>
       ) : null}
@@ -495,6 +502,10 @@ const styles = StyleSheet.create({
   tipBand: {
     paddingTop: space.sm,
     paddingBottom: space.sm,
+  },
+  tipBandSlim: {
+    paddingTop: 2,
+    paddingBottom: 2,
   },
   tipText: {
     color: colors.text,

@@ -529,15 +529,24 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     fontWeight: weight.heavy,
   },
+  // Shrinks to its line and wraps a pair (and a pair its figure under its
+  // label) when the letters widen: a reader's text spacing at 320px ran the
+  // longest reading's measuring copy to x=360, so the Roster could pan
+  // sideways (walk 14 T3-01).
   readingFigures: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    flexShrink: 1,
+    minWidth: 0,
     alignItems: 'baseline',
     columnGap: space.md,
     rowGap: 2,
   },
   readingPair: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    flexShrink: 1,
+    minWidth: 0,
     alignItems: 'baseline',
     gap: 4,
   },

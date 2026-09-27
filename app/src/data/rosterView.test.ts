@@ -13,7 +13,6 @@ import {
   axisLabelIndexes,
   axisMoney,
   breakdownParts,
-  breakdownPrecision,
   chartSummary,
   closedRows,
   expiryLine,
@@ -270,7 +269,8 @@ test('x-axis labels name the first night and the last point, plus a middle one w
     return nightlySeries(buildPnlSeries(entries), entries);
   };
   assert.deepEqual(axisLabelIndexes(make(0), 360), []);
-  assert.deepEqual(axisLabelIndexes(make(1), 360), [1]);
+  // One night names the line's left end too: "Start" (walk 14 T2-03).
+  assert.deepEqual(axisLabelIndexes(make(1), 360), [0, 1]);
   assert.deepEqual(axisLabelIndexes(make(3), 360), [1, 3]);
   assert.deepEqual(axisLabelIndexes(make(9), 360), [1, 5, 9]);
   assert.deepEqual(axisLabelIndexes(make(9), 240), [1, 9]);
@@ -378,28 +378,16 @@ test('the week figure is labelled in calendar days, as recentEarnings counts it'
   assert.equal(WEEK_LABEL, 'Games, last 7 days');
 });
 
-test('breakdown parts take the precision at which they visibly add up to the hero', () => {
-  // "-$1.05M + $552K - $3,000" reads -$501K beside a "-$503K" hero; one more
-  // digit on the millions ("-$1.052M") makes the parts add up.
-  const parts = [-1_052_000, 0, 552_000, -3_000];
-  const score = parts.reduce((sum, part) => sum + part, 0);
-  assert.equal(breakdownPrecision(parts, score), 'fine3');
-  // Rigor's case: the hero shows $100s ("-$503K"), which "-$1.052M + $552.1K
-  // - $3,000" (-$502.9K) still misses, so the parts read in exact dollars.
-  const rigor = [-1_052_100, 0, 552_100, -3_000];
-  assert.equal(breakdownPrecision(rigor, rigor.reduce((sum, part) => sum + part, 0)), 'exact');
-  assert.equal(formatAt(-1_052_100, 'fine3', true), '-$1.052M');
-  assert.equal(formatAt(552_100, 'fine3', true), '+$552.1K');
-  assert.equal(formatAt(-3_000, 'fine3', true), '-$3K');
-  assert.equal(formatAt(1_050_000, 'fine3', true), '+$1.05M');
-  assert.equal(formatAt(0, 'fine3', true), '$0');
+test('the split formats at one precision, halves up like copy/terms, exact dollars on request (walk 14 T4-01)', () => {
+  // The third-decimal precision ("-$1.052M") is gone: a split never changes
+  // its format to add up (walk 14 T4-01); halves round up at every size.
+  assert.equal(formatAt(-1_052_100, 'fine', true), '-$1.05M');
+  assert.equal(formatAt(2_065_000, 'fine', true), '+$2.07M');
+  assert.equal(formatAt(-2_075_000, 'fine', true), '-$2.08M');
+  assert.equal(formatAt(5_505_000, 'fine', true), '+$5.51M');
+  assert.equal(formatAt(552_150, 'fine', true), '+$552.2K');
+  assert.equal(formatAt(0, 'fine', true), '$0');
   assert.equal(formatAt(-1_052_100, 'exact', true), '-$1,052,100');
-  // Parts that already add up keep the lighter precision.
-  assert.equal(breakdownPrecision([-418_500, 0, 546_500, -3_000], 125_000), 'fine');
-  // Million-scale parts beside a thousand-scale hero: $10K and $1K rounding
-  // both miss "+$500K" ($490K, $501K), so the parts fall back to exact dollars.
-  const edge = [1_004_500, 1_004_500, -1_508_999];
-  assert.equal(breakdownPrecision(edge, 500_001), 'exact');
 });
 
 test('x-axis dates never touch: the most recent date wins a crowded axis', () => {
@@ -690,31 +678,28 @@ test('a touch on the score chart selects a night only on a tap or a mostly sidew
   assert.equal(chartTouchIsTap(0, 25), false);
 });
 
-test('the score split reads in K like the score, and its parts add up to the score as shown (walk 6 T4-09, T2-08)', async () => {
-  const { fineValue, shownParts } = await import('./rosterView');
+test('the score split reads in K like the score, each part at its own rounding (walk 6 T4-09, T2-08; walk 14 T4-01)', async () => {
+  const { fineValue, splitParts } = await import('./rosterView');
   const { signedMoney } = await import('../copy/terms');
-  const split = (values: number[]) => values.map((value, index) => ({ key: String(index), value }));
-  const read = (values: number[], score: number) => shownParts(split(values), score).map((part) => signedMoney(part.value));
+  const split = (values: number[]) => values.map((value, index) => ({ key: 'roster' as const, label: `Part ${index}`, value }));
+  const read = (values: number[], score: number) => splitParts(split(values), score).parts.map((part) => signedMoney(part.value));
   // T4-09, Day 14: exact dollars kicked in beside the same figure in K.
   assert.deepEqual(read([148_449, 0, 755_467, -2_250], 901_666), ['+$148.4K', '$0', '+$755.5K', '-$2.25K']);
   assert.equal(signedMoney(901_666), '+$901.7K');
+  assert.equal(splitParts(split([148_449, 0, 755_467, -2_250]), 901_666).exact, null);
   // T2-08, Nov 4: "Roster +$977,980 · Closed −$12,796 · Fees −$4,750" under +$960.4K.
   assert.deepEqual(read([977_980, 0, -12_796, -4_750], 960_434), ['+$978K', '$0', '-$12.8K', '-$4.75K']);
-  // Rounded each on its own the parts would read +$2.23M under +$2.24M:
-  // the parts nearest a rounding edge round the other way.
-  const dec = shownParts(split([2_254_300, 0, -12_796, -5_000]), 2_236_504);
-  assert.deepEqual(dec.map((part) => signedMoney(part.value)), ['+$2.26M', '$0', '-$12.7K', '-$5K']);
-  const sum = dec.reduce((total, part) => total + part.value, 0);
-  assert.ok(Math.abs(sum - fineValue(2_236_504)) <= 5_000);
-  // A fee never moves; $0 stays $0.
-  assert.equal(dec[3].value, -5_000);
-  assert.equal(dec[1].value, 0);
+  // Rounded each on its own the parts read +$2.23M under +$2.24M: no part is
+  // nudged to another figure (walk 14 T4-01); the exact line says how.
+  const dec = splitParts(split([2_254_300, 0, -12_796, -5_000]), 2_236_504);
+  assert.deepEqual(dec.parts.map((part) => signedMoney(part.value)), ['+$2.25M', '$0', '-$12.8K', '-$5K']);
+  assert.equal(dec.exact, 'Exactly +$2,236,504: part 0 +$2,254,300, part 2 -$12,796, part 3 -$5,000.');
   assert.equal(fineValue(148_449), 148_400);
   assert.equal(fineValue(-1_052_100), -1_050_000);
 });
 
-test('the season card reads millions one way, and says the exact final when rounding hides a part (walk 6 T3-12, T1-10)', async () => {
-  const { exactFinalLine, shownParts } = await import('./rosterView');
+test('the season card reads millions one way, and says the exact final only when the parts as shown disagree (walk 6 T3-12, T1-10; walk 14 T4-09)', async () => {
+  const { splitParts } = await import('./rosterView');
   const { signedMoney } = await import('../copy/terms');
   const parts = (roster: number, fees: number) => [
     { key: 'roster' as const, label: 'Roster', value: roster },
@@ -722,18 +707,19 @@ test('the season card reads millions one way, and says the exact final when roun
     { key: 'closed' as const, label: 'Closed', value: 0 },
     { key: 'fees' as const, label: 'Fees', value: fees },
   ];
-  // T3-12: "+$5.5M" headline beside "Roster +$5.505M": now both +$5.50M
-  // (millions keep two decimals everywhere, walk 7 T4-14).
-  const one = shownParts(parts(5_505_100, -250), 5_504_850);
+  // T3-12: "+$5.5M" headline beside "Roster +$5.505M": millions keep two
+  // decimals everywhere (walk 7 T4-14). Roster +$5.51M, fees -$250 read
+  // +$5.51M, not the final +$5.50M: the exact line says how.
+  const one = splitParts(parts(5_505_100, -250), 5_504_850);
   assert.equal(signedMoney(5_504_850), '+$5.50M');
-  assert.equal(signedMoney(one[0].value), '+$5.50M');
-  assert.equal(exactFinalLine(one, 5_504_850), 'Exactly +$5,504,850, fees -$250 included.');
-  // T1-10: Final +$4.13M, Roster +$4.13M, Fees -$750.
-  const two = shownParts(parts(4_130_500, -750), 4_129_750);
-  assert.equal(signedMoney(two[0].value), '+$4.13M');
-  assert.equal(exactFinalLine(two, 4_129_750), 'Exactly +$4,129,750, fees -$750 included.');
-  // Every part moves the score as shown: no exact line.
-  assert.equal(exactFinalLine(shownParts(parts(148_449, -2_250), 146_199), 146_199), null);
+  assert.equal(signedMoney(one.parts[0].value), '+$5.51M');
+  assert.equal(one.exact, 'Exactly +$5,504,850: roster +$5,505,100, fees -$250.');
+  // T1-10: Final +$4.13M, Roster +$4.13M, Fees -$750 already add up as
+  // shown: no line (walk 14 T4-09: never a line that corrects nothing).
+  const two = splitParts(parts(4_130_500, -750), 4_129_750);
+  assert.equal(signedMoney(two.parts[0].value), '+$4.13M');
+  assert.equal(two.exact, null);
+  assert.equal(splitParts(parts(148_449, -2_250), 146_199).exact, null);
 });
 
 test('the season card has one spoken summary, places in words as Leaders speaks them (walk 6 T3-07)', async () => {

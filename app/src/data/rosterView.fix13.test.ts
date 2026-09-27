@@ -6,8 +6,8 @@ import {
   chartAfterLists,
   closeQuestion,
   earnLine,
-  finalParts,
   SHORTS_LATER,
+  splitParts,
   welcomeAgainLine,
   welcomeDetails,
   welcomeSteps,
@@ -64,13 +64,14 @@ test('walk 13 T4-02: at season end each part keeps its own rounding, and the exa
   ];
   // The tester's season: the players made $7,686,500 (+$7.69M, as "They made
   // +$7.69M before fees" says), fees -$2,500, final +$7,684,000 (+$7.68M).
-  const t402 = finalParts(raw(7_686_500, -2_500), 7_684_000);
+  const t402 = splitParts(raw(7_686_500, -2_500), 7_684_000);
   assert.equal(t402.parts[0].value, 7_690_000);
   assert.equal(t402.parts[3].value, -2_500);
   assert.equal(t402.exact, 'Exactly +$7,684,000: roster +$7,686,500, fees -$2,500.');
-  // Parts that add up as shown keep walk 6's line (fees rounding hides) or none.
-  assert.equal(finalParts(raw(4_130_500, -750), 4_129_750).exact, 'Exactly +$4,129,750, fees -$750 included.');
-  assert.equal(finalParts(raw(148_449, -2_250), 146_199).exact, null);
+  // Parts that add up as shown need no line (walk 14 T4-09 retired walk 6's
+  // "Exactly +$4,129,750, fees -$750 included.", which corrected nothing).
+  assert.equal(splitParts(raw(4_130_500, -750), 4_129_750).exact, null);
+  assert.equal(splitParts(raw(148_449, -2_250), 146_199).exact, null);
 });
 
 test('walk 13 T1-13: closing a short early asks in two sentences, the free way in the question', () => {

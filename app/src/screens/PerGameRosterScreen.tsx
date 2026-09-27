@@ -30,6 +30,7 @@ import {
 import { ScoreHeader } from '../components/roster/ScoreHeader';
 import { FirstNightTip, SeasonCompleteCard, SeasonSoFar, WelcomeCard } from '../components/roster/SeasonCards';
 import { SectionHead } from '../components/roster/SectionHead';
+import { useHoldInView } from '../components/roster/useHoldInView';
 import { useRecentAdvances } from '../components/SimBar';
 import {
   closeActionName,
@@ -59,10 +60,8 @@ import {
   closedRows,
   closeQuestion,
   earnLine,
-  exactFinalLine,
   feeMoves,
   figureCaptions,
-  finalParts,
   movesLine,
   pickValue,
   pressLine,
@@ -70,8 +69,9 @@ import {
   rosterRowView,
   rowLayout,
   shortEndsNext,
-  shownParts,
+  shortsQuiet,
   slotLine,
+  splitParts,
   tipReading,
   tipRetired,
   belowZeroNote,
@@ -225,6 +225,7 @@ function PositionRow({
   onConfirmClose,
   actionRef,
   profileRef,
+  holdRef,
   marketPrice,
 }: {
   position: PerGamePosition;
@@ -242,6 +243,8 @@ function PositionRow({
   profileRef: (node: View | null) => void;
   /** His price a game in the market today, when he is listed. */
   marketPrice: number | null;
+  /** The row's outer view, held in view while its question is open (walk 14 T4-05). */
+  holdRef?: (node: unknown) => void;
 }) {
   const { bootstrap, lockedPress, pendingActions } = usePerGame();
   const nameFit = useTableNameFit(layout === 'table', position.playerName);
@@ -458,7 +461,7 @@ function PositionRow({
     // inside it (walk 13 T3-03).
     const headerName = `${position.playerName}, ${view.tag.label}`;
     return (
-      <View style={styles.tableItem}>
+      <View ref={holdRef as never} style={styles.tableItem}>
         <View role="row" style={styles.tableRow}>
           <Pressable
             accessible={false}
@@ -505,7 +508,7 @@ function PositionRow({
     // (no headshot, no space held for the button), the figures list one a
     // line, and Drop sits below them.
     return (
-      <View style={styles.compactRow}>
+      <View ref={holdRef as never} style={styles.compactRow}>
         <Pressable {...profileProps} style={({ pressed }) => [styles.compactProfile, pressed && styles.pressed]}>
           {identity}
           <View style={styles.compactFigures}>
@@ -519,7 +522,7 @@ function PositionRow({
   }
 
   return (
-    <View style={styles.stackRow}>
+    <View ref={holdRef as never} style={styles.stackRow}>
       <Pressable {...profileProps} style={({ pressed }) => [styles.stackProfile, pressed && styles.pressed]}>
         <View style={[styles.stackTop, action ? null : styles.stackTopFull]}>
           <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
@@ -754,6 +757,15 @@ export function PerGameRosterScreen({
   const onConfirmOpen = useCallback((position: PerGamePosition) => {
     setConfirmingId(position.positionId);
   }, []);
+  // An open Drop or Close question stays where you read it while +1 night
+  // draws the chart and the tip above it (walk 14 T4-05), as an opened Closed
+  // group does; it lets go once answered, and a scroll of yours wins.
+  const questionHold = useHoldInView();
+  const { hold: holdQuestion, release: releaseQuestion } = questionHold;
+  useEffect(() => {
+    if (confirmingId) holdQuestion(confirmingId, { throughTaps: true });
+    else releaseQuestion();
+  }, [confirmingId, holdQuestion, releaseQuestion]);
   const onConfirmClose = useCallback((position: PerGamePosition, outcome: ConfirmOutcome) => {
     setConfirmingId((current) => (current === position.positionId ? null : current));
     if (outcome === 'kept') {
@@ -887,8 +899,15 @@ export function PerGameRosterScreen({
   // The first visit on a wide screen: the empty table shows its columns and
   // one ghost row, so the room says what will fill it (walk 13 T2-02).
   const ghostTable = welcomeMarket && layout === 'table';
-  // Before any short and while the welcome is up, shorts are one quiet line.
-  const quietShorts = showWelcome && !seasonOver && shorts.length === 0 && !hadShorts;
+  // Before any short, while the welcome is up or before the first games
+  // settle (welcome closed or not), shorts are one quiet line (walk 14 T1-12).
+  const quietShorts = shortsQuiet({
+    welcome: showWelcome,
+    dayZero: practice && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).day === 0,
+    seasonOver,
+    openShorts: shorts.length,
+    hadShorts,
+  });
   const { longSlots, shortSlots } = bootstrap.account;
   const lockLine = rosterLocked ? `${rosterReopensLine(rosterLockDate)}.` : null;
   // Why Drop and Close are unavailable, in words on the screen (not only in a
@@ -897,14 +916,13 @@ export function PerGameRosterScreen({
   // list's header does not repeat it (walk 6 T1-08).
   const actionNote = seasonOver ? 'The season is over. Your roster is final.' : shortWindow ? undefined : lockLine ?? undefined;
   // The split in the app's one money format, the same as the score above it
-  // (walk 6 T2-08, T4-09, T3-12): never exact dollars or a third decimal; the
-  // parts nearest a rounding edge round the other way when needed, so the
-  // parts as shown add up to the score as shown. Each list's total repeats
-  // its part exactly. Once the season is over each part keeps its own
-  // rounding and the card's exact line reconciles them, so the split, the
-  // lists' totals and "They made … before fees" name one figure (walk 13 T4-02).
-  const final = seasonOver && bootstrap.ledger.items.length > 0 ? finalParts(breakdownParts(breakdown), score) : null;
-  const parts = final ? final.parts : bootstrap.ledger.items.length > 0 ? shownParts(breakdownParts(breakdown), score) : null;
+  // (walk 6 T2-08, T4-09, T3-12), each part at its own rounding, in season
+  // and at season end: one amount reads one figure in the split, its list's
+  // total, the status row and the notices (walk 14 T4-01; walk 13 T4-02).
+  // When the parts as shown visibly disagree with the score as shown, one
+  // line under them says how they add up, every figure in dollars.
+  const split = bootstrap.ledger.items.length > 0 ? splitParts(breakdownParts(breakdown), score) : null;
+  const parts = split ? split.parts : null;
   const shownPart = (key: 'roster' | 'shorts' | 'closed' | 'fees', fallback: number) => (
     parts?.find((part) => part.key === key)?.value ?? fallback
   );
@@ -943,6 +961,7 @@ export function PerGameRosterScreen({
       key={position.positionId}
       actionRef={actionRef(position.positionId)}
       confirming={confirmingId === position.positionId}
+      holdRef={questionHold.rowRef(position.positionId)}
       profileRef={profileRef(position.positionId)}
       layout={layout}
       marketPrice={market.get(position.playerId)?.currentGameCost ?? null}
@@ -1120,7 +1139,9 @@ export function PerGameRosterScreen({
       // screen the newest Closed row (walk 10 T1-10).
       reading={tipReading(bootstrap.positions, bootstrap.settledResults ?? [], closed)}
       // Results at the end of the tip's words at every width, so the tip
-      // keeps to a slim band (walk 6 T1-08, walk 7 T1-10).
+      // keeps to a slim band (walk 6 T1-08, walk 7 T1-10); in a short
+      // window one line of its controls' height (walk 14 T1-08).
+      slim={shortWindow}
       onHide={() => {
         retireFirstNightTip();
         setTipClosed(true);
@@ -1145,7 +1166,7 @@ export function PerGameRosterScreen({
       onPlayAgain={practice
         ? () => restartPractice(seasonResultLine(bootstrap.account.cumulativePnl, rankLine(bootstrap.leaderboard)))
         : undefined}
-      exactLine={final ? final.exact : parts ? exactFinalLine(parts, score) : null}
+      exactLine={split ? split.exact : null}
       movesText={movesText}
       parts={parts}
       precision={precision}
@@ -1189,10 +1210,12 @@ export function PerGameRosterScreen({
           // does not say it a third time and the roster shows under them on
           // a 320px phone (walk 10 T1-01).
           nextGameDate={showWelcome ? null : bootstrap.game.nextGameDate}
+          exactLine={split ? split.exact : null}
           parts={parts}
           precision={precision}
           rank={started ? rankLine(bootstrap.leaderboard) : null}
           score={score}
+          short={shortWindow}
           slots={wide ? slotLine(bootstrap.account) : null}
           started={started}
           title="Your score"
@@ -1382,11 +1405,16 @@ const styles = StyleSheet.create({
   },
   summaryContent: {
     paddingBottom: space.xl,
+    // A vertical list never pans sideways, even when a reader's text spacing
+    // widens a line past the screen and focus scrolls it into view (walk 14
+    // T3-01). Clip, not hidden: pinned headers still pin.
+    ...({ overflowX: 'clip' } as object),
   },
   listContent: {
     // Clears a problem notice, which stays over the bottom of the screen
     // until it is dismissed, so the last row is never stuck under it.
     paddingBottom: 110,
+    ...({ overflowX: 'clip' } as object),
   },
   section: {
     borderBottomWidth: StyleSheet.hairlineWidth,

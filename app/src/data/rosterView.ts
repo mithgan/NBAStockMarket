@@ -767,6 +767,26 @@ const HERO_EM_PER_CHAR = 0.62;
 const HERO_MIN_SIZE = 26;
 
 /**
+ * Phones stack the week and rank under the score at every score length; from
+ * this width they sit beside it (walk 5 T1-12).
+ */
+export const SCORE_BESIDE_MIN_WIDTH = 600;
+
+/**
+ * How the score block is laid out: `stacked` (phones: the week and rank under
+ * the score), `beside` (600px and wider: beside it), or `tight` in a short
+ * window side by side (a phone on its side, a 853x533 laptop; `short` is
+ * `chromeFolded`): one band with the title beside a smaller score, "Why?"
+ * folding last season's paragraph, and the split on one line, so "Your
+ * roster" and a first row share the first view with the notice strip (walk
+ * 14 T1-08). The desktop column (`panel`) is never beside.
+ */
+export function scoreArrangement(variant: 'compact' | 'narrow' | 'panel', width: number, short: boolean): 'stacked' | 'beside' | 'tight' {
+  if (variant !== 'compact' || width < SCORE_BESIDE_MIN_WIDTH) return 'stacked';
+  return short ? 'tight' : 'beside';
+}
+
+/**
  * The hero score's font size for a line `room` pixels wide: full size when it
  * fits, smaller when it would run off the edge (a phone at 200% zoom is about
  * 195px wide, and "+$139.5K" at full size did: walk 3 T3-28).
@@ -777,22 +797,11 @@ export function heroFontSize(text: string, room: number, fullSize: number): numb
 }
 
 /**
- * How precisely the breakdown shows its parts. `fine` is `moneyFine` ("$552.1K",
- * "$1.05M"); `fine3` adds a digit to millions ("$1.052M"); `exact` is dollars.
+ * How precisely a figure is shown: `fine` is `moneyFine` ("$552.1K",
+ * "$1.05M"), the Roster's one format for amounts; `compact` is
+ * `moneyCompact` (per-game figures); `exact` is dollars.
  */
-export type PartPrecision = 'fine' | 'fine3' | 'exact' | 'compact';
-
-const PRECISIONS: PartPrecision[] = ['fine', 'fine3', 'exact'];
-
-/** The value a reader sees once an amount is formatted at this precision. */
-function shownValue(amount: number, precision: PartPrecision): number {
-  const rounded = Math.round(amount);
-  const abs = Math.abs(rounded);
-  const sign = rounded < 0 ? -1 : 1;
-  if (precision === 'exact' || abs < 10_000) return rounded;
-  if (abs < 999_950) return sign * Math.round(abs / 100) * 100;
-  return sign * Math.round(abs / (precision === 'fine3' ? 1_000 : 10_000)) * (precision === 'fine3' ? 1_000 : 10_000);
-}
+export type PartPrecision = 'fine' | 'exact' | 'compact';
 
 /**
  * One precision for millions on the Roster (walk 7 T4-14): always two
@@ -804,45 +813,11 @@ export function twoDecimalMillions(text: string): string {
   return text.replace(/\$(\d+)(?:\.(\d))?M\b/g, (_, whole: string, tenth: string | undefined) => `$${whole}.${(tenth ?? '').padEnd(2, '0')}M`);
 }
 
-function trimZeros(value: string): string {
-  return value.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
-}
-
-/** Format money at a breakdown precision, signed ("+$1.052M") or plain. */
+/** Format money at a precision, signed ("+$1.05M") or plain, halves up as copy/terms rounds them. */
 export function formatAt(amount: number, precision: PartPrecision, signed: boolean): string {
   if (precision === 'exact') return signed ? exactSignedMoney(amount) : exactMoney(amount);
   if (precision === 'compact') return signed ? signedMoneyCompact(amount) : moneyCompact(amount);
-  const rounded = Math.round(amount);
-  if (precision === 'fine3' && Math.abs(rounded) >= 999_950) {
-    const text = `$${trimZeros((Math.abs(rounded) / 1_000_000).toFixed(3))}M`;
-    if (rounded < 0) return `-${text}`;
-    return signed ? `+${text}` : text;
-  }
   return twoDecimalMillions(signed ? signedMoneyFine(amount) : moneyFine(amount));
-}
-
-/**
- * The least precision at which the parts, as a reader sees them, add up to
- * the score as the hero shows it. `moneyFine` rounds millions to $10K, so
- * "-$1.05M + $552.1K - $3,000" reads -$500.9K beside a "-$503K" hero; one more
- * digit ("-$1.052M") or, failing that, exact dollars makes the sum agree.
- */
-export function breakdownPrecision(values: readonly number[], score: number): PartPrecision {
-  const hero = signedMoney(score);
-  for (const precision of PRECISIONS) {
-    const sum = values.reduce((total, value) => total + shownValue(value, precision), 0);
-    if (signedMoney(sum) === hero) return precision;
-  }
-  return 'exact';
-}
-
-/** The step `moneyFine` rounds an amount to: $1 under $1K, $10 under $10K, $100 in K, $10K in M. */
-export function fineStep(amount: number): number {
-  const abs = Math.abs(Math.round(amount));
-  if (abs < 1_000) return 1;
-  if (abs < 9_995) return 10;
-  if (abs < 999_950) return 100;
-  return 10_000;
 }
 
 /** An amount as `moneyFine` shows it, back in dollars: 148,449 reads "$148.4K", so 148,400. */
@@ -854,82 +829,36 @@ export function fineValue(amount: number): number {
 }
 
 /**
- * The score's parts as the screen shows them (walk 6 T2-08, T4-09, T3-12):
- * every part in the app's one money format (`moneyFine`: K from $1,000, two
- * decimals in millions), the same as the score above them, never exact
- * dollars and never a third decimal. When the parts, rounded each on its own,
- * would not add up to the score as shown (to within half its last digit),
- * the parts nearest a rounding edge round the other way (largest remainder),
- * each by one step at most and never away from $0 or across it; an amount
- * the format already shows exactly (fees under $10K) never moves. Returns each part's shown value, which
- * the section totals repeat, so a part and its list's total read alike.
+ * The score's split, in season and once it is over (walk 14 T4-01, T2-02,
+ * T4-09): each part at its own rounding, never nudged to add up, so one
+ * amount reads one figure in the split, its list's total, the status row and
+ * the notices ("Roster -$2.07M" beside "Oct 21–Nov 24 games -$2.07M", where a
+ * nudge had drawn "Roster -$2.08M" over rows that add up to -$2,074,000).
+ * When the parts as shown visibly disagree with the score as shown (their
+ * sum, written the way the score is, reads another figure), `exact` says how
+ * they add up, every figure in dollars: "Exactly -$2,076,500: roster
+ * -$2,074,000, fees -$2,500." Otherwise null: never a line that corrects
+ * nothing (walk 6's "Exactly +$4,648,000, fees -$1.5K included." explained
+ * parts that already added up, with a rounded fee inside an exact line).
+ * Each part's value is its figure as shown (`fineValue`).
  */
-export function shownParts<T extends { value: number }>(parts: readonly T[], score: number): T[] {
-  const natural = parts.map((part) => fineValue(part.value));
-  const hero = fineValue(score);
-  const tolerance = fineStep(score) / 2;
-  const shown = [...natural];
-  const gap = () => hero - shown.reduce((sum, value) => sum + value, 0);
-  const moved = new Set<number>();
-  while (Math.abs(gap()) > tolerance) {
-    const need = gap();
-    const direction = Math.sign(need);
-    let best = -1;
-    let bestMiss = Number.POSITIVE_INFINITY;
-    parts.forEach((part, index) => {
-      if (moved.has(index)) return;
-      const value = Math.round(part.value);
-      const step = fineStep(value);
-      const next = shown[index] + direction * step;
-      const miss = Math.abs(next - value);
-      // The other rounding of the same amount only, never its sign or $0.
-      if (value === 0 || shown[index] === value || miss >= step || Math.sign(next) !== Math.sign(value)) return;
-      // Only a step that brings the sum closer to the score.
-      if (Math.abs(need - direction * step) >= Math.abs(need)) return;
-      if (miss < bestMiss) {
-        best = index;
-        bestMiss = miss;
-      }
-    });
-    if (best < 0) return parts.map((part, index) => ({ ...part, value: natural[index] }));
-    shown[best] += direction * fineStep(parts[best].value);
-    moved.add(best);
-  }
-  return parts.map((part, index) => ({ ...part, value: shown[index] }));
-}
-
-/**
- * The season card's exact final score, when rounding hides a part (walk 6
- * T1-10: "+$4.13M" final beside "Roster +$4.13M" and "Fees -$750", so the
- * fees seemed to vanish): "Exactly +$4,129,750, fees -$750 included." Null
- * when every part visibly moves the score.
- */
-export function exactFinalLine(parts: readonly BreakdownPart[], score: number): string | null {
-  const half = fineStep(score) / 2;
-  const hidden = parts.filter((part) => Math.round(part.value) !== 0 && Math.abs(part.value) < half);
-  if (hidden.length === 0) return null;
-  const named = hidden.map((part) => `${part.label.toLowerCase()} ${signedMoney(part.value)}`);
-  return `Exactly ${exactSignedMoney(score)}, ${named.join(' and ')} included.`;
-}
-
-/**
- * The season card's split, once the season is over (walk 13 T4-02): each part
- * at its own rounding, never nudged to add up, so "Roster +$7.69M", "Roster
- * total +$7.69M" and "They made +$7.69M before fees" name one figure for the
- * same money. When the rounded parts do not add up to the rounded final score,
- * the exact line says how they do, every part in dollars: "Exactly
- * +$7,684,000: roster +$7,686,500, fees -$2,500." Otherwise it is
- * `exactFinalLine` (a part rounding hides, or none). In-season the score
- * block keeps `shownParts`.
- */
-export function finalParts(raw: readonly BreakdownPart[], score: number): { parts: BreakdownPart[]; exact: string | null } {
+export function splitParts(raw: readonly BreakdownPart[], score: number): { parts: BreakdownPart[]; exact: string | null } {
   const parts = raw.map((part) => ({ ...part, value: fineValue(part.value) }));
   const sum = parts.reduce((total, part) => total + part.value, 0);
-  if (Math.abs(fineValue(score) - sum) <= fineStep(score) / 2) return { parts, exact: exactFinalLine(parts, score) };
+  if (formatAt(sum, 'fine', true) === formatAt(score, 'fine', true)) return { parts, exact: null };
   const named = raw
     .filter((part) => Math.round(part.value) !== 0)
     .map((part) => `${part.label.toLowerCase()} ${exactSignedMoney(part.value)}`);
   return { parts, exact: `Exactly ${exactSignedMoney(score)}: ${named.join(', ')}.` };
+}
+
+/**
+ * The exact line as drawn: each figure stays with its label, so a narrow
+ * phone wraps it after a comma ("…, roster -$2,074,000," / "fees -$2,500."),
+ * never between "fees" and its figure. Screen readers hear the same words.
+ */
+export function figuresKeptWithLabels(line: string): string {
+  return line.replace(/ (?=[+-]?\$)/g, '\u00a0');
 }
 
 // ---------------------------------------------------------------------------
@@ -1020,6 +949,25 @@ export function welcomeAgainLine(nextGameDate: string | null | undefined, locked
  * on day 0; it says where shorts are and what many fans do.
  */
 export const SHORTS_LATER = "Shorts: bet against a player on the Market's Short side. Many fans wait a few games first.";
+
+/**
+ * When the short side is that one quiet line instead of the "No shorts yet"
+ * card with Find a short: while the welcome is up (walk 11 T1-01), and before
+ * the first games settle whether or not the welcome was closed (walk 14
+ * T1-12: closing it on day 0 swapped the advice for a call to short before a
+ * single game). From the first played night, or once you short, the card.
+ */
+export function shortsQuiet({ welcome, dayZero, seasonOver, openShorts, hadShorts }: {
+  welcome: boolean;
+  /** Practice before its first night (Day 0). */
+  dayZero: boolean;
+  seasonOver: boolean;
+  openShorts: number;
+  hadShorts: boolean;
+}): boolean {
+  if (seasonOver || openShorts > 0 || hadShorts) return false;
+  return welcome || dayZero;
+}
 
 /**
  * The welcome's smaller second part (walk 10 T1-01): how a game scores
@@ -1314,14 +1262,17 @@ export function hasNights(series: readonly NightPoint[]): boolean {
  * Which points get a date under the x-axis: the first night and the last
  * night always, plus one in the middle when the plot is wide enough that the
  * three labels cannot touch. A `now` point (fees since the last night) is
- * never labelled, so a move never swaps the last date for a word.
+ * never labelled, so a move never swaps the last date for a word. With one
+ * night the line's left end is named too ("Start" under it), so one night
+ * reads as one step from the start, not a long climb from an unnamed edge
+ * (walk 14 T2-03).
  */
 export function axisLabelIndexes(series: readonly NightPoint[], plotWidth: number): number[] {
   const first = series.findIndex((point) => point.kind === 'night');
   if (first === -1) return [];
   let last = series.length - 1;
   while (last > first && series[last].kind !== 'night') last -= 1;
-  if (last === first) return [first];
+  if (last === first) return first > 0 && series[0].kind === 'start' ? [0, first] : [first];
   const indexes = [first, last];
   if (plotWidth >= 300 && last - first >= 4) indexes.splice(1, 0, Math.round((first + last) / 2));
   return indexes;

@@ -11,6 +11,13 @@ interface Held {
   scroller: HTMLElement;
   /** The list's own overflow-anchor, given back on release. */
   anchorWas: string;
+  /**
+   * Kept through taps and focus elsewhere, until `release()`: an open Drop or
+   * Close question while +1 night plays (walk 14 T4-05).
+   */
+  throughTaps: boolean;
+  /** Looks again whenever the list's content changes size (a chart a child draws on its own render). */
+  observer: ResizeObserver | null;
 }
 
 /** The nearest box around `node` that scrolls up and down. */
@@ -32,7 +39,10 @@ function scrollerOf(node: HTMLElement): HTMLElement | null {
  *
  * `rowRef(key)` goes on each row's outer view; `hold(key)` right after a row
  * opens, `release()` when it folds. Call the hook where the rows render: it
- * looks again after every render of that component.
+ * looks again after every render of that component. `hold(key, { throughTaps:
+ * true })` keeps an open Drop or Close question in view while +1 night (a tap
+ * elsewhere) draws the chart and the tip above it, until it is answered
+ * (walk 14 T4-05); a scroll of yours still wins.
  */
 export function useHoldInView() {
   const nodes = useRef(new Map<string, HTMLElement>());
@@ -41,7 +51,9 @@ export function useHoldInView() {
   const release = useCallback(() => {
     const current = held.current;
     held.current = null;
-    if (current) current.scroller.style.setProperty('overflow-anchor', current.anchorWas);
+    if (!current) return;
+    current.observer?.disconnect();
+    current.scroller.style.setProperty('overflow-anchor', current.anchorWas);
   }, []);
 
   const look = useCallback((current: Held) => {
@@ -51,22 +63,9 @@ export function useHoldInView() {
     current.scrollTop = current.scroller.scrollTop;
   }, []);
 
-  const hold = useCallback((key: string) => {
-    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    release();
-    const node = nodes.current.get(key);
-    const scroller = node ? scrollerOf(node) : null;
-    if (!node || !scroller) return;
-    const anchorWas = scroller.style.getPropertyValue('overflow-anchor');
-    // The browser's own guess at what to keep still would fight this one.
-    scroller.style.setProperty('overflow-anchor', 'none');
-    held.current = { key, top: 0, scrollTop: 0, scroller, anchorWas };
-    look(held.current);
-  }, [look, release]);
-
-  // After every render: content above the held row moved it, so the list
-  // scrolls by as much and the row stays under the finger.
-  useLayoutEffect(() => {
+  // Content above the held row moved it: the list scrolls by as much and the
+  // row stays under the finger.
+  const settle = useCallback(() => {
     const current = held.current;
     if (!current) return;
     const node = nodes.current.get(current.key);
@@ -88,13 +87,36 @@ export function useHoldInView() {
     });
     if (shift !== 0) scroller.scrollTop += shift;
     look(current);
+  }, [look, release]);
+
+  const hold = useCallback((key: string, { throughTaps = false }: { throughTaps?: boolean } = {}) => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    release();
+    const node = nodes.current.get(key);
+    const scroller = node ? scrollerOf(node) : null;
+    if (!node || !scroller) return;
+    const anchorWas = scroller.style.getPropertyValue('overflow-anchor');
+    // The browser's own guess at what to keep still would fight this one.
+    scroller.style.setProperty('overflow-anchor', 'none');
+    // A question held through a night: the chart and the tip above it are
+    // drawn by their own renders, so the list's size is watched too.
+    const content = throughTaps && typeof ResizeObserver !== 'undefined' ? scroller.firstElementChild : null;
+    const observer = content ? new ResizeObserver(() => settle()) : null;
+    held.current = { key, top: 0, scrollTop: 0, scroller, anchorWas, throughTaps, observer };
+    look(held.current);
+    if (observer && content) observer.observe(content);
+  }, [look, release, settle]);
+
+  // After every render of the component that holds the rows.
+  useLayoutEffect(() => {
+    settle();
   });
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return undefined;
     const elsewhere = (event: Event) => {
       const current = held.current;
-      if (!current) return;
+      if (!current || current.throughTaps) return;
       const node = nodes.current.get(current.key);
       if (!node || !(event.target instanceof Node) || !node.contains(event.target)) release();
     };

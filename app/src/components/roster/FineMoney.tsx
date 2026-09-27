@@ -25,7 +25,7 @@ export function FineMoney({
   signed?: boolean;
   /** Green or red by sign; false keeps a signed figure neutral (fees before the first game). */
   colored?: boolean;
-  /** More digits where figures must visibly add up (see `breakdownPrecision`). */
+  /** `fine` (the default), `compact` for per-game figures, `exact` for dollars (see `formatAt`). */
   precision?: PartPrecision;
   /**
    * The headline sizes (the score, the final result) draw like the kit's
