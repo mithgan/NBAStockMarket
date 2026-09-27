@@ -25,13 +25,15 @@ test('a waiting button says what it waits for and what it will do', () => {
   assert.equal(waitingActionName('short', 'Devin Booker', 'Oct 21'), 'Waiting for the Oct 21 games to short Devin Booker');
 });
 
-// walk 9 T1-06: a held row's value line says it is last season's, never "Value".
-test('a held row says last season against your price, whatever this season did', () => {
+// walk 9 T1-06: a held row's value line is last season's figure at your price
+// (drawn in neutral ink); walk 13 T1-05 names it Value, the word the list sorts
+// by and the Market defines, and gives today's price its noun.
+test('a held row says its Value at your price, whatever this season did', () => {
   const barnes = { currentGameCost: 260_000, priorSeasonValuePerGame: 294_000 };
   const line = heldValueLine(barnes, 'long', 259_000);
-  assert.equal(line.value, 'Last season +$35K at your price');
-  assert.equal(line.now, 'now $260K');
-  assert.doesNotMatch(line.value, /^Value/);
+  assert.equal(line.value, 'Value +$35K at your price');
+  assert.equal(line.now, 'price now $260K');
+  assert.doesNotMatch(line.value, /^Last season/);
   assert.equal(HELD_NOW_MIN_WIDTH, 360);
 });
 

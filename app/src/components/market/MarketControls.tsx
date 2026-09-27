@@ -162,9 +162,12 @@ export function MarketSearch({
   placeholder = 'Search players',
   onEscapeEmpty,
   focusOnMount = false,
+  onFocusChange,
 }: {
   value: string;
   onChange: (next: string) => void;
+  /** The field took or lost keyboard focus (a narrow phone widens it meanwhile, walk 13 T4-06). */
+  onFocusChange?: (focused: boolean) => void;
   style?: StyleProp<ViewStyle>;
   /** "Search" where "Search players" would be cut (under 360px, walk 5 T4-13); the name stays "Search players". */
   placeholder?: string;
@@ -196,7 +199,9 @@ export function MarketSearch({
         autoCorrect={false}
         clearButtonMode="never"
         maxFontSizeMultiplier={1.4}
+        onBlur={() => onFocusChange?.(false)}
         onChangeText={onChange}
+        onFocus={() => onFocusChange?.(true)}
         onKeyPress={(event) => {
           if (event.nativeEvent.key !== 'Escape') return;
           if (value.length > 0) onChange('');
@@ -238,11 +243,14 @@ export function WatchingToggle({
   count,
   onChange,
   style,
+  compact = false,
 }: {
   on: boolean;
   count: number;
   onChange: (next: boolean) => void;
   style?: StyleProp<ViewStyle>;
+  /** Its star and count only, while a narrow phone's search box needs the room (walk 13 T4-06); the name is unchanged. */
+  compact?: boolean;
 }) {
   return (
     <Pressable
@@ -255,12 +263,14 @@ export function WatchingToggle({
       // A double tap switches it once, not on and straight back off (walk 6 T4-11).
       onPress={repeatSafe(() => onChange(!on))}
       {...spaceToggles(repeatSafe(() => onChange(!on)))}
-      style={({ pressed }) => [styles.watching, on && styles.watchingOn, pressed && styles.pressed, style]}
+      style={({ pressed }) => [styles.watching, compact && styles.watchingCompact, on && styles.watchingOn, pressed && styles.pressed, style]}
     >
       <StarIcon filled={on} size={16} />
-      <Text maxFontSizeMultiplier={1.3} style={[styles.watchingText, on && styles.watchingTextOn]}>
-        Watching
-      </Text>
+      {compact ? null : (
+        <Text maxFontSizeMultiplier={1.3} style={[styles.watchingText, on && styles.watchingTextOn]}>
+          Watching
+        </Text>
+      )}
       <Text maxFontSizeMultiplier={1.3} style={[styles.watchingCount, on && styles.watchingTextOn]}>
         {count}
       </Text>
@@ -754,6 +764,11 @@ const styles = StyleSheet.create({
     borderColor: colors.controlBorder,
     borderRadius: radius.sm,
     backgroundColor: colors.background,
+  },
+  watchingCompact: {
+    // Star and count in a 48px box, still a full 44px target.
+    gap: 2,
+    paddingHorizontal: 6,
   },
   watchingOn: {
     borderColor: colors.goldLine,

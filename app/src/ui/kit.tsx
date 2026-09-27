@@ -398,6 +398,7 @@ const STRIP_SPOT_MS = 1400;
 export function ConfirmStrip({
   message,
   confirmLabel,
+  confirmVariant = 'danger',
   cancelLabel = 'Keep',
   confirmAccessibilityLabel,
   onConfirm,
@@ -408,6 +409,12 @@ export function ConfirmStrip({
   confirmLabel: string;
   cancelLabel?: string;
   confirmAccessibilityLabel?: string;
+  /**
+   * The confirm button's look: red for a costly answer (a drop, a restart),
+   * the normal gold for a move you are making again (walk 13: "Add back for
+   * $250" read as a warning).
+   */
+  confirmVariant?: 'danger' | 'primary';
   onConfirm: () => void;
   onCancel: () => void;
   style?: StyleProp<ViewStyle>;
@@ -496,7 +503,7 @@ export function ConfirmStrip({
             settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list');
             onConfirm();
           })}
-          variant="danger"
+          variant={confirmVariant}
         />
         <Button
           ref={keepRef}

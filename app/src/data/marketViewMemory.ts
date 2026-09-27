@@ -21,6 +21,12 @@ export interface MarketMemory {
   width: number;
   /** The side the app last asked the Market to open on. */
   lastInitialSide: PerGamePositionSide | null;
+  /**
+   * A phone has shown the line that says what Value is (walk 13 T1-01): it
+   * shows on the first phone visit of a session and stays for that visit, so
+   * it never goes from under a thumb; later visits leave the rows its room.
+   */
+  valueTipSeen: boolean;
 }
 
 /**
@@ -40,6 +46,7 @@ const FRESH: MarketMemory = {
   offset: 0,
   width: 0,
   lastInitialSide: null,
+  valueTipSeen: false,
 };
 
 let memory: MarketMemory = { ...FRESH };

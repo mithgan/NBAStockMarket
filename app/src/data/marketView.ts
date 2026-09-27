@@ -582,10 +582,26 @@ export function heldValueLine(
   lockedGameCost: number,
 ): { edge: number | null; value: string; now: string; tone: SignalTone } {
   const edge = player.priorSeasonValuePerGame === null ? null : rowValueEdge(player, side, { lockedGameCost });
-  const now = `now ${money(player.currentGameCost)}`;
+  // "price now", never a bare "now $418.5K" (walk 13 T1-05: it had no noun).
+  const now = `price now ${money(player.currentGameCost)}`;
   if (edge === null) return { edge, value: 'No last season', now, tone: 'none' };
   const tone = netTone(edge);
-  return { edge, value: tone === 'even' ? 'Last season even at your price' : `Last season ${signedMoneyCompact(edge)} at your price`, now, tone };
+  // Named Value, the word the list sorts by and the Market defines (walk 13
+  // T1-05: "Last season +$71K" read as money he made you last season).
+  return { edge, value: tone === 'even' ? 'Value even at your price' : `Value ${signedMoneyCompact(edge)} at your price`, now, tone };
+}
+
+/**
+ * What Value is, said once on a phone's Market, under the sort (walk 13
+ * T1-01: "sorted by value" was a guess until a profile was opened; phones
+ * have no hover tip). True to the side, as the table's header explains it.
+ */
+export function valueDefinition(side: PerGamePositionSide, narrow = false): string {
+  // Below 360px the rows' own words, so it keeps one line (46 characters).
+  if (narrow) return side === 'short' ? "Value: his price minus last season's dividend." : "Value: last season's dividend minus his price.";
+  return side === 'short'
+    ? "Value: today's price minus last season's dividend a game."
+    : "Value: last season's dividend a game minus today's price.";
 }
 
 /**
@@ -744,6 +760,46 @@ export function tickPressNotice(
   return `${done} Changed your mind? Press ${next} when it shows${fee}.`;
 }
 
+/**
+ * For this long after a Drop or Close lands, the row's Add or Short asks
+ * before it buys him back (walk 13 T4-11: the tick lasts 1.2 s, and a tap on
+ * the same spot at 1.25 s added him again at a new price, with a second fee
+ * and no question). A deliberate comeback costs one more tap; a late repeat
+ * costs nothing.
+ */
+export const REOPEN_ASKS_WITHIN_MS = 5000;
+
+export function reopenAsks(closedAt: number, now: number): boolean {
+  return closedAt > 0 && now >= closedAt && now - closedAt < REOPEN_ASKS_WITHIN_MS;
+}
+
+/** The question a quick comeback asks, its answers, and what backing out says. */
+export function reopenQuestion(
+  side: PerGamePositionSide,
+  playerName: string,
+  price: number,
+  feeDollars: number,
+): { message: string; confirm: string; confirmName: string; cancel: string; kept: string } {
+  const fee = feeDollars > 0 ? ` Another ${exactMoney(feeDollars)} fee.` : '';
+  const forFee = feeDollars > 0 ? ` for ${exactMoney(feeDollars)}` : '';
+  if (side === 'long') {
+    return {
+      message: `Add ${playerName} back at ${perGame(price)}? You dropped him a moment ago.${fee}`,
+      confirm: `Add back${forFee}`,
+      confirmName: `Add ${playerName} back at ${perGame(price)}${forFee}`,
+      cancel: 'Not now',
+      kept: `${playerName} stays off your roster.`,
+    };
+  }
+  return {
+    message: `Short ${playerName} again at ${perGame(price)}? You closed that short a moment ago.${fee}`,
+    confirm: `Short again${forFee}`,
+    confirmName: `Short ${playerName} again at ${perGame(price)}${forFee}`,
+    cancel: 'Not now',
+    kept: `Your short on ${playerName} stays closed.`,
+  };
+}
+
 /** What the live region says when a player backs out of a Drop or Close. */
 export function keptAnnouncement(side: PerGamePositionSide, playerName: string): string {
   return side === 'long' ? `Kept ${playerName} on your roster.` : `Kept your short on ${playerName}.`;
@@ -847,6 +903,30 @@ export const COLLAPSE_CONTROLS_BELOW_HEIGHT = 500;
  */
 export function collapseControls(width: number, height = Infinity, _table = false): boolean {
   return width < COLLAPSE_CONTROLS_BELOW || height < COLLAPSE_CONTROLS_BELOW_HEIGHT;
+}
+
+/**
+ * Whether the folded panel's search box takes the caret as "Search & sort"
+ * opens it: for a key press (walk 6 T3-02) and for a mouse click, so the
+ * letters a desktop player types next filter the list (walk 13 T2-10: they
+ * went nowhere); never for a finger or a pen, whose on-screen keyboard would
+ * cover the list the tap opened. `pointerType` is the press's, or null.
+ */
+export function searchFocusOnOpen(byPointer: boolean, pointerType: string | null): boolean {
+  return !byPointer || pointerType === 'mouse';
+}
+
+/** Below this width the phone's search box shares its row with Watching and is too narrow to read a query. */
+export const SEARCH_WIDENS_BELOW = 360;
+
+/**
+ * Whether the phone's search box takes Watching's room: below 360px, while it
+ * has focus or holds a search, Watching keeps only its star and count (still
+ * there, still named "Watching"), so what you typed stays readable (walk 13
+ * T4-06: at 320px "Gilgeous" showed as "ilgeous"). The row keeps its height.
+ */
+export function searchWidens(width: number, focused: boolean, query: string): boolean {
+  return width < SEARCH_WIDENS_BELOW && (focused || query.length > 0);
 }
 
 /**
@@ -1023,11 +1103,11 @@ export function heldValuePhrase(
   side: PerGamePositionSide,
   lockedGameCost: number,
 ): string {
-  const now = `now ${perGame(player.currentGameCost)}`;
+  const now = `price now ${perGame(player.currentGameCost)}`;
   const edge = rowValueEdge(player, side, { lockedGameCost });
   if (edge === null || player.priorSeasonValuePerGame === null) return `no last season, ${now}`;
-  // Said as the row shows it: last season against your price (walk 9 T1-06).
-  const value = netTone(edge) === 'even' ? 'last season even at your price' : `last season ${signedMoneyCompact(edge)} a game at your price`;
+  // Said as the row shows it: Value at your price (walk 9 T1-06, walk 13 T1-05).
+  const value = netTone(edge) === 'even' ? 'value even at your price' : `value ${signedMoneyCompact(edge)} a game at your price`;
   return `${value}, dividend ${money(player.priorSeasonValuePerGame)} a game, ${now}`;
 }
 
@@ -1151,8 +1231,26 @@ export function rowHeaderLabel({
   tag?: string | null;
   reason?: string | null;
 }): string {
-  const facts = [name, spokenTier(tier), tag ? `${tag[0].toLowerCase()}${tag.slice(1)}` : ''].filter(Boolean).join(', ');
+  const facts = rowHeaderName({ name, tier, tag });
   return reason ? `${facts}. ${reason} View profile` : `${facts}, view profile`;
+}
+
+/**
+ * The table row header cell's own name (walk 13 T3-03): who he is, his tier
+ * and his tag while held ("Luka Doncic, star, on your roster"). A screen
+ * reader says it before every cell of his row and down every column, so
+ * "view profile" and a blocked row's reason stay on his button inside it.
+ */
+export function rowHeaderName({
+  name,
+  tier,
+  tag = null,
+}: {
+  name: string;
+  tier: string | null | undefined;
+  tag?: string | null;
+}): string {
+  return [name, spokenTier(tier), tag ? `${tag[0].toLowerCase()}${tag.slice(1)}` : ''].filter(Boolean).join(', ');
 }
 
 /** What a screen reader hears when typing pauses: "7 players match "le"". */
@@ -1685,26 +1783,48 @@ export function unheldProfitWords(side: PerGamePositionSide, heldOtherSide: bool
 }
 
 /**
- * After a night the list keeps the order it had, so nothing moves under a tap
- * (walk 7 T4-11); a tall table says so in its sentence slot: "Same order as
- * before the Oct 21 games."
+ * The order line's wording for the room it has: `short` under 390px beside
+ * Re-sort (walk 11 T4-08: one line at 320px), `phone` from there, `long` on
+ * the tables (true: short; false: long, for older callers).
  */
-export function heldOrderLine(previousNight: string, night: string, narrow = false): string {
-  // A narrow phone says it short, so it keeps one line beside Re-sort (walk 11 T4-08).
-  if (narrow) return `Same order as before ${gamesSince(previousNight, night)}`;
-  return `Same order as before the ${gamesSince(previousNight, night)} games.`;
+export type OrderLineForm = 'short' | 'phone' | 'long';
+
+/**
+ * After a night the list keeps the order it had, so nothing moves under a tap
+ * (walk 7 T4-11). The line says what moved and why the order stayed (walk 13
+ * T1-17: "Same order as before the Oct 21 games" sounded like good news and
+ * gave no reason to Re-sort): "Values moved in the Oct 21 games; order kept
+ * so rows stay put." Sorted by price, it is the prices that moved.
+ */
+export function heldOrderLine(
+  previousNight: string,
+  night: string,
+  form: boolean | OrderLineForm = 'long',
+  sort: MarketSort = 'value',
+): string {
+  const shape: OrderLineForm = form === true ? 'short' : form === false ? 'long' : form;
+  // One line beside Re-sort at 320px: the why alone (the button names the games).
+  if (shape === 'short') return 'Order kept so rows stay put';
+  const moved = sort === 'price' ? 'Prices moved' : 'Values moved';
+  if (shape === 'phone') return `${moved}; order kept so rows stay put.`;
+  return `${moved} in the ${gamesSince(previousNight, night)} games; order kept so rows stay put.`;
 }
 
 /**
- * From this window width the order line's long wording ("Same order as before
- * the Oct 21–27 games.", about 255px, with Re-sort's 70px) keeps one line;
- * narrower, the phone says "Same order as before Oct 21–27" (walk 11 T4-08: at
- * 320px the long one took two lines and the list dropped 28px after a night).
+ * From this window width a phone's order line says what moved as well as
+ * why the order stayed ("Values moved; order kept so rows stay put.", about
+ * 251px, with Re-sort's 61px, in 287px at 390); narrower, it says the why
+ * alone ("Order kept so rows stay put", 163px of 217px at 320px).
  */
 export const ORDER_LINE_LONG_MIN_WIDTH = 390;
 
+export function orderLineForm(width: number, table: boolean): OrderLineForm {
+  if (table) return 'long';
+  return width < ORDER_LINE_LONG_MIN_WIDTH ? 'short' : 'phone';
+}
+
 export function orderLineNarrow(width: number, table: boolean): boolean {
-  return !table && width < ORDER_LINE_LONG_MIN_WIDTH;
+  return orderLineForm(width, table) === 'short';
 }
 
 /**
@@ -1719,6 +1839,7 @@ export function orderLine({
   reversed,
   heldNote,
   narrow = false,
+  form,
 }: {
   sort: MarketSort;
   reversed: boolean;
@@ -1728,6 +1849,8 @@ export function orderLine({
   gamesIn?: boolean;
   /** A narrow phone (orderLineNarrow): the held wording is the short one. */
   narrow?: boolean;
+  /** The room the line has (orderLineForm); wins over `narrow`. */
+  form?: OrderLineForm;
 }): { text: string; tone: 'quiet' | 'flipped' | 'stale'; resort: boolean; reserve: string; reserveResort: boolean; reserveOwn: string } {
   const said = sortedLine(sort, reversed);
   const flipped = flippedSortNote(sort).text;
@@ -1737,7 +1860,8 @@ export function orderLine({
   // its own longest wording, before and after every night, so the list never
   // drops under a thumb when a night lands (walk 11 T4-08: 28px at 320px after
   // each first night; walk 10 T4-04's two reserved lines are gone).
-  const reserve = narrow ? 'Same order as before Oct 21–27' : 'Same order as before the Oct 21–27 games.';
+  const shape: OrderLineForm = form ?? (narrow ? 'short' : 'long');
+  const reserve = heldOrderLine('2025-10-20', '2025-10-27', shape, 'value');
   const reserveOwn = flipped.length > plain.length ? flipped : plain;
   const reserveResort = true;
   if (heldNote) return { text: heldNote, tone: 'stale', resort: true, reserve, reserveResort, reserveOwn };

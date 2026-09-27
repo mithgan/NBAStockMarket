@@ -20,6 +20,7 @@ import { OrderLine } from '../components/market/OrderLine';
 import { listenForActivations, pressedInScreen } from '../components/market/lastActivation';
 import { spaceToggles } from '../components/market/switchKeys';
 import { useAriaDisabled } from '../components/market/useAriaDisabled';
+import { lastPointerType } from '../components/market/pointerKind';
 import { pressedByPointer } from '../web/tapSettle';
 import { revealFocused } from '../web/focusInView';
 import { ControlsToggle, MarketColumnHeader, MarketSearch, SortControl, WatchingToggle } from '../components/market/MarketControls';
@@ -64,6 +65,8 @@ import {
   isSeasonOver,
   JUST_OPENED_MS,
   keptAnnouncement,
+  reopenAsks,
+  reopenQuestion,
   tickPressNotice,
   justClosedName,
   justOpenedName,
@@ -76,7 +79,7 @@ import {
   netTone,
   nextSortState,
   orderLine,
-  orderLineNarrow,
+  orderLineForm,
   lockLineShort,
   slotLineNarrow,
   otherSideGroup,
@@ -92,6 +95,7 @@ import {
   rowActions,
   rowKicker,
   rowHeaderLabel,
+  rowHeaderName,
   rowProfileLabel,
   rowTier,
   pinnedChromeTooTall,
@@ -126,8 +130,12 @@ import {
   shortTermLine,
   unheldProfitWords,
   unheldValueLines,
+  valueDefinition,
   listHeading,
   surnameFontSize,
+  searchFocusOnOpen,
+  searchWidens,
+  SEARCH_WIDENS_BELOW,
   searchFooterLine,
   searchMatchLine,
   stillFilteredLine,
@@ -532,6 +540,40 @@ function MarketRow({
     (actionRef.current as unknown as { focus?: () => void } | null)?.focus?.();
   }, [confirming, noting]);
   const waiting = waitingFor !== null && opening;
+  // Add or Short him: painted at once, then saved (or queued behind games).
+  const openNow = () => {
+    // A press in the same moment as another Add into the last slot:
+    // FULL's note says whose Add took it, and nothing is painted added.
+    const takenBy = onClaimSlot(side, player.playerId);
+    if (takenBy) {
+      dismissNotice();
+      setNoting(true);
+      return;
+    }
+    closedAt.current = 0;
+    lastAction.current = 'open';
+    setOptimistic('open');
+    setWaitingFor(practicePlaying());
+    startCooling();
+    // The move starts once "Added ✓" (or "Waiting") is on screen.
+    afterPaint(() => {
+      void openPosition({
+        playerId: player.playerId,
+        playerName: player.name,
+        side,
+        expectedQuoteVersion: player.quoteVersion,
+      }).then((opened) => {
+        setOptimistic(null);
+        setWaitingFor(null);
+        onReleaseSlot(side, player.playerId);
+        if (opened) startCooling();
+      }, () => {
+        setOptimistic(null);
+        setWaitingFor(null);
+        onReleaseSlot(side, player.playerId);
+      });
+    });
+  };
   const word = waiting ? 'Waiting' : actionWord({
     side,
     held: shownHeld,
@@ -551,13 +593,19 @@ function MarketRow({
   const resting = (disabled || justOpened || justClosed) && !fullButton;
   useAriaDisabled(actionRef, resting);
   const askedAt = useRef(0);
+  // When his Drop or Close landed: for a few seconds after, Add or Short asks
+  // before buying him back (walk 13 T4-11).
+  const closedAt = useRef(0);
+  const reopening = confirming && !position;
   useEffect(() => {
     const node = actionRef.current as unknown as { setAttribute?: (name: string, value: string) => void; removeAttribute?: (name: string) => void } | null;
     if (!node?.setAttribute || !node.removeAttribute) return;
     // Only Drop/Close (its question) and FULL (its note) open something; the
     // "Added ✓" beat is neither, so it is never "collapsed" (walk 8 T3-04).
+    // A quick comeback's question is open while it asks.
     if (position && !resting) node.setAttribute('aria-expanded', confirming ? 'true' : 'false');
     else if (fullButton) node.setAttribute('aria-expanded', noting ? 'true' : 'false');
+    else if (reopening) node.setAttribute('aria-expanded', 'true');
     else node.removeAttribute('aria-expanded');
   });
   // A double tap opens the note once (a toggle, walk 6 T4-11).
@@ -834,43 +882,16 @@ function MarketRow({
               // first one opened; a later tap folds it, as Keep does.
               if (Date.now() - askedAt.current < QUESTION_DOUBLE_TAP_MS) return;
               closeStrip();
-              onAnnounce(keptAnnouncement(side, player.name));
+              onAnnounce(position ? keptAnnouncement(side, player.name) : reopenQuestion(side, player.name, currentGameCost, fee).kept);
               return;
             }
-            if (position) {
+            if (position || reopenAsks(closedAt.current, Date.now())) {
+              // Drop or Close asks; so does Add or Short a moment after he
+              // was dropped or closed, where the tick just was (walk 13 T4-11).
               askedAt.current = Date.now();
               setConfirming(true);
             } else {
-              // A press in the same moment as another Add into the last slot:
-              // FULL's note says whose Add took it, and nothing is painted added.
-              const takenBy = onClaimSlot(side, player.playerId);
-              if (takenBy) {
-                dismissNotice();
-                setNoting(true);
-                return;
-              }
-              lastAction.current = 'open';
-              setOptimistic('open');
-              setWaitingFor(practicePlaying());
-              startCooling();
-              // The move starts once "Added ✓" (or "Waiting") is on screen.
-              afterPaint(() => {
-                void openPosition({
-                  playerId: player.playerId,
-                  playerName: player.name,
-                  side,
-                  expectedQuoteVersion: player.quoteVersion,
-                }).then((opened) => {
-                  setOptimistic(null);
-                  setWaitingFor(null);
-                  onReleaseSlot(side, player.playerId);
-                  if (opened) startCooling();
-                }, () => {
-                  setOptimistic(null);
-                  setWaitingFor(null);
-                  onReleaseSlot(side, player.playerId);
-                });
-              });
+              openNow();
             }
           }}
           // "Dropped ✓" and "Shorted ✓" fit the phone button on one line (walk 5 T4-03).
@@ -914,13 +935,39 @@ function MarketRow({
         afterPaint(() => {
           void closePosition(position).then((closed) => {
             setOptimistic(null);
-            if (closed) startCooling();
+            if (closed) {
+              startCooling();
+              closedAt.current = Date.now();
+            }
           }, () => setOptimistic(null));
         });
       }}
       style={table ? styles.stripTable : undefined}
     />
-  ) : null;
+  ) : reopening && !disabled ? (() => {
+    // A moment after a Drop or Close, Add or Short asks first; its "Not now"
+    // sits where the row's button is, so a late repeat never buys him back
+    // (walk 13 T4-11).
+    const question = reopenQuestion(side, player.name, currentGameCost, fee);
+    return (
+      <ConfirmStrip
+        cancelLabel={question.cancel}
+        confirmAccessibilityLabel={question.confirmName}
+        confirmLabel={question.confirm}
+        confirmVariant="primary"
+        message={question.message}
+        onCancel={() => {
+          closeStrip();
+          onAnnounce(question.kept);
+        }}
+        onConfirm={() => {
+          closeStrip();
+          openNow();
+        }}
+        style={table ? styles.stripTable : undefined}
+      />
+    );
+  })() : null;
   const note = noting && fullOffer ? (() => {
     const { message, action: actionLabel } = spokenFor && lastSlotTo
       ? spokenForNote(side, lastSlotTo, player.name, slotLimit)
@@ -1019,7 +1066,15 @@ function MarketRow({
         {/* The player is the row's header (walk 9 T3-02): moving down a
             column, a screen reader names him before each figure, so his
             button's name leaves the figures to their cells. */}
-        <View style={styles.profileWrap} {...(tableRoles ? ({ role: 'rowheader' } as object) : {})}>
+        {/* Its own short name (walk 13 T3-03): said as the context of every
+            cell, without the button's "view profile". */}
+        <View
+          style={styles.profileWrap}
+          {...(tableRoles ? ({
+            role: 'rowheader',
+            'aria-label': rowHeaderName({ name: player.name, tier: player.tier, tag: position && !blocked ? tagText : null }),
+          } as object) : {})}
+        >
         <Pressable
           accessibilityLabel={tableRoles
             ? rowHeaderLabel({
@@ -1233,6 +1288,14 @@ export function PerGameMarketScreen({
     rememberMarket({ lastInitialSide: initialSide });
     return openSide === saved.side ? saved : { ...saved, side: openSide, anchorId: null, offset: 0 };
   });
+  // What Value is, said under a phone's sort on the first visit of a session
+  // (walk 13 T1-01), for the whole visit, so it never leaves from under a
+  // thumb; remembered as seen once a phone has shown it.
+  const valueTip = !remembered.valueTipSeen;
+  const valueTipShown = useRef(false);
+  useEffect(() => () => {
+    if (valueTipShown.current) rememberMarket({ valueTipSeen: true });
+  }, []);
   const [query, setQuery] = useState(remembered.query);
   const [side, setSide] = useState<PerGamePositionSide>(remembered.side);
   const [sort, setSort] = useState<MarketSort>(remembered.sort);
@@ -1266,6 +1329,8 @@ export function PerGameMarketScreen({
   const [profileId, setProfileId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [controlsOpen, setControlsOpen] = useState(false);
+  // The phone search box has focus (below 360px it widens meanwhile, walk 13 T4-06).
+  const [searchFocused, setSearchFocused] = useState(false);
   // Escape in the folded panel's empty search closes the panel and returns
   // focus to "Search & sort" (walk 5 T3-03).
   const controlsToggleRef = useRef<View>(null);
@@ -1273,15 +1338,16 @@ export function PerGameMarketScreen({
     setControlsOpen(false);
     setTimeout(() => (controlsToggleRef.current as unknown as { focus?: () => void } | null)?.focus?.(), 0);
   }, []);
-  // Opened from the keyboard, the panel puts focus in its search box, so
-  // typing searches at once (walk 6 T3-02); a tap leaves focus where it was.
+  // Opened from the keyboard or with a mouse, the panel puts focus in its
+  // search box, so typing searches at once (walk 6 T3-02, walk 13 T2-10); a
+  // finger's tap leaves focus where it was (no on-screen keyboard).
   const openedByKey = useRef(false);
   // A double tap opens it once and leaves it open (walk 8 T4-05: in
   // landscape the second tap shut it again at 150 and 250 ms), as the other
   // toggles do; a key press always acts.
   const toggleControls = useMemo(() => repeatSafe(() => {
     const opening = !controlsOpenRef.current;
-    openedByKey.current = opening && !pressedByPointer();
+    openedByKey.current = opening && searchFocusOnOpen(pressedByPointer(), lastPointerType());
     setControlsOpen(opening);
   }), []);
   const controlsOpenRef = useRef(controlsOpen);
@@ -1484,7 +1550,7 @@ export function PerGameMarketScreen({
   // Kept from before the latest night, and a fresh sort would move someone:
   // said only in the tall table's reserved sentence slot, with "Re-sort"
   // (nothing else on screen may move for it).
-  const heldNote = night !== sortedNight && orderMoved ? heldOrderLine(sortedNight, night, orderLineNarrow(width, layout === 'table')) : null;
+  const heldNote = night !== sortedNight && orderMoved ? heldOrderLine(sortedNight, night, orderLineForm(width, layout === 'table'), sort) : null;
   const resortNow = useCallback(() => {
     const previous = sortedNightRef.current;
     if (previous === nightRef.current) return;
@@ -1922,7 +1988,7 @@ export function PerGameMarketScreen({
   // under the sort, on a laptop-height table in the sentence's place once the
   // first games are in; a tall table keeps its sentence slot.
   const compactSlot = wide && roomy && height < LAPTOP_HEIGHT_BELOW && sentenceGone;
-  const order = orderLine({ sort, reversed, heldNote, gamesIn, narrow: orderLineNarrow(width, wide) });
+  const order = orderLine({ sort, reversed, heldNote, gamesIn, form: orderLineForm(width, wide) });
   const orderStrip = (
     <OrderLine
       reserve={order.reserve}
@@ -1982,6 +2048,10 @@ export function PerGameMarketScreen({
       ) : sideExplainer}
     </View>
   ) : null;
+  // The phone toolbar (not a row toolbar, not folded) says what Value is on
+  // a session's first visit (walk 13 T1-01).
+  const phoneValueTip = valueTip && !rowToolbar && !folded;
+  if (phoneValueTip) valueTipShown.current = true;
   // Folded for want of room, a pinned table lets this slot (the sentence,
   // or the "Same order as before…" line with Re-sort) scroll away with the
   // rows as their first row (walk 11 T2-09: at 960x600 after games the
@@ -2041,11 +2111,13 @@ export function PerGameMarketScreen({
           {shortExplainer}
           {/* The two filters share a row; the sort and its order button get the next one whole. */}
           <View style={styles.filterRow}>
-            <MarketSearch onChange={setQuery} placeholder={searchPlaceholder} style={styles.searchFlex} value={query} />
-            {watchingToggle}
+            <MarketSearch onChange={setQuery} onFocusChange={setSearchFocused} placeholder={searchPlaceholder} style={styles.searchFlex} value={query} />
+            {/* Below 360px a search in progress takes Watching's words (walk 13 T4-06). */}
+            <WatchingToggle compact={searchWidens(width, searchFocused, query)} count={watchlist.watched.length} on={watchedOnly} onChange={setWatchedOnly} />
           </View>
           {sortToggle}
           {orderStrip}
+          {phoneValueTip ? <Text maxFontSizeMultiplier={1.4} style={[styles.explainer, styles.valueTip]}>{valueDefinition(side, width < SEARCH_WIDENS_BELOW)}</Text> : null}
         </View>
       )}
       {/* On a tall desktop the unusual-order note takes the explainer's own
@@ -2180,11 +2252,14 @@ export function PerGameMarketScreen({
         // other side's row (walk 8 T4-07).
         keyExtractor={(row) => `${row.side}:${row.player.playerId}`}
         ListEmptyComponent={spanRow(emptyState)}
+        // After the players, not rows of the table: the table ends with its
+        // last player (walk 13 T3-02: a reader counted 33 rows, the last two
+        // "End of the list" and "Back to the practice controls").
         ListFooterComponent={(
           <>
-            {spanRow(resultCount > 0 ? <ListEnd label="End of the list" ref={listEndRef} /> : null)}
-            {spanRow(resultCount > 0 && isMockActive() ? <SkipLink label="Back to the practice controls" onPress={backToControls} /> : null)}
-            {spanRow(watchingFooter ?? searchFooter)}
+            {resultCount > 0 ? <ListEnd label="End of the list" ref={listEndRef} /> : null}
+            {resultCount > 0 && isMockActive() ? <SkipLink label="Back to the practice controls" onPress={backToControls} /> : null}
+            {watchingFooter ?? searchFooter}
           </>
         )}
         // A folded pinned table lets the order line scroll away with the
@@ -2515,6 +2590,11 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: type.caption,
     lineHeight: 17,
+  },
+  valueTip: {
+    // Close under the order line it explains (whose Re-sort room is empty
+    // before the first games).
+    marginTop: -6,
   },
   explainerWide: {
     // Two lines' room: the longer (short) sentence wraps once on a tablet.

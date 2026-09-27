@@ -91,7 +91,7 @@ test('the order line reserves its own longest wording and the one-line held word
   assert.equal(orderLine({ sort: 'name', reversed: false, heldNote: null, gamesIn: false }).reserveOwn, 'Sorted by name, A to Z.');
   const after = orderLine({ sort: 'value', reversed: false, heldNote: null, gamesIn: true });
   assert.deepEqual([before.reserve, before.reserveResort], [after.reserve, after.reserveResort], 'one height before and after the first games');
-  assert.equal(after.reserve, 'Same order as before the Oct 21–27 games.');
+  assert.equal(after.reserve, 'Values moved in the Oct 21–27 games; order kept so rows stay put.');
   assert.equal(after.reserveResort, true);
 });
 

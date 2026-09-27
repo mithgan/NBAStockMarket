@@ -545,9 +545,9 @@ test('spoken rows say the tier as words, and held rows keep their value phrase (
   assert.match(rowProfileLabel({ name: 'Kon Knueppel', tier: 'role', price: 111_500, detail: 'No last season' }), /^Kon Knueppel, role player, /);
   const gillespie = { currentGameCost: 126_500, priorSeasonValuePerGame: 120_000 };
   // Held at the price you locked (walk 5 T4-02): today's price is said after it.
-  assert.equal(heldValuePhrase(gillespie, 'long', 126_500), 'last season -$6.5K a game at your price, dividend $120K a game, now $126.5K a game');
-  assert.equal(heldValuePhrase(gillespie, 'short', 126_500), 'last season +$6.5K a game at your price, dividend $120K a game, now $126.5K a game');
-  assert.equal(heldValuePhrase({ currentGameCost: 90_000, priorSeasonValuePerGame: null }, 'long', 89_000), 'no last season, now $90K a game');
+  assert.equal(heldValuePhrase(gillespie, 'long', 126_500), 'value -$6.5K a game at your price, dividend $120K a game, price now $126.5K a game');
+  assert.equal(heldValuePhrase(gillespie, 'short', 126_500), 'value +$6.5K a game at your price, dividend $120K a game, price now $126.5K a game');
+  assert.equal(heldValuePhrase({ currentGameCost: 90_000, priorSeasonValuePerGame: null }, 'long', 89_000), 'no last season, price now $90K a game');
 });
 
 test('a reversed sort runs the other way, words included; no last season still goes last (T2-N03)', () => {
@@ -646,11 +646,11 @@ test('a held row measures Value at the price you locked, and sorts by the figure
   const doncic = { currentGameCost: 418_500, priorSeasonValuePerGame: 488_500 };
   assert.equal(rowValueEdge(doncic, 'long', { lockedGameCost: 417_500 }), 71_000);
   assert.equal(rowValueEdge(doncic, 'long', null), 70_000, 'unheld: today\'s price');
-  assert.deepEqual(heldValueLine(doncic, 'long', 417_500), { edge: 71_000, value: 'Last season +$71K at your price', now: 'now $418.5K', tone: 'gain' });
+  assert.deepEqual(heldValueLine(doncic, 'long', 417_500), { edge: 71_000, value: 'Value +$71K at your price', now: 'price now $418.5K', tone: 'gain' });
   // A held short: locked credit minus his dividend.
-  assert.equal(heldValueLine({ currentGameCost: 150_000, priorSeasonValuePerGame: 120_000 }, 'short', 140_000).value, 'Last season +$20K at your price');
+  assert.equal(heldValueLine({ currentGameCost: 150_000, priorSeasonValuePerGame: 120_000 }, 'short', 140_000).value, 'Value +$20K at your price');
   assert.equal(heldValueLine({ currentGameCost: 90_000, priorSeasonValuePerGame: null }, 'long', 89_500).value, 'No last season');
-  assert.equal(heldValueLine({ currentGameCost: 100_200, priorSeasonValuePerGame: 100_000 }, 'long', 100_000).value, 'Last season even at your price');
+  assert.equal(heldValueLine({ currentGameCost: 100_200, priorSeasonValuePerGame: 100_000 }, 'long', 100_000).value, 'Value even at your price');
   // Value sort: a held row sorts by its value at your price (+$71K), above a +$70.5K row at today's.
   const market = [
     { player: player({ playerId: 'x', currentGameCost: 100_000, priorSeasonValuePerGame: 170_500 }), position: null },
@@ -743,8 +743,8 @@ test('spaced single letters are initials, and a few nicknames find their player 
 });
 
 test('after a night the list keeps its order, says so for which games, and re-sorts only when asked (walk 7 T4-11)', () => {
-  assert.equal(heldOrderLine('2025-10-20', '2025-10-21'), 'Same order as before the Oct 21 games.');
-  assert.equal(heldOrderLine('2025-10-20', '2025-10-27'), 'Same order as before the Oct 21–27 games.');
+  assert.equal(heldOrderLine('2025-10-20', '2025-10-21'), 'Values moved in the Oct 21 games; order kept so rows stay put.');
+  assert.equal(heldOrderLine('2025-10-20', '2025-10-27'), 'Values moved in the Oct 21–27 games; order kept so rows stay put.');
   assert.equal(resortName('2025-10-21'), 'Re-sort for the Oct 21 games');
   assert.equal(resortName('2025-10-27', '2025-10-20'), 'Re-sort for the Oct 21–27 games');
   assert.equal(resortedLine('2025-10-20', '2025-10-21'), 'Re-sorted for the Oct 21 games.');
