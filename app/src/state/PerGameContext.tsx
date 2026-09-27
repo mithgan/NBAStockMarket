@@ -21,7 +21,7 @@ import type {
   PerGamePosition,
 } from '../api/contracts';
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
-import { exactMoney, moneyCompact, moneyFine, perGame, rosterReopensLine } from '../copy/terms';
+import { exactMoney, lockNotice, moneyCompact, moneyFine, perGame, rosterReopensLine } from '../copy/terms';
 import { practiceProgress } from '../data/chromeView';
 import { isAppResume } from './appResume';
 import { ActionLock } from './actionLock';
@@ -98,6 +98,11 @@ interface PerGameContextValue {
   /** A short informational notice (clears itself), e.g. why a LOCKED button did nothing. */
   notify: (text: string, options?: { spoken?: string }) => void;
   /**
+   * A press on a LOCKED Add / Short / Drop: named with the games' notice when
+   * it raced the lock the games just brought, else the lock's own sentence.
+   */
+  lockedPress: (move: { name: string; verb: string }) => void;
+  /**
    * Speak the notice on screen, shown silently a moment ago (`silent`, or
    * `spoken: ''`): a run of quick +1 night presses is heard once, when it
    * settles, not once per press (walk 8 T3-10). Nothing if another notice
@@ -131,6 +136,16 @@ function nameList(names: string[]): string {
 
 /** How long a move waits for a refresh (a practice night) before it says so. */
 const MOVE_WAITS_FOR_REFRESH_MS = 10_000;
+/**
+ * A success that comes while a refused move's notice shows joins it for this
+ * long, so the refusal stays in view with its × (walk 12 T4-14: "Scottie
+ * Barnes was not added" lasted 1.5 s under a waiting drop's "dropped").
+ */
+const PROBLEM_JOIN_MS = 8000;
+/** A refusal this soon after waiting moves were told is told with them again. */
+const WAITED_REJOIN_MS = 2000;
+/** A press on a button that turned LOCKED this soon after a night landed raced the lock. */
+const LOCK_RACE_MS = 1500;
 
 function errorMessage(error: unknown): string {
   if (error instanceof PerGameApiError) return error.message;
@@ -159,6 +174,11 @@ export function PerGameProvider({
   const minimumSnapshotRef = useRef<PerGameBootstrap | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<NoticeTone>('problem');
+  // What the notice area shows now, for a success that must not hide a
+  // refusal (walk 12 T4-14).
+  const shownTone = useRef<NoticeTone>('problem');
+  shownTone.current = noticeTone;
+  const shownAt = useRef(0);
   const [noticeSeq, setNoticeSeq] = useState(0);
   const [noticeSpoken, setNoticeSpoken] = useState<string | null>(null);
   // The fee is part of every move's confirmation, so it is never a surprise.
@@ -180,9 +200,15 @@ export function PerGameProvider({
   /** `spoken`: what screen readers hear instead, when it differs. */
   const say = useCallback((text: string, tone: NoticeTone = 'problem', spoken?: string) => {
     const lock = tone === 'success' ? text.match(LOCK_SENTENCE) : null;
-    setNoticeTone(tone);
-    setMessage(lock && lock.index !== undefined && lock.index > 0 ? text.slice(0, lock.index) + text.slice(lock.index + lock[0].length) : text);
-    setNoticeSpoken(spoken ?? (lock ? text : null));
+    const visible = lock && lock.index !== undefined && lock.index > 0 ? text.slice(0, lock.index) + text.slice(lock.index + lock[0].length) : text;
+    // A refused move still on screen stays there: the success joins it, and
+    // only the success is heard (walk 12 T4-14).
+    const joins = tone === 'success' && spoken !== '' && shownMessage.current !== null
+      && shownTone.current === 'problem' && Date.now() - shownAt.current < PROBLEM_JOIN_MS;
+    shownAt.current = Date.now();
+    setNoticeTone(joins ? 'problem' : tone);
+    setMessage(joins ? `${shownMessage.current} ${visible}` : visible);
+    setNoticeSpoken(spoken ?? (lock || joins ? text : null));
     setNoticeSeq((seq) => seq + 1);
     noticeIds.current += 1;
     const id = noticeIds.current;
@@ -388,14 +414,24 @@ export function PerGameProvider({
   // still want them."
   type WaitedMove = { verb: string; name: string; locked: boolean; cost: number | null };
   const waitedMoves = useRef<{ moves: WaitedMove[]; base: string | null } | null>(null);
+  // The last waiting moves told, so a refusal a moment later is told with
+  // them, not over them (walk 12 T4-07: a second add refused as the week
+  // landed replaced the first one's notice, and neither named both).
+  const lastWaited = useRef<{ moves: WaitedMove[]; base: string | null; at: number } | null>(null);
   const sayWaitedMove = useCallback((move: WaitedMove) => {
     const batch = waitedMoves.current;
     if (batch) {
       if (!batch.moves.some((entry) => entry.name === move.name && entry.verb === move.verb)) batch.moves.push(move);
       return;
     }
-    const recent = lastRefreshNotice.current;
-    waitedMoves.current = { moves: [move], base: recent && Date.now() - recent.at < 6000 ? recent.text : null };
+    const last = lastWaited.current;
+    if (last && Date.now() - last.at < WAITED_REJOIN_MS) {
+      const moves = last.moves.filter((entry) => !(entry.name === move.name && entry.verb === move.verb));
+      waitedMoves.current = { moves: [...moves, move], base: last.base };
+    } else {
+      const recent = lastRefreshNotice.current;
+      waitedMoves.current = { moves: [move], base: recent && Date.now() - recent.at < 6000 ? recent.text : null };
+    }
     setTimeout(() => {
       const done = waitedMoves.current;
       waitedMoves.current = null;
@@ -437,8 +473,21 @@ export function PerGameProvider({
       // The games' own notice is inside this one: it is not said again.
       silentNotice.current = null;
       say(parts.join(' '));
+      lastWaited.current = { moves: done.moves, base: done.base, at: Date.now() };
     }, 0);
   }, [say]);
+
+  // A press on Add (or Short) that turned LOCKED as the games landed raced the
+  // lock: it is a move that failed, named with the others in the games'
+  // notice. A LOCKED pressed later only explains the lock (walk 12 T4-07).
+  const lockedPress = useCallback((move: { name: string; verb: string }) => {
+    const recent = lastRefreshNotice.current;
+    if (recent && Date.now() - recent.at < LOCK_RACE_MS) {
+      sayWaitedMove({ verb: move.verb, name: move.name, locked: true, cost: null });
+      return;
+    }
+    say(lockNotice(bootstrapRef.current?.ruleset.rosterLockGameDate));
+  }, [say, sayWaitedMove]);
 
   const runPositionAction = useCallback(async <T extends { accountVersion: number },>(
     key: string,
@@ -670,6 +719,7 @@ export function PerGameProvider({
     closePosition,
     dismissNotice,
     notify,
+    lockedPress,
     speakNotice,
     confirmLocalTransition,
   }), [
@@ -678,6 +728,7 @@ export function PerGameProvider({
     confirmLocalTransition,
     dismissNotice,
     notify,
+    lockedPress,
     speakNotice,
     isGameplayReady,
     isLoading,
