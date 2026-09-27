@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameBootstrap, PerGameLedgerEntry, PerGamePosition } from '../api/contracts';
-import { isSeasonCompleteNotice, outcomeFirst, refreshHasNews, refreshNotice } from './perGameNotices';
+import { isSeasonCompleteNotice, newsFirst, outcomeFirst, refreshHasNews, refreshNotice } from './perGameNotices';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -183,4 +183,33 @@ test('a narrow strip leads a games notice with its news, and leaves other notice
     'Luka Doncic added at $417.5K a game, locked in. $250 fee.',
     'Season complete. Final score +$4.95M, #1 of 5.',
   ]) assert.equal(outcomeFirst(unchanged), unchanged);
+});
+
+test('a bar narrower than a desktop\'s leads with moves that did not happen, then the figure (walk 16 T4-02, T4-09)', () => {
+  // Three refused adds were cut at "…rose $205K. Devin" on a 390px phone.
+  assert.equal(
+    newsFirst('Oct 21–27 games: your score rose $205K. Devin Booker, Jalen Duren and OG Anunoby were not added: their prices moved to $330K, $179.1K and $166K a game.'),
+    'Devin Booker, Jalen Duren and OG Anunoby were not added: their prices moved to $330K, $179.1K and $166K a game. Your score rose $205K in the Oct 21–27 games.',
+  );
+  // A run's refusal leads; the lock still ahead stays last.
+  assert.equal(
+    newsFirst('Oct 21–Nov 10 games (3 weeks): your score fell $529K. Jalen Duren was not added: moves paused for the Oct 28 games. Moves pause for the Nov 11 games.'),
+    'Jalen Duren was not added: moves paused for the Oct 28 games. Your score fell $529K in the Oct 21–Nov 10 games (3 weeks). Moves pause for the Nov 11 games.',
+  );
+  assert.equal(
+    newsFirst('Oct 21–27 games: your score fell $167.5K. Moves pause for the Oct 28 games, so Jalen Duren was not added.'),
+    'Moves pause for the Oct 28 games, so Jalen Duren was not added. Your score fell $167.5K in the Oct 21–27 games.',
+  );
+  // With nothing refused it is the figure first, as below 300px before.
+  assert.equal(newsFirst('Oct 21–Nov 10 games (3 weeks): your score fell $529K.'), 'Your score fell $529K in the Oct 21–Nov 10 games (3 weeks).');
+  // A name's "Jr." is no sentence end, and other notices are left alone.
+  assert.equal(
+    newsFirst('Oct 21 games: your score rose $84K. Jaren Jackson Jr. was not added: his price moved to $200K a game.'),
+    'Jaren Jackson Jr. was not added: his price moved to $200K a game. Your score rose $84K in the Oct 21 games.',
+  );
+  for (const unchanged of [
+    'Luka Doncic added at $417.5K a game, locked in. $250 fee.',
+    'Your roster is locked. Moves reopen after Nov 11.',
+    'Season complete. Final score +$4.95M, #1 of 5.',
+  ]) assert.equal(newsFirst(unchanged), unchanged);
 });

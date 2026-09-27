@@ -104,6 +104,25 @@ export function outcomeFirst(message: string): string {
   return `Your score ${verb} ${amount} in the ${span}.${rest}`;
 }
 
+/** A sentence saying a move the player pressed did not happen. */
+const REFUSED_MOVE = /\bnot (added|dropped|shorted|closed)\b/;
+
+/**
+ * A notice for a bar or strip narrower than a desktop's, which shows two
+ * lines (one at 400% zoom) before "more ▾": its news first. Moves that did
+ * not happen lead (walk 16 T4-09: "…your score rose $205K. Devin" hid three
+ * refused adds), then the games' result with its figure first (T4-02: "(3
+ * weeks): your score fell" hid the $529K). Everything else keeps its order.
+ * Screen readers and Recent notices keep the notice as written.
+ */
+export function newsFirst(message: string): string {
+  const sentences = message.replace(/([.!?])\s+(?=[A-Z])/g, '$1\u0000').split('\u0000');
+  const refused = sentences.filter((sentence) => REFUSED_MOVE.test(sentence));
+  if (refused.length === 0) return outcomeFirst(message);
+  const [head = '', ...tail] = sentences.filter((sentence) => !REFUSED_MOVE.test(sentence));
+  return [...refused, outcomeFirst(head), ...tail].filter(Boolean).join(' ');
+}
+
 /** How the season's last games are announced; the Roster's result card says the same. */
 export const SEASON_COMPLETE_NOTICE_START = 'Season complete. Final score ';
 
