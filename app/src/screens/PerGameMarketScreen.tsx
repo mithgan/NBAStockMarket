@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactElement, type ReactNode, type RefObject } from 'react';
 import {
   FlatList,
   type NativeScrollEvent,
@@ -1064,12 +1064,12 @@ function MarketRow({
   // Keep sits at the right, where the row's button was; the costly button sits
   // to its left. Focus starts on Keep; Escape or Keep closes the strip.
   const strip = confirming && position ? (
-    <ConfirmStrip
+    <CloseQuestionStrip
       confirmAccessibilityLabel={confirmCloseName(side, player.name, fee)}
       confirmLabel={confirmCloseButton(side, fee)}
       // One wording on every screen: the fee, what stays, and what coming
       // back would cost today.
-      message={confirmCloseMessage({
+      question={{
         side,
         playerName: player.name,
         feeDollars: fee,
@@ -1080,7 +1080,7 @@ function MarketRow({
         // The comeback price as the Closed row shows it right after, as the
         // Roster and the profile ask (walk 11 T1-05).
         dropImpactBps,
-      })}
+      }}
       onCancel={() => {
         closeStrip();
         onAnnounce(keptAnnouncement(side, player.name));
@@ -1412,6 +1412,18 @@ function MarketRow({
  * T4-11). Its callbacks are stable, so they never force a redraw.
  */
 const MemoMarketRow = memo(MarketRow, (prev, next) => sameMarketRowProps(prev, next));
+
+/**
+ * A row's Drop / Close question, which says while games play that the move
+ * waits for them (walk 18 T4-03). Its own component, so only an open
+ * question listens to the games playing, never all thirty rows.
+ */
+function CloseQuestionStrip({ question, ...strip }: Omit<ComponentProps<typeof ConfirmStrip>, 'message'> & {
+  question: Omit<Parameters<typeof confirmCloseMessage>[0], 'playing'>;
+}) {
+  const playing = usePracticePlaying();
+  return <ConfirmStrip {...strip} message={confirmCloseMessage({ ...question, playing })} />;
+}
 
 export function PerGameMarketScreen({
   initialSide = 'long',

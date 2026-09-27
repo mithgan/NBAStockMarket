@@ -469,6 +469,8 @@ function PositionRow({
         // (walk 11 T1-05).
         priceNow: marketPrice,
         dropImpactBps: bootstrap?.ruleset.quoteDropImpactBps ?? 0,
+        // Asked while games play, it waits for them (walk 18 T4-03).
+        playing: playingNow,
       })}
       onCancel={() => onConfirmClose(position, 'kept')}
       onConfirm={() => {

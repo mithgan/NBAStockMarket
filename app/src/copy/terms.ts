@@ -314,6 +314,7 @@ export function confirmCloseMessage({
   endsFreeAfter = null,
   priceNow = null,
   dropImpactBps = null,
+  playing = null,
 }: {
   side: PerGamePositionSide;
   playerName: string;
@@ -334,9 +335,27 @@ export function confirmCloseMessage({
    * $262K" (walk 11 T1-05). Without it, today's price.
    */
   dropImpactBps?: number | null;
+  /**
+   * The games playing now ("Oct 21–27"), when the question is asked while
+   * they play: the move waits for them, his games in them still count, and
+   * moves paused right after them would stop it (walk 18 T4-03: a drop
+   * confirmed during a week read as instant, then the lock after the week
+   * refused it). His price after them is not known yet, so none is quoted.
+   */
+  playing?: string | null;
 }): string {
   const fee = feeDollars > 0 ? exactMoney(feeDollars) : null;
   const forFee = fee ? ` for a ${fee} fee` : '';
+  if (playing) {
+    const after = `after the ${playing} games`;
+    const another = fee ? `, plus another ${fee} fee` : '';
+    const kept = Math.round(total) !== 0
+      ? side === 'long' ? ` His ${signedMoneyFine(total)} so far stays in your score.` : ` This short's ${signedMoneyFine(total)} so far stays in your score.`
+      : '';
+    return side === 'long'
+      ? `Drop ${playerName} ${after}${forFee}? His games in them still count, and if moves pause after them, he stays on your roster.${kept} Adding him back later costs his price at that time${another}.`
+      : `Close your short on ${playerName} ${after}${forFee}? Its games in them still count, and if moves pause after them, it stays open.${kept} Shorting him again later sets a new price${another}.`;
+  }
   // Closing a short early is asked in two sentences, not five, on every
   // screen that quotes the price after the move (walk 13 T1-13): the choice
   // first, the free way in it, then one line for the rest. The first

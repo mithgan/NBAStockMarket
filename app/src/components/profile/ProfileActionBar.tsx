@@ -25,6 +25,7 @@ import { practiceProgress } from '../../data/chromeView';
 import { actionName, fullNote, isSeasonOver, justClosedName, justOpenedName } from '../../data/marketView';
 import { moveSaving, openTermsNote, profileCloseName, profileCloseWord, savingWords } from '../../data/profileView';
 import { usePerGame } from '../../state/PerGameContext';
+import { usePracticePlaying } from '../../state/practicePlaying';
 import { buildPerGameMarketRows } from '../../state/perGameState';
 import { openTab, requestRosterPick } from '../../state/uiActions';
 import { colors, space, type } from '../../theme';
@@ -52,6 +53,8 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
   onLeave?: () => void;
 }) {
   const { bootstrap, closePosition, notify, openPosition, pendingActions } = usePerGame();
+  // The games playing now: a Drop or Close asked meanwhile waits for them (walk 18 T4-03).
+  const playing = usePracticePlaying();
   // A brief tick after a move lands ("Added ✓"), in the button's place.
   const [done, showDone] = useCooldown();
   const [doneWords, setDoneWords] = useState({ tick: '', note: '', name: '' });
@@ -173,6 +176,7 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
             // The comeback price as the Closed row shows it right after, as
             // the Roster and the Market ask (walk 11 T1-05).
             dropImpactBps: bootstrap.ruleset.quoteDropImpactBps,
+            playing,
           })}
           onCancel={cancel}
           onConfirm={() => {

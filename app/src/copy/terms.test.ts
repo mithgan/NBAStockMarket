@@ -180,3 +180,16 @@ test('a half always rounds up, in K and in millions, whatever its binary fractio
   assert.equal(moneyFine(9_995), '$10K');
   assert.equal(moneyFine(1_000), '$1K');
 });
+
+test('a Drop or Close asked while games play says it waits for them, and what a pause after them does (walk 18 T4-03)', () => {
+  assert.equal(
+    confirmCloseMessage({ side: 'long', playerName: 'Luka Doncic', feeDollars: 250, total: 0, priceNow: 418_500, dropImpactBps: 25, playing: 'Oct 21–27' }),
+    'Drop Luka Doncic after the Oct 21–27 games for a $250 fee? His games in them still count, and if moves pause after them, he stays on your roster. Adding him back later costs his price at that time, plus another $250 fee.',
+  );
+  assert.equal(
+    confirmCloseMessage({ side: 'short', playerName: 'Cade Cunningham', feeDollars: 250, total: 67_900, endsFreeAfter: '2025-10-27', priceNow: 300_000, dropImpactBps: 25, playing: 'Oct 22' }),
+    "Close your short on Cade Cunningham after the Oct 22 games for a $250 fee? Its games in them still count, and if moves pause after them, it stays open. This short's +$67.9K so far stays in your score. Shorting him again later sets a new price, plus another $250 fee.",
+  );
+  // Nothing playing: the question is unchanged.
+  assert.doesNotMatch(confirmCloseMessage({ side: 'long', playerName: 'Luka Doncic', feeDollars: 250, total: 0, playing: null }), /after the/);
+});
