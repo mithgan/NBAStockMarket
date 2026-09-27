@@ -33,8 +33,9 @@ export function SettlementBreakdown({
   /** Desktop: a receipt-width column aligned to the right, under the numbers. */
   wide: boolean;
 }) {
-  // Whose math this is, in the profile's words ("Your roster spot:").
-  const heading = side === 'short' ? 'Your short' : 'Your roster spot';
+  // Whose math this is, in the app's own words (walk 12 T1-01: "Your roster
+  // spot" was a third term for holding him): "On your roster" or "Your short".
+  const heading = side === 'short' ? 'Your short' : 'On your roster';
   const spoken = [
     heading,
     ...(basis ? [`His dividend: ${basis}`] : []),

@@ -8,6 +8,7 @@ import type {
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
+import { chromeFolded } from '../data/chromeView';
 import { panelDockRight, type ProfileMetric, type ProfileRange } from '../data/profileView';
 import type { TrendPoint } from '../data/trendPresentation';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -99,7 +100,7 @@ export function PlayerProfileSheet({
 }) {
   const reducedMotion = useReducedMotion();
   const ownWatchlist = useWatchlist();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // Back (the browser button or a phone's back gesture) closes the profile,
   // not the app; the screen behind it is inert while it is open.
@@ -110,6 +111,12 @@ export function PlayerProfileSheet({
   // Docked to the app column's right edge, not the window's (walk 8 T2-03).
   const dockRight = panel ? panelDockRight(width) : 0;
   const sheetWidth = Math.min(width, SHEET_MAX_WIDTH);
+  // A short, wide window (a phone on its side, a laptop at 150%) folds the
+  // frame into one row of live-looking controls (+1 night, +1 week), and the
+  // gap above the sheet showed them, dimmed but still read as pressable,
+  // where a tap only closed the profile (walk 12 T1-08). There the sheet
+  // covers that row, from the top: the dimmed sides still close it on a tap.
+  const coverFrame = !panel && width > sheetWidth && chromeFolded(height, width);
   const playerId = player.playerId;
 
   return (
@@ -131,7 +138,11 @@ export function PlayerProfileSheet({
           styles.sheet,
           panel
             ? [styles.panel, dockRight > 0 && { right: dockRight, borderRightWidth: 1 }]
-            : [styles.phoneSheet, { top: insets.top + SHEET_TOP_GAP, width: sheetWidth, left: (width - sheetWidth) / 2 }],
+            : [styles.phoneSheet, {
+                top: insets.top + (coverFrame ? 0 : SHEET_TOP_GAP),
+                width: sheetWidth,
+                left: (width - sheetWidth) / 2,
+              }, coverFrame && styles.fullHeight],
         ]}
       >
         <PerGamePlayerProfile
@@ -174,6 +185,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     overflow: 'hidden',
+  },
+  // From the window's top: square corners, like the panel's.
+  fullHeight: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderTopWidth: 0,
   },
   panel: {
     top: 0,

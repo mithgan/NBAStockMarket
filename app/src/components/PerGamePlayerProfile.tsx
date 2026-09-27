@@ -39,7 +39,9 @@ import {
   signedMoneyFine,
   unbrokenName,
 } from '../copy/terms';
-import { tierLabel } from '../data/marketView';
+import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
+import { practiceProgress } from '../data/chromeView';
+import { isSeasonOver, tierLabel } from '../data/marketView';
 import { currentResults, playerValue, positionValue } from '../data/perGameMetrics';
 import { splitPlayerName } from '../data/playerName';
 import {
@@ -252,7 +254,14 @@ export function PerGamePlayerProfile({
   // your add of Luka Doncic…"); the header keeps saying where you stand until
   // it lands (walk 10 T4-09: three lines said one thing).
   // Held: the header leads with your price and this line names the market's (walk 9 T1-01).
-  const status = holdingStatus(position, viewSide, false, player.currentGameCost);
+  // After the last night the header speaks of the season past, as the
+  // Market does, and Watch steps aside with the market closed (walk 12 T1-09).
+  const seasonOver = bootstrap ? isSeasonOver({
+    practiceComplete: isMockActive() && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete,
+    lastSettledDate: bootstrap.game.lastSettledDate,
+    nextGameDate: bootstrap.game.nextGameDate,
+  }) : false;
+  const status = holdingStatus(position, viewSide, false, player.currentGameCost, seasonOver);
   const ledger = bootstrap?.ledger.items;
   const opened = useMemo(() => (position ? {
     since: positionOpenedDay(ledger ?? [], position.positionId),
@@ -262,7 +271,7 @@ export function PerGamePlayerProfile({
     // Not held: name the side and dates of your past games with him.
     past: pastStintLead(currentResults(results).filter((row) => row.playerId === player.playerId)),
   }), [ledger, player.playerId, position, results]);
-  const stake = stakeLine(stakeSummary, held, viewSide, opened);
+  const stake = stakeLine(stakeSummary, held, viewSide, opened, seasonOver);
   // One game shown, and it was yours with the header saying its result: the
   // verdict says how it went without the figure, and the averages and the
   // best/only tiles wait for his second game (walk 7 T1-05: one figure said
@@ -342,22 +351,24 @@ export function PerGamePlayerProfile({
             word says the state too, "Watch" or "Watching" (walk 5 T1-10), and
             the spoken name starts with the word shown ("Watching Nikola
             Jokic"), so a voice command naming the button still finds it. */}
-        <Pressable
-          accessibilityLabel={`${watching ? 'Watching' : 'Watch'} ${player.name}`}
-          accessibilityRole="switch"
-          accessibilityState={{ checked: watching }}
-          aria-checked={watching}
-          onPress={toggleWatch}
-          style={({ pressed }) => [styles.watch, narrow && styles.watchIcon, watching && styles.watchOn, pressed && styles.pressed]}
-          {...({ onKeyDown: onWatchKey } as object)}
-        >
-          <StarIcon filled={watching} />
-          {narrow ? null : (
-            <Text maxFontSizeMultiplier={1.3} style={[styles.watchText, watching && styles.watchTextOn]}>
-              {watching ? 'Watching' : 'Watch'}
-            </Text>
-          )}
-        </Pressable>
+        {seasonOver ? null : (
+          <Pressable
+            accessibilityLabel={`${watching ? 'Watching' : 'Watch'} ${player.name}`}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: watching }}
+            aria-checked={watching}
+            onPress={toggleWatch}
+            style={({ pressed }) => [styles.watch, narrow && styles.watchIcon, watching && styles.watchOn, pressed && styles.pressed]}
+            {...({ onKeyDown: onWatchKey } as object)}
+          >
+            <StarIcon filled={watching} />
+            {narrow ? null : (
+              <Text maxFontSizeMultiplier={1.3} style={[styles.watchText, watching && styles.watchTextOn]}>
+                {watching ? 'Watching' : 'Watch'}
+              </Text>
+            )}
+          </Pressable>
+        )}
       </View>
 
       <ScrollView

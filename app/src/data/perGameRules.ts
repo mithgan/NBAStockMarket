@@ -65,7 +65,7 @@ export const BAD_GAME_LINE = 'A bad game can push his dividend below zero, and y
 
 /** Why a dividend can be below zero, and who pays it. */
 export const NEGATIVE_DIVIDEND_EXPLAINER =
-  'A bad game can make his dividend negative: then a roster spot pays it and a short collects it.';
+  'A bad game can make his dividend negative: you pay it if he is on your roster, and collect it if you shorted him.';
 
 /** Practice's own opponents and calendar, for the rules' opening lines. */
 export interface PracticeRulesContext {
@@ -126,7 +126,7 @@ export function perGameRulesPresentation(rules: PerGameRuleset, practice: Practi
     glossary: [
       { term: 'Price', meaning: 'What one game of a player costs. The price you add him at stays locked while you hold him.' },
       { term: 'Dividend', meaning: 'What he pays out for one game: his net points times the dividend rate. It can be below zero.' },
-      { term: 'Profit', meaning: 'Dividend minus price for a roster spot; price minus dividend for a short.' },
+      { term: 'Profit', meaning: 'Dividend minus price when he is on your roster; price minus dividend when you shorted him.' },
       {
         term: 'Short',
         meaning: rules.shortTermDays === null

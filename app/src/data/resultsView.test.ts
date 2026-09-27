@@ -14,6 +14,7 @@ import {
   feeDay,
   feedNights,
   feesLineName,
+  focusAnchor,
   nightSummaryLine,
   nightTotalPending,
   resultRowModel,
@@ -937,4 +938,21 @@ test('walk 11 T4-10: month buttons never leave one alone on a row', () => {
       if (rows.length > 1) assert.ok(rows[rows.length - 1] >= 2 || count < 2, `${count}/${fit}: ${rows}`);
     }
   }
+});
+
+test('the list hears of the next heading when the keyboard is on the row before it, in the way it is going (walk 12 T3-06)', () => {
+  const night = (date: string): ResultsFeedItem => ({ type: 'night', key: `night-${date}`, night: { date } as never });
+  const row = (key: string): ResultsFeedItem => ({ type: 'result', key, date: '2025-11-02', result: {} as never });
+  // Nov 3: one row; Nov 2: two rows.
+  const items = [night('2025-11-03'), row('a'), night('2025-11-02'), row('b'), row('c')];
+  // Tab down from Nov 3's last row: the heading after it, so Nov 2's first row is drawn.
+  assert.equal(focusAnchor(items, 1, false), 2);
+  // Within a night, the row itself.
+  assert.equal(focusAnchor(items, 3, false), 3);
+  assert.equal(focusAnchor(items, 4, true), 4);
+  // Shift+Tab up from Nov 2's first row: the heading above it, so Nov 3's row is drawn.
+  assert.equal(focusAnchor(items, 3, true), 2);
+  // The feed's ends.
+  assert.equal(focusAnchor(items, 4, false), 4);
+  assert.equal(focusAnchor(items, 1, true), 0);
 });

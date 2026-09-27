@@ -1,4 +1,4 @@
-import { Children, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Children, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   FlatList,
   Platform,
@@ -7,6 +7,7 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type CellRendererProps,
   type ListRenderItem,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -40,6 +41,7 @@ import {
   dividendBasisLine,
   feedNights,
   feesLineName,
+  focusAnchor,
   foldedFeed,
   monthAnchors,
   movesByDay,
@@ -96,6 +98,8 @@ const DOCK_MONTH_MIN_WIDTH = 260;
 const FAR_SCREENS = 1.5;
 /** While a month jump lands: rows rendered in one pass, and screens kept around it. */
 const JUMP_BATCH = 1000;
+/** A jump still landing after this long says where it is going. */
+const LANDING_NOTE_MS = 250;
 const AVATAR = 32;
 /** Collapsed height of a row's two lines, so the chevron sits level with them. */
 const STACKED_LINES = 40;
@@ -877,6 +881,79 @@ function useInsetRing() {
   }, []);
 }
 
+type CellFocus = (event: unknown) => void;
+/**
+ * The feed's cells, by index, and how each tells the list it has focus; the
+ * items say which cells are night headings (focusAnchor); `short` is a short
+ * window (400% zoom), where a screen of rows is one or two.
+ */
+type FeedFocus = {
+  cells: Map<number, { current: CellFocus | undefined }>;
+  items: { current: readonly ResultsFeedItem[] };
+  short: { current: boolean };
+};
+const FeedFocusContext = createContext<FeedFocus | null>(null);
+
+/**
+ * Each cell of the feed tells the list when the keyboard lands in it, so the
+ * list keeps that row and a screen of rows on either side of it drawn (walk
+ * 12 T3-06). react-native-web's View drops the list's own `onFocusCapture`,
+ * so on the web the list drew rows around the scroll only: Tab held at 400%
+ * zoom outran it, jumped out of the feed past the older nights, and once
+ * lost focus with the row it was on. React's `onFocus` bubbles up from the
+ * row's buttons on the web, as the capture does elsewhere.
+ */
+function FeedCell({ children, index, onFocusCapture, onLayout, style }: CellRendererProps<ResultsFeedItem>) {
+  const feed = useContext(FeedFocusContext);
+  const own = useRef<CellFocus | undefined>(undefined);
+  own.current = onFocusCapture as CellFocus | undefined;
+  useLayoutEffect(() => {
+    if (!feed) return undefined;
+    feed.cells.set(index, own);
+    return () => {
+      if (feed.cells.get(index) === own) feed.cells.delete(index);
+    };
+  }, [feed, index]);
+  const onFocus = (event: unknown) => {
+    const into = (event as { currentTarget?: unknown }).currentTarget as Node | null | undefined;
+    const from = (event as { relatedTarget?: unknown }).relatedTarget as Node | null | undefined;
+    // Shift+Tab (or any move up the page): focus came from below this cell.
+    const up = Boolean(into && from && typeof into.compareDocumentPosition === 'function'
+      && into.compareDocumentPosition(from) & 4 /* Node.DOCUMENT_POSITION_FOLLOWING */ && !into.contains(from));
+    // Telling the list redraws every row it holds (a third of a second on a
+    // laptop with a long season), so a taller window tells it only when the
+    // next rows the keyboard needs are not drawn yet; a short one, where the
+    // list holds a few rows and its window lags a held Tab, on every stop.
+    if (feed && !feed.short.current) {
+      const count = feed.items.current.length;
+      const drawn = [1, 2, 3].every((step) => {
+        const at = index + (up ? -step : step);
+        return at < 0 || at >= count || feed.cells.has(at);
+      });
+      if (drawn) return;
+    }
+    const anchor = feed ? focusAnchor(feed.items.current, index, up) : index;
+    const told = feed?.cells.get(anchor)?.current;
+    if (told && anchor !== index) {
+      told(event);
+      return;
+    }
+    own.current?.(event);
+    // The heading past this row may be drawn only by this very report: once
+    // the list has drawn it (its render runs first, in a microtask), tell the
+    // list of the heading too, so the row after it is drawn before the next Tab.
+    if (feed && anchor !== index) {
+      queueMicrotask(() => feed.cells.get(anchor)?.current?.(event));
+    }
+  };
+  const focus = Platform.OS === 'web' ? { onFocus } : { onFocusCapture: onFocus };
+  return (
+    <View onLayout={onLayout} style={style} {...(focus as object)}>
+      {children}
+    </View>
+  );
+}
+
 export function PerGameResultsScreen() {
   useInsetRing();
   const { bootstrap } = usePerGame();
@@ -932,6 +1009,9 @@ export function PerGameResultsScreen() {
   const backToProfile = useMemo(() => repeatSafe(() => setProfileOpen(true)), []);
   // A day's moves render inside their fold, as one list (walk 3 T3-32).
   const visible = useMemo(() => foldedFeed(feed), [feed]);
+  // Which row the keyboard is on, for the list's drawing (FeedCell).
+  const feedFocus = useRef<FeedFocus>({ cells: new Map(), items: { current: visible }, short: { current: false } }).current;
+  feedFocus.items.current = visible;
   // What the reading place is recorded against, for the viewability callback.
   const placeNow = useRef({ visible, filtered: false, lastSettled: null as string | null });
   placeNow.current = { visible, filtered: onlyId !== null, lastSettled: bootstrap?.game.lastSettledDate ?? null };
@@ -1030,6 +1110,19 @@ export function PerGameResultsScreen() {
   // The month a jump is landing on: "Jump to" marks it until the feed shows,
   // never a month the hidden view passes on its way (walk 11 T2-07).
   const landingMonth = useRef<string | null>(null);
+  // A far month takes a moment to land (up to 2 s in a full season): after
+  // LANDING_NOTE_MS the hidden feed says where it is going instead of
+  // standing blank (walk 11 lead note, fix 12).
+  const [goingTo, setGoingTo] = useState<string | null>(null);
+  useEffect(() => {
+    setGoingTo(null);
+    if (!landing) return undefined;
+    const timer = setTimeout(() => {
+      const key = landingMonth.current;
+      setGoingTo(anchors.find((anchor) => anchor.key === key)?.name ?? null);
+    }, LANDING_NOTE_MS);
+    return () => clearTimeout(timer);
+  }, [anchors, landing]);
   // Ends the last jump's hold on its night (holdOnDay).
   const releaseHold = useRef<(() => void) | null>(null);
   useEffect(() => () => releaseHold.current?.(), []);
@@ -1151,6 +1244,7 @@ export function PerGameResultsScreen() {
   // Tab while it is there, the row the keyboard is on ends in the clear above
   // it instead of cut off under it.
   const place = newestPlace({ wide: wideScreen, height });
+  feedFocus.short.current = place === 'corner';
   useEffect(() => {
     if (!far || place === 'side' || typeof document === 'undefined') return undefined;
     // Clear of the corner button with room for the focus ring drawn around a row.
@@ -1469,32 +1563,43 @@ export function PerGameResultsScreen() {
   );
 
   const list = (
-    <FlatList
-      ref={listRef}
-      contentContainerStyle={styles.content}
-      data={visible}
-      extraData={extraData}
-      initialNumToRender={16}
-      keyExtractor={(item) => item.key}
-      ListEmptyComponent={empty}
-      ListHeaderComponent={wide ? null : header}
-      // A month jump renders every row up to the month in one pass while the
-      // feed is hidden: rows are measured only once rendered, so the list
-      // could otherwise reach a far month only a batch at a time.
-      maxToRenderPerBatch={jumpWindow ? JUMP_BATCH : 16}
-      onLayout={(event) => {
-        listHeight.current = event.nativeEvent.layout.height;
-      }}
-      onScroll={onScroll}
-      onScrollToIndexFailed={onScrollToIndexFailed}
-      onViewableItemsChanged={onViewableItemsChanged}
-      renderItem={renderItem}
-      scrollEventThrottle={100}
-      stickyHeaderIndices={stickyIndices}
-      style={[styles.list, landing ? styles.listLanding : styles.listLanded]}
-      viewabilityConfig={viewabilityConfig}
-      windowSize={jumpWindow ? JUMP_BATCH : 9}
-    />
+    <FeedFocusContext.Provider value={feedFocus}>
+      <View style={styles.list}>
+        <FlatList
+          ref={listRef}
+          CellRendererComponent={FeedCell}
+          contentContainerStyle={styles.content}
+          data={visible}
+          extraData={extraData}
+          initialNumToRender={16}
+          keyExtractor={(item) => item.key}
+          ListEmptyComponent={empty}
+          ListHeaderComponent={wide ? null : header}
+          // A month jump renders every row up to the month in one pass while the
+          // feed is hidden: rows are measured only once rendered, so the list
+          // could otherwise reach a far month only a batch at a time.
+          maxToRenderPerBatch={jumpWindow ? JUMP_BATCH : 16}
+          onLayout={(event) => {
+            listHeight.current = event.nativeEvent.layout.height;
+          }}
+          onScroll={onScroll}
+          onScrollToIndexFailed={onScrollToIndexFailed}
+          onViewableItemsChanged={onViewableItemsChanged}
+          renderItem={renderItem}
+          scrollEventThrottle={100}
+          stickyHeaderIndices={stickyIndices}
+          style={[styles.list, landing ? styles.listLanding : styles.listLanded]}
+          viewabilityConfig={viewabilityConfig}
+          windowSize={jumpWindow ? JUMP_BATCH : 9}
+        />
+        {landing && goingTo ? (
+          // Where the feed will show, while it is hidden: nothing under it.
+          <View accessibilityLiveRegion="polite" style={[styles.goingTo, { paddingHorizontal: edges(layout).left }]}>
+            <Text style={styles.note}>Going to {goingTo}…</Text>
+          </View>
+        ) : null}
+      </View>
+    </FeedFocusContext.Provider>
   );
 
   // His profile, reopened from "Back to <player>" in the view it was in.
@@ -1590,6 +1695,14 @@ export function PerGameResultsScreen() {
 const styles = StyleSheet.create({
   list: {
     flex: 1,
+  },
+  // "Going to October 2025…" where the hidden feed will show.
+  goingTo: {
+    position: 'absolute',
+    top: space.lg,
+    left: 0,
+    right: 0,
+    pointerEvents: 'none',
   },
   // A month jump settling: hidden, so the months in between never stream past.
   listLanding: {

@@ -489,7 +489,7 @@ test('holding status and stake line say where you stand, from the same numbers a
     tag: 'Shorted',
     text: 'Credited $112.5K a game, ends Nov 12',
   });
-  assert.deepEqual(stakeLine({ games: 11, total: 1_632_000 }, true), { lead: 'Your roster spot:', total: '+$1.63M over 11 games', tone: 'gain' });
+  assert.deepEqual(stakeLine({ games: 11, total: 1_632_000 }, true), { lead: 'Your result:', total: '+$1.63M over 11 games', tone: 'gain' });
   assert.deepEqual(stakeLine({ games: 3, total: 377_500 }, true)?.total, '+$377.5K over 3 games');
   // A short leads with its own result (walk-1 T1-44).
   assert.deepEqual(stakeLine({ games: 3, total: -699_200 }, true, 'short'), { lead: 'Your short:', total: '-$699.2K over 3 games', tone: 'loss' });
@@ -506,9 +506,9 @@ test('holding status and stake line say where you stand, from the same numbers a
 test('a past stint is named by side and dates (walk-2 T2-20)', () => {
   const row = (positionId: string, side: 'long' | 'short', gameDate: string) => ({ positionId, side, gameDate });
   assert.equal(pastStintLead([row('s1', 'short', '2025-10-27'), row('s1', 'short', '2025-10-21'), row('s1', 'short', '2025-10-24')]), 'Your short, Oct 21 to 27:');
-  assert.equal(pastStintLead([row('l1', 'long', '2025-10-30'), row('l1', 'long', '2025-11-03')]), 'Your roster spot, Oct 30 to Nov 3:');
-  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22')]), 'Your roster spot, Oct 22:');
-  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22'), row('l2', 'long', '2025-11-02')]), 'Your 2 roster spots, Oct 22 to Nov 2:');
+  assert.equal(pastStintLead([row('l1', 'long', '2025-10-30'), row('l1', 'long', '2025-11-03')]), 'On your roster, Oct 30 to Nov 3:');
+  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22')]), 'On your roster, Oct 22:');
+  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22'), row('l2', 'long', '2025-11-02')]), 'On your roster twice, Oct 22 to Nov 2:');
   assert.equal(pastStintLead([row('l1', 'long', '2025-10-22'), row('s1', 'short', '2025-11-02')]), 'With you, Oct 22 to Nov 2:');
   assert.equal(pastStintLead([]), null);
   assert.deepEqual(stakeLine({ games: 3, total: -37_500 }, false, 'long', { past: 'Your short, Oct 21 to 27:' }), { lead: 'Your short, Oct 21 to 27:', total: '-$37.5K over 3 games', tone: 'loss' });
@@ -1124,4 +1124,62 @@ test('walk 11 T2-01: the Price view says one game rarely decides a price, in the
     "A player's price moves as people add and drop him and as his games add up: one game rarely decides it, so a price can dip after a great night.",
   );
   assert.ok(PRICE_EXPLAINER.startsWith(priceMovesNote()));
+});
+
+test('the profile says "On your roster" and "Your result", never "roster spot" (walk 12 T1-01)', () => {
+  const row = (positionId: string, side: 'long' | 'short', gameDate: string) => ({ positionId, side, gameDate });
+  assert.equal(stakeLine({ games: 6, total: -658_000 }, true)?.lead, 'Your result:');
+  assert.equal(stakeLine({ games: 6, total: -658_000 }, true, 'short')?.lead, 'Your short:');
+  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22'), row('l2', 'long', '2025-11-02'), row('l3', 'long', '2025-11-09')]), 'On your roster 3 times, Oct 22 to Nov 9:');
+  for (const line of [
+    stakeLine({ games: 6, total: -658_000 }, true)?.lead,
+    pastStintLead([row('l1', 'long', '2025-10-22')]),
+    pastStintLead([row('l1', 'long', '2025-10-22'), row('l2', 'long', '2025-11-02')]),
+  ]) assert.doesNotMatch(String(line), /roster spot/i);
+});
+
+test('after the season a held player is spoken of in the past (walk 12 T1-09)', () => {
+  // Not "Locked in, market now $439.5K": the market has closed.
+  assert.deepEqual(holdingStatus({ side: 'long', lockedGameCost: 417_500, expiresOn: null }, 'long', false, 439_500, true), {
+    tag: 'On your roster',
+    text: 'This season: you paid $417.5K a game, his\u00a0last\u00a0price\u00a0$439.5K',
+  });
+  assert.deepEqual(holdingStatus({ side: 'long', lockedGameCost: 417_500, expiresOn: null }, 'long', false, 417_500, true).text,
+    'This season: you paid $417.5K a game, the same as his last price');
+  assert.deepEqual(holdingStatus({ side: 'short', lockedGameCost: 259_000, expiresOn: '2026-04-14' }, 'short', false, 250_000, true), {
+    tag: 'Shorted',
+    text: 'This season: credited $259K a game, his\u00a0last\u00a0price\u00a0$250K',
+  });
+  // During the season the line is unchanged.
+  assert.equal(holdingStatus({ side: 'long', lockedGameCost: 417_500, expiresOn: null }, 'long', false, 439_500).text, 'Locked in, market now $439.5K');
+  // Not held: nothing to say about a season with him.
+  assert.deepEqual(holdingStatus(null, 'long', false, 439_500, true), { tag: null, text: 'Not on your roster' });
+  // The figure is your season with him.
+  assert.deepEqual(stakeLine({ games: 82, total: 5_500_000 }, true, 'long', {}, true), { lead: 'Your season with him:', total: '+$5.50M over 82 games', tone: 'gain' });
+  assert.equal(stakeLine({ games: 3, total: -60_000 }, false, 'long', {}, true)?.lead, 'Before, with you:');
+});
+
+test('the Price view never puts another figure on your dashed line (walk 12 T2-02)', () => {
+  // Barnes, locked at $259K; his market price dips to $258.6K and climbs to $262K.
+  const nights: ProfileNight[] = [
+    { date: '2025-10-21', dividend: 200_000, price: 259_000, net: -59_000, source: 'yours', market: 258_600 },
+    { date: '2025-10-22', dividend: 300_000, price: 259_000, net: 41_000, source: 'yours', market: 260_100 },
+    { date: '2025-10-24', dividend: 250_000, price: 259_000, net: -9_000, source: 'yours', market: 262_000 },
+  ];
+  const insets = { top: 12, right: 6, bottom: 12, left: 52 };
+  const height = priceChartHeight(nights, 176, insets);
+  const model = profileChartModel(nights, 'price', 300, height, insets, 176);
+  const [high, low] = model.priceMarks;
+  assert.deepEqual([high.value, low.value], [262_000, 258_600]);
+  // Your line's height: the dashed path's y.
+  const yoursY = Number(/M [\d.]+ ([\d.]+)/.exec(model.yourPricePath)?.[1]);
+  assert.ok(Math.abs(low.y - yoursY) < 7, 'the low line runs right by yours');
+  // "$258.6K" steps below your line, clear of its dashes; "$262K" stays on its own line.
+  assert.ok(low.labelY - yoursY >= 10, `low words ${low.labelY} vs your line ${yoursY}`);
+  assert.ok(Math.abs(high.labelY - yoursY) >= 10);
+  assert.ok(low.labelY - high.labelY >= 16, 'the two never overlap');
+  assert.ok(low.labelY <= height - 7, 'inside the chart');
+  // Your own figure may sit on your line (the one-game case above keeps it there).
+  const same = profileChartModel(nights.map((night) => ({ ...night, market: night.market === 258_600 ? 259_000 : night.market })), 'price', 300, height, insets, 176).priceMarks;
+  assert.equal(same[1].value, 259_000);
 });

@@ -221,7 +221,7 @@ export interface VerdictOptions {
   scope?: 'season' | 'yours';
   /**
    * Say the money. False when his one game shown is yours and the profile's
-   * header already says its result ("Your roster spot: +$194.5K over 1
+   * header already says its result ("Your result: +$194.5K over 1
    * game"): the verdict tells how it went, once (walk 7 T1-05).
    */
   figure?: boolean;
@@ -666,7 +666,22 @@ export function holdingStatus(
   saving = false,
   /** His market price now: the line then names it beside "Locked in" (walk 9 T1-01). */
   market?: number,
+  /**
+   * The season is over (walk 12 T1-09): nothing is locked in a market that
+   * has closed, so the line speaks of the season past, "This season: you paid
+   * $417.5K a game, his last price $439.5K".
+   */
+  seasonOver = false,
 ): HoldingStatus {
+  if (position && seasonOver && !saving) {
+    const paid = moneyFine(position.lockedGameCost);
+    // "his last price $439.5K" wraps as one piece, never leaving the figure alone.
+    const last = market === undefined ? ''
+      : moneyFine(market) === paid ? ', the same as his last price' : `, ${`his last price ${moneyFine(market)}`.replace(/ /g, '\u00a0')}`;
+    return position.side === 'long'
+      ? { tag: 'On your roster', text: `This season: you paid ${paid} a game${last}` }
+      : { tag: 'Shorted', text: `This season: credited ${paid} a game${last}` };
+  }
   if (!position) {
     if (saving) return { tag: null, text: side === 'long' ? 'Adding him to your roster…' : 'Opening your short on him…' };
     return { tag: null, text: side === 'long' ? 'Not on your roster' : "You haven't shorted him" };
@@ -816,10 +831,12 @@ export function pastStintLead(
   const sides = new Set(results.map((row) => row.side));
   const stints = new Set(results.map((row) => row.positionId)).size;
   const dates = results.map((row) => row.gameDate).sort();
+  // The app's own words for holding him (walk 12 T1-01: "roster spot" was a
+  // third term for it, found only here and in the Results math).
   const who = sides.size > 1
     ? 'With you'
     : sides.has('long')
-      ? stints > 1 ? `Your ${stints} roster spots` : 'Your roster spot'
+      ? stints > 2 ? `On your roster ${stints} times` : stints > 1 ? 'On your roster twice' : 'On your roster'
       : stints > 1 ? `Your ${stints} shorts` : 'Your short';
   return `${who}, ${dateSpan(dates[0], dates[dates.length - 1])}:`;
 }
@@ -838,6 +855,8 @@ export function stakeLine(
   held: boolean,
   side: PerGamePositionSide = 'long',
   opened: { since?: string | null; readd?: boolean; past?: string | null } = {},
+  /** The season is over: the figure is your season with him (walk 12 T1-09). */
+  seasonOver = false,
 ): {
   lead: string;
   total: string | null;
@@ -852,8 +871,12 @@ export function stakeLine(
     return { lead: `No games since you ${verb} him${day}`, total: null, tone: 'none' };
   }
   const tone: StakeTone = Math.abs(summary.total) < EVEN_BAND ? 'even' : summary.total > 0 ? 'gain' : 'loss';
-  // Your result leads (walk-1 T1-44): "Your short: -$699.2K over 3 games".
-  const lead = !held ? opened.past ?? 'Before, with you:' : side === 'long' ? 'Your roster spot:' : 'Your short:';
+  // Your result leads (walk-1 T1-44): "Your short: -$699.2K over 3 games";
+  // on your roster it is "Your result:", the tag under it naming the side
+  // (walk 12 T1-01), and once the season is over, "Your season with him:".
+  const lead = !held ? opened.past ?? 'Before, with you:'
+    : seasonOver ? 'Your season with him:'
+      : side === 'long' ? 'Your result:' : 'Your short:';
   return { lead, total: `${signedMoneyFine(summary.total)} over ${gamesCount(summary.games)}`, tone };
 }
 
@@ -1004,18 +1027,38 @@ export interface PriceMark {
 const MARK_GAP = 16;
 const MARK_HALF = 7;
 
-/** Steps two close marks' words apart, inside the chart's height. */
-function spreadMarks(marks: PriceMark[], height: number): PriceMark[] {
+/**
+ * Steps two close marks' words apart, inside the chart's height. `yours` is
+ * your dashed line (walk 12 T2-02): a mark with another figure never has its
+ * words on it ("$258.6K" on the line the legend calls "Your price $259K" read
+ * as your price); they step to the far side of it, clear of the dashes.
+ */
+function spreadMarks(marks: PriceMark[], height: number, yours?: { y: number; value: number }): PriceMark[] {
   const clamp = (value: number) => Math.min(Math.max(value, MARK_HALF), Math.max(MARK_HALF, height - MARK_HALF));
-  if (marks.length < 2) return marks.map((mark) => ({ ...mark, labelY: clamp(mark.y) }));
-  const [high, low] = marks;
-  const mid = (high.y + low.y) / 2;
-  let up = low.y - high.y < MARK_GAP ? mid - MARK_GAP / 2 : high.y;
-  let down = low.y - high.y < MARK_GAP ? mid + MARK_GAP / 2 : low.y;
-  up = clamp(up);
-  down = clamp(Math.max(down, up + MARK_GAP));
-  up = Math.min(up, down - MARK_GAP);
-  return [{ ...high, labelY: up }, { ...low, labelY: down }];
+  let placed: PriceMark[];
+  if (marks.length < 2) placed = marks.map((mark) => ({ ...mark, labelY: clamp(mark.y) }));
+  else {
+    const [high, low] = marks;
+    const mid = (high.y + low.y) / 2;
+    let up = low.y - high.y < MARK_GAP ? mid - MARK_GAP / 2 : high.y;
+    let down = low.y - high.y < MARK_GAP ? mid + MARK_GAP / 2 : low.y;
+    up = clamp(up);
+    down = clamp(Math.max(down, up + MARK_GAP));
+    up = Math.min(up, down - MARK_GAP);
+    placed = [{ ...high, labelY: up }, { ...low, labelY: down }];
+  }
+  if (!yours) return placed;
+  const clear = MARK_HALF + 3;
+  const moved = placed.map((mark) => moneyFine(mark.value) !== moneyFine(yours.value) && Math.abs(mark.labelY - yours.y) < clear);
+  placed = placed.map((mark, index) => (moved[index]
+    ? { ...mark, labelY: clamp(mark.value < yours.value ? yours.y + clear : yours.y - clear) }
+    : mark));
+  if (placed.length === 2 && placed[1].labelY - placed[0].labelY < MARK_GAP) {
+    // The one that stepped aside keeps going, away from the other.
+    if (moved[0]) placed[0] = { ...placed[0], labelY: clamp(placed[1].labelY - MARK_GAP) };
+    else placed[1] = { ...placed[1], labelY: clamp(placed[0].labelY + MARK_GAP) };
+  }
+  return placed;
 }
 
 /**
@@ -1263,6 +1306,8 @@ export function profileChartModel(
   const extrema = selectHighLowPoints(values);
   const flat = Math.max(...values) === Math.min(...values);
   const labelled = count >= 5 && !flat;
+  // Your dashed line, where one is drawn: the latest price you locked.
+  const lockedNow = metric === 'price' && yourPricePath ? yourPrices[yourPrices.length - 1] : undefined;
   const priceMarks: PriceMark[] = metric !== 'price'
     ? []
     : spreadMarks(moneyFine(priceHigh) === moneyFine(priceLow)
@@ -1270,7 +1315,7 @@ export function profileChartModel(
       : [
           { value: priceHigh, y: y(priceHigh), labelY: 0, kind: 'high' },
           { value: priceLow, y: y(priceLow), labelY: 0, kind: 'low' },
-        ], height);
+        ], height, lockedNow === undefined ? undefined : { y: y(lockedNow), value: lockedNow });
 
   return {
     slot,

@@ -30,6 +30,7 @@ import { openTab, requestRosterPick } from '../../state/uiActions';
 import { colors, space, type } from '../../theme';
 import { Button, ConfirmStrip, repeatSafe, useCooldown } from '../../ui/kit';
 import { sheetIsOpen } from '../../web/appHistory';
+import { TOGGLE_REPEAT_MS } from '../../web/tapSettle';
 
 export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave }: {
   player: PerGameMarketPlayer;
@@ -59,6 +60,11 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
   // never falls out of the sheet to the page (walk-2 T2-24, in the profile).
   const doneRef = useRef<View>(null);
   const openRef = useRef<View>(null);
+  // "Short instead" / "Add instead", and the watch that keeps focus on the
+  // new main button through a double tap's second tap (walk 12 T4-13).
+  const insteadRef = useRef<View>(null);
+  const stopHold = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopHold.current?.(), []);
   const follow = useRef(false);
   const finish = (tick: string, note: string, name: string) => {
     setDoneWords({ tick, note, name });
@@ -183,7 +189,7 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
     }
     const costs = fee > 0
       ? `${held === 'long' ? 'Dropping him' : 'Closing the short'} costs ${moneyFine(fee)}.`
-      : held === 'long' ? 'Dropping him frees a roster spot.' : 'Closing frees a short slot.';
+      : held === 'long' ? 'Dropping him frees a spot on your roster.' : 'Closing frees a short slot.';
     const closing = pending ? savingWords('close', held, player.name) : null;
     return (
       <Bar note={closing ? closing.note : rosterLocked ? lockLine : costs} warn={rosterLocked && !closing}>
@@ -242,7 +248,10 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
         // profile's figures change, and focus moves to that button.
         onSwitchSide(otherSide);
         setTimeout(() => focusView(openRef.current, true), 0);
+        stopHold.current?.();
+        stopHold.current = holdFocusOnMain(insteadRef, openRef);
       })}
+      ref={insteadRef}
       style={styles.instead}
       variant="quiet"
     />
@@ -311,6 +320,33 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
       />
     </Bar>
   );
+}
+
+/**
+ * A double tap on "Short instead" acts once (repeatSafe), but its second tap
+ * lands on "Add instead", which took its place, and the browser moved focus
+ * there: a screen reader heard "Add instead" instead of the short's terms
+ * (walk 12 T4-13). For as long as a repeat counts as the same tap, a tap's
+ * focus that lands on the switch goes back to the new main button. Returns
+ * the stop.
+ */
+function holdFocusOnMain(instead: { current: View | null }, main: { current: View | null }): () => void {
+  if (typeof document === 'undefined') return () => undefined;
+  const onFocusIn = (event: FocusEvent) => {
+    const node = instead.current as unknown as HTMLElement | null;
+    const target = event.target as Node | null;
+    if (!node || !target || typeof node.contains !== 'function' || !node.contains(target)) return;
+    // Only a tap's focus: Shift+Tab back to the switch stays there.
+    const keyboard = typeof (target as Element).matches === 'function' && (target as Element).matches(':focus-visible');
+    if (!keyboard) setTimeout(() => focusView(main.current), 0);
+  };
+  document.addEventListener('focusin', onFocusIn, true);
+  const timer = setTimeout(() => stop(), TOGGLE_REPEAT_MS + 150);
+  function stop() {
+    clearTimeout(timer);
+    document.removeEventListener('focusin', onFocusIn, true);
+  }
+  return stop;
 }
 
 function focusView(node: unknown, reveal = false) {

@@ -734,3 +734,17 @@ export function resumeNight(
   if (!place || now.filtered || place.lastSettled !== now.lastSettled) return null;
   return now.nightDates.includes(place.date) ? place.date : null;
 }
+
+/**
+ * The feed row whose focus the list is told of when the keyboard lands on
+ * row `index` (walk 12 T3-06). The list keeps a screen of rows drawn on
+ * either side of it; at 400% zoom a screen can be a single row, and past a
+ * night's last row that row is the next night's heading, never a Tab stop,
+ * so the next Tab left the feed. When the next row in the direction of travel
+ * is a heading, the list is told of the heading instead: the focused row is
+ * then the one drawn before it and the heading's first row the one after.
+ */
+export function focusAnchor(items: readonly ResultsFeedItem[], index: number, up: boolean): number {
+  const next = up ? index - 1 : index + 1;
+  return items[next]?.type === 'night' ? next : index;
+}
