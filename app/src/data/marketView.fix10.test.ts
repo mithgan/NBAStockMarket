@@ -76,8 +76,9 @@ test('a held line leads with the total, the average after it, and says a below-z
 
 // walk 10 T1-02: a held phone price keeps "/game"; "yours" only where it fits beside the name.
 test('a held price says yours only where it cannot push the row to a second line', () => {
-  assert.equal(heldPriceSaysYours(390, false), false);
-  assert.equal(heldPriceSaysYours(320, false), false);
+  // Walk 16 T1-04: "yours" at every width now.
+  assert.equal(heldPriceSaysYours(390, false), true);
+  assert.equal(heldPriceSaysYours(320, false), true);
   assert.equal(heldPriceSaysYours(440, false), true);
   assert.equal(heldPriceSaysYours(844, false), true, 'a phone turned sideways');
   assert.equal(heldPriceSaysYours(320, true), true, 'the large-text row gives the price a line of its own');

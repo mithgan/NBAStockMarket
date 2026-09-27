@@ -62,6 +62,8 @@ import {
   heldPriceCaption,
   heldPlayedWordings,
   heldStepFloor,
+  heldFirstStep,
+  heldDropsAverage,
   heldValueLine,
   heldValuePhrase,
   HELD_NOW_MIN_WIDTH,
@@ -87,6 +89,7 @@ import {
   orderLine,
   orderLineForm,
   lockLineShort,
+  lockLineUnbroken,
   slotLineNarrow,
   otherSideGroup,
   otherSideGroupLine,
@@ -107,9 +110,11 @@ import {
   pinnedChromeTooTall,
   heldLineWordings,
   heldTag,
+  endedShortTag,
   seasonEndSlotLine,
   seasonEndStatusShown,
-  unlistedStarFor,
+  unlistedGuessLine,
+  unlistedSearch,
   unlistedStarLine,
   seasonEndExplainer,
   priceWidthReserve,
@@ -159,6 +164,9 @@ import {
   valueColumnExplanation,
   waitingActionName,
   waitingForLine,
+  REFUSED_MARK_MS,
+  refusedActionName,
+  refusedWord,
   valueSignal,
   type MarketColumnSet,
   type MarketLayout,
@@ -170,6 +178,7 @@ import {
   marketMemory,
   openingSide,
   rememberMarket,
+  restoresPlace,
   rememberTierAfterSurname,
   tierAfterSurnameKey,
   tierAfterSurnameKnown,
@@ -233,6 +242,9 @@ const slotUnderWidths = new Set<number>();
 // The step of a held row's second line every held row shows, per width,
 // layout and side, for the rest of the visit (walk 15 T1-02).
 const heldFloorMemory = new Map<string, number>();
+// Where a held row had to drop its per-game average, every held row drops it,
+// per width, layout and side, for the rest of the visit (walk 16 T1-13).
+const averageDroppedAt = new Set<string>();
 
 /** The player whose Drop or Close question is open on `side`, if any. */
 function askingOn(side: PerGamePositionSide): string | null {
@@ -377,6 +389,8 @@ function MarketRow({
   dimmed = false,
   heldFloor = 0,
   onHeldStep,
+  dropAverage = false,
+  onAverageDropped,
   pending,
   ownSaving,
   busyElsewhere,
@@ -422,6 +436,10 @@ function MarketRow({
   heldFloor?: number;
   /** A held row whose second line needs a more compact step than the list's says so here. */
   onHeldStep?: (step: number) => void;
+  /** Every held row of this list leaves out its per-game average (heldFirstStep, walk 16 T1-13). */
+  dropAverage?: boolean;
+  /** A held row that could not keep its average on its line says so here. */
+  onAverageDropped?: () => void;
   /** This row's own move is on its way (or waiting its turn). */
   pending: boolean;
   /** An Add pressed on this side of this screen is still saving: "Added ✓" holds, even after a side switch. */
@@ -505,6 +523,18 @@ function MarketRow({
   // T4-04): the button says "Waiting" in neutral ink, not a tick the games
   // may take back, until the move goes through ("Added ✓") or reverts.
   const [waitingFor, setWaitingFor] = useState<string | null>(null);
+  // An Add or Short that waited for games and was refused as they landed (his
+  // price moved, or they brought a lock) marks this row for a few seconds:
+  // "Not added", named with the new price, and still pressable (walk 16
+  // T4-09: the rows went straight back to plain ADD). Read from the row's own
+  // figures, so it says the price the row shows.
+  const [refusedAt, setRefusedAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (refusedAt === null) return undefined;
+    const timer = setTimeout(() => setRefusedAt(null), REFUSED_MARK_MS);
+    return () => clearTimeout(timer);
+  }, [refusedAt]);
+  const pressedQuote = useRef<number | null>(null);
   // Rows are keyed by side, so the tick stays on the side it was pressed on
   // (walk 8 T4-07); coming back to that side while it saves shows it again.
   const opening = optimistic === 'open' || (optimistic === null && ownSaving && !position);
@@ -593,7 +623,10 @@ function MarketRow({
     closedAt.current = 0;
     lastAction.current = 'open';
     setOptimistic('open');
-    setWaitingFor(practicePlaying());
+    setRefusedAt(null);
+    const waited = practicePlaying();
+    pressedQuote.current = player.quoteVersion;
+    setWaitingFor(waited);
     startCooling();
     // The move starts once "Added ✓" (or "Waiting") is on screen.
     afterPaint(() => {
@@ -607,6 +640,7 @@ function MarketRow({
         setWaitingFor(null);
         onReleaseSlot(side, player.playerId);
         if (opened) startCooling();
+        else if (waited !== null) setRefusedAt(Date.now());
       }, () => {
         setOptimistic(null);
         setWaitingFor(null);
@@ -614,7 +648,13 @@ function MarketRow({
       });
     });
   };
-  const word = waiting ? 'Waiting' : actionWord({
+  // The mark shows while he is still unheld and nothing else is under way.
+  const refusal = refusedAt !== null && !position && !waiting && !opening && !justOpened && !justClosed && !confirming
+    ? player.quoteVersion !== pressedQuote.current
+      ? refusedActionName(side, player.name, currentGameCost)
+      : rosterLocked ? refusedActionName(side, player.name, currentGameCost, rosterLockHint) : null
+    : null;
+  const word = waiting ? 'Waiting' : refusal ? refusedWord(side) : actionWord({
     side,
     held: shownHeld,
     pending,
@@ -669,10 +709,14 @@ function MarketRow({
   const wordings = held ? heldLineWordings(held, width < HELD_NOW_MIN_WIDTH) : null;
   const fitKey = `${width}|${layout}|${heldTag(side, seasonOver)}|${held?.text ?? ''}|${held?.why ?? ''}`;
   const [fit, setFit] = useState<{ key: string; step: number } | null>(null);
-  const fitStep = wordings ? Math.min(fit && fit.key === fitKey ? fit.step : 0, wordings.length - 1) : 0;
+  const ownFitStep = wordings ? Math.min(fit && fit.key === fitKey ? fit.step : 0, wordings.length - 1) : 0;
+  const hasAverage = held !== null && held.text !== held.total;
+  const fitStep = wordings ? heldFirstStep(ownFitStep, dropAverage, hasAverage, wordings.length) : 0;
   const heldShown = wordings ? wordings[fitStep] : null;
   useLayoutEffect(() => {
-    if (!wordings || fitStep >= wordings.length - 1) return;
+    if (!wordings) return;
+    if (!dropAverage && heldDropsAverage(ownFitStep, hasAverage)) onAverageDropped?.();
+    if (fitStep >= wordings.length - 1) return;
     const node = heldFirstRef.current as unknown as HTMLElement | null;
     const box = node?.getBoundingClientRect?.();
     if (!node || !box || !(box.height > 0)) return;
@@ -897,6 +941,8 @@ function MarketRow({
           // FULL says why, with its own word in the name for voice control.
           accessibilityLabel={waiting && waitingFor
             ? waitingActionName(side, player.name, waitingFor, optimistic === 'close' ? 'close' : 'open')
+            : refusal
+            ? refusal
             : justOpened
             ? justOpenedName(side, player.name)
             : justClosed
@@ -1085,6 +1131,8 @@ function MarketRow({
 
   if (table) {
     const tableEdge = rowValueEdge(player, side, position);
+    // Where his past figure shows (the Your profit column), an ended short says whose it was.
+    const pastTag = columns.yours > 0 ? endedShortTag(side, seasonOver, position !== null, pastValue?.avgNet != null ? pastValue.games : 0) : null;
     // The table's cells as a screen reader moves through them (walk 8
     // T3-09): the star, the player (his profile button), each figure in its
     // column, the button. The figures drawn inside the profile button are
@@ -1169,7 +1217,7 @@ function MarketRow({
               {/* A narrow table's chip is one short word, so it stays on the
                   kicker's line beside "Scottie · Starter" and a held row keeps
                   the list's one height (walk 6 T2-14: 76px beside 60px). */}
-              {position ? <Tag style={styles.kickerTag}>{columns.yours === 0 && side === 'long' ? 'Yours' : tagText}</Tag> : null}
+              {position ? <Tag style={styles.kickerTag}>{columns.yours === 0 && side === 'long' ? 'Yours' : tagText}</Tag> : pastTag ? <Tag style={styles.kickerTag}>{pastTag}</Tag> : null}
             </View>
             <Text maxFontSizeMultiplier={1.4} style={styles.surname}>{nameLine}</Text>
             {/* The result once he has played; the locked price is "Yours" under
@@ -1475,6 +1523,13 @@ export function PerGameMarketScreen({
     heldFloorMemory.set(key, floor);
     setHeldFloorTick((tick) => tick + 1);
   }, []);
+  const averageDropped = averageDroppedAt.has(heldFloorKey);
+  const dropHeldAverage = useCallback(() => {
+    const key = heldFloorKeyRef.current;
+    if (averageDroppedAt.has(key)) return;
+    averageDroppedAt.add(key);
+    setHeldFloorTick((tick) => tick + 1);
+  }, []);
   // A phone turned sideways has the width for the table's toolbar rows but
   // not the height for the stacked phone toolbar: two rows, so a third
   // player shows on arrival.
@@ -1675,9 +1730,17 @@ export function PerGameMarketScreen({
     lastSettledDate: bootstrap.game.lastSettledDate,
     nextGameDate: bootstrap.game.nextGameDate,
   });
+  const seasonDoneRef = useRef(seasonDone);
+  seasonDoneRef.current = seasonDone;
   useEffect(() => {
     if (playingNow !== null) return;
-    if (resortsAfterRun(sortedNightRef.current, night, seasonDone)) setSortedNight(night);
+    if (!resortsAfterRun(sortedNightRef.current, night, seasonDone)) return;
+    setSortedNight(night);
+    // A re-sort you did not ask for opens the list at its top (walk 16 T1-07).
+    if (seasonDone) {
+      place.current = { anchorId: null, offset: 0 };
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    }
   }, [night, playingNow, seasonDone]);
   // Changing the view sorts afresh for the latest night, with nothing to say.
   const viewKey = `${sort}|${reversed}|${side}|${query}|${watchedOnly}`;
@@ -1798,7 +1861,13 @@ export function PerGameMarketScreen({
     let timer: ReturnType<typeof setTimeout> | null = null;
     const restore = () => {
       // A side switched meanwhile starts at its top (below).
-      if (remembered.offset <= 0 || shownSide.current !== remembered.side) return;
+      if (shownSide.current !== remembered.side) return;
+      // The season ended since you left: the list was re-sorted, so it opens
+      // at its top, and that is the place kept from now (walk 16 T1-07).
+      if (!restoresPlace(remembered.offset, seasonDoneRef.current, remembered.seasonOver)) {
+        if (remembered.offset > 0) place.current = { anchorId: null, offset: 0 };
+        return;
+      }
       if (remembered.width !== widthRef.current) {
         scrollToPlayer(remembered.anchorId);
         return;
@@ -1814,7 +1883,7 @@ export function PerGameMarketScreen({
     timer = setTimeout(restore, 0);
     return () => {
       if (timer) clearTimeout(timer);
-      rememberMarket({ anchorId: place.current.anchorId, offset: place.current.offset, width: widthRef.current });
+      rememberMarket({ anchorId: place.current.anchorId, offset: place.current.offset, width: widthRef.current, seasonOver: seasonDoneRef.current });
     };
   }, [remembered, scrollToPlayer]);
   // A rotation or a resized window reflows every row: bring the same player
@@ -1934,11 +2003,20 @@ export function PerGameMarketScreen({
   const totalCount = allRows.length;
   // A search that finds nobody offers the nearest listed name, among the
   // players this list could show (walk 14 T4-N1: "jokci", "lukka", "shai ga").
+  // A search that really names a player practice leaves out, or a retired
+  // star, offers no near names (walk 16 T4-01, T4-03: "Kobe" said Rudy
+  // Gobert, "Bron" offered Jalen Brunson or Jaylen Brown).
+  const unlisted = useMemo(() => (searchText && resultCount === 0 && !watchedOnly && isMockActive()
+    ? unlistedSearch(searchText, allRows.map((row) => row.player.name))
+    : NO_UNLISTED), [allRows, resultCount, searchText, watchedOnly]);
+  const unlistedRef = useRef(unlisted);
+  unlistedRef.current = unlisted;
   const suggestions = useMemo<NameSuggestion[]>(() => {
     if (!searchText || resultCount > 0 || !searchHasLetters(searchText)) return [];
+    if (unlisted.star || unlisted.retired) return [];
     const shown = watchedOnly ? allRows.filter((row) => watchlist.isWatched(row.player.playerId)) : allRows;
     return nearestNames(searchText, shown.map((row) => row.player.name));
-  }, [allRows, resultCount, searchText, watchedOnly, watchlist]);
+  }, [allRows, resultCount, searchText, watchedOnly, watchlist, unlisted]);
   const suggestionsRef = useRef(suggestions);
   suggestionsRef.current = suggestions;
   // A well-known player practice leaves out is named (walk 15 T1-N4).
@@ -1967,9 +2045,10 @@ export function PerGameMarketScreen({
     const timer = setTimeout(() => {
       // The nearest name is heard with the empty result ("… Did you mean Nikola Jokic?").
       const offer = resultCount === 0 ? didYouMeanLine(suggestionsRef.current) : '';
-      const star = resultCount === 0 && !watchedOnly && isMockActive() ? unlistedStarFor(searchText, listedNamesRef.current) : null;
+      const { star, guess } = resultCount === 0 ? unlistedRef.current : NO_UNLISTED;
       const first = star ? `${unlistedStarLine(star, listedNamesRef.current.length)}.` : line;
-      const said = offer ? `${first} ${offer}` : first;
+      const question = offer || (guess ? unlistedGuessLine(guess, listedNamesRef.current.length) : '');
+      const said = question ? `${first} ${question}` : first;
       announce(note ? `${note} ${said}` : said);
     }, note || filterFlipped ? 150 : 700);
     return () => clearTimeout(timer);
@@ -2117,7 +2196,7 @@ export function PerGameMarketScreen({
       </View>
     )
   ) : (
-    <Text maxFontSizeMultiplier={1.4} style={slotTextStyle}>{seasonOver ? seasonEndSlotLine(side, slots.used) : lockLineShort(width) && !rowToolbar && !folded && !slotUnderToggle ? slotLineNarrow(side, slots) : slotLine(side, slots)}</Text>
+    <Text maxFontSizeMultiplier={1.4} style={slotTextStyle}>{seasonOver ? seasonEndSlotLine(side, slots.used, slotRight) : lockLineShort(width) && !rowToolbar && !folded && !slotUnderToggle ? slotLineNarrow(side, slots) : slotLine(side, slots)}</Text>
   );
   // Measured beside the toggle in its plain wording only (not while moves
   // save or wait, not at season end).
@@ -2128,7 +2207,7 @@ export function PerGameMarketScreen({
       {status.kind === 'lock' ? (
         <View style={styles.lockLine}>
           <LockIcon />
-          <Text maxFontSizeMultiplier={1.4} style={styles.lockText}>{unbrokenTail(status.text ?? '')}</Text>
+          <Text maxFontSizeMultiplier={1.4} style={styles.lockText}>{lockLineUnbroken(status.text ?? '')}</Text>
         </View>
       ) : status.text && (status.kind !== 'season' || seasonEndStatusShown(side)) ? (
         <Text maxFontSizeMultiplier={1.4} style={[styles.fullText, slotRight && styles.textRight]}>{unbrokenTail(status.text)}</Text>
@@ -2180,6 +2259,7 @@ export function PerGameMarketScreen({
   const orderRow = pinned && folded && !roomy;
   const orderStrip = (
     <OrderLine
+      centred={!wide && !rowToolbar}
       reserve={order.reserve}
       reserveOwn={order.reserveOwn}
       reserveResort={order.reserveResort}
@@ -2249,11 +2329,30 @@ export function PerGameMarketScreen({
   // rows as their first row (walk 11 T2-09: at 960x600 after games the
   // pinned chrome kept 53% of the window).
   const slotScrolls = pinned && folded && tableSlot !== null;
+  const marketHeading = (
+    <View style={visuallyHidden}>
+      <Text accessibilityRole="header" {...headingLevel(1)}>Market</Text>
+    </View>
+  );
+  // A portrait phone keeps the side toggle and the slot line in view while
+  // search, sort, the order line and the explainer scroll away with the rows
+  // (walk 16 T1-01); at the list's top everything sits where it did.
+  const phoneBarPinned = !rowToolbar && !folded;
+  const sideRow = (
+    <View style={[styles.controlRow, !slotBeside && styles.controlStack, slotRoomFirst(width) && styles.controlRowSnug, slotBeside && width < 340 && styles.controlRowTight]}>
+      {sideToggle}
+      {slotStatus}
+    </View>
+  );
+  const phoneBar = phoneBarPinned ? (
+    <View style={[styles.header, styles.phoneBar]}>
+      {marketHeading}
+      {sideRow}
+    </View>
+  ) : null;
   const listHeader = (
     <View ref={pinned ? undefined : listHeaderRef} style={styles.header}>
-      <View style={visuallyHidden}>
-        <Text accessibilityRole="header" {...headingLevel(1)}>Market</Text>
-      </View>
+      {phoneBarPinned ? null : marketHeading}
       {rowToolbar ? (
         <View style={[styles.controlsWide, (!roomy || compactSlot) && styles.controlsShort]}>
           {sideToggle}
@@ -2295,11 +2394,7 @@ export function PerGameMarketScreen({
           ) : null}
         </View>
       ) : (
-        <View style={styles.controls}>
-          <View style={[styles.controlRow, !slotBeside && styles.controlStack, slotRoomFirst(width) && styles.controlRowSnug, slotBeside && width < 340 && styles.controlRowTight]}>
-            {sideToggle}
-            {slotStatus}
-          </View>
+        <View style={[styles.controls, styles.controlsUnderBar]}>
           {shortExplainer}
           {/* The two filters share a row; the sort and its order button get the next one whole. */}
           <View style={styles.filterRow}>
@@ -2360,9 +2455,8 @@ export function PerGameMarketScreen({
       target?.focus();
     }, 60);
   };
-  const unlistedStar = trimmed && resultCount === 0 && !watchedOnly && isMockActive()
-    ? unlistedStarFor(trimmed, allRows.map((row) => row.player.name))
-    : null;
+  const unlistedStar = trimmed ? unlisted.star : null;
+  const unlistedGuess = trimmed ? unlisted.guess : null;
   const emptyState = watchedOnly && watchlist.watched.length === 0 ? (
     <EmptyState
       action={<Button ref={emptyAction} label="Show everyone" onPress={() => setWatchedOnly(false)} />}
@@ -2399,6 +2493,8 @@ export function PerGameMarketScreen({
         ? didYouMeanLine(suggestions)
         : unlistedStar
           ? `Clear the search to see all ${allRows.length}.`
+          : unlistedGuess
+          ? `${unlistedGuessLine(unlistedGuess, allRows.length)} Clear the search to see all ${allRows.length}.`
           : watchedOnly
           ? 'None of the players you watch match that name.'
           : isMockActive()
@@ -2421,11 +2517,12 @@ export function PerGameMarketScreen({
   );
 
   // Under a Watching list, the count and the way back to everyone, on screen
-  // as well as aloud (walk 6 T1-12: 450px of empty space under two rows).
+  // as well as aloud (walk 6 T1-12: 450px of empty space under two rows), in
+  // the toolbar's gutter (walk 16 T1-09: 4px left of it on phones).
   // Kept (unwatched, dimmed) rows count here: with every listed row
   // unwatched, "Show all 30" is still the way back (walk 8 T2-07).
   const watchingFooter = watchedOnly && !trimmed && resultCount > 0 ? (
-    <View style={[styles.watchingFooter, { paddingHorizontal: wide ? space.lg : space.md }]}>
+    <View style={[styles.watchingFooter, { paddingHorizontal: space.lg }]}>
       <Text maxFontSizeMultiplier={1.4} style={styles.watchingFooterText}>{watchingLine(spokenCount)}</Text>
       <Button
         accessibilityLabel={`Show all ${totalCount} players`}
@@ -2439,7 +2536,7 @@ export function PerGameMarketScreen({
   // as well as aloud, so coming back to a search says it is still on (walk 7
   // T3-19), as the Watching list's line does.
   const searchFooter = trimmed && searchHasLetters(trimmed) && spokenCount > 0 ? (
-    <View style={[styles.watchingFooter, { paddingHorizontal: wide ? space.lg : space.md }]}>
+    <View style={[styles.watchingFooter, { paddingHorizontal: space.lg }]}>
       <Text maxFontSizeMultiplier={1.4} style={styles.watchingFooterText}>{searchFooterLine(echoQuery(trimmed), spokenCount)}</Text>
       <Button
         accessibilityLabel={`Show all ${totalCount} players`}
@@ -2452,7 +2549,7 @@ export function PerGameMarketScreen({
 
   return (
     <>
-      {pinned ? listHeader : null}
+      {pinned ? listHeader : phoneBar}
       {/* On a tall desktop the column labels and the rows are one table for
           screen readers (walk 8 T3-09); the labels stay put over the rows. */}
       {/* Above the toolbar in paint order, so a column's explanation, which
@@ -2463,7 +2560,7 @@ export function PerGameMarketScreen({
       <FlatList
         contentContainerStyle={styles.content}
         data={rows}
-        extraData={[layout, columns, positionValues, pastValues, fee, width, priceReserve, seasonOver, watchlist.watched, kept, watchedOnly, firstBlockedId, blockedCount, heldFloorNow]}
+        extraData={[layout, columns, positionValues, pastValues, fee, width, priceReserve, seasonOver, watchlist.watched, kept, watchedOnly, firstBlockedId, blockedCount, heldFloorNow, averageDropped]}
         initialNumToRender={Math.min(Math.max(rows.length, 18), WHOLE_LIST_MAX)}
         keyboardShouldPersistTaps="handled"
         // One row per side: a press's "Added ✓" never follows him to the
@@ -2476,7 +2573,7 @@ export function PerGameMarketScreen({
         ListFooterComponent={(
           <>
             {resultCount > 0 ? <ListEnd label="End of the list" ref={listEndRef} /> : null}
-            {resultCount > 0 && isMockActive() ? <SkipLink label="Back to the practice controls" onPress={backToControls} /> : null}
+            {resultCount > 0 && isMockActive() ? <SkipLink label="Back to the practice controls" onPress={backToControls} role="link" /> : null}
             {watchingFooter ?? searchFooter}
           </>
         )}
@@ -2530,6 +2627,8 @@ export function PerGameMarketScreen({
             dimmed={watchedOnly && kept.includes(item.player.playerId) && !watchlist.isWatched(item.player.playerId)}
             heldFloor={item.position ? heldFloorNow : 0}
             onHeldStep={raiseHeldFloor}
+            dropAverage={item.position ? averageDropped : false}
+            onAverageDropped={dropHeldAverage}
             onOpenProfile={openProfile}
             pastValue={item.position ? undefined : pastValues.get(item.player.playerId)}
             row={item}
@@ -2581,6 +2680,9 @@ export function PerGameMarketScreen({
   );
 }
 
+/** A search that names no player practice leaves out. */
+const NO_UNLISTED = { star: null, guess: null, retired: false } as const;
+
 /** Seen, never pressed (react-native-web wants pointerEvents as a style). */
 const NO_POINTER = { pointerEvents: 'none' } as const;
 
@@ -2610,6 +2712,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: 10,
     paddingBottom: 10,
+  },
+  phoneBar: {
+    // The phone toolbar's first row, pinned over the list: its inset and the
+    // toolbar's gap, so at the list's top every line sits where it did.
+    paddingHorizontal: space.lg,
+    paddingTop: 10,
+    paddingBottom: space.sm,
+  },
+  controlsUnderBar: {
+    paddingTop: 0,
   },
   controlRow: {
     flexDirection: 'row',

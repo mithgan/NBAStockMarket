@@ -439,6 +439,45 @@ export const PLAYER_NICKNAMES: Readonly<Record<string, string>> = {
   'chef curry': 'Stephen Curry',
   'the process': 'Joel Embiid',
   'the beard': 'James Harden',
+  // Walk 16 T4-03: "Bron" suggested Jalen Brunson or Jaylen Brown.
+  bron: 'LeBron James',
+  'the king': 'LeBron James',
+  steph: 'Stephen Curry',
+  kd: 'Kevin Durant',
+  cp3: 'Chris Paul',
+  'jimmy buckets': 'Jimmy Butler',
+};
+
+/**
+ * Retired stars fans still type (walk 16 T4-01, T4-03), and their nicknames:
+ * practice lists none of them, so a search for one says "No listed player
+ * matches", with no near name offered ("Kobe" read "Rudy Gobert is not in
+ * this practice season's 30 players"; "Shaq" offered Shai Gilgeous-Alexander).
+ */
+export const RETIRED_STARS: readonly string[] = [
+  'Kobe Bryant', 'Michael Jordan', "Shaquille O'Neal", 'Tim Duncan', 'Larry Bird', 'Magic Johnson',
+  'Kareem Abdul-Jabbar', 'Dirk Nowitzki', 'Dwyane Wade', 'Allen Iverson', 'Wilt Chamberlain', 'Bill Russell',
+  'Hakeem Olajuwon', 'Kevin Garnett', 'Vince Carter', 'Tracy McGrady', 'Carmelo Anthony', 'Derrick Rose',
+  'Yao Ming', 'Steve Nash', 'Dennis Rodman', 'Scottie Pippen', 'Charles Barkley', 'Karl Malone',
+  'John Stockton', 'Dwight Howard', 'Pau Gasol', 'Manu Ginobili', 'Tony Parker', 'Paul Pierce',
+];
+
+export const RETIRED_NICKNAMES: Readonly<Record<string, string>> = {
+  mj: 'Michael Jordan',
+  'air jordan': 'Michael Jordan',
+  shaq: "Shaquille O'Neal",
+  'black mamba': 'Kobe Bryant',
+  mamba: 'Kobe Bryant',
+  'the answer': 'Allen Iverson',
+  kg: 'Kevin Garnett',
+  tmac: 'Tracy McGrady',
+  't mac': 'Tracy McGrady',
+  melo: 'Carmelo Anthony',
+  'd rose': 'Derrick Rose',
+  drose: 'Derrick Rose',
+  'the mailman': 'Karl Malone',
+  'the dream': 'Hakeem Olajuwon',
+  vinsanity: 'Vince Carter',
 };
 
 /**
@@ -458,20 +497,72 @@ export const WELL_KNOWN_PLAYERS: readonly string[] = [
   'Victor Wembanyama', 'Jalen Brunson', 'Donovan Mitchell', 'Devin Booker', 'Kawhi Leonard', 'Jaylen Brown',
 ];
 
+/** The name parts a search word can be exactly: first name, surname, any run of parts ("gilgeousalexander"). */
+function nameTargets(name: string): Set<string> {
+  const parts = searchKey(name).split(/[\s-]+/).filter(Boolean);
+  const targets = new Set<string>();
+  for (let from = 0; from < parts.length; from += 1) {
+    for (let to = from + 1; to <= parts.length; to += 1) targets.add(parts.slice(from, to).join(''));
+  }
+  return targets;
+}
+
+/** First names fans shorten, read as the name itself ("steph curry" is Stephen Curry's full name). */
+const FIRST_NAME_SHORT: Readonly<Record<string, string>> = { steph: 'stephen', bron: 'lebron' };
+
+/** The names among `names` that every word of the search is exactly a part of. */
+function exactNameHits(query: string, names: readonly string[]): string[] {
+  const words = searchKey(query).split(/\s+/).map((word) => word.replace(/-/g, '')).filter((word) => /\p{L}/u.test(word))
+    .map((word) => FIRST_NAME_SHORT[word] ?? word);
+  if (words.length === 0) return [];
+  return names.filter((name) => {
+    const targets = nameTargets(name);
+    return words.every((word) => targets.has(word));
+  });
+}
+
 /**
- * The well-known player a search names when practice does not list him
- * ("lebron", "steph curry", "king james" → "LeBron James", "Stephen Curry"),
- * or null: nobody, a listed player, or more than one ("james").
+ * What a practice search that found nobody says about a player practice
+ * leaves out (walk 16 T4-01, T4-03):
+ * - `star`: the search really names one well-known player: his first name,
+ *   surname or full name, or a nickname fans use ("lebron", "bron", "king
+ *   james", "curry"). The title names him; no near names are offered.
+ * - `guess`: it only comes close to one ("embid"): a question under "No
+ *   listed player matches", never a statement.
+ * - `retired`: it names a retired star ("kobe", "shaq", "mj"): "No listed
+ *   player matches", with no did-you-mean.
+ * A name two players share ("james", "kevin") names nobody.
  */
-export function unlistedStarFor(query: string, listed: readonly string[]): string | null {
-  if (!searchHasLetters(query)) return null;
+export function unlistedSearch(query: string, listed: readonly string[]): { star: string | null; guess: string | null; retired: boolean } {
+  const none = { star: null, guess: null, retired: false };
+  if (!searchHasLetters(query)) return none;
   const listedKeys = new Set(listed.map((name) => searchKey(name)));
-  const nick = nicknameFor(query);
-  const byNick = nick ? WELL_KNOWN_PLAYERS.find((name) => searchKey(name) === nick) ?? null : null;
-  const found = byNick ? [byNick] : nearestNames(query, WELL_KNOWN_PLAYERS, 2).map((entry) => entry.label);
-  // One whole name only: a shared first name ("jalen") offers a word.
-  if (found.length !== 1 || !WELL_KNOWN_PLAYERS.includes(found[0])) return null;
-  return listedKeys.has(searchKey(found[0])) ? null : found[0];
+  const unlisted = WELL_KNOWN_PLAYERS.filter((name) => !listedKeys.has(searchKey(name)));
+  const key = searchKey(query).replace(/[\s-]+/g, ' ');
+  const nick = PLAYER_NICKNAMES[key];
+  if (nick) return listedKeys.has(searchKey(nick)) ? none : { star: nick, guess: null, retired: false };
+  if (RETIRED_NICKNAMES[key] || RETIRED_NICKNAMES[key.replace(/ /g, '')]) return { ...none, retired: true };
+  const active = exactNameHits(query, WELL_KNOWN_PLAYERS);
+  const retired = exactNameHits(query, RETIRED_STARS);
+  if (active.length + retired.length > 1) return none;
+  if (active.length === 1) return unlisted.includes(active[0]) ? { star: active[0], guess: null, retired: false } : none;
+  if (retired.length === 1) return { ...none, retired: true };
+  // Close to one name only, among the stars fans type: a question for an
+  // active one, nothing for a retired one ("kobi").
+  const near = nearestNames(query, [...WELL_KNOWN_PLAYERS, ...RETIRED_STARS], 2).map((entry) => entry.label);
+  if (near.length !== 1) return none;
+  if (RETIRED_STARS.includes(near[0])) return { ...none, retired: true };
+  return unlisted.includes(near[0]) ? { star: null, guess: near[0], retired: false } : none;
+}
+
+/** The well-known player a search really names when practice does not list him, or null (unlistedSearch). */
+export function unlistedStarFor(query: string, listed: readonly string[]): string | null {
+  return unlistedSearch(query, listed).star;
+}
+
+/** A close search's question: "Did you mean Joel Embiid? He is not in this practice season's 30 players." */
+export function unlistedGuessLine(name: string, listedCount: number): string {
+  return `Did you mean ${name}? He is not in this practice season's ${listedCount} players.`;
 }
 
 /** "LeBron James is not in this practice season's 30 players" (walk 15 T1-N4). */
@@ -759,6 +850,23 @@ export function heldPlayedWordings(
 }
 
 /**
+ * A held phone row's first value line, decided once per list (walk 16 T1-13:
+ * at 360px one held row kept "-$3K over 3 games, -$1K a game" while its
+ * neighbours dropped their average): once any held row of the list has had
+ * to drop its per-game average, every held row starts from the wording
+ * without it (step 1 of heldLineWordings); a row's own fit may go further.
+ */
+export function heldFirstStep(ownStep: number, listDropsAverage: boolean, hasAverage: boolean, steps: number): number {
+  const floor = listDropsAverage && hasAverage ? 1 : 0;
+  return Math.max(0, Math.min(Math.max(ownStep, floor), steps - 1));
+}
+
+/** A row whose own fit could not keep its average (it has one): the list drops it on every held row. */
+export function heldDropsAverage(ownStep: number, hasAverage: boolean): boolean {
+  return hasAverage && ownStep > 0;
+}
+
+/**
  * The step every held row of a list shows (heldPlayedWordings): the most
  * compact any of them needs, so rows at one width say the same things (walk
  * 15 T1-02). `needed` is each row's own step, measured before paint.
@@ -789,14 +897,12 @@ export const HELD_VALUE_CAPTION = 'last season at\u00A0your\u00A0price';
 
 /**
  * A held phone row's price keeps its "/game" (walk 10 T1-02: "yours $417.5K"
- * read as what he cost in all). Beside the given name and tier, "yours" fits
- * too only from this width: at 390px "KARL-ANTHONY · STAR  yours
- * $379.5K/game" wrapped and made rows taller than the rest (walk 5 T1-04).
- * Narrower, the row says it is yours in its "On your roster ·" line and "at
- * your price · now $X" line; the large-text row, whose price has a line of its
- * own, always says "yours".
+ * read as what he cost in all) and says "yours" beside it at every width
+ * (walk 16 T1-04: under 440px the word was dropped, and the big figure, the
+ * price you locked, read as today's price). The price box never shrinks: the
+ * given name beside it gives way (cut short) first, so the line never wraps.
  */
-export const HELD_YOURS_MIN_WIDTH = 440;
+export const HELD_YOURS_MIN_WIDTH = 0;
 
 export function heldPriceSaysYours(width: number, ownLine: boolean): boolean {
   return ownLine || width >= HELD_YOURS_MIN_WIDTH;
@@ -1747,6 +1853,28 @@ export function waitingForLine(playing: string): string {
 }
 
 /**
+ * A move refused after it waited for games (his price moved with them, or
+ * they brought a lock) marks its own row for this long (walk 16 T4-09: three
+ * adds refused as a week landed went straight back to plain ADD).
+ */
+export const REFUSED_MARK_MS = 5000;
+
+/** The row's button meanwhile: "Not added" / "Not shorted", in neutral ink. */
+export function refusedWord(side: PerGamePositionSide): string {
+  return side === 'long' ? 'Not added' : 'Not shorted';
+}
+
+/**
+ * Its name, why first and then what a press does now: "Not added: his price
+ * moved to $330K. Add Devin Booker at $330K a game"; locked, the lock and
+ * when moves reopen.
+ */
+export function refusedActionName(side: PerGamePositionSide, playerName: string, price: number, lock: string | null = null): string {
+  if (lock) return `${refusedWord(side)}: ${lock}`;
+  return `${refusedWord(side)}: his price moved to ${moneyCompact(price)}. ${actionName('open', side, playerName, price)}`;
+}
+
+/**
  * The name of an Add or Short pressed while practice games play, while it
  * waits for them (walk 9 T4-04: it used to say "Added" before the games
  * decided whether it could be).
@@ -1975,14 +2103,38 @@ export function heldTag(side: PerGamePositionSide, seasonOver: boolean): string 
   return seasonOver ? 'Shorted this season' : 'Shorted';
 }
 
+/**
+ * At season end a short that ended earlier is tagged on the Short side, as a
+ * held row is ("Shorted this season"), so the past figure beside him explains
+ * itself (walk 16 T2-06: "+$17.3K, 5 past games" showed with no tag); null
+ * for anyone else.
+ */
+export function endedShortTag(side: PerGamePositionSide, seasonOver: boolean, held: boolean, pastGames: number): string | null {
+  return side === 'short' && seasonOver && !held && pastGames > 0 ? heldTag('short', true) : null;
+}
+
+/**
+ * The lock line keeps "after Oct 28" whole, so where it wraps the date never
+ * sits alone on a line (walk 16 T2-08: "Moves reopen after" / "Oct 28" at
+ * 1024 and 768): it breaks as "Moves reopen" / "after Oct 28".
+ */
+export function lockLineUnbroken(text: string): string {
+  const at = text.lastIndexOf(' after ');
+  if (at < 0) return text.replace(/ (\S+)$/, '\u00A0$1');
+  return `${text.slice(0, at)} ${text.slice(at + 1).replace(/ /g, '\u00A0')}`;
+}
+
 /** The slot line once the season is over: what you held at its end ("2 held at season end"). */
-export function seasonEndSlotLine(side: PerGamePositionSide, used: number): string {
+export function seasonEndSlotLine(side: PerGamePositionSide, used: number, stacked = false): string {
   // "at season end" never leaves "end" alone on a line (walk 15 T1-08).
   if (side === 'long') return used === 0 ? 'None held at season\u00A0end' : `${used}\u00A0held at season\u00A0end`;
   // The Short side says its state once: the slot says the season is over, so
   // no "The season is over" line under it; its explainer says what comes next
   // (walk 15 T1-08: said twice within 50px, "end" alone on a line).
-  return used === 0 ? 'No shorts · season\u00A0over' : `${used}\u00A0shorted · season\u00A0over`;
+  const count = used === 0 ? 'No shorts' : `${used}\u00A0shorted`;
+  // Beside a phone's side toggle it takes two lines, split where the dot was,
+  // so no "·" hangs at a line's end (walk 16 T1-14: "No shorts ·" / "season over").
+  return stacked ? `${count}\nseason\u00A0over` : `${count} · season\u00A0over`;
 }
 
 /** The slot's status line at season end: the Short side's slot already says it (walk 15 T1-08). */
@@ -2045,18 +2197,18 @@ export function heldOrderLine(
   sort: MarketSort = 'value',
 ): string {
   const shape: OrderLineForm = form === true ? 'short' : form === false ? 'long' : form;
-  // One line beside Re-sort at 320px: the why alone (the button names the games).
-  if (shape === 'short') return 'Order kept so rows stay put';
   const moved = sort === 'price' ? 'Prices moved' : 'Values moved';
-  if (shape === 'phone') return `${moved}; order kept so rows stay put.`;
+  // A phone's line swaps its words in place, one line with Re-sort at every
+  // phone width (walk 16 T1-02: the two-line wording kept an empty line
+  // under "Sorted by value, highest first." from the first view on); the
+  // button names the games.
+  if (shape === 'short' || shape === 'phone') return `${moved}; order kept`;
   return `${moved} in the ${gamesSince(previousNight, night)} games; order kept so rows stay put.`;
 }
 
 /**
- * From this window width a phone's order line says what moved as well as
- * why the order stayed ("Values moved; order kept so rows stay put.", about
- * 251px, with Re-sort's 61px, in 287px at 390); narrower, it says the why
- * alone ("Order kept so rows stay put", 163px of 217px at 320px).
+ * The phone forms' boundary (walk 13): both now say "Values moved; order
+ * kept", about 150px with Re-sort's 61px, one line from 320px (walk 16 T1-02).
  */
 export const ORDER_LINE_LONG_MIN_WIDTH = 390;
 

@@ -18,6 +18,7 @@ export function OrderLine({
   resort,
   reserveResort = true,
   reserveOwn,
+  centred = false,
   style,
 }: {
   text: string;
@@ -30,6 +31,11 @@ export function OrderLine({
   reserveResort?: boolean;
   /** The line's own longest wording without Re-sort (a flipped order), kept too. */
   reserveOwn?: string;
+  /**
+   * The shown words sit mid-reserve (a phone, walk 16 T1-02): the plain line
+   * reads as spacing, not a gap, and the held wording swaps in without a jump.
+   */
+  centred?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const words = (shown: string, action: boolean, ghost: boolean) => (
@@ -57,7 +63,7 @@ export function OrderLine({
   );
   return (
     <View style={[styles.wrap, style]}>
-      <View style={styles.layer}>{words(text, resort !== null, false)}</View>
+      <View style={[styles.layer, centred && styles.centred]}>{words(text, resort !== null, false)}</View>
       <View
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
@@ -88,6 +94,10 @@ const styles = StyleSheet.create({
   layer: {
     width: '100%',
     flexShrink: 0,
+  },
+  centred: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
   },
   ghost: {
     marginLeft: '-100%',

@@ -11,12 +11,40 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { visuallyHidden } from '../../ui/kit';
 
-export function SkipLink({ label, onPress }: { label: string; onPress: () => void }) {
+/**
+ * `role`: "Back to the practice controls" is a link, as the one Roster,
+ * Results and Leaders end with (walk 16 T3-04: a reader heard "button" here).
+ */
+export function SkipLink({ label, onPress, role = 'button' }: { label: string; onPress: () => void; role?: 'button' | 'link' }) {
   const [shown, setShown] = useState(false);
+  if (role === 'link') {
+    // react-native-web leaves a link's Enter to the browser, which never
+    // clicks a div: the link answers Enter and a click itself, as SimBar's does.
+    return (
+      <View
+        accessibilityLabel={label}
+        accessibilityRole="link"
+        onBlur={() => setShown(false)}
+        onFocus={() => setShown(true)}
+        style={shown ? styles.shown : visuallyHidden}
+        {...({
+          tabIndex: 0,
+          onClick: () => onPress(),
+          onKeyDown: (event: { key: string; preventDefault: () => void }) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            onPress();
+          },
+        } as object)}
+      >
+        <Text maxFontSizeMultiplier={1.4} style={styles.text}>{label}</Text>
+      </View>
+    );
+  }
   return (
     <Pressable
       accessibilityLabel={label}
-      accessibilityRole="button"
+      accessibilityRole={role}
       onBlur={() => setShown(false)}
       onFocus={() => setShown(true)}
       onPress={onPress}

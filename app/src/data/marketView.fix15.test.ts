@@ -86,7 +86,8 @@ test('a search for a star practice leaves out names him (walk 15 T1-N4)', () => 
   assert.equal(unlistedStarFor('lebron', listed), 'LeBron James');
   assert.equal(unlistedStarFor('steph curry', listed), 'Stephen Curry');
   assert.equal(unlistedStarFor('king james', listed), 'LeBron James', 'a nickname');
-  assert.equal(unlistedStarFor('embid', listed), 'Joel Embiid', 'a typo');
+  // Walk 16 T4-01: a typo is a question now ("Did you mean Joel Embiid?"), never a statement.
+  assert.equal(unlistedStarFor('embid', listed), null, 'a typo');
   assert.equal(unlistedStarFor('james', listed), null, 'two stars: say nothing new');
   assert.equal(unlistedStarFor('jalen', listed), null, 'a shared first name');
   assert.equal(unlistedStarFor('luka', listed), null, 'listed');

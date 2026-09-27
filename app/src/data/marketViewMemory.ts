@@ -27,6 +27,8 @@ export interface MarketMemory {
    * it never goes from under a thumb; later visits leave the rows its room.
    */
   valueTipSeen: boolean;
+  /** The season was over when the Market was left (walk 16 T1-07). */
+  seasonOver: boolean;
 }
 
 /**
@@ -47,6 +49,7 @@ const FRESH: MarketMemory = {
   width: 0,
   lastInitialSide: null,
   valueTipSeen: false,
+  seasonOver: false,
 };
 
 let memory: MarketMemory = { ...FRESH };
@@ -70,6 +73,16 @@ export function tierAfterSurnameKnown(key: string): boolean {
 
 export function rememberTierAfterSurname(key: string): void {
   tierAfterSurnameAt.add(key);
+}
+
+/**
+ * Coming back to the Market restores your place in the list, unless the list
+ * was re-sorted for you meanwhile: the season ended since you left (walk 16
+ * T1-07: you came back mid-list on re-sorted rows, the side toggle and the
+ * season's line out of view). Then it opens at its top.
+ */
+export function restoresPlace(offset: number, seasonOverNow: boolean, seasonOverWhenLeft: boolean): boolean {
+  return offset > 0 && !(seasonOverNow && !seasonOverWhenLeft);
 }
 
 export function marketMemory(): MarketMemory {
