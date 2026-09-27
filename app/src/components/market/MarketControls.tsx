@@ -531,7 +531,10 @@ function PlainHeader({
 }) {
   const [explainId] = useState(() => `market-column-explain-${(explainIds += 1)}`);
   return (
-    <View style={[styles.headerCell, { width }]} {...(tableRoles ? ({ role: 'columnheader' } as object) : {})}>
+    // The header cell is named by its visible label's words alone, in plain
+    // case (walk 11 T3-02: every cell read "Your profit a game, about this
+    // column"); what the button does stays on the button.
+    <View style={[styles.headerCell, { width }]} {...(tableRoles ? ({ role: 'columnheader', 'aria-label': label.replace(/\u00A0/g, ' ') } as object) : {})}>
       <Pressable
         // A real control with a name and a role, like its neighbours (walk 7
         // T3-01: a focusable stop with no role read as nothing): a press
@@ -616,7 +619,11 @@ function SortHeader({
   return (
     <View
       style={[styles.headerCell, number ? { width } : styles.columnPlayer]}
-      {...(tableRoles ? ({ role: 'columnheader', ...(on ? { 'aria-sort': ascending ? 'ascending' : 'descending' } : {}) } as object) : {})}
+      // Named by its visible label only, so moving across a row reads
+      // "Dividend last season, $488.5K", never the button's "sort by…"; every
+      // sortable header says its state, "none" when it is not the sort
+      // (walk 11 T3-02).
+      {...(tableRoles ? ({ role: 'columnheader', 'aria-label': words, 'aria-sort': on ? (ascending ? 'ascending' : 'descending') : 'none' } as object) : {})}
     >
       <Pressable
         accessibilityLabel={on

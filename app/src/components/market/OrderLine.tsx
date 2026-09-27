@@ -3,8 +3,9 @@
  * order in words, an unusual order said plainly (the order button beside the
  * sort flips it back, so there is no second button), or that the order is
  * from before the latest games, with Re-sort. It always keeps the height of
- * its longest wording (an invisible copy under it), so the list below never
- * moves when a night lands or the order flips.
+ * its longest wording (invisible copies under it: the held wording with
+ * Re-sort, and its own longest), from the first view on, so the list below
+ * never moves when a night lands or the order flips (walk 11 T4-08).
  */
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -16,6 +17,7 @@ export function OrderLine({
   reserve,
   resort,
   reserveResort = true,
+  reserveOwn,
   style,
 }: {
   text: string;
@@ -26,6 +28,8 @@ export function OrderLine({
   resort: { name: string; onPress: () => void } | null;
   /** The reserve keeps Re-sort's height too (from the first games on, orderLine). */
   reserveResort?: boolean;
+  /** The line's own longest wording without Re-sort (a flipped order), kept too. */
+  reserveOwn?: string;
   style?: StyleProp<ViewStyle>;
 }) {
   const words = (shown: string, action: boolean, ghost: boolean) => (
@@ -62,6 +66,16 @@ export function OrderLine({
       >
         {words(reserve, reserveResort || resort !== null, true)}
       </View>
+      {reserveOwn ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[styles.layer, styles.ghost]}
+          {...({ 'aria-hidden': true } as object)}
+        >
+          {words(reserveOwn, false, true)}
+        </View>
+      ) : null}
     </View>
   );
 }

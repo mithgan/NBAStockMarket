@@ -576,6 +576,24 @@ export function heldPriceSaysYours(width: number, ownLine: boolean): boolean {
 }
 
 /**
+ * The phone row's price box keeps the width of the widest price the list can
+ * show (each digit as its widest, "0"), held or not, so the given name beside
+ * it has the same room before and after an Add whatever the price does
+ * (walk 11 lead note: at 390px Karl-Anthony Towns' row grew 92 -> 102px
+ * right after Add, when his price moved $379.5K -> $380.4K and a hidden copy
+ * of the other state's line wrapped "Karl-Anthony"). `amounts` are the price
+ * texts without "/game" ("$379.5K").
+ */
+export function priceWidthReserve(amounts: readonly string[]): string {
+  let widest = '';
+  for (const amount of amounts) {
+    const shape = amount.replace(/\d/g, '0');
+    if (shape.length > widest.length || (shape.length === widest.length && shape.endsWith('M') && !widest.endsWith('M'))) widest = shape;
+  }
+  return widest;
+}
+
+/**
  * From this width a held phone row's value line also says today's price
  * ("· now $418.2K"); narrower, it would wrap onto a third line on every row.
  */
@@ -714,17 +732,36 @@ export function headerStatus({
   rosterLocked,
   lockGameDate,
   full,
+  short = false,
 }: {
   side: PerGamePositionSide;
   seasonOver: boolean;
   rosterLocked: boolean;
   lockGameDate: string | null;
   full: boolean;
+  /** The narrow slot column (lockLineShort): the lock line in two short lines. */
+  short?: boolean;
 }): HeaderStatus {
   if (seasonOver) return { text: 'The season is over', kind: 'season' };
-  if (rosterLocked) return { text: rosterReopensLine(lockGameDate), kind: 'lock' };
+  if (rosterLocked) return { text: short ? shortReopensLine(lockGameDate) : rosterReopensLine(lockGameDate), kind: 'lock' };
   if (full) return { text: side === 'long' ? 'Full: drop one to add' : 'Full: close one to short', kind: 'full' };
   return { text: null, kind: null };
+}
+
+/**
+ * Beside the side toggle at 320-339px the slot column is 86-105px wide, and
+ * "Moves reopen after Oct 28" took three lines to the fee's two, so the list
+ * dropped 16px on a lock eve (walk 11 T4-08). There the padlock line says
+ * "Reopens after Oct 28" ("Reopens" / "after Oct 28"), two lines like the fee.
+ */
+export const LOCK_LINE_SHORT_BELOW = 340;
+
+export function lockLineShort(width: number): boolean {
+  return slotLineBeside(width) && width < LOCK_LINE_SHORT_BELOW;
+}
+
+function shortReopensLine(lockGameDate: string | null): string {
+  return lockGameDate ? `Reopens after ${humanDate(lockGameDate)}` : 'Reopens after these games';
 }
 
 /**
@@ -774,6 +811,20 @@ export const PINNED_ROWS_MIN_SHARE = 0.55;
 export function pinnedChromeTooTall(rowsHeight: number, windowHeight: number): boolean {
   if (!(rowsHeight > 0) || !(windowHeight > 0)) return false;
   return rowsHeight < windowHeight * PINNED_ROWS_MIN_SHARE;
+}
+
+/**
+ * A short table window (500-559px tall) scrolls its toolbar and labels away
+ * with the rows, but on arrival they take the top: at 853x533 (a 1280x800
+ * laptop at 150%) the rows got 126px, two players (walk 11 T3-13). Where the
+ * rows under them would get less than half the window, the toolbar folds
+ * search, sort and Watching behind "Search & sort", as a pinned one does.
+ */
+export const ROWS_MIN_SHARE_ON_ARRIVAL = 0.5;
+
+export function rowsUnderToolbarTooFew(rowsHeight: number, windowHeight: number): boolean {
+  if (!(windowHeight > 0)) return false;
+  return rowsHeight < windowHeight * ROWS_MIN_SHARE_ON_ARRIVAL;
 }
 
 /**
@@ -1272,6 +1323,20 @@ export function slotLine(side: PerGamePositionSide, slots: Pick<PerGameSlotSumma
 }
 
 /**
+ * The slot line in the narrow column beside the toggle (320-339px, where it
+ * already takes two lines): "2 of 10", then "on your roster" on a line of its
+ * own whose words may wrap among themselves, so a text-spacing style never
+ * pushes the unbroken phrase over the Short side button (walk 11 check at
+ * 320px), and "2 of 10 on / your roster" still never happens.
+ */
+export function slotLineNarrow(side: PerGamePositionSide, slots: Pick<PerGameSlotSummary, 'used' | 'limit'>): string {
+  const line = slotLine(side, slots);
+  if (side !== 'long') return line;
+  const gap = line.indexOf(' ');
+  return gap < 0 ? line : `${line.slice(0, gap)}\n${line.slice(gap + 1).replace(/\u00A0/g, ' ')}`;
+}
+
+/**
  * Under "3 of 10 · 2 waiting", in the fee line's place: which games the
  * moves wait for ("for the Oct 21–27 games", "for the rest of the season's
  * games"); `playing` is usePracticePlaying().
@@ -1458,6 +1523,33 @@ export function otherSideGroupLine(side: PerGamePositionSide, seasonOver: boolea
 }
 
 /**
+ * A held player's tag, in the past once the season is over (walk 11 T2-03:
+ * "ON YOUR ROSTER" read as if moves were still open): "On your roster this
+ * season", "Shorted this season", as the group line over the other side says.
+ */
+export function heldTag(side: PerGamePositionSide, seasonOver: boolean): string {
+  if (side === 'long') return seasonOver ? 'On your roster this season' : 'On your roster';
+  return seasonOver ? 'Shorted this season' : 'Shorted';
+}
+
+/** The slot line once the season is over: what you held at its end ("2 held at season end"). */
+export function seasonEndSlotLine(side: PerGamePositionSide, used: number): string {
+  if (side === 'long') return used === 0 ? 'None held at season end' : `${used}\u00A0held at season end`;
+  return used === 0 ? 'No shorts at season end' : `${used}\u00A0shorted at season end`;
+}
+
+/**
+ * The side's sentence once the season is over (walk 11 T2-03, T1-13): what
+ * the figures show now, and on the Short side that shorts come back with a
+ * new season, never how to open one.
+ */
+export function seasonEndExplainer(side: PerGamePositionSide): string {
+  return side === 'short'
+    ? 'The season is over. Shorts open again in a new season.'
+    : 'The season is over. Values show how each player did against his price.';
+}
+
+/**
  * The "Your profit a game" cell of a player you do not hold on this side, in
  * words (the cell shows a dash): held on the other side says where he is
  * ("on your roster", "shorted"), never "not held" (walk 10 T2-04).
@@ -1482,8 +1574,22 @@ export function unheldProfitWords(side: PerGamePositionSide, heldOtherSide: bool
  * (walk 7 T4-11); a tall table says so in its sentence slot: "Same order as
  * before the Oct 21 games."
  */
-export function heldOrderLine(previousNight: string, night: string): string {
+export function heldOrderLine(previousNight: string, night: string, narrow = false): string {
+  // A narrow phone says it short, so it keeps one line beside Re-sort (walk 11 T4-08).
+  if (narrow) return `Same order as before ${gamesSince(previousNight, night)}`;
   return `Same order as before the ${gamesSince(previousNight, night)} games.`;
+}
+
+/**
+ * From this window width the order line's long wording ("Same order as before
+ * the Oct 21–27 games.", about 255px, with Re-sort's 70px) keeps one line;
+ * narrower, the phone says "Same order as before Oct 21–27" (walk 11 T4-08: at
+ * 320px the long one took two lines and the list dropped 28px after a night).
+ */
+export const ORDER_LINE_LONG_MIN_WIDTH = 390;
+
+export function orderLineNarrow(width: number, table: boolean): boolean {
+  return !table && width < ORDER_LINE_LONG_MIN_WIDTH;
 }
 
 /**
@@ -1497,28 +1603,31 @@ export function orderLine({
   sort,
   reversed,
   heldNote,
-  gamesIn = true,
+  narrow = false,
 }: {
   sort: MarketSort;
   reversed: boolean;
   /** heldOrderLine(...) while the order is from before the latest games, else null. */
   heldNote: string | null;
-  /**
-   * Games have been played. Before them the order cannot be held, so the line
-   * keeps only its own longest wording (walk 10 T4-04: at 320x568 the held
-   * line's two reserved lines pushed all but one player below the fold).
-   */
+  /** Kept for callers: the line's height no longer depends on it (walk 11 T4-08). */
   gamesIn?: boolean;
-}): { text: string; tone: 'quiet' | 'flipped' | 'stale'; resort: boolean; reserve: string; reserveResort: boolean } {
+  /** A narrow phone (orderLineNarrow): the held wording is the short one. */
+  narrow?: boolean;
+}): { text: string; tone: 'quiet' | 'flipped' | 'stale'; resort: boolean; reserve: string; reserveResort: boolean; reserveOwn: string } {
   const said = sortedLine(sort, reversed);
   const flipped = flippedSortNote(sort).text;
   const plain = sortedLine(sort, false);
-  const reserve = gamesIn ? 'Same order as before the Oct 21–27 games.' : flipped.length > plain.length ? flipped : plain;
-  // Re-sort's 44px target is kept in the reserve only once it can appear.
-  const reserveResort = gamesIn;
-  if (heldNote) return { text: heldNote, tone: 'stale', resort: true, reserve, reserveResort };
-  if (reversed) return { text: flipped, tone: 'flipped', resort: false, reserve, reserveResort };
-  return { text: said, tone: 'quiet', resort: false, reserve, reserveResort };
+  // The line keeps one height from the first view on: the held wording with
+  // Re-sort's 44px target (one line, in its short form on a narrow phone) and
+  // its own longest wording, before and after every night, so the list never
+  // drops under a thumb when a night lands (walk 11 T4-08: 28px at 320px after
+  // each first night; walk 10 T4-04's two reserved lines are gone).
+  const reserve = narrow ? 'Same order as before Oct 21–27' : 'Same order as before the Oct 21–27 games.';
+  const reserveOwn = flipped.length > plain.length ? flipped : plain;
+  const reserveResort = true;
+  if (heldNote) return { text: heldNote, tone: 'stale', resort: true, reserve, reserveResort, reserveOwn };
+  if (reversed) return { text: flipped, tone: 'flipped', resort: false, reserve, reserveResort, reserveOwn };
+  return { text: said, tone: 'quiet', resort: false, reserve, reserveResort, reserveOwn };
 }
 
 /**

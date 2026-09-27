@@ -2,8 +2,11 @@
  * The answer to tapping FULL: an inline note under the row that says why he
  * cannot be added and offers the way forward (the Roster, where drops and
  * closes happen). Focus lands on that button; Escape or OK closes the note.
+ * The note is not an alert: focus moving to the button says the sentence as
+ * its description, once (walk 11 T3-12: an alert read the sentence run into
+ * its own buttons' names, then the focused button again).
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { colors, space, type } from '../../theme';
@@ -27,6 +30,7 @@ export function FullNote({
   const go = useRef<View>(null);
   const ok = useRef<View>(null);
   const showGo = canOpenRoster();
+  const messageId = `full-note-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   useEffect(() => {
     const target = (showGo ? go.current : ok.current) as unknown as { focus?: () => void } | null;
     target?.focus?.();
@@ -40,14 +44,14 @@ export function FullNote({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
   return (
-    <View accessibilityRole="alert" style={[styles.note, style]}>
-      <Text style={styles.text}>{message}</Text>
+    <View style={[styles.note, style]}>
+      <Text nativeID={messageId} style={styles.text}>{message}</Text>
       <View style={styles.buttons}>
-        {showGo ? <Button ref={go} label={actionLabel} onPress={() => {
+        {showGo ? <Button ref={go} describedBy={messageId} label={actionLabel} onPress={() => {
           onAction?.();
           openRoster();
         }} variant="primary" /> : null}
-        <Button ref={ok} label="OK" onPress={onClose} variant="secondary" />
+        <Button ref={ok} describedBy={showGo ? undefined : messageId} label="OK" onPress={onClose} variant="secondary" />
       </View>
     </View>
   );

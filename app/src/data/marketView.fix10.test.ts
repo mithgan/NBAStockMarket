@@ -81,18 +81,18 @@ test('a held price says yours only where it cannot push the row to a second line
   assert.equal(heldPriceSaysYours(320, true), true, 'the large-text row gives the price a line of its own');
 });
 
-// walk 10 T4-04: before any games the order line keeps only its own height.
-test('the order line reserves the held wording and Re-sort only once games are in', () => {
+// walk 10 T4-04, superseded by walk 11 T4-08: the order line keeps one
+// height from the first view on (one line with Re-sort; its short held
+// wording on a narrow phone), so the list never drops when a night lands.
+test('the order line reserves its own longest wording and the one-line held wording before and after games', () => {
   const before = orderLine({ sort: 'value', reversed: false, heldNote: null, gamesIn: false });
-  assert.equal(before.reserve, 'Sorted by value, highest first.', 'the longer of its own two wordings');
-  assert.equal(orderLine({ sort: 'dividend', reversed: true, heldNote: null, gamesIn: false }).reserve, 'Sorted by dividend last season, highest first.');
-  assert.equal(before.reserveResort, false);
-  assert.equal(orderLine({ sort: 'name', reversed: false, heldNote: null, gamesIn: false }).reserve, 'Sorted by name, A to Z.');
+  assert.equal(before.reserveOwn, 'Sorted by value, highest first.', 'the longer of its own two wordings');
+  assert.equal(orderLine({ sort: 'dividend', reversed: true, heldNote: null, gamesIn: false }).reserveOwn, 'Sorted by dividend last season, highest first.');
+  assert.equal(orderLine({ sort: 'name', reversed: false, heldNote: null, gamesIn: false }).reserveOwn, 'Sorted by name, A to Z.');
   const after = orderLine({ sort: 'value', reversed: false, heldNote: null, gamesIn: true });
+  assert.deepEqual([before.reserve, before.reserveResort], [after.reserve, after.reserveResort], 'one height before and after the first games');
   assert.equal(after.reserve, 'Same order as before the Oct 21–27 games.');
   assert.equal(after.reserveResort, true);
-  // Unchanged callers (gamesIn left out) keep the full reserve.
-  assert.equal(orderLine({ sort: 'value', reversed: false, heldNote: null }).reserveResort, true);
 });
 
 // walk 10 T3-08: turning the Watching filter on says the count and where the way back is.

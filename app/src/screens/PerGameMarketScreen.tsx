@@ -75,6 +75,9 @@ import {
   netTone,
   nextSortState,
   orderLine,
+  orderLineNarrow,
+  lockLineShort,
+  slotLineNarrow,
   otherSideGroupLine,
   otherSideReason,
   otherSideSaving,
@@ -89,6 +92,11 @@ import {
   rowProfileLabel,
   rowTier,
   pinnedChromeTooTall,
+  heldTag,
+  seasonEndSlotLine,
+  seasonEndExplainer,
+  priceWidthReserve,
+  rowsUnderToolbarTooFew,
   rowValueEdge,
   shortTierLabel,
   ROOMY_MIN_HEIGHT,
@@ -176,11 +184,16 @@ const ROW_PAD = 6;
 const QUESTION_DOUBLE_TAP_MS = 400;
 /** Folds the one FULL note that is open, if any (walk 8 T4-09: one at a time). */
 let openFullNote: (() => void) | null = null;
+/**
+ * The Drop or Close question open on a row, with the layout that drew it: the
+ * table and the phone list draw different rows, so a resize or a rotation
+ * across the breakpoint remounts every row, and the question vanished with
+ * focus thrown to the top (walk 11 T4-05). The row drawn in the other layout
+ * reopens it, and the strip puts focus on Keep again. Coming back to the
+ * Market in the same layout starts without it.
+ */
+let openQuestion: { key: string; layout: MarketLayout } | null = null;
 
-/** The tag a player carries when he is held on a side. */
-function sideTag(side: PerGamePositionSide): 'On your roster' | 'Shorted' {
-  return side === 'long' ? 'On your roster' : 'Shorted';
-}
 
 /** Keep the last two words together ("Oct 31", "to add"), so no line ends in a lone word. */
 function unbrokenTail(text: string): string {
@@ -301,9 +314,11 @@ function MarketRow({
   currentValue,
   pastValue,
   fee,
+  dropImpactBps,
   wholeNames,
   seasonOver,
   width,
+  priceReserve,
   fullTier,
   tierAfterSurname,
   onOpenProfile,
@@ -331,12 +346,16 @@ function MarketRow({
   /** Every earlier stint with him on this side, for a player you do not hold now. */
   pastValue: ValueSummary | undefined;
   fee: number;
+  /** The ruleset's drop impact: the drop question quotes his price right after (walk 11 T1-05). */
+  dropImpactBps: number;
   /** Keep hyphenated names whole (there is room for them on this width). */
   wholeNames: boolean;
   /** No games are left: the row carries no button, so nothing can charge a fee. */
   seasonOver: boolean;
   /** The screen width: below 380px the kicker leaves out the tier. */
   width: number;
+  /** The widest price text the list can show (priceWidthReserve): the phone price box's width. */
+  priceReserve: string;
   /** The list says "Role player" at this width (fullTierFits), else "Role" on every row. */
   fullTier: boolean;
   /** Some given name was cut beside its tier: the tier goes after the surname on every row. */
@@ -442,8 +461,29 @@ function MarketRow({
 
   // Drop and Close ask in a strip under the row (fee, what stays, what coming
   // back costs). It waits for Keep, Escape or the costly button: no timeout.
-  const [confirming, setConfirming] = useState(false);
+  const questionKey = `${side}:${player.playerId}`;
+  const [confirming, setConfirmingState] = useState(() => (
+    openQuestion !== null && openQuestion.key === questionKey && openQuestion.layout !== layout && position !== null
+  ));
+  const confirmingRef = useRef(confirming);
+  confirmingRef.current = confirming;
+  const setConfirming = (on: boolean) => {
+    if (on) openQuestion = { key: questionKey, layout };
+    else if (openQuestion?.key === questionKey) openQuestion = null;
+    setConfirmingState(on);
+  };
+  // Once drawn, this layout owns the question (or a stale record goes).
   useEffect(() => {
+    if (openQuestion?.key !== questionKey) return;
+    openQuestion = confirmingRef.current ? { key: questionKey, layout } : null;
+  }, [questionKey, layout]);
+  // A new position or a row that can no longer act folds the question; a
+  // remount (the table/list switch) does not.
+  const questionDeps = useRef(`${position?.positionId ?? ''}|${disabled}`);
+  useEffect(() => {
+    const deps = `${position?.positionId ?? ''}|${disabled}`;
+    if (questionDeps.current === deps) return;
+    questionDeps.current = deps;
     setConfirming(false);
   }, [position?.positionId, disabled]);
   // Keyboard focus stays in the row: the button keeps its focus through
@@ -542,10 +582,10 @@ function MarketRow({
   // At season end a player held on the other side only says where he is (walk 10 T2-04).
   const blockedReason = otherSideReason(side, row.unavailableReason, seasonOver);
   const tagText = position
-    ? sideTag(side)
+    ? heldTag(side, seasonOver)
     : busy && busyElsewhere
       ? busyElsewhere.tag
-      : blocked ? sideTag(side === 'long' ? 'short' : 'long') : null;
+      : blocked ? heldTag(side === 'long' ? 'short' : 'long', seasonOver) : null;
   const table = layout === 'table';
   const large = layout === 'large';
   const actionWidth = table ? columns.action : PHONE_ACTION_WIDTH;
@@ -566,7 +606,7 @@ function MarketRow({
   const joiner = valueLineParts('', '', oneLine).joiner;
   const heldLine = (text: string, tone: SignalTone, value: ReturnType<typeof heldValueLine>, why: string | null = null, firstRef?: RefObject<Text | null>) => valueLines(
     <Text ref={firstRef} maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.heldText]}>
-      {`${sideTag(side)} · `}
+      {`${heldTag(side, seasonOver)} · `}
       <Text style={{ color: TONE_COLOR[tone] }}>{text}</Text>
       {/* Why a result is bigger than his price, muted (walk 10 T1-03). */}
       {why ? <Text style={styles.leadText}>{` (${why})`}</Text> : null}
@@ -584,7 +624,9 @@ function MarketRow({
     const parts = valueLineParts(lines.first, lines.second, oneLine);
     return valueLines(
       <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>{parts.first}</Text>,
-      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: TONE_COLOR[shown.tone] }]}>
+      // At season end the figures only say how he did, in muted ink, never a
+      // green invitation ("+$67.9K for a short", walk 11 T1-13).
+      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: seasonOver ? colors.muted : TONE_COLOR[shown.tone] }]}>
         {parts.joiner ? <Text style={styles.leadText}>{parts.joiner}</Text> : null}
         {parts.second}
       </Text>,
@@ -629,12 +671,26 @@ function MarketRow({
       <Text maxFontSizeMultiplier={1.6} style={styles.priceUnit}>{`/${priceUnit}`}</Text>
     </View>
   );
-  const marketPriceBox = (
+  const plainPriceBox = (amount: string) => (
     <View style={styles.priceBox}>
-      <Text maxFontSizeMultiplier={1.6} style={styles.price}>{priceAmount}</Text>
+      <Text maxFontSizeMultiplier={1.6} style={styles.price}>{amount}</Text>
       <Text maxFontSizeMultiplier={1.6} style={styles.priceUnit}>{`/${priceUnit}`}</Text>
     </View>
   );
+  const marketPriceBox = plainPriceBox(priceAmount);
+  // The widest price box either state can show, as an invisible width: the
+  // given name beside it keeps the same room held or not, whatever the price
+  // does after an Add (walk 11 lead note: 92 -> 102px at 390px).
+  const priceWidth = priceReserve ? (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[styles.priceReserve, NO_POINTER]}
+      {...({ 'aria-hidden': true } as object)}
+    >
+      {heldPriceSaysYours(width, large) ? heldPriceBox(priceReserve) : plainPriceBox(priceReserve)}
+    </View>
+  ) : null;
   const priceBox = position ? heldPriceBox(perGameShort(position.lockedGameCost).split('/')[0]) : marketPriceBox;
   // The phone row's top line in both states: held (given name and tier,
   // "yours $X") and not held (given name and tier, today's price). Each is
@@ -652,14 +708,18 @@ function MarketRow({
   const kickerLine = (box: ReactNode) => (
     <View style={styles.kickerPriceLine}>
       {kickerWords}
-      <View style={styles.priceEnd}>{box}</View>
+      <View style={styles.priceEnd}>
+        {box}
+        {priceWidth}
+      </View>
     </View>
   );
-  const heldTop = kickerLine(heldPriceBox(position ? perGameShort(position.lockedGameCost).split('/')[0] : priceAmount));
-  const unheldTop = kickerLine(marketPriceBox);
+  // Held (given name and tier, "yours $X") or not (today's price): with the
+  // price box's width reserved both lay out alike, so an Add or a Drop never
+  // changes the row's height and no copy of the other line is needed.
   const topLine = position
-    ? <SameHeight ghosts={[unheldTop]}>{heldTop}</SameHeight>
-    : <SameHeight ghosts={[heldTop]}>{unheldTop}</SameHeight>;
+    ? kickerLine(heldPriceBox(perGameShort(position.lockedGameCost).split('/')[0]))
+    : kickerLine(marketPriceBox);
 
   const label = rowProfileLabel({
     name: player.name,
@@ -808,6 +868,9 @@ function MarketRow({
         // Left alone a short ends by itself on its last day, at no cost (walk 3 T1-N3).
         endsFreeAfter: position.expiresOn,
         priceNow: player.currentGameCost,
+        // The comeback price as the Closed row shows it right after, as the
+        // Roster and the profile ask (walk 11 T1-05).
+        dropImpactBps,
       })}
       onCancel={() => {
         closeStrip();
@@ -957,9 +1020,12 @@ function MarketRow({
             <Text maxFontSizeMultiplier={1.4} style={styles.surname}>{nameLine}</Text>
             {/* The result once he has played; the locked price is "Yours" under
                 the price, said once per row (walk 4 T2-11). */}
+            {/* Measured as the phone row's line is: where the average would
+                wrap ("+$113.5K a" / "game" at 768px, walk 11 T2-08) the line
+                keeps the total alone, so every row keeps one height. */}
             {columns.yours === 0 && position && held && currentValue && currentValue.games > 0 ? (
-              <Text maxFontSizeMultiplier={1.4} style={[styles.detailText, { color: TONE_COLOR[held.tone] }]}>
-                {held.text}
+              <Text ref={heldFirstRef} maxFontSizeMultiplier={1.4} style={[styles.detailText, { color: TONE_COLOR[held.tone] }]}>
+                {showAverage ? held.text : held.total}
                 {held.why ? <Text style={styles.leadText}>{` (${held.why})`}</Text> : null}
               </Text>
             ) : null}
@@ -989,7 +1055,7 @@ function MarketRow({
                     locked, in neutral ink, as the phone rows say it: green and
                     red are only for what he made you (walk 10 T2-12: a green
                     +$35K beside his -$153K a game). */}
-                <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, { color: position ? colors.text : TONE_COLOR[netTone(tableEdge)] }]}>
+                <Text maxFontSizeMultiplier={1.4} style={[styles.cellValue, { color: seasonOver ? colors.muted : position ? colors.text : TONE_COLOR[netTone(tableEdge)] }]}>
                   {/* One style down the column: "+$8K" beside "+$25.5K" (walk 3 T2-03). */}
                   {netTone(tableEdge) === 'even' ? 'Even' : signedMoneyCompact(tableEdge)}
                 </Text>
@@ -1206,7 +1272,7 @@ export function PerGameMarketScreen({
   // (walk 10 T2-16), measured before paint and kept for this window size.
   const [crampedAt, setCrampedAt] = useState<string | null>(null);
   const sizeKey = `${width}x${height}`;
-  const cramped = crampedAt === sizeKey && layout === 'table' && height >= ROOMY_MIN_HEIGHT;
+  const cramped = crampedAt === sizeKey && layout === 'table';
   const folded = collapseControls(width, height, layout === 'table') || cramped;
   // A short but wide window folds into one row: side, slot line, toggle.
   const foldWide = folded && width >= 480;
@@ -1270,6 +1336,11 @@ export function PerGameMarketScreen({
     [bootstrap?.market],
   );
   const fullTier = fullTierFits(width, longestGiven);
+  // Every phone price box keeps the widest price's width (walk 11 lead note).
+  const priceReserve = useMemo(() => priceWidthReserve([
+    ...(bootstrap?.market ?? []).map((entry) => perGameShort(entry.currentGameCost).split('/')[0]),
+    ...(bootstrap?.positions ?? []).map((entry) => perGameShort(entry.lockedGameCost).split('/')[0]),
+  ]), [bootstrap?.market, bootstrap?.positions]);
   // Under a text-spacing style long given names were cut ("KARL-AN… · STAR",
   // walk 7 T3-07): once any row's given name is cut beside its tier, every
   // row puts its tier after the surname, the narrow phones' place, so names
@@ -1377,7 +1448,7 @@ export function PerGameMarketScreen({
   // Kept from before the latest night, and a fresh sort would move someone:
   // said only in the tall table's reserved sentence slot, with "Re-sort"
   // (nothing else on screen may move for it).
-  const heldNote = night !== sortedNight && orderMoved ? heldOrderLine(sortedNight, night) : null;
+  const heldNote = night !== sortedNight && orderMoved ? heldOrderLine(sortedNight, night, orderLineNarrow(width, layout === 'table')) : null;
   const resortNow = useCallback(() => {
     const previous = sortedNightRef.current;
     if (previous === nightRef.current) return;
@@ -1407,11 +1478,21 @@ export function PerGameMarketScreen({
 
   // Your place in the list: the first player you can see, and the offset.
   const listRef = useRef<FlatList<PerGameMarketRow>>(null);
+  const listHeaderRef = useRef<View>(null);
   useLayoutEffect(() => {
-    if (!pinned || cramped || crampedAt === sizeKey) return;
+    if (layout !== 'table' || cramped || crampedAt === sizeKey) return;
     const node = listRef.current?.getScrollableNode?.() as { getBoundingClientRect?: () => { height: number } } | undefined;
-    const rowsHeight = node?.getBoundingClientRect?.().height ?? 0;
-    if (pinnedChromeTooTall(rowsHeight, height)) setCrampedAt(sizeKey);
+    const listHeight = node?.getBoundingClientRect?.().height ?? 0;
+    if (pinned) {
+      if (pinnedChromeTooTall(listHeight, height)) setCrampedAt(sizeKey);
+      return;
+    }
+    // A short table (500-559px tall) scrolls its toolbar away with the rows,
+    // but on arrival the toolbar and labels are what shows: at 853x533 (a
+    // laptop at 150%) the rows got 126px, two players (walk 11 T3-13). The
+    // room left under them is measured the same way, and folds the same way.
+    const header = (listHeaderRef.current as unknown as { getBoundingClientRect?: () => { height: number } } | null)?.getBoundingClientRect?.();
+    if (header && header.height > 0 && rowsUnderToolbarTooFew(listHeight - header.height, height)) setCrampedAt(sizeKey);
   });
   // "Skip to the end of the list" lands here (walk 8 T3-I1).
   const listEndRef = useRef<View>(null);
@@ -1651,6 +1732,9 @@ export function PerGameMarketScreen({
     rosterLocked,
     lockGameDate: lockDate,
     full: slots.remaining === 0,
+    // The narrow slot column beside the toggle (320-339px) says the lock in
+    // two lines, as the fee does, so a lock eve never moves the list (walk 11 T4-08).
+    short: lockLineShort(width) && !rowToolbar && !folded,
   });
   const filtersOn = query.trim() !== '' || sort !== MARKET_DEFAULT_SORT || reversed || watchedOnly;
   const profilePlayer = profileId
@@ -1723,7 +1807,7 @@ export function PerGameMarketScreen({
       </View>
     )
   ) : (
-    <Text maxFontSizeMultiplier={1.4} style={slotTextStyle}>{slotLine(side, slots)}</Text>
+    <Text maxFontSizeMultiplier={1.4} style={slotTextStyle}>{seasonOver ? seasonEndSlotLine(side, slots.used) : lockLineShort(width) && !rowToolbar && !folded ? slotLineNarrow(side, slots) : slotLine(side, slots)}</Text>
   );
   const slotStatus = (
     <View style={[styles.slotStatus, !slotBeside && styles.slotStatusUnder, rowToolbar && styles.slotStatusWide, rowToolbar && width >= LOCK_LINE_ROOMY_WIDTH && styles.slotStatusRoomy, folded && !slotOwnLine && styles.slotStatusFolded]}>
@@ -1767,21 +1851,22 @@ export function PerGameMarketScreen({
   // The Short side says how long a short runs before anyone pays for one.
   const shortWords = `${SHORT_EXPLAINER} ${shortTermLine(bootstrap.ruleset.shortTermDays)}`;
   const shortExplainer = side === 'short' && roomy ? (
-    <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{shortWords}</Text>
+    <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{seasonOver ? seasonEndExplainer('short') : shortWords}</Text>
   ) : null;
   // On a tablet or desktop each side explains itself in the same reserved
   // line, so switching sides never moves the table.
   const sideExplainer = (
-    <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{side === 'short' ? shortWords : ROSTER_EXPLAINER}</Text>
+    <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{seasonOver ? seasonEndExplainer(side) : side === 'short' ? shortWords : ROSTER_EXPLAINER}</Text>
   );
   // The order in one quiet line (walk 9 T4-10, T1-16, T2-12): on phones
   // under the sort, on a laptop-height table in the sentence's place once the
   // first games are in; a tall table keeps its sentence slot.
   const compactSlot = wide && roomy && height < LAPTOP_HEIGHT_BELOW && sentenceGone;
-  const order = orderLine({ sort, reversed, heldNote, gamesIn });
+  const order = orderLine({ sort, reversed, heldNote, gamesIn, narrow: orderLineNarrow(width, wide) });
   const orderStrip = (
     <OrderLine
       reserve={order.reserve}
+      reserveOwn={order.reserveOwn}
       reserveResort={order.reserveResort}
       resort={order.resort ? { name: resortName(night, sortedNight), onPress: resortNow } : null}
       text={order.text}
@@ -1820,8 +1905,30 @@ export function PerGameMarketScreen({
       tableRoles={pinned}
     />
   ) : null;
+  const tableSlot = compactSlot || (rowToolbar && !roomy) || (wide && folded && !pinned) ? (
+    <View style={[styles.explainerWide, styles.orderSlot, wide && folded && !pinned && styles.orderSlotFolded]}>{orderStrip}</View>
+  ) : wide && roomy ? (
+    <View style={[styles.explainerWide, styles.explainerSlot]}>
+      {heldNote ? (
+        <View style={styles.flipNote}>
+          <Text maxFontSizeMultiplier={1.4} style={[styles.explainer, styles.resortText]}>{heldNote}</Text>
+          <Button accessibilityLabel={resortName(night, sortedNight)} label="Re-sort" onPress={resortNow} variant="secondary" />
+        </View>
+      ) : reversed ? (
+        <View style={styles.flipNote}>
+          <Text maxFontSizeMultiplier={1.4} style={styles.flipText}>{flippedSortNote(sort).text}</Text>
+          <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="secondary" />
+        </View>
+      ) : sideExplainer}
+    </View>
+  ) : null;
+  // Folded for want of room, a pinned table lets this slot (the sentence,
+  // or the "Same order as before…" line with Re-sort) scroll away with the
+  // rows as their first row (walk 11 T2-09: at 960x600 after games the
+  // pinned chrome kept 53% of the window).
+  const slotScrolls = pinned && folded && tableSlot !== null;
   const listHeader = (
-    <View style={styles.header}>
+    <View ref={pinned ? undefined : listHeaderRef} style={styles.header}>
       <View style={visuallyHidden}>
         <Text accessibilityRole="header" {...headingLevel(1)}>Market</Text>
       </View>
@@ -1885,30 +1992,14 @@ export function PerGameMarketScreen({
           slot, which always keeps a button's height, so pressing a column
           header again never pushes the table down under the pointer (walk 5
           T2-02: the header moved 44px and a third click missed). */}
-      {compactSlot || (rowToolbar && !roomy) ? (
-        <View style={[styles.explainerWide, styles.orderSlot]}>{orderStrip}</View>
-      ) : wide && roomy ? (
-        <View style={[styles.explainerWide, styles.explainerSlot]}>
-          {heldNote ? (
-            <View style={styles.flipNote}>
-              <Text maxFontSizeMultiplier={1.4} style={[styles.explainer, styles.resortText]}>{heldNote}</Text>
-              <Button accessibilityLabel={resortName(night, sortedNight)} label="Re-sort" onPress={resortNow} variant="secondary" />
-            </View>
-          ) : reversed ? (
-            <View style={styles.flipNote}>
-              <Text maxFontSizeMultiplier={1.4} style={styles.flipText}>{flippedSortNote(sort).text}</Text>
-              <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="secondary" />
-            </View>
-          ) : sideExplainer}
-        </View>
-      ) : reversed && folded && controlsOpen ? (
+      {slotScrolls ? null : tableSlot ?? (reversed && folded && controlsOpen ? (
         // On the list's gutter, with a reset that looks like the other small
         // outlined buttons (walk 5 T1-15: the note touched the screen edge).
         <View style={[styles.flipNote, styles.flipNoteGutter, folded && styles.flipNoteFolded]}>
           <Text maxFontSizeMultiplier={1.4} style={styles.flipText}>{flippedSortNote(sort).text}</Text>
           <Button label={flippedSortNote(sort).restore} onPress={flipOrder} variant="secondary" />
         </View>
-      ) : null}
+      ) : null)}
       {/* After the toolbar, before the column labels: past the thirty rows in
           one press (two or three Tab stops each, walk 8 T3-I1). */}
       {resultCount > 0 ? <SkipLink label="Skip to the end of the list" onPress={skipToEnd} /> : null}
@@ -2022,7 +2113,7 @@ export function PerGameMarketScreen({
       <FlatList
         contentContainerStyle={styles.content}
         data={rows}
-        extraData={[layout, columns, positionValues, pastValues, fee, width, seasonOver, watchlist.watched, kept, watchedOnly]}
+        extraData={[layout, columns, positionValues, pastValues, fee, width, priceReserve, seasonOver, watchlist.watched, kept, watchedOnly]}
         initialNumToRender={Math.min(Math.max(rows.length, 18), WHOLE_LIST_MAX)}
         keyboardShouldPersistTaps="handled"
         // One row per side: a press's "Added ✓" never follows him to the
@@ -2036,7 +2127,10 @@ export function PerGameMarketScreen({
             {spanRow(watchingFooter ?? searchFooter)}
           </>
         )}
-        ListHeaderComponent={pinned ? null : listHeader}
+        // A folded pinned table lets the order line scroll away with the
+        // rows (walk 11 T2-09: at 960x600 after games the pinned chrome kept
+        // 53% of the window); it is the table's first row, across it.
+        ListHeaderComponent={pinned ? (slotScrolls ? spanRow(<View style={styles.slotScrolling}>{tableSlot}</View>) : null) : listHeader}
         onScroll={onScroll}
         onScrollToIndexFailed={({ index, averageItemLength }) => {
           // Rows further down are not laid out yet: jump near, then settle.
@@ -2069,10 +2163,12 @@ export function PerGameMarketScreen({
             columns={columns}
             currentValue={item.position ? positionValues.get(item.position.positionId) : undefined}
             fee={fee}
+            dropImpactBps={bootstrap.ruleset.quoteDropImpactBps}
             layout={layout}
             seasonOver={seasonOver}
             wholeNames={keepNamesWhole(width)}
             width={width}
+            priceReserve={priceReserve}
             fullTier={fullTier}
             tierAfterSurname={tierAfterSurname}
             onAnnounce={announce}
@@ -2317,10 +2413,11 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   lockLine: {
+    // No top margin: the line is as tall as the fee line it replaces, so a
+    // lock eve never nudges the list (walk 11 T4-08).
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 1,
   },
   lockText: {
     // Wraps within the slot block beside its icon, never past it.
@@ -2385,6 +2482,16 @@ const styles = StyleSheet.create({
     minHeight: 0,
     paddingBottom: 6,
     marginTop: -space.sm,
+  },
+  orderSlotFolded: {
+    // Under the folded bar (a short laptop table, walk 11 T3-13) the line
+    // keeps clear of the side toggle; Re-sort's reserve is its space below.
+    marginTop: 0,
+    paddingBottom: 0,
+  },
+  slotScrolling: {
+    // The table's first row under the pinned labels, not under the toolbar.
+    paddingTop: space.sm,
   },
   explainerSlot: {
     // A quiet button's height, whichever it holds (sentence or order note).
@@ -2532,6 +2639,13 @@ const styles = StyleSheet.create({
   priceEnd: {
     // Right-aligned on the kicker's line, or on its own line when it wraps.
     marginLeft: 'auto',
+    alignItems: 'flex-end',
+  },
+  priceReserve: {
+    // Only a width: the widest price box, flat and unseen (priceWidthReserve).
+    height: 0,
+    overflow: 'hidden',
+    opacity: 0,
   },
   kickerShrink: {
     flexShrink: 1,
