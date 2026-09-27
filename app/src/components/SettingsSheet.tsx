@@ -282,7 +282,11 @@ export function SettingsSheet({
                     ref={(node) => {
                       choiceRefs.current[index] = node;
                     }}
-                    accessibilityLabel={`${name}. ${blurb}`}
+                    // Named by its title alone, its line as the description, so
+                    // arrowing through six looks hears six short names (walk 14
+                    // T3-04: each read its whole sentence as its name).
+                    accessibilityLabel={name.replace(' · ', ', ')}
+                    {...({ 'aria-describedby': `theme-blurb-${choice}` } as object)}
                     accessibilityRole="radio"
                     accessibilityState={{ selected, checked: selected }}
                     // react-native-web drops accessibilityState.checked, so the
@@ -300,7 +304,7 @@ export function SettingsSheet({
                       {/* The whole description at every width: cut at two
                           lines, High contrast lost "Gains in blue, losses in
                           orange" at 200% zoom (walk 6 T3-15). */}
-                      <Text style={styles.choiceBlurb}>{blurb}</Text>
+                      <Text nativeID={`theme-blurb-${choice}`} style={styles.choiceBlurb}>{blurb}</Text>
                     </View>
                     {narrow ? (
                       // The swatch under the name, so the name keeps the width.
