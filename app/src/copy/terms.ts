@@ -149,6 +149,21 @@ function trimDecimals(value: string): string {
 }
 
 /**
+ * Whole dollars `abs` in units of `unit`, to `places` decimals, a half always
+ * rounding up: "$2,065,000" is "2.07" in millions, as "$2,075,000" is "2.08".
+ * `toFixed` on the binary fraction rounded some halves down (2.065 is stored
+ * as 2.06499…), so two amounts $10K apart could read one step apart or two
+ * (walk 14 lead). Integer steps first, then the digits.
+ */
+function scaled(abs: number, unit: number, places: number): string {
+  const perStep = unit / 10 ** places;
+  const steps = Math.round(abs / perStep);
+  const whole = Math.floor(steps / 10 ** places);
+  if (places === 0) return String(whole);
+  return `${whole}.${String(steps % 10 ** places).padStart(places, '0')}`;
+}
+
+/**
  * Money with enough digits that figures shown side by side still add up:
  * "$250", "$3.5K", "$1.25K", "$137.5K", "$4.85M". Use it where two amounts
  * are compared or summed on screen (a score breakdown, dividend against
@@ -165,11 +180,11 @@ export function moneyFine(amount: number): string {
   const sign = rounded < 0 ? '-' : '';
   const abs = Math.abs(rounded);
   if (abs < 1_000) return `${sign}$${abs}`;
-  if (abs < 9_995) return `${sign}$${trimDecimals((abs / 1_000).toFixed(2))}K`;
-  if (abs < 999_950) return `${sign}$${trimDecimals((abs / 1_000).toFixed(1))}K`;
+  if (abs < 9_995) return `${sign}$${trimDecimals(scaled(abs, 1_000, 2))}K`;
+  if (abs < 999_950) return `${sign}$${trimDecimals(scaled(abs, 1_000, 1))}K`;
   // Millions keep two decimals, so "+$1.60M" sits beside "+$1.61M" as one
   // precision, not "+$1.6M" that looks $10K away (walk 7 T4-14).
-  return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  return `${sign}$${scaled(abs, 1_000_000, 2)}M`;
 }
 
 /**
@@ -183,10 +198,10 @@ export function moneyCompact(amount: number): string {
   const sign = rounded < 0 ? '-' : '';
   const abs = Math.abs(rounded);
   if (abs < 1_000) return `${sign}$${abs}`;
-  if (abs < 999_950) return `${sign}$${trimDecimals((abs / 1_000).toFixed(1))}K`;
+  if (abs < 999_950) return `${sign}$${trimDecimals(scaled(abs, 1_000, 1))}K`;
   // Millions keep two decimals, so "+$1.60M" sits beside "+$1.61M" as one
   // precision, not "+$1.6M" that looks $10K away (walk 7 T4-14).
-  return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  return `${sign}$${scaled(abs, 1_000_000, 2)}M`;
 }
 
 /** Signed `moneyCompact`: "+$6.5K", "-$950", and "$0" for zero. */

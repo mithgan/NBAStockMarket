@@ -162,3 +162,21 @@ test('notices read places in words, even when "#2 of 5" is held together (walk 6
   assert.equal(spoken('$12K behind #2'), '$12K behind second place');
   assert.equal(ordinalWords(22), '22nd');
 });
+
+test('a half always rounds up, in K and in millions, whatever its binary fraction (walk 14 lead)', () => {
+  // toFixed read 2.065 as 2.06499… and 1.075 as 1.07499…: those halves went down, others up.
+  assert.equal(moneyFine(2_065_000), '$2.07M');
+  assert.equal(moneyFine(2_075_000), '$2.08M');
+  assert.equal(moneyFine(-2_065_000), '-$2.07M');
+  assert.equal(moneyFine(1_075_000), '$1.08M');
+  assert.equal(moneyFine(1_605_000), '$1.61M');
+  assert.equal(moneyFine(121_050), '$121.1K');
+  assert.equal(moneyFine(137_450), '$137.5K');
+  assert.equal(moneyCompact(1_605_000), '$1.61M');
+  // The edges between K and M, and between two and one K decimals, hold.
+  assert.equal(moneyFine(999_950), '$1.00M');
+  assert.equal(moneyFine(999_949), '$999.9K');
+  assert.equal(moneyFine(9_994), '$9.99K');
+  assert.equal(moneyFine(9_995), '$10K');
+  assert.equal(moneyFine(1_000), '$1K');
+});

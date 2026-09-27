@@ -32,7 +32,8 @@ test('in the middle: the gap to the rank above and to #1', () => {
   assert.equal(standing.of, 5);
   assert.equal(standing.score, 125_000);
   assert.equal(standingPlace(standing), '#3');
-  assert.deepEqual(standingLines(standing), ['$12K behind #2', '$1.07M behind #1']);
+  // $1,075,000 is a half: it rounds up, as every half does (walk 14 lead).
+  assert.deepEqual(standingLines(standing), ['$12K behind #2', '$1.08M behind #1']);
 });
 
 test('second place names #1 once', () => {
@@ -42,7 +43,7 @@ test('second place names #1 once', () => {
     ['Cal', -241_000],
   ])));
   assert.equal(standingPlace(standing), '#2');
-  assert.deepEqual(standingLines(standing), ['$1.07M behind #1']);
+  assert.deepEqual(standingLines(standing), ['$1.08M behind #1']);
   assert.equal(standing.first, null);
 });
 
@@ -313,7 +314,7 @@ test('a board figure that differs only by fees says why, and the row shows one f
   assert.equal(lagLine(standing, 250), "Your score includes today's $250 fee; rivals' scores change after the next games.");
   assert.equal(lagLine(leaderStanding(rows, -121_550), 250), "Your score includes today's $500 in fees; rivals' scores change after the next games.");
   // Anything but whole fees keeps the board's own figure.
-  assert.equal(lagLine(leaderStanding(rows, -121_300), 300), 'The board still has you at -$121K until the next games settle.');
+  assert.equal(lagLine(leaderStanding(rows, -121_300), 300), 'The board still has you at -$121.1K until the next games settle.');
   assert.equal(lagLine(leaderStanding(rows, -121_050), 250), null, 'in step: no line');
   assert.equal(feesOnly(-250, 250), 1);
   assert.equal(feesOnly(-750, 250), 3);
