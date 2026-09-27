@@ -58,11 +58,13 @@ import {
   chartAfterLists,
   closedRows,
   closeQuestion,
+  compactActionBeside,
   earnLine,
   feeMoves,
   figureCaptions,
   formatAt,
   movesLine,
+  oneGameFigure,
   perGamePrecision,
   pickValue,
   pressLine,
@@ -73,6 +75,7 @@ import {
   shortsQuiet,
   slotLine,
   splitParts,
+  sectionExact,
   tipReading,
   tipRetired,
   belowZeroNote,
@@ -103,6 +106,11 @@ const STICKY_RELEASE = 60;
 const NARROW_LIST_MAX_WIDTH = 380;
 
 const WELCOME_HIDDEN_KEY = 'nba-stock-market:welcome-hidden';
+/** A list's rows as its exact line names them, each by the Total it shows (walk 16 T1-05). */
+function sectionFigures(positions: readonly PerGamePosition[]) {
+  return positions.map((position) => ({ name: position.playerName, value: position.cumulativePnl }));
+}
+
 const TIP_DONE_KEY = 'nba-stock-market:first-night-tip-done';
 
 /** A flag kept for this tab's visit (web sessionStorage); false when storage is unavailable. */
@@ -222,6 +230,7 @@ function PositionRow({
   position,
   layout,
   narrow,
+  actionBeside = false,
   seasonOver,
   onOpenProfile,
   confirming,
@@ -236,6 +245,8 @@ function PositionRow({
   layout: RowLayout;
   /** A phone list under 380 CSS px: three figures instead of four. */
   narrow: boolean;
+  /** A compact row's Drop beside the name and tag line (`compactActionBeside`, walk 16 T4-05). */
+  actionBeside?: boolean;
   seasonOver: boolean;
   onOpenProfile: (playerId: string) => void;
   /** This row's Drop/Close question is open. */
@@ -532,18 +543,21 @@ function PositionRow({
   }
 
   if (layout === 'compact') {
-    // Nothing shares a line it cannot fit on: the name takes the full width
-    // (no headshot, no space held for the button), the figures list one a
-    // line, and Drop sits below them.
+    // Nothing shares a line it cannot fit on: no headshot, the figures list
+    // one a line. Where it fits (a 320px phone) Drop sits beside the name and
+    // tag line, as on wider phones; otherwise (200% zoom, large text) the
+    // name takes the full width and Drop sits below the figures. With one
+    // game, Profit a game and Total are one line (walk 16 T4-05).
+    const beside = actionBeside && Boolean(action);
     return (
-      <View ref={holdRef as never} style={styles.compactRow}>
+      <View ref={holdRef as never} style={[styles.compactRow, beside && styles.compactRowBeside]}>
         <Pressable {...profileProps} style={({ pressed }) => [styles.compactProfile, pressed && styles.pressed]}>
-          {identity}
+          {beside ? <View style={styles.compactTop}>{identity}</View> : identity}
           <View style={styles.compactFigures}>
-            <ListFigures {...figures} />
+            <ListFigures {...figures} oneGame={oneGameFigure(view.summary.games, figures.net, figures.total)} />
           </View>
         </Pressable>
-        {action ? <View style={styles.compactAction}>{action}</View> : null}
+        {action ? <View style={beside ? styles.compactActionBeside : styles.compactAction}>{action}</View> : null}
         {strip}
       </View>
     );
@@ -867,6 +881,9 @@ export function PerGameRosterScreen({
   const onReadded = useCallback((playerId: string) => focusNewRow('long', playerId), [focusNewRow]);
   // Desktop: the chart spans the Roster while "Full width" is on (walk 15 T2-02).
   const [chartWide, setChartWide] = useState(false);
+  // The night picked on the chart stays picked when Full width or Narrow
+  // moves it (walk 16 T2-N4).
+  const [chartPin, setChartPin] = useState<number | null>(null);
   const [chartFocus, setChartFocus] = useState(false);
   const onChartFocused = useCallback(() => setChartFocus(false), []);
 
@@ -918,6 +935,8 @@ export function PerGameRosterScreen({
   const wide = width >= WIDE_MIN_WIDTH;
   const layout = rowLayout(listWidth ?? (wide ? width - summaryWidth(width) : width), width, fontScale);
   const narrow = layout === 'stacked' && (listWidth ?? width) < NARROW_LIST_MAX_WIDTH;
+  // A 320px phone's Drop beside the name (walk 16 T4-05).
+  const actionBeside = layout === 'compact' && compactActionBeside(width, fontScale);
   // The score's split: a statement in the desktop column, one a line when narrow, else two a line.
   const scoreVariant = wide ? 'panel' : layout === 'compact' ? 'narrow' : 'compact';
   // The table's action column (Drop, Close) and its gap, which the totals
@@ -998,6 +1017,7 @@ export function PerGameRosterScreen({
       layout={layout}
       marketPrice={market.get(position.playerId)?.currentGameCost ?? null}
       narrow={narrow}
+      actionBeside={actionBeside}
       onConfirmClose={onConfirmClose}
       onConfirmOpen={onConfirmOpen}
       onOpenProfile={setProfileId}
@@ -1237,6 +1257,7 @@ export function PerGameRosterScreen({
         focus: chartFocus,
         onFocused: onChartFocused,
       } : undefined}
+      pin={wide ? { night: chartPin, onPin: setChartPin } : undefined}
     />
   );
   // A short one-column window (a laptop at 960x600, a phone on its side)
@@ -1282,6 +1303,7 @@ export function PerGameRosterScreen({
         <View>
         <SectionHead
           count={`${longSlots.used} of ${longSlots.limit}`}
+          exact={longs.length > 0 ? sectionExact(sectionFigures(longs), breakdown.roster) : null}
           headingRef={rosterHeading}
           legend={longs.length > 0 || ghostTable ? legend('long') : undefined}
           note={actionNote}
@@ -1342,6 +1364,7 @@ export function PerGameRosterScreen({
         <View>
         <SectionHead
           caption={shorts.length > 0 ? SHORT_EXPLAINER : undefined}
+          exact={shorts.length > 0 ? sectionExact(sectionFigures(shorts), breakdown.shorts) : null}
           count={`${shortSlots.used} of ${shortSlots.limit}`}
           headingRef={shortsHeading}
           legend={shorts.length > 0 ? legend('short') : undefined}
@@ -1610,6 +1633,21 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
+  },
+  // Drop beside the name and tag line (walk 16 T4-05), as on wider phones:
+  // over the row's top corner, the name kept clear of it.
+  compactRowBeside: {
+    position: 'relative',
+  },
+  compactTop: {
+    minHeight: control.height,
+    flexDirection: 'row',
+    paddingRight: ACTION_WIDTH + space.sm,
+  },
+  compactActionBeside: {
+    position: 'absolute',
+    top: space.sm,
+    right: space.lg,
   },
   tableItem: {
     borderTopWidth: StyleSheet.hairlineWidth,

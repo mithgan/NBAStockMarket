@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode, type Ref } from 'react';
 import { Platform, StyleSheet, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 
-import { formatAt, type PartPrecision } from '../../data/rosterView';
+import { figuresKeptWithLabels, formatAt, type PartPrecision } from '../../data/rosterView';
 import { colors, fonts, headingStyle, space, type, weight } from '../../theme';
 import { headingLevel, visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -30,6 +30,7 @@ export function SectionHead({
   sticky = false,
   caption,
   note,
+  exact = null,
   legend,
   headingRef,
   onPinnedHeight,
@@ -55,6 +56,12 @@ export function SectionHead({
   caption?: string;
   /** A warning about the list's actions: "Moves reopen after Oct 31." */
   note?: string;
+  /**
+   * How the rows add up to the total when, as shown, they do not
+   * (`sectionExact`, walk 16 T1-05): "Exactly +$3,891,000: Luka Doncic
+   * +$5,505,500, …". It scrolls away with the caption and note.
+   */
+  exact?: string | null;
   legend?: ReactNode;
   /** The title, so a screen can move keyboard focus to it. */
   headingRef?: Ref<Text>;
@@ -100,10 +107,11 @@ export function SectionHead({
           )}
         </View>
       </View>
-      {caption || note ? (
+      {caption || note || exact ? (
         <View style={styles.body}>
           {caption ? <Text style={styles.caption}>{caption}</Text> : null}
           {note ? <Text style={styles.note}>{note}</Text> : null}
+          {exact ? <Text style={styles.exact}>{figuresKeptWithLabels(exact)}</Text> : null}
         </View>
       ) : null}
       {legend ? (
@@ -179,6 +187,15 @@ const styles = StyleSheet.create({
     fontSize: type.caption,
     fontWeight: weight.bold,
     lineHeight: 17,
+  },
+  // The score block's exact line, as it draws it.
+  exact: {
+    marginTop: 2,
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    lineHeight: 17,
+    fontVariant: ['tabular-nums'],
   },
   legend: {
     paddingHorizontal: space.lg,

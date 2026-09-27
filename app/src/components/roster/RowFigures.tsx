@@ -87,9 +87,11 @@ export function FigureLegend({ side, narrow = false }: { side: PerGamePositionSi
 /**
  * Narrow windows and very large text: one figure a line, its label on the
  * left and the value on the right, so nothing has to share a line it cannot
- * fit on. Values still line up at the right edge from row to row.
+ * fit on. Values still line up at the right edge from row to row. With one
+ * game (`oneGame`, `oneGameFigure`) Profit a game is his Total, the same
+ * money: it is written once, on the Total line (walk 16 T4-05).
  */
-export function ListFigures({ side, price, dividend, net, total }: Figures) {
+export function ListFigures({ side, price, dividend, net, total, oneGame = false }: Figures & { oneGame?: boolean }) {
   const captions = figureCaptions(side);
   const line = (caption: string, value: ReactNode) => (
     <View style={styles.listLine}>
@@ -102,7 +104,7 @@ export function ListFigures({ side, price, dividend, net, total }: Figures) {
     <View style={styles.list}>
       {line(captions.price, <FineMoney precision={perGamePrecision(price, total)} signed={false} value={price} />)}
       {line(captions.dividend, dividend === null ? <Missing /> : <FineMoney precision={perGamePrecision(dividend, total)} signed={false} value={dividend} />)}
-      {line(captions.net, net === null ? <Missing /> : <FineMoney precision={perGamePrecision(net, total)} value={net} />)}
+      {oneGame ? null : line(captions.net, net === null ? <Missing /> : <FineMoney precision={perGamePrecision(net, total)} value={net} />)}
       {line(captions.total, <FineMoney value={total} />)}
     </View>
   );

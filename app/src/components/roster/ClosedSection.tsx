@@ -4,10 +4,12 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle } fro
 import { gamesCount, unbrokenName } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
 import {
+  closedFigures,
   closedGroupSpoken,
   feesDetail,
   formatAt,
   mergeClosedRows,
+  sectionExact,
   spokenRepeats,
   stintParts,
   stintSpoken,
@@ -115,12 +117,17 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, table: tab
   // the Fees line counts him instead of a row of zeros.
   const rows = mergeClosedRows(allRows).filter((row) => !row.unplayed);
   if (rows.length === 0) return null;
+  // Rows that, as shown, do not add up to the total get the score block's
+  // exact line (walk 16 T1-05), over every row, shown or behind "Show all".
+  // Its total is the stints' own sum: `total` is the figure as shown.
+  const exact = sectionExact(closedFigures(rows), allRows.reduce((sum, row) => sum + row.total, 0));
   const shown = showAll ? rows : rows.slice(0, COLLAPSED_COUNT);
   const figureStyle = table ? { marginRight: totalInset, minWidth: TABLE_COLUMNS.total, alignItems: 'flex-end' as const } : null;
   return (
     <View style={styles.section}>
       <SectionHead
         caption="Dropped players and ended shorts. What they made stays in your score."
+        exact={exact}
         precision={precision}
         title="Closed"
         total={total}

@@ -58,6 +58,7 @@ export function PerGamePnlChart({
   plotHeight = 80,
   seasonOver = false,
   widen,
+  pin,
 }: {
   entries: readonly PerGameLedgerEntry[];
   plotHeight?: number;
@@ -71,6 +72,12 @@ export function PerGamePnlChart({
    * `onFocused` clears it.
    */
   widen?: { wide: boolean; onToggle: () => void; focus: boolean; onFocused: () => void };
+  /**
+   * The night picked, kept by the screen (walk 16 T2-N4): Full width and
+   * Narrow draw the chart in another place, and it opens there on the night
+   * picked before, not on "Select a night to read it".
+   */
+  pin?: { night: number | null; onPin: (night: number | null) => void };
 }) {
   const toggleRef = useRef<View | null>(null);
   const widenFocus = widen?.focus ?? false;
@@ -95,7 +102,11 @@ export function PerGamePnlChart({
   // The night being read: one a mouse points at (desktop hover, walk 9
   // T2-N3) wins over the one pinned by a click, a tap, a slide or the keys;
   // leaving the plot goes back to the pinned one.
-  const [pinned, setPinned] = useState<number | null>(null);
+  const [pinned, setPinned] = useState<number | null>(pin?.night ?? null);
+  const onPin = pin?.onPin;
+  useEffect(() => {
+    onPin?.(pinned);
+  }, [onPin, pinned]);
   const [hovered, setHovered] = useState<number | null>(null);
   const selected = hovered ?? pinned;
   // Whether the longest reading needs two lines: the resting words then take
@@ -139,8 +150,13 @@ export function PerGamePnlChart({
     : '';
 
   // A new night means old indexes may point at other nights. Fees since the
-  // last night only add a point at the end, so a reading stays put.
+  // last night only add a point at the end, so a reading stays put. Only a
+  // change lets go: a chart drawn again in its new place (Full width,
+  // Narrow) keeps the night picked before (walk 16 T2-N4).
+  const pinNights = useRef(nightCount);
   useEffect(() => {
+    if (pinNights.current === nightCount) return;
+    pinNights.current = nightCount;
     setPinned(null);
     setHovered(null);
   }, [nightCount]);
@@ -354,29 +370,40 @@ export function PerGamePnlChart({
               <G clipPath={`url(#${clipId}-up)`}>
                 <Path d={areaPath} fill={colors.greenSoft} />
                 <Path d={linePath} fill="none" stroke={colors.green} strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} />
-                {tailPath ? <Path d={tailPath} fill="none" stroke={colors.green} strokeDasharray="3 3" strokeWidth={2} /> : null}
               </G>
               <G clipPath={`url(#${clipId}-down)`}>
                 <Path d={areaPath} fill={colors.redSoft} />
                 <Path d={linePath} fill="none" stroke={colors.red} strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} />
-                {tailPath ? <Path d={tailPath} fill="none" stroke={colors.red} strokeDasharray="3 3" strokeWidth={2} /> : null}
               </G>
             </G>
             {ticks.map((tick) => (
               <Line
                 key={tick.kind}
                 // Above or below $0 is the chart's message: its line is drawn
-                // at 3:1 in the muted-text colour (walk 9 T3-13); the high
-                // and low guides stay faint.
+                // at 3:1 in the muted-text colour (walk 9 T3-13), solid, a
+                // hairline, so the one dash on the chart is the fee step
+                // (walk 16 T2-02); the high and low guides stay faint.
                 stroke={tick.kind === 'zero' ? colors.muted : colors.border}
-                strokeDasharray={tick.kind === 'zero' ? '4 4' : '1 4'}
-                strokeWidth={tick.kind === 'zero' ? 1.5 : 1}
+                strokeDasharray={tick.kind === 'zero' ? undefined : '1 4'}
+                strokeWidth={1}
                 x1={gutter - 2}
                 x2={width}
                 y1={tick.y}
                 y2={tick.y}
               />
             ))}
+            {tailPath ? (
+              // Fees since the last night: the chart's only dashed stroke,
+              // drawn over the $0 line so it stands out where they meet.
+              <G clipPath={`url(#${clipId}-reveal)`}>
+                <G clipPath={`url(#${clipId}-up)`}>
+                  <Path d={tailPath} fill="none" stroke={colors.green} strokeDasharray="3 3" strokeWidth={2} />
+                </G>
+                <G clipPath={`url(#${clipId}-down)`}>
+                  <Path d={tailPath} fill="none" stroke={colors.red} strokeDasharray="3 3" strokeWidth={2} />
+                </G>
+              </G>
+            ) : null}
             {point ? (
               <>
                 <Line
@@ -653,9 +680,9 @@ const styles = StyleSheet.create({
   emptyRule: {
     flex: 1,
     height: 0,
-    borderTopWidth: 1.5,
-    borderStyle: 'dashed',
-    // The $0 line, at 3:1 as on the drawn chart (walk 9 T3-13).
+    borderTopWidth: 1,
+    // The $0 line, at 3:1 and solid as on the drawn chart (walk 9 T3-13,
+    // walk 16 T2-02).
     borderTopColor: colors.muted,
   },
   emptyText: {

@@ -70,6 +70,29 @@ export function rowLayout(listWidth: number, windowWidth: number, fontScale: num
   return listWidth >= TABLE_MIN_LIST_WIDTH ? 'table' : 'stacked';
 }
 
+/** From this window width a compact row's Drop fits beside the name (a 320px phone). */
+export const COMPACT_BESIDE_MIN_WIDTH = 300;
+
+/**
+ * Where a compact row's Drop or Close goes (walk 16 T4-05): beside the name
+ * and tag line where it fits, as on wider phones, so a 320px row loses the
+ * line Drop took under its figures; under the figures when the name would
+ * have no room beside it (a phone at 200% zoom, about 195px) or with large
+ * text.
+ */
+export function compactActionBeside(windowWidth: number, fontScale: number): boolean {
+  return windowWidth >= COMPACT_BESIDE_MIN_WIDTH && fontScale <= LARGE_TEXT_SCALE;
+}
+
+/**
+ * Whether a row's Profit a game is the same money as its Total (walk 16
+ * T4-05): with one game played they are one figure, so a compact row writes
+ * it once, on its Total line, a line shorter. Compared as shown.
+ */
+export function oneGameFigure(games: number, net: number | null, total: number): boolean {
+  return games === 1 && net !== null && formatAt(net, 'fine', true) === formatAt(total, 'fine', true);
+}
+
 /**
  * Below this window height a one-column Roster cannot show the tip, the
  * score, the Score by night chart and a player together: at 960x600 "Your
@@ -776,7 +799,7 @@ export const SCORE_BESIDE_MIN_WIDTH = 600;
  * How the score block is laid out: `stacked` (phones: the week and rank under
  * the score), `beside` (600px and wider: beside it), or `tight` in a short
  * window side by side (a phone on its side, a 853x533 laptop; `short` is
- * `chromeFolded`): one band with the title beside a smaller score, "Why?"
+ * `chromeFolded`): one band with the title beside a smaller score, "vs last season"
  * folding last season's paragraph, and the split on one line, so "Your
  * roster" and a first row share the first view with the notice strip (walk
  * 14 T1-08). The desktop column (`panel`) is never beside.
@@ -864,6 +887,30 @@ export function splitParts(raw: readonly BreakdownPart[], score: number): { part
     .filter((part) => Math.round(part.value) !== 0)
     .map((part) => `${part.label.toLowerCase()} ${exactSignedMoney(part.value)}`);
   return { parts, exact: `Exactly ${exactSignedMoney(score)}: ${named.join(', ')}.` };
+}
+
+/** A list row as its section's exact line names it: "Luka Doncic", and its total. */
+export interface SectionFigure {
+  name: string;
+  value: number;
+}
+
+/**
+ * A list section's exact line (walk 16 T1-05), by the score block's rule
+ * (`splitParts`): when the rows as shown do not add up to the section's total
+ * as shown (season end: +$5.51M, -$559K and -$1.05M under "Roster total
+ * +$3.89M", which a fan adds to +$3.90M), one line says how they add up,
+ * every figure in dollars: "Exactly +$3,891,000: Luka Doncic +$5,505,500,
+ * Scottie Barnes -$559,000, Jalen Duren -$1,055,500." A section whose rows
+ * add up gets nothing, and a row at $0 is not named.
+ */
+export function sectionExact(rows: readonly SectionFigure[], total: number): string | null {
+  const shown = rows.reduce((sum, row) => sum + fineValue(row.value), 0);
+  if (formatAt(shown, 'fine', true) === formatAt(total, 'fine', true)) return null;
+  const named = rows
+    .filter((row) => Math.round(row.value) !== 0)
+    .map((row) => `${row.name} ${exactSignedMoney(row.value)}`);
+  return `Exactly ${exactSignedMoney(total)}: ${named.join(', ')}.`;
 }
 
 /**
@@ -1088,6 +1135,19 @@ export function mergeClosedRows(rows: readonly ClosedRow[]): ClosedGroup[] {
 }
 
 /**
+ * The Closed list's rows as its exact line names them (walk 16 T1-05): by
+ * name, and a player with a row on each side names the short one as his
+ * short ("Cade Cunningham's short"), so the line never names him twice alike.
+ */
+export function closedFigures(rows: readonly ClosedGroup[]): SectionFigure[] {
+  return rows.map((row) => {
+    const both = row.side === 'short' && rows.some((other) => other.side === 'long' && other.playerId === row.playerId);
+    const name = both ? `${row.name}'s ${row.stints.length > 1 ? 'shorts' : 'short'}` : row.name;
+    return { name, value: row.total };
+  });
+}
+
+/**
  * A Closed row as heard, one sentence with its total: a single stint as
  * `closedSpoken` says it, several as "Scottie Barnes, 3 stints, 2 games in
  * all: -$368.4K".
@@ -1126,6 +1186,12 @@ export interface TipReading {
  * showing one (a short that ended inside the first week), the newest Closed
  * row, by name and figure: "Cade Cunningham's short ended +$86.5K: his
  * dividends came in under his price." Never a word the screen does not show.
+ *
+ * `closed` is `closedRows`' stints; the tip reads them as the Closed list
+ * draws them (walk 16 T4-04), one row per player and side: a player dropped
+ * and added again is quoted by his row's total, "Luka Doncic made +$207.4K
+ * over 3 stints", never by a stint hidden inside it, and a row with no games
+ * (a drop before he played) is never the one quoted.
  */
 export function tipReading(
   positions: readonly PerGamePosition[],
@@ -1144,20 +1210,26 @@ export function tipReading(
     const verdict = tipVerdict(positions, results, side);
     return { side, tag: tipTag(verdict), words: tipWords(side, verdict) };
   }
-  const row = closed.find((candidate) => !candidate.unplayed);
+  const row = mergeClosedRows(closed).find((candidate) => !candidate.unplayed && candidate.games > 0);
   if (!row) return { side: first, tag: tipTag('profit'), words: tipWords(first, 'profit') };
   const money = formatAt(row.total, 'fine', true);
   const up = Math.round(row.total) > 0;
   const down = Math.round(row.total) < 0;
   const math = " Results shows each game's math.";
+  // Several stints: the row's own words and total ("3 stints", "2 shorts").
+  const group = row.stints.length > 1;
   if (row.side === 'short') {
+    const his = group ? 'his prices' : 'his price';
+    const why = up ? `his dividends came in under ${his}`
+      : down ? `he played well, so his dividends beat ${his}` : `his dividends matched ${his}`;
+    if (group) return { side: 'short', tag: null, words: `${row.name} made ${money} over ${row.how}: ${why}.${math}` };
     const what = row.endedByTerm ? 'ended' : 'closed';
-    const why = up ? 'his dividends came in under his price'
-      : down ? 'he played well, so his dividends beat his price' : 'his dividends matched his price';
     return { side: 'short', tag: null, words: `${row.name}'s short ${what} ${money}: ${why}.${math}` };
   }
-  const why = up ? 'his dividends beat your price'
-    : down ? 'his dividends came in under your price' : 'his dividends matched your price';
+  const your = group ? 'your prices' : 'your price';
+  const why = up ? `his dividends beat ${your}`
+    : down ? `his dividends came in under ${your}` : `his dividends matched ${your}`;
+  if (group) return { side: 'long', tag: null, words: `${row.name} made ${money} over ${row.how}: ${why}.${math}` };
   return { side: 'long', tag: null, words: `${row.name} ended ${money} when you dropped him: ${why}.${math}` };
 }
 

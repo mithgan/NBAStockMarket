@@ -20,7 +20,7 @@ function StackRow({ label, children }: { label: string; children: ReactNode }) {
 /** The measured fit never takes the hero below this (a 200% zoom phone with text spacing). */
 const HERO_FIT_MIN = 18;
 /**
- * Stacked (phones): from this block width "Why?" sits beside the score, in
+ * Stacked (phones): from this block width "vs last season" sits beside the score, in
  * the room the score leaves; narrower (200% zoom) it takes a line under it,
  * so the score keeps its size.
  */
@@ -135,7 +135,7 @@ export function ScoreHeader({
   weekWords?: { label: string; spoken: string } | null;
   /**
    * A short window (the folded frame, `chromeFolded`: a phone on its side, a
-   * 853x533 laptop): the last-season paragraph folds behind "Why?" as on
+   * 853x533 laptop): the last-season paragraph folds behind "vs last season" as on
    * portrait phones, so your players are in the first view after a night
    * (walk 14 T1-08).
    */
@@ -143,7 +143,7 @@ export function ScoreHeader({
 }) {
   const { width } = useWindowDimensions();
   const weekName = weekWords ?? { label: WEEK_LABEL, spoken: WEEK_LABEL.toLowerCase() };
-  // Phones fold the last-season paragraph behind "Why?", so your players
+  // Phones fold the last-season paragraph behind "vs last season", so your players
   // start higher after a night (walk 7 T1-10); desktop and tablets have room.
   const [whyOpen, setWhyOpen] = useState(false);
   // Before the first game only fees can have moved the score.
@@ -202,16 +202,21 @@ export function ScoreHeader({
   ].filter(Boolean).join(', ');
   const weekSpoken = started && week !== null ? ` ${weekName.spoken.charAt(0).toUpperCase()}${weekName.spoken.slice(1)}: ${formatAt(week, 'fine', true)}.` : '';
   const summary = `${head}.${weekSpoken}`;
+  // Named for what it opens (walk 16 T1-08): "vs last season", heard as
+  // "Compare with last season's numbers". Beside the score on a phone its
+  // words take two short lines, so the score keeps its room.
+  const whyTwoLines = !beside && whyBeside;
+  const whyWords = `${whyTwoLines ? 'vs last\nseason' : 'vs last season'} ${whyOpen ? '\u25B4' : '\u203A'}`;
   const why = fold ? (
     <Pressable
-      accessibilityLabel="Why? Your games against last season's numbers"
+      accessibilityLabel="Compare with last season's numbers"
       accessibilityRole="button"
       aria-expanded={whyOpen}
       // A double tap opens it once, not open and shut (walk 6 T4-11).
       onPress={repeatSafe(() => setWhyOpen((open) => !open))}
       style={({ pressed }) => [styles.why, beside ? styles.whyInRow : !whyBeside && styles.whyLine, pressed && styles.whyPressed]}
     >
-      <Text maxFontSizeMultiplier={1.3} style={styles.whyText}>{whyOpen ? 'Why? \u25B4' : 'Why? \u203A'}</Text>
+      <Text maxFontSizeMultiplier={1.3} style={[styles.whyText, whyTwoLines && styles.whyTextTwoLines]}>{whyWords}</Text>
     </Pressable>
   ) : null;
   const hero = (
@@ -241,9 +246,9 @@ export function ScoreHeader({
       {tight ? null : heading}
       {tight ? null : spoken}
       {beside ? (
-        // Side by side: the score, "Why?" when folded (a short window), then
+        // Side by side: the score, "vs last season" when folded (a short window), then
         // the week and rank. Only the drawn figures are hidden from screen
-        // readers; "Why?" is a control.
+        // readers; "vs last season" is a control.
         <View style={styles.heroRow}>
           {tight ? heading : null}
           {tight ? spoken : null}
@@ -252,9 +257,9 @@ export function ScoreHeader({
           {facts ? <View aria-hidden style={styles.stackBeside}>{facts}</View> : null}
         </View>
       ) : (
-        // Stacked: the score, "Why?" in the room beside it on a phone, then
+        // Stacked: the score, "vs last season" in the room beside it on a phone, then
         // the week and rank under it. Only the drawn figures are hidden from
-        // screen readers (the sentence above says them); "Why?" is a control.
+        // screen readers (the sentence above says them); "vs last season" is a control.
         <View style={styles.heroColumn}>
           <View style={styles.heroTop}>
             <View aria-hidden ref={heroBox} style={styles.heroFill}>{hero}</View>
@@ -340,7 +345,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  // The score and "Why?" on one line: the score takes the room "Why?" leaves.
+  // The score and "vs last season" on one line: the score takes the room it leaves.
   heroTop: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -381,6 +386,11 @@ const styles = StyleSheet.create({
     fontWeight: weight.black,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
+  },
+  // "VS LAST" over "SEASON ›", right-aligned beside the score.
+  whyTextTwoLines: {
+    textAlign: 'right',
+    lineHeight: 15,
   },
   heroColumn: {
     flexDirection: 'column',
