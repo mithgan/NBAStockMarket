@@ -401,8 +401,9 @@ function NoticeToast({
       </ScrollView>
       {clampLines > 0 && overflowing ? (
         <Pressable
-          // One name, and its state said as expanded or collapsed (walk 12 T3-05).
-          accessibilityLabel="Whole notice"
+          // Its visible word in its name, for voice control ("tap more"; walk
+          // 13 T3-10), and its state said as expanded or collapsed (walk 12 T3-05).
+          accessibilityLabel={expanded ? 'Less of the notice' : 'More of the notice'}
           accessibilityRole="button"
           accessibilityState={{ expanded }}
           aria-expanded={expanded}
@@ -424,12 +425,14 @@ function NoticeToast({
       <Pressable
         ref={noticeRef}
         nativeID={LATEST_NOTICE_ID}
-        {...(tinyDock ? ({ role: 'region', 'aria-label': 'Latest notice' } as object) : null)}
-        // Hidden from screen readers (the live region spoke it), except at
-        // 400% zoom, where its words are a focus stop of their own.
-        accessibilityElementsHidden={!tinyDock}
-        aria-hidden={!tinyDock}
-        importantForAccessibility={tinyDock ? 'auto' : 'no-hide-descendants'}
+        // In the strip above the tab bar it is a "Latest notice" region, which
+        // the skip link and the landmark list reach (walk 13 T3-08). In the
+        // brand bar it stays hidden from screen readers: the live region
+        // spoke it, and it sits in the page's first lines.
+        {...(placement === 'dock' ? ({ role: 'region', 'aria-label': 'Latest notice' } as object) : null)}
+        accessibilityElementsHidden={placement !== 'dock'}
+        aria-hidden={placement !== 'dock'}
+        importantForAccessibility={placement === 'dock' ? 'auto' : 'no-hide-descendants'}
         onHoverIn={() => setHeld(true)}
         onHoverOut={() => setHeld(false)}
         onPress={dismissByTap}
@@ -809,13 +812,23 @@ function AppBody() {
   }, [bootstrap]);
 
   const [slowStart, setSlowStart] = useState(false);
+  // A start slow enough to say so says when it is ready too (walk 13 T3-09:
+  // "Loading…" was the last word a screen reader heard).
+  const slowShown = useRef(false);
   useEffect(() => {
     if (!isLoading) {
+      if (slowShown.current) notify(isMockActive() ? 'Practice is ready.' : 'Your account is ready.');
+      slowShown.current = false;
       setSlowStart(false);
       return undefined;
     }
-    const timer = setTimeout(() => setSlowStart(true), SLOW_START_MS);
+    const timer = setTimeout(() => {
+      slowShown.current = true;
+      setSlowStart(true);
+    }, SLOW_START_MS);
     return () => clearTimeout(timer);
+    // notify is stable (the context's own callback).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading]);
 
   // The screen on show, kept as one element until the tab or the Market's
