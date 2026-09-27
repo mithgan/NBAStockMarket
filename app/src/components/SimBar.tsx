@@ -1374,6 +1374,15 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       notify(queueFullLine(practiceSeasonEnd(mockSeasonStart())), { spoken: '' });
       return;
     }
+    // The run so far takes the step's place, silent until the run settles:
+    // taking the step's notice down left the logo for most of a second
+    // between "Oct 21–27 games…" and the three weeks' notice, as if the
+    // first week's result had been taken back (walk 14 T1-11).
+    const run = runRef.current;
+    if (run && bootstrap && run.steps.length > 1) {
+      notify(runNotice(run.steps, refreshNotice(run.start, bootstrap, false, { seasonComplete: seasonOver })), { spoken: '' });
+      return;
+    }
     dismissNotice();
   }, [noticeSeq, dismissNotice]);
   // In the render that shows the run's last nights, before it paints, so the
