@@ -227,3 +227,12 @@ test('a run\'s notice covers the notice of its own first week, and nothing else 
   assert.equal(coversGames('Luka Doncic added at $417.5K a game, locked in. $250 fee.', week), false);
   assert.equal(coversGames(week, week), false);
 });
+
+test('the season\'s end after a run keeps its words on a phone: only a date span leads a games notice (walk 17 T1-08)', () => {
+  const end = 'Season complete. Final score +$4.95M, #1 of 5. Oct 21–Apr 12 games: your score rose $4.95M.';
+  assert.equal(outcomeFirst(end), end);
+  assert.equal(newsFirst(end), end);
+  // Spans still turn around.
+  assert.equal(outcomeFirst('Oct 21–Apr 12 games (25 weeks): your score rose $4.95M.'), 'Your score rose $4.95M in the Oct 21–Apr 12 games (25 weeks).');
+  assert.equal(outcomeFirst('Oct 22 games: your score fell $9K.'), 'Your score fell $9K in the Oct 22 games.');
+});

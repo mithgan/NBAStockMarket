@@ -98,7 +98,11 @@ export function refreshHasNews(previous: PerGameBootstrap | null, next: PerGameB
  * readers hear the notice as written.
  */
 export function outcomeFirst(message: string): string {
-  const match = /^(\S.*? games(?: \([^)]*\))?): your score (rose|fell) (\$[\d,]+(?:\.\d+)?[KM]?)\.(\s[\s\S]*)?$/.exec(message);
+  // The games are a date span ("Oct 21", "Oct 21–27", "Oct 21–Nov 17"), never
+  // any words before "games": "Season complete. Final score … Oct 21–Apr 12
+  // games: …" became "Your score rose $4.95M in the Season complete. …" on a
+  // phone (walk 17 T1-08).
+  const match = /^([A-Z][a-z]{2} \d{1,2}(?:–(?:[A-Z][a-z]{2} )?\d{1,2})? games(?: \([^)]*\))?): your score (rose|fell) (\$[\d,]+(?:\.\d+)?[KM]?)\.(\s[\s\S]*)?$/.exec(message);
   if (!match) return message;
   const [, span, verb, amount, rest = ''] = match;
   return `Your score ${verb} ${amount} in the ${span}.${rest}`;
