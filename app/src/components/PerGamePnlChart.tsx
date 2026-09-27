@@ -13,6 +13,7 @@ import {
   nearestIndex,
   nightlySeries,
   placeAxisLabels,
+  plotXs,
   readingRevealTop,
   valueTicks,
   weekStepIndex,
@@ -44,7 +45,9 @@ const GROW_MS = 520;
 /**
  * Your score, night by night, from the $0 you start at.
  *
- * One point per game night (see `nightlySeries`): the line is green above the
+ * One point per game night (see `nightlySeries`), and a short dashed step for
+ * fees paid since the last night, so the line always ends on your score: the
+ * line is green above the
  * labelled $0 line and red below it, the x-axis names real dates, and tapping
  * (touch), pointing (mouse) or arrow keys read one night's score and what that
  * night's games made. When a new night settles while the chart is on screen
@@ -61,13 +64,15 @@ export function PerGamePnlChart({
   seasonOver?: boolean;
 }) {
   const points = useMemo(() => buildPnlSeries(entries), [entries]);
-  // Every point, fees since the last night included: the spoken summary's
-  // "now" is your score as the block above says it.
-  const nights = useMemo(() => nightlySeries(points, entries), [entries, points]);
-  // Drawn: played nights only. A move between nights added a flat, undated
-  // point that read as a night and pushed the last date to the middle (walk 8
-  // T2-02); its fees fold into the next night's reading ("Fees -$250").
-  const series = useMemo(() => nights.filter((point) => point.kind !== 'now'), [nights]);
+  // Every point is drawn, fees since the last night included, so the line
+  // ends on your score as the block above says it and the Low mark is the
+  // low that is spoken (walk 12 T2-07, T4-03, T3-08). Those fees are a short
+  // dashed step after the last night, not a night's width, so the last
+  // date stays at the right edge (walk 8 T2-02); once the next night plays
+  // they join its point ("Fees -$250"). A night none of your players played
+  // leaves them on that step until then.
+  const series = useMemo(() => nightlySeries(points, entries), [entries, points]);
+  const nightCount = useMemo(() => series.filter((point) => point.kind === 'night').length, [series]);
   const domain = useMemo(() => pnlChartDomain(series), [series]);
   const [width, setWidth] = useState(0);
   // The night being read: one a mouse points at (desktop hover, walk 9
@@ -102,33 +107,42 @@ export function PerGamePnlChart({
     markWidths[tick.kind] ? Math.ceil(markWidths[tick.kind]) + GUTTER_GAP : 0
   )));
   const span = Math.max(width - gutter - INSET_RIGHT, 0);
-  const xs = useMemo(() => series.map((_, index) => (
-    gutter + (index / Math.max(series.length - 1, 1)) * span
-  )), [gutter, series, span]);
-  const linePath = series.map((point, index) => (
-    `${index === 0 ? 'M' : 'L'} ${xs[index].toFixed(1)} ${yOf(point.cumulativePnl).toFixed(1)}`
-  )).join(' ');
+  const xs = useMemo(() => plotXs(series, gutter, span), [gutter, series, span]);
+  const spanNow = useRef(span);
+  spanNow.current = span;
+  const at = (index: number) => `${xs[index].toFixed(1)} ${yOf(series[index].cumulativePnl).toFixed(1)}`;
+  const through = (count: number) => series.slice(0, count).map((_, index) => `${index === 0 ? 'M' : 'L'} ${at(index)}`).join(' ');
+  // The nights' line is solid; fees since the last night are its dashed step.
+  const tailed = series.length > 2 && series[series.length - 1].kind === 'now';
+  const solidCount = tailed ? series.length - 1 : series.length;
+  const linePath = through(solidCount);
+  const tailPath = tailed ? `M ${at(solidCount - 1)} L ${at(series.length - 1)}` : '';
   const areaPath = series.length > 1
-    ? `${linePath} L ${xs.at(-1)!.toFixed(1)} ${zeroY.toFixed(1)} L ${xs[0].toFixed(1)} ${zeroY.toFixed(1)} Z`
+    ? `${through(series.length)} L ${xs.at(-1)!.toFixed(1)} ${zeroY.toFixed(1)} L ${xs[0].toFixed(1)} ${zeroY.toFixed(1)} Z`
     : '';
 
-  // A new reading of the data means old indexes point at other nights.
+  // A new night means old indexes may point at other nights. Fees since the
+  // last night only add a point at the end, so a reading stays put.
   useEffect(() => {
     setPinned(null);
     setHovered(null);
-  }, [series.length]);
+  }, [nightCount]);
 
   // Grow into newly settled nights (never on first paint, never with reduced motion).
   const [revealed, setRevealed] = useState(1);
-  const shownCount = useRef(series.length);
+  const shownNights = useRef(nightCount);
   useEffect(() => {
-    const before = shownCount.current;
-    shownCount.current = series.length;
-    if (reducedMotion || before < 2 || series.length <= before || typeof requestAnimationFrame !== 'function') {
+    const before = shownNights.current;
+    shownNights.current = nightCount;
+    if (reducedMotion || before < 1 || nightCount <= before || typeof requestAnimationFrame !== 'function') {
       setRevealed(1);
       return undefined;
     }
-    const from = (before - 1) / (series.length - 1);
+    // From where the last night drawn before now sits: nights come first
+    // after the start, so it is point `before`; a step of fees that followed
+    // it has joined the new night.
+    const room = spanNow.current;
+    const from = room > 0 ? Math.min(1, Math.max(0, plotXs(series, 0, room)[before] / room)) : 0;
     let frame = 0;
     let startedAt: number | null = null;
     const step = (now: number) => {
@@ -140,7 +154,9 @@ export function PerGamePnlChart({
     setRevealed(from);
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [reducedMotion, series.length]);
+    // Only a new night grows the line; `series` is read as it is then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reducedMotion, nightCount]);
 
   // A tap, click or slide asks to see its reading: when the heading that
   // carries it has scrolled under the top of the page, it comes into view
@@ -273,7 +289,7 @@ export function PerGamePnlChart({
         // Native screen readers step nights with their adjust gesture; the web
         // slider takes arrow keys (see usePlotPointer).
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-        accessibilityLabel={chartSummary(nights)}
+        accessibilityLabel={chartSummary(series)}
         accessibilityRole="adjustable"
         aria-valuemax={last}
         aria-valuemin={0}
@@ -306,10 +322,12 @@ export function PerGamePnlChart({
               <G clipPath={`url(#${clipId}-up)`}>
                 <Path d={areaPath} fill={colors.greenSoft} />
                 <Path d={linePath} fill="none" stroke={colors.green} strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} />
+                {tailPath ? <Path d={tailPath} fill="none" stroke={colors.green} strokeDasharray="3 3" strokeWidth={2} /> : null}
               </G>
               <G clipPath={`url(#${clipId}-down)`}>
                 <Path d={areaPath} fill={colors.redSoft} />
                 <Path d={linePath} fill="none" stroke={colors.red} strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} />
+                {tailPath ? <Path d={tailPath} fill="none" stroke={colors.red} strokeDasharray="3 3" strokeWidth={2} /> : null}
               </G>
             </G>
             {ticks.map((tick) => (

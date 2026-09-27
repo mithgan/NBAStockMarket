@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { gamesCount, unbrokenName } from '../../copy/terms';
@@ -19,6 +19,7 @@ import { Button, repeatSafe, visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
 import { TABLE_COLUMNS } from './RowFigures';
 import { SectionHead } from './SectionHead';
+import { useHoldInView } from './useHoldInView';
 
 /** Closed positions listed before "Show all" takes over. */
 const COLLAPSED_COUNT = 5;
@@ -85,6 +86,22 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
     else next.add(key);
     return next;
   })), []);
+  // A row just opened stays where it is on screen while a night or a move
+  // that waited for it changes the lists above (fix 12 check), until the
+  // next tap or focus elsewhere; folding it lets go.
+  const { hold, release, rowRef, heldKey } = useHoldInView();
+  const openBefore = useRef(open);
+  useLayoutEffect(() => {
+    const before = openBefore.current;
+    openBefore.current = open;
+    const opened = [...open].find((key) => !before.has(key));
+    if (opened !== undefined) {
+      hold(opened);
+      return;
+    }
+    const key = heldKey();
+    if (key !== null && !open.has(key)) release();
+  }, [heldKey, hold, open, release]);
   // The roster table (a wide list) keeps a Total column and an action column
   // at the right; `totalInset` is the action column plus its gap.
   const table = totalInset > 0;
@@ -133,7 +150,7 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
           </>
         );
         return (
-          <View key={key} style={styles.item}>
+          <View key={key} ref={rowRef(key)} style={styles.item}>
             <View style={styles.row}>
               {grouped ? (
                 // Heard as one sentence with his total, "Scottie Barnes, 3

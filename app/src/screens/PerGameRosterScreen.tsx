@@ -238,7 +238,7 @@ function PositionRow({
   /** His price a game in the market today, when he is listed. */
   marketPrice: number | null;
 }) {
-  const { bootstrap, notify, pendingActions } = usePerGame();
+  const { bootstrap, lockedPress, pendingActions } = usePerGame();
   const nameFit = useTableNameFit(layout === 'table', position.playerName);
   const actionKey = `position:${position.side}:${position.playerId}`;
   // A move waiting its turn counts as this row's; another row's move does
@@ -340,9 +340,11 @@ function PositionRow({
   };
   const onActionPress = () => {
     if (tapsSettling()) return;
-    // LOCKED answers a tap with why and when (a silent button teaches nothing).
+    // LOCKED answers a tap with why and when (a silent button teaches nothing);
+    // a Drop pressed as the games brought the lock is named with the games'
+    // notice (walk 12 T4-07).
     if (rosterLocked) {
-      notify(lockNotice(rosterLockDate));
+      lockedPress({ name: position.playerName, verb: position.side === 'long' ? 'dropped' : 'closed' });
       return;
     }
     if (disabled) return;

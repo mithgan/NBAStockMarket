@@ -1286,9 +1286,63 @@ export function chartSummary(series: readonly NightPoint[]): string {
   // In the score's own format, so "now" is heard as the score block says it
   // ("+$194.3K", not "+$194K"; walk 11 T1-04).
   const score = (value: number) => formatAt(value, 'fine', true);
-  return twoDecimalMillions(`Your score by night ${span}: started at $0, now ${score(end.cumulativePnl)}. `
+  // The line's short last step is the fees paid since the last night: said
+  // once, so the "now" low is heard for what it is (walk 12 T3-08).
+  const since = end.kind === 'now' ? ` ${sinceWords(end.change, nights.at(-1)!.label)}` : '';
+  return twoDecimalMillions(`Your score by night ${span}: started at $0, now ${score(end.cumulativePnl)}${since}. `
     + `Best ${score(best.cumulativePnl)} ${best.kind === 'now' ? 'now' : `after ${best.label}`}, `
     + `lowest ${score(worst.cumulativePnl)} ${worst.kind === 'now' ? 'now' : `after ${worst.label}`}.`);
+}
+
+/**
+ * How far to scroll a list so a Closed row you just opened stays under your
+ * finger while the lists above it change (a night or a waiting move landing;
+ * fix 12): by as much as they moved it, and only when it was on screen and
+ * nobody scrolled since, so a scroll of yours is never undone.
+ */
+export function holdShift({ top, previousTop, height, viewTop, viewBottom, scrolled }: {
+  top: number;
+  previousTop: number;
+  height: number;
+  viewTop: number;
+  viewBottom: number;
+  scrolled: boolean;
+}): number {
+  const moved = top - previousTop;
+  if (scrolled || Math.abs(moved) < 1) return 0;
+  const wasShown = previousTop < viewBottom && previousTop + height > viewTop;
+  return wasShown ? moved : 0;
+}
+
+/** "after $250 in fees since Oct 22": what moved the score since the last night. */
+function sinceWords(change: number, lastNight: string): string {
+  const amount = formatAt(Math.abs(change), 'fine', false);
+  return change < 0 ? `after ${amount} in fees since ${lastNight}` : `with ${formatAt(change, 'fine', true)} since ${lastNight}`;
+}
+
+/**
+ * The room a `now` point (fees paid since the last night) takes at the right
+ * end of the score chart: a short step, never a night's width, so the last
+ * night keeps its date at the right edge (walk 8 T2-02) while the line still
+ * ends on your score (walk 12 T2-07, T4-03).
+ */
+export const NOW_STEP = 18;
+
+/**
+ * The x of every point on the score chart, `left` to `left + span`: nights
+ * evenly spaced, and a final `now` point a short step (`NOW_STEP`, or a
+ * night's spacing when nights sit closer than that) after the last night.
+ */
+export function plotXs(series: readonly NightPoint[], left: number, span: number, step = NOW_STEP): number[] {
+  const count = series.length;
+  const tailed = count > 1 && series[count - 1].kind === 'now';
+  const room = tailed ? Math.min(step, span / (count - 1)) : 0;
+  const spaced = tailed ? count - 1 : count;
+  return series.map((_, index) => (
+    tailed && index === count - 1
+      ? left + span
+      : left + (index / Math.max(spaced - 1, 1)) * (span - room)
+  ));
 }
 
 /**
@@ -1481,7 +1535,10 @@ export function weekStepIndex(series: readonly NightPoint[], from: number, direc
   const dayOf = (index: number): number | null => {
     const date = series[index]?.date;
     if (date) return dayNumber(date);
-    return series[index]?.kind === 'start' && firstDated?.date ? dayNumber(firstDated.date) - 1 : null;
+    if (series[index]?.kind === 'start') return firstDated?.date ? dayNumber(firstDated.date) - 1 : null;
+    // Fees since the last night sit on that night's day: a week back from
+    // them is a week back from it.
+    return series[index]?.kind === 'now' && index > 0 ? dayOf(index - 1) : null;
   };
   const start = Math.min(Math.max(from, 0), last);
   const today = dayOf(start);
