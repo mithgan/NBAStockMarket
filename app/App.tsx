@@ -1581,7 +1581,10 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 500,
     padding: space.xl,
-    backgroundColor: colors.background,
+    // No surface of its own: the column's texture shows through, so a
+    // loading or error screen is one even surface (a flat 500px band sat
+    // between the grain on either side in Navy: walk 15 T2-05).
+    backgroundColor: 'transparent',
   },
   stateBusy: {
     color: colors.goldInk,
