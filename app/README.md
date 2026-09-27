@@ -44,6 +44,36 @@ npx expo export --platform web
 
 Application screens live in `src/screens/`; runtime-validated API contracts live in `src/api/`.
 
+## Practice mode
+
+Open the web app with `?mock` (for example `http://localhost:8081/?mock`) to play a generated
+season in browser memory with no sign-in. It replays last season's calendar, starts every
+leaderboard entry at $0, and starts over on reload; it never touches a saved account. The practice
+bar advances one night or one week at a time, and Restart asks for a second tap before it reloads.
+
+## The per-game screens
+
+Every screen answers one question, in the same words everywhere (`src/copy/terms.ts`: "Short",
+never "inverse"; "$105K a game"; "Nov 6", never an ISO date). Shared per-game numbers come from
+`src/data/perGameMetrics.ts`, so the screens agree to the dollar.
+
+- **Roster**: how am I doing? Your score, rank, last night and last 7 days, then the score split
+  by source (roster, shorts, closed positions, fees), each equal to the list beneath it. Every
+  player shows his locked price, dividend a game, net a game and total under a Paying off /
+  Losing money tag; shorts and closed positions have their own lists. Drop and Close ask for a
+  second tap.
+- **Market**: who is worth adding? Roster/Short toggle, search, sort by price, value or name, and
+  a Watching filter. Each row shows the price a game and last season's value against it.
+- **Player profile**: is he worth his price, game by game? Read from the side you hold him on, at
+  the price you locked, with his form at market price for games you did not hold him.
+- **Results**: what happened last night? Game nights newest first, each with its total; a row
+  reads by its effect on you, and the full arithmetic opens on tap. Corrections, did-not-play,
+  unsettled and fee rows all stay visible.
+- **Leaders**: where do I stand? Your rank, the gap to the next rank and to #1.
+- **Status and practice bars** stay under 100px on a phone; the game rules open as a sheet.
+  Notices float as toasts: a success clears itself and lets taps through, a problem waits to be
+  dismissed, and every notice is announced to screen readers.
+
 ## GitHub Pages
 
 The published web address is `https://mithgan.github.io/NBAStockMarket/`. A published build may

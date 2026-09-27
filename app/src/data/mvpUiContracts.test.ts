@@ -80,7 +80,8 @@ test('market discovery supports search and a clear empty result', () => {
 test('an empty portfolio sends the user directly to the market', () => {
   assert.match(appSource, /onOpenMarket=\{\(side\) => \{/);
   assert.match(appSource, /setMarketSide\(side\)/);
-  assert.match(appSource, /setActiveTab\('market'\)/);
+  // The switch goes through switchScreen, which also guards a double tap (walk 5 T4-05).
+  assert.match(appSource, /(setActiveTab|switchScreen)\('market'\)/);
   assert.match(appSource, /<MarketScreen initialSide=\{marketSide\} \/>/);
   assert.match(portfolioSource, /Your cap sheet is clean/);
   assert.match(portfolioSource, /accessibilityLabel="Open the player market"/);
@@ -426,7 +427,14 @@ test('portfolio provides server-backed activity, history, and exact cost basis',
 
 test('global server action notices are visible and dismissible', () => {
   assert.match(appSource, /dismissNotice/);
-  assert.match(appSource, /message \? \(/);
+  // Every notice, the new-season one included, renders from the game's message
+  // (walk 12 T4-05 folded the app's own notice slot into it). The one it
+  // leaves to the screen is the season-complete notice in a short window's
+  // strip while the Roster's result card shows the same (walk 14 lead); it is
+  // still spoken by the live region.
+  // In a short window it also waits while a finger taps the screen (walk 16 T1-11).
+  assert.match(appSource, /message && !cardSaysIt && !\(noticePlacement === 'dock' && dockWaits\) && \(noticeTone === 'problem' \|\| !sheetOpen\) \? \(/);
+  assert.match(appSource, /const cardSaysIt = noticePlacement === 'dock' && activeTab === 'portfolio' && isSeasonCompleteNotice\(message\);/);
   assert.match(appSource, /message=\{message\}/);
   assert.match(appSource, /accessibilityLiveRegion="polite"/);
 });

@@ -168,9 +168,9 @@ export function settlementEquation(
     : null;
   if (result.status === 'verified_dnp') {
     return {
-      firstLabel: result.side === 'long' ? 'Dividend' : 'Game cost credit',
+      firstLabel: result.side === 'long' ? 'Dividend' : 'Price credited',
       firstAmount: result.side === 'long' ? result.dividendDollars : 0,
-      secondLabel: result.side === 'long' ? 'Game cost charged' : 'Dividend paid',
+      secondLabel: result.side === 'long' ? 'Price paid' : 'Dividend paid',
       secondAmount: result.side === 'long' ? 0 : result.dividendDollars,
       operator: '-',
       netPnl: result.netPnl,
@@ -206,10 +206,10 @@ export function settlementEquation(
   return {
     firstLabel: result.side === 'long'
       ? correction ? 'Corrected dividend' : 'Dividend'
-      : 'Game cost credit',
+      : 'Price credited',
     firstAmount,
     secondLabel: result.side === 'long'
-      ? 'Locked game cost'
+      ? 'Price paid'
       : correction ? 'Corrected dividend paid' : 'Dividend paid',
     secondAmount,
     operator: '-',
@@ -256,11 +256,13 @@ export function buildPerGameMarketRows(
     const unavailableReason = position
       ? null
       : !capability
-        ? `${side === 'long' ? 'Roster' : 'Inverse'} adds are unavailable.`
+        ? `${side === 'long' ? 'Adding' : 'Shorting'} is unavailable right now.`
         : blockedByOpposingPosition
-          ? `Close the ${side === 'long' ? 'inverse' : 'roster'} position before opening this side.`
+          ? side === 'long'
+            ? "You're shorting him. Close the short to add him."
+            : "He's on your roster. Drop him to short him."
         : isFull
-          ? `${side === 'long' ? 'Long' : 'Short'} slots are full.`
+          ? side === 'long' ? 'Your roster is full.' : 'Your short slots are full.'
           : null;
     return {
       player,

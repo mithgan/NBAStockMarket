@@ -21,3 +21,9 @@ test('valid saved appearance is restored, while unknown choices and failed stora
   await restoreSavedVariant(async () => { throw new Error('unavailable'); }, () => assert.fail(), () => true);
   assert.deepEqual(choices, ['dark']);
 });
+
+test('"Match device" is a choice that survives a reload', async () => {
+  const choices: string[] = [];
+  await restoreSavedVariant(async () => 'device', (choice) => choices.push(choice), () => true);
+  assert.deepEqual(choices, ['device']);
+});

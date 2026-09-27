@@ -1,0 +1,167 @@
+/**
+ * One quiet line under the sort (walk 9 T4-10, T1-16, T2-12): the list's
+ * order in words, an unusual order said plainly (the order button beside the
+ * sort flips it back, so there is no second button), or that the order is
+ * from before the latest games, with Re-sort. It always keeps the height of
+ * its longest wording (invisible copies under it: the held wording with
+ * Re-sort, and its own longest), from the first view on, so the list below
+ * never moves when a night lands or the order flips (walk 11 T4-08).
+ */
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+
+import { colors, fonts, radius, space, type, weight } from '../../theme';
+
+export function OrderLine({
+  text,
+  tone,
+  reserve,
+  resort,
+  reserveResort = true,
+  reserveOwn,
+  centred = false,
+  style,
+}: {
+  text: string;
+  tone: 'quiet' | 'flipped' | 'stale';
+  /** The line's longest wording, kept as an invisible copy for its height. */
+  reserve: string;
+  /** Re-sort for the latest games: its button's name and press. */
+  resort: { name: string; onPress: () => void } | null;
+  /** The reserve keeps Re-sort's height too (from the first games on, orderLine). */
+  reserveResort?: boolean;
+  /** The line's own longest wording without Re-sort (a flipped order), kept too. */
+  reserveOwn?: string;
+  /**
+   * The shown words sit mid-reserve (a phone, walk 16 T1-02): the plain line
+   * reads as spacing, not a gap, and the held wording swaps in without a jump.
+   */
+  centred?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  // Re-sort is the app's outlined button at every size (walk 17 T2-02: an
+  // underlined link at 853x533, a bordered RE-SORT elsewhere), compact in a
+  // one-line strip: a 22px box centred on the line's words (T1-05: it sat
+  // half a line low), its 44px target reaching above and below it. The line
+  // keeps its words' 17px height: a 26px line cost a phone's first view a
+  // player row (walk 17 lead; T1-01 had won it back).
+  const box = (hovered: boolean, pressed: boolean) => (
+    <View style={[styles.actionBox, hovered && styles.actionHover, pressed && styles.pressed]}>
+      <Text maxFontSizeMultiplier={1.4} style={styles.actionText}>Re-sort</Text>
+    </View>
+  );
+  const words = (shown: string, action: boolean, ghost: boolean) => (
+    <View style={styles.line}>
+      <Text maxFontSizeMultiplier={1.4} style={[styles.text, !ghost && tone === 'flipped' && styles.flipped, !ghost && tone === 'stale' && styles.stale]}>
+        {shown}
+      </Text>
+      {action ? (
+        ghost ? (
+          <View style={styles.action}>{box(false, false)}</View>
+        ) : (
+          <Pressable
+            accessibilityLabel={resort?.name}
+            accessibilityRole="button"
+            onPress={resort?.onPress}
+            style={styles.action}
+          >
+            {(state) => box((state as { hovered?: boolean }).hovered === true, state.pressed)}
+          </Pressable>
+        )
+      ) : null}
+    </View>
+  );
+  return (
+    <View style={[styles.wrap, style]}>
+      <View style={[styles.layer, centred && styles.centred]}>{words(text, resort !== null, false)}</View>
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={[styles.layer, styles.ghost]}
+        {...({ 'aria-hidden': true } as object)}
+      >
+        {words(reserve, reserveResort || resort !== null, true)}
+      </View>
+      {reserveOwn ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[styles.layer, styles.ghost]}
+          {...({ 'aria-hidden': true } as object)}
+        >
+          {words(reserveOwn, false, true)}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  layer: {
+    width: '100%',
+    flexShrink: 0,
+  },
+  centred: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+  },
+  ghost: {
+    marginLeft: '-100%',
+    opacity: 0,
+    pointerEvents: 'none',
+  },
+  line: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: space.sm,
+  },
+  text: {
+    flexShrink: 1,
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
+    lineHeight: 17,
+  },
+  flipped: {
+    color: colors.goldInk,
+  },
+  stale: {
+    color: colors.text,
+  },
+  action: {
+    // A full 44px target (the audit's floor) that takes only the line's 17px:
+    // the 22px box overhangs the space around the line by 2.5px.
+    minHeight: 44,
+    marginVertical: -13.5,
+    justifyContent: 'center',
+  },
+  actionBox: {
+    // The kit's secondary button (outlined, raised, caps), compact.
+    minHeight: 22,
+    justifyContent: 'center',
+    paddingHorizontal: space.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.controlBorder,
+    backgroundColor: colors.surfaceRaised,
+  },
+  actionHover: {
+    backgroundColor: colors.surfaceHigh,
+  },
+  actionText: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.black,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  pressed: {
+    opacity: 0.72,
+  },
+});

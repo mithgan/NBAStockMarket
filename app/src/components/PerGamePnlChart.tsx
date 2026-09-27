@@ -1,120 +1,812 @@
-import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
-import Svg, { Line, Path } from 'react-native-svg';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Platform, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import Svg, { Circle, ClipPath, Defs, G, Line, Path, Rect } from 'react-native-svg';
 
 import type { PerGameLedgerEntry } from '../api/contracts';
-import { formatCompactSignedMoney, formatSignedMoney } from '../format';
+import {
+  axisLabelIndexes,
+  chartSummary,
+  chartValueText,
+  MARK_MIN_GAP,
+  nightReadingParts,
+  hasNights,
+  LOW_INSIDE_ROOM,
+  lowInsideIndex,
+  lowInsidePlace,
+  nearestIndex,
+  nightlySeries,
+  outsideNights,
+  placeAxisLabels,
+  plotXs,
+  readingRevealTop,
+  valueTicks,
+  weekStepIndex,
+  widestReading,
+  valueMark,
+  type NightPoint,
+} from '../data/rosterView';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { buildPnlSeries, pnlChartDomain } from '../state/perGameState';
-import { colors, fonts, labelStyle, space, type, weight } from '../theme';
+import { colors, fonts, space, type, weight } from '../theme';
+import { Button, headingLevel, Label, repeatSafe, visuallyHidden } from '../ui/kit';
+import { FineMoney } from './roster/FineMoney';
+import { usePlotPointer, type PlotIntent } from './roster/usePlotPointer';
 
-const CHART_HEIGHT = 132;
-const CHART_INSET = 10;
+/**
+ * Room at the left of the plot for the value marks: $0, the high and the low.
+ * The least room: the gutter grows to the widest mark as drawn, so wider text
+ * (a user's text spacing, a large font) never cuts "-$334K" to "-$334"
+ * (walk 7 T3-06).
+ */
+const GUTTER = 52;
+/** Clear air between a value mark's words and the plot. */
+const GUTTER_GAP = 6;
+const INSET_RIGHT = 6;
+const INSET_Y = 8;
+const AXIS_LABEL_WIDTH = 64;
+/** The Low mark drawn inside the plot: its box, wide enough for "Low -$848.3K". */
+const LOW_INSIDE_BOX = 96;
+const GROW_MS = 520;
 
-export function PerGamePnlChart({ entries }: { entries: readonly PerGameLedgerEntry[] }) {
-  const [width, setWidth] = useState(0);
+/**
+ * Your score, night by night, from the $0 you start at.
+ *
+ * One point per game night (see `nightlySeries`), and a short dashed step for
+ * fees paid since the last night, so the line always ends on your score: the
+ * line is green above the
+ * labelled $0 line and red below it, the x-axis names real dates, and tapping
+ * (touch), pointing (mouse) or arrow keys read one night's score and what that
+ * night's games made. When a new night settles while the chart is on screen
+ * the line grows into it, unless the viewer asked for reduced motion.
+ */
+export function PerGamePnlChart({
+  entries,
+  plotHeight = 80,
+  seasonOver = false,
+  widen,
+  pin,
+}: {
+  entries: readonly PerGameLedgerEntry[];
+  plotHeight?: number;
+  /** A finished season with no nights says so instead of promising a first one. */
+  seasonOver?: boolean;
+  /**
+   * Desktop (walk 15 T2-02): a toggle beside the heading spans the chart
+   * across the whole Roster, so a mouse can pick one night of a season (the
+   * score column's plot gave a season's 174 nights about 240px). `focus`
+   * moves keyboard focus to the toggle once the chart has moved, then
+   * `onFocused` clears it.
+   */
+  widen?: { wide: boolean; onToggle: () => void; focus: boolean; onFocused: () => void };
+  /**
+   * The night picked, kept by the screen (walk 16 T2-N4): Full width and
+   * Narrow draw the chart in another place, and it opens there on the night
+   * picked before, not on "Select a night to read it".
+   */
+  pin?: { night: number | null; onPin: (night: number | null) => void };
+}) {
+  const toggleRef = useRef<View | null>(null);
+  const widenFocus = widen?.focus ?? false;
+  const onWidenFocused = widen?.onFocused;
+  useEffect(() => {
+    if (!widenFocus) return;
+    (toggleRef.current as unknown as { focus?: () => void } | null)?.focus?.();
+    onWidenFocused?.();
+  }, [onWidenFocused, widenFocus]);
   const points = useMemo(() => buildPnlSeries(entries), [entries]);
-  const domain = useMemo(() => pnlChartDomain(points), [points]);
-  const coordinates = useMemo(() => points.map((point, index) => ({
-    x: CHART_INSET + (index / Math.max(points.length - 1, 1)) * Math.max(width - CHART_INSET * 2, 0),
-    y: CHART_INSET + ((domain.maximum - point.cumulativePnl)
-      / (domain.maximum - domain.minimum)) * (CHART_HEIGHT - CHART_INSET * 2),
-  })), [domain.maximum, domain.minimum, points, width]);
-  const path = coordinates.map((point, index) => (
-    `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
-  )).join(' ');
-  const zeroY = CHART_INSET + domain.zeroRatio * (CHART_HEIGHT - CHART_INSET * 2);
-  const current = points.at(-1)?.cumulativePnl ?? 0;
-  const color = current >= 0 ? colors.green : colors.red;
-  const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
+  // Every point is drawn, fees since the last night included, so the line
+  // ends on your score as the block above says it and the Low mark is the
+  // low that is spoken (walk 12 T2-07, T4-03, T3-08). Those fees are a short
+  // dashed step after the last night, not a night's width, so the last
+  // date stays at the right edge (walk 8 T2-02); once the next night plays
+  // they join its point ("Fees -$250"). A night none of your players played
+  // leaves them on that step until then.
+  const series = useMemo(() => nightlySeries(points, entries), [entries, points]);
+  const nightCount = useMemo(() => series.filter((point) => point.kind === 'night').length, [series]);
+  const domain = useMemo(() => pnlChartDomain(series), [series]);
+  const [width, setWidth] = useState(0);
+  // The night being read: one a mouse points at (desktop hover, walk 9
+  // T2-N3) wins over the one pinned by a click, a tap, a slide or the keys;
+  // leaving the plot goes back to the pinned one.
+  const [pinned, setPinned] = useState<number | null>(pin?.night ?? null);
+  const onPin = pin?.onPin;
+  useEffect(() => {
+    onPin?.(pinned);
+  }, [onPin, pinned]);
+  const [hovered, setHovered] = useState<number | null>(null);
+  const selected = hovered ?? pinned;
+  // Read inside the pointer handlers: the night pinned now.
+  const pinnedNow = useRef(pinned);
+  pinnedNow.current = pinned;
+  // The night a click just let go: pointing at it again does not read it
+  // until the mouse moves to another night or leaves (walk 18 T2-04: the
+  // second click let go, but the hover showed the same night again).
+  const letGo = useRef<number | null>(null);
+  // Whether the longest reading needs two lines: the resting words then take
+  // two as well, so the heading never changes height (walk 9 T1-03).
+  const [tallReading, setTallReading] = useState(true);
+  const keysId = `${useId().replace(/[^a-zA-Z0-9_-]/g, '')}-keys`;
+  // The value marks' drawn widths, by kind: the gutter fits the widest.
+  const [markWidths, setMarkWidths] = useState<Record<string, number>>({});
+  const onMarkLayout = useCallback((kind: string, room: number) => {
+    setMarkWidths((current) => (Math.abs((current[kind] ?? 0) - room) < 0.5 ? current : { ...current, [kind]: room }));
+  }, []);
+  const reducedMotion = useReducedMotion();
+  const clipId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+
+  const values = useMemo(() => series.map((night) => night.cumulativePnl), [series]);
+  // A low whose gutter mark gives way to "$0" is named inside the plot,
+  // under its dip, and the plot keeps room there for its words (walk 17, T4
+  // idea 6): a season that climbed high never loses "how low did I go".
+  const lowCrowds = useMemo(() => {
+    const plain = (value: number) => (
+      INSET_Y + ((domain.maximum - value) / (domain.maximum - domain.minimum)) * (plotHeight - INSET_Y * 2)
+    );
+    return lowInsideIndex(values, valueTicks(values, plain, { height: plotHeight, minGap: MARK_MIN_GAP })) !== null;
+  }, [domain.maximum, domain.minimum, plotHeight, values]);
+  const insetBottom = INSET_Y + (lowCrowds ? LOW_INSIDE_ROOM : 0);
+  const yOf = useCallback((value: number) => (
+    INSET_Y + ((domain.maximum - value) / (domain.maximum - domain.minimum)) * (plotHeight - INSET_Y - insetBottom)
+  ), [domain.maximum, domain.minimum, insetBottom, plotHeight]);
+  const zeroY = INSET_Y + domain.zeroRatio * (plotHeight - INSET_Y - insetBottom);
+  const ticks = useMemo(
+    // A high or low close to "$0" gives way to it (walk 9 T1-11).
+    () => valueTicks(values, yOf, { height: plotHeight, minGap: MARK_MIN_GAP }),
+    [plotHeight, values, yOf],
+  );
+  const lowInside = lowCrowds ? lowInsideIndex(values, ticks) : null;
+  // Only the marks drawn now count: a low that is gone no longer widens it.
+  const gutter = Math.max(GUTTER, ...ticks.map((tick) => (
+    markWidths[tick.kind] ? Math.ceil(markWidths[tick.kind]) + GUTTER_GAP : 0
+  )));
+  const span = Math.max(width - gutter - INSET_RIGHT, 0);
+  const xs = useMemo(() => plotXs(series, gutter, span), [gutter, series, span]);
+  const spanNow = useRef(span);
+  spanNow.current = span;
+  const at = (index: number) => `${xs[index].toFixed(1)} ${yOf(series[index].cumulativePnl).toFixed(1)}`;
+  const through = (count: number) => series.slice(0, count).map((_, index) => `${index === 0 ? 'M' : 'L'} ${at(index)}`).join(' ');
+  // The nights' line is solid; fees since the last night are its dashed step.
+  const tailed = series.length > 2 && series[series.length - 1].kind === 'now';
+  const solidCount = tailed ? series.length - 1 : series.length;
+  const linePath = through(solidCount);
+  const tailPath = tailed ? `M ${at(solidCount - 1)} L ${at(series.length - 1)}` : '';
+  const areaPath = series.length > 1
+    ? `${through(series.length)} L ${xs.at(-1)!.toFixed(1)} ${zeroY.toFixed(1)} L ${xs[0].toFixed(1)} ${zeroY.toFixed(1)} Z`
+    : '';
+
+  // A new night means old indexes may point at other nights. Fees since the
+  // last night only add a point at the end, so a reading stays put. Only a
+  // change lets go: a chart drawn again in its new place (Full width,
+  // Narrow) keeps the night picked before (walk 16 T2-N4).
+  const pinNights = useRef(nightCount);
+  useEffect(() => {
+    if (pinNights.current === nightCount) return;
+    pinNights.current = nightCount;
+    setPinned(null);
+    setHovered(null);
+  }, [nightCount]);
+
+  // Grow into newly settled nights (never on first paint, never with reduced motion).
+  const [revealed, setRevealed] = useState(1);
+  const shownNights = useRef(nightCount);
+  useEffect(() => {
+    const before = shownNights.current;
+    shownNights.current = nightCount;
+    if (reducedMotion || before < 1 || nightCount <= before || typeof requestAnimationFrame !== 'function') {
+      setRevealed(1);
+      return undefined;
+    }
+    // From where the last night drawn before now sits: nights come first
+    // after the start, so it is point `before`; a step of fees that followed
+    // it has joined the new night.
+    const room = spanNow.current;
+    const from = room > 0 ? Math.min(1, Math.max(0, plotXs(series, 0, room)[before] / room)) : 0;
+    let frame = 0;
+    let startedAt: number | null = null;
+    const step = (now: number) => {
+      startedAt ??= now;
+      const progress = Math.min(1, (now - startedAt) / GROW_MS);
+      setRevealed(from + (1 - from) * (1 - (1 - progress) ** 3));
+      if (progress < 1) frame = requestAnimationFrame(step);
+    };
+    setRevealed(from);
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+    // Only a new night grows the line; `series` is read as it is then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reducedMotion, nightCount]);
+
+  // A tap, click or slide asks to see its reading: when the heading that
+  // carries it has scrolled under the top of the page, it comes into view
+  // (walk 10 T1-07). Pointing (hover) and the keys never move the page.
+  const headingRef = useRef<View>(null);
+  const revealWanted = useRef(false);
+  useEffect(() => {
+    const wanted = revealWanted.current;
+    revealWanted.current = false;
+    if (pinned === null || !wanted) return;
+    revealReading(headingRef.current, reducedMotion);
+  }, [pinned, reducedMotion]);
+
+  const last = series.length - 1;
+  const read = useCallback((x: number, intent: PlotIntent) => {
+    const index = nearestIndex(xs, x);
+    if (index === null) return;
+    // Off the nights (the value marks' gutter): nothing to read there, and a
+    // click or tap lets the picked night go (walk 18 T2-04).
+    const off = intent !== 'slide' && outsideNights(xs, x);
+    if (intent === 'point') {
+      if (off) {
+        letGo.current = null;
+        setHovered(null);
+        return;
+      }
+      if (letGo.current === index) return;
+      letGo.current = null;
+      setHovered(index);
+      return;
+    }
+    if (intent === 'slide') {
+      revealWanted.current = true;
+      letGo.current = null;
+      setPinned(index);
+      return;
+    }
+    // A click pins a night; a click on the pinned night, or off the nights,
+    // lets it go, as a second tap does: the chart goes back to its latest
+    // reading at once, though the mouse still points there.
+    if (off || pinnedNow.current === index) {
+      letGo.current = off ? null : index;
+      setHovered(null);
+      setPinned(null);
+      return;
+    }
+    revealWanted.current = true;
+    letGo.current = null;
+    setPinned(index);
+  }, [xs]);
+  const onKey = useCallback((key: string) => {
+    // The keys never move the page, even right after a slide asked to.
+    revealWanted.current = false;
+    if (key === 'Escape') {
+      if (selected === null) return false;
+      setPinned(null);
+      setHovered(null);
+      return true;
+    }
+    const current = Math.min(selected ?? last, last);
+    // Arrows move a night, Page keys a week (walk 9 T3-N1), Home and End the ends.
+    const next = key === 'ArrowLeft' ? Math.max(0, current - 1)
+      : key === 'ArrowRight' ? Math.min(last, current + 1)
+        : key === 'PageDown' ? weekStepIndex(series, current, -1)
+          : key === 'PageUp' ? weekStepIndex(series, current, 1)
+            : key === 'Home' ? 0
+              : key === 'End' ? last
+                : null;
+    if (next === null) return false;
+    // The keys own the reading until the mouse moves again.
+    letGo.current = null;
+    setHovered(null);
+    setPinned(next);
+    return true;
+  }, [last, selected, series]);
+  const { ref, responderProps } = usePlotPointer({
+    onRead: read,
+    onLeave: () => {
+      letGo.current = null;
+      setHovered(null);
+    },
+    onKey,
+  });
+  const onLayout = (event: LayoutChangeEvent) => setWidth(Math.round(event.nativeEvent.layout.width));
+
+  if (!hasNights(series)) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.heading}>
+          <ChartName />
+        </View>
+        {/* Keyed apart from the plot: react-native-web only starts observing
+            onLayout when a view mounts, so the plot must mount fresh when the
+            first night arrives instead of reusing this view. */}
+        <View key="empty">
+          {/* The sentence under the drawn $0 line is what a reader hears (it
+              says why, at season end too); a name on this role-less view was
+              not read everywhere (walk 15 T3-09). */}
+          <View aria-hidden style={styles.emptyZero}>
+            <Text maxFontSizeMultiplier={1.3} style={styles.emptyZeroLabel}>$0</Text>
+            <View style={styles.emptyRule} />
+          </View>
+          <Text style={styles.emptyText}>
+            {seasonOver
+              ? 'None of your players played this season, so there is nothing to chart.'
+              : 'Your chart starts at $0 and fills in after your first game night.'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Never trust a stale index for a render: the series can shrink under it.
+  const readIndex = selected !== null && selected <= last ? selected : null;
+  const point = readIndex === null ? null : series[readIndex];
+  const shownIndex = readIndex ?? last;
+  const end = series[last];
+  const endUp = end.cumulativePnl >= 0;
+  const axisLabels = placeAxisLabels(xs, axisLabelIndexes(series, width), width, AXIS_LABEL_WIDTH);
+  const revealX = gutter + revealed * span + 4;
+  const widest = widestReading(series);
+  const restWords = (
+    <View style={tallReading ? styles.restStacked : styles.restLine}>
+      <ChartName />
+      {/* Tap, click or arrow keys: one word for all of them. */}
+      <Text style={styles.hint}>Select a night to read it</Text>
+    </View>
+  );
 
   return (
-    <View
-      accessible
-      accessibilityLabel={`Cumulative profit and loss chart from zero to ${formatSignedMoney(current)}`}
-      style={styles.container}
-    >
-      <View style={styles.heading}>
-        <Text style={styles.label}>CUMULATIVE P&amp;L</Text>
-        <Text style={[styles.value, current >= 0 ? styles.positive : styles.negative]}>
-          {formatCompactSignedMoney(current)}
-        </Text>
-      </View>
-      <View onLayout={onLayout}>
-        {entries.length === 0 ? (
-          <View style={styles.emptyChart}>
-            <View style={styles.zeroLine} />
-            <Text style={styles.emptyText}>Your chart starts at $0. Fees and settled games will appear here.</Text>
+    <View style={styles.container}>
+      {/* The heading holds the height of its longest reading from the start,
+          so reading a night never pushes the chart and the rows under it
+          (walk 9 T1-03): unseen copies of the resting words and of the
+          longest reading share its one cell with what is shown. */}
+      <View style={styles.headingRow}>
+      <View ref={headingRef} style={[styles.heading, styles.headingFill]}>
+        <View style={styles.headingLayer}>
+          {point ? <Reading point={point} previous={series[shownIndex - 1]} stacked={tallReading} /> : restWords}
+        </View>
+        <View aria-hidden style={[styles.headingLayer, styles.headingGhost]}>
+          {restWords}
+        </View>
+        {/* Measured as it would wrap by itself: two lines or more, and every
+            reading takes its date line and its figures line. */}
+        <View
+          aria-hidden
+          onLayout={(event) => {
+            const tall = event.nativeEvent.layout.height > 26;
+            setTallReading((current) => (current === tall ? current : tall));
+          }}
+          style={[styles.headingLayer, styles.headingGhost]}
+        >
+          <Reading point={series[widest]} previous={series[widest - 1]} />
+        </View>
+        {tallReading ? (
+          <View aria-hidden style={[styles.headingLayer, styles.headingGhost]}>
+            <Reading point={series[widest]} previous={series[widest - 1]} stacked />
           </View>
-        ) : width > 0 ? (
-          <Svg height={CHART_HEIGHT} width={width}>
-            <Line
-              stroke={colors.borderStrong}
-              strokeDasharray="4 4"
-              strokeWidth={1}
-              x1={CHART_INSET}
-              x2={width - CHART_INSET}
-              y1={zeroY}
-              y2={zeroY}
-            />
-            <Path d={path} fill="none" stroke={color} strokeLinecap="round" strokeWidth={3} />
+        ) : null}
+      </View>
+      {/* Outside the heading's layers, so it stays while a night is read. */}
+      {widen ? (
+        <Button
+          ref={toggleRef}
+          accessibilityLabel={widen.wide ? 'Score by night: back beside your score' : 'Score by night: full width, to pick one night'}
+          label={widen.wide ? 'Narrow' : 'Full width'}
+          onPress={repeatSafe(widen.onToggle)}
+          style={styles.widen}
+        />
+      ) : null}
+      </View>
+      {/* How the keys move, said once after the slider's name (walk 9 T3-N1). */}
+      <Text nativeID={keysId} style={visuallyHidden}>Arrow keys move a night, Page keys a week.</Text>
+      <View
+        key="plot"
+        {...({ 'aria-describedby': keysId } as object)}
+        accessible
+        // Native screen readers step nights with their adjust gesture; the web
+        // slider takes arrow keys (see usePlotPointer).
+        accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+        accessibilityLabel={chartSummary(series)}
+        accessibilityRole="adjustable"
+        aria-valuemax={last}
+        aria-valuemin={0}
+        aria-valuenow={shownIndex}
+        // Always a reading, the selected night's or the last's (walk 8 T3-03).
+        aria-valuetext={chartValueText(series, readIndex)}
+        onAccessibilityAction={(event) => {
+          onKey(event.nativeEvent.actionName === 'increment' ? 'ArrowRight' : 'ArrowLeft');
+        }}
+        onLayout={onLayout}
+        ref={ref}
+        style={[styles.plot, { height: plotHeight }]}
+        tabIndex={0}
+        {...responderProps}
+      >
+        {width > 0 ? (
+          <Svg height={plotHeight} style={styles.svg} width={width}>
+            <Defs>
+              <ClipPath id={`${clipId}-up`}>
+                <Rect height={Math.max(zeroY, 0)} width={width} x={0} y={0} />
+              </ClipPath>
+              <ClipPath id={`${clipId}-down`}>
+                <Rect height={Math.max(plotHeight - zeroY, 0)} width={width} x={0} y={zeroY} />
+              </ClipPath>
+              <ClipPath id={`${clipId}-reveal`}>
+                <Rect height={plotHeight} width={Math.max(revealX, 0)} x={0} y={0} />
+              </ClipPath>
+            </Defs>
+            <G clipPath={`url(#${clipId}-reveal)`}>
+              <G clipPath={`url(#${clipId}-up)`}>
+                <Path d={areaPath} fill={colors.greenSoft} />
+                <Path d={linePath} fill="none" stroke={colors.green} strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} />
+              </G>
+              <G clipPath={`url(#${clipId}-down)`}>
+                <Path d={areaPath} fill={colors.redSoft} />
+                <Path d={linePath} fill="none" stroke={colors.red} strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} />
+              </G>
+            </G>
+            {ticks.map((tick) => (
+              <Line
+                key={tick.kind}
+                // Above or below $0 is the chart's message: its line is drawn
+                // at 3:1 in the muted-text colour (walk 9 T3-13), solid, a
+                // hairline, so the one dash on the chart is the fee step
+                // (walk 16 T2-02); the high and low guides stay faint.
+                stroke={tick.kind === 'zero' ? colors.muted : colors.border}
+                strokeDasharray={tick.kind === 'zero' ? undefined : '1 4'}
+                strokeWidth={1}
+                x1={gutter - 2}
+                x2={width}
+                y1={tick.y}
+                y2={tick.y}
+              />
+            ))}
+            {tailPath ? (
+              // Fees since the last night: the chart's only dashed stroke,
+              // drawn over the $0 line so it stands out where they meet.
+              <G clipPath={`url(#${clipId}-reveal)`}>
+                <G clipPath={`url(#${clipId}-up)`}>
+                  <Path d={tailPath} fill="none" stroke={colors.green} strokeDasharray="3 3" strokeWidth={2} />
+                </G>
+                <G clipPath={`url(#${clipId}-down)`}>
+                  <Path d={tailPath} fill="none" stroke={colors.red} strokeDasharray="3 3" strokeWidth={2} />
+                </G>
+              </G>
+            ) : null}
+            {point ? (
+              <>
+                <Line
+                  stroke={colors.muted}
+                  strokeDasharray="2 3"
+                  strokeWidth={1}
+                  x1={xs[shownIndex]}
+                  x2={xs[shownIndex]}
+                  y1={0}
+                  y2={plotHeight}
+                />
+                <Circle
+                  cx={xs[shownIndex]}
+                  cy={yOf(point.cumulativePnl)}
+                  fill={point.cumulativePnl >= 0 ? colors.green : colors.red}
+                  fillOpacity={0.25}
+                  r={9}
+                />
+                <Circle
+                  cx={xs[shownIndex]}
+                  cy={yOf(point.cumulativePnl)}
+                  fill={point.cumulativePnl >= 0 ? colors.green : colors.red}
+                  r={4.5}
+                />
+              </>
+            ) : revealed >= 1 ? (
+              <Circle cx={xs[last]} cy={yOf(end.cumulativePnl)} fill={endUp ? colors.green : colors.red} r={3.5} />
+            ) : null}
           </Svg>
-        ) : (
-          <View style={styles.emptyChart} />
-        )}
+        ) : null}
+        {/* The value marks name the lines: $0, and the season's high and low,
+            each beside its line or stepped just clear of a close one. */}
+        {ticks.map((tick) => (
+          <Text
+            key={tick.kind}
+            maxFontSizeMultiplier={1.3}
+            onLayout={(event) => onMarkLayout(tick.kind, event.nativeEvent.layout.width)}
+            style={[styles.tickLabel, { top: Math.min(Math.max(tick.labelY - 7, 0), plotHeight - 14) }]}
+          >
+            {valueMark(tick.kind, tick.value)}
+          </Text>
+        ))}
+        {/* The low that gave way to "$0" in the gutter, named under its dip
+            once the line has reached it (walk 17, T4 idea 6). */}
+        {lowInside !== null && width > 0 && xs[lowInside] !== undefined && xs[lowInside] <= revealX ? (() => {
+          const place = lowInsidePlace(xs[lowInside], LOW_INSIDE_BOX, gutter, width - INSET_RIGHT);
+          return (
+            <Text
+              maxFontSizeMultiplier={1.3}
+              style={[
+                styles.tickLabel,
+                styles.lowInside,
+                // Clear of the end dot (r 3.5) when the low is the latest point;
+                // a box squeezed narrower than its words takes two lines.
+                {
+                  left: place.left,
+                  width: place.width,
+                  textAlign: place.align,
+                  top: Math.min(yOf(values[lowInside]) + 4, plotHeight - (place.width < LOW_INSIDE_BOX ? 29 : 15)),
+                },
+              ]}
+            >
+              {valueMark('low', values[lowInside])}
+            </Text>
+          );
+        })() : null}
+      </View>
+      <View style={styles.axis}>
+        {width > 0 ? axisLabels.map(({ index, left, align }) => (
+          // The end labels hang from their edge and grow inward, so wider text
+          // (text-spacing overrides) never cuts "Oct 26" to "Oct" (walk 4 T3-13).
+          <Text
+            key={index}
+            maxFontSizeMultiplier={1.3}
+            style={[
+              styles.axisLabel,
+              align === 'right'
+                ? { right: 0, width: undefined, textAlign: 'right' }
+                : align === 'left'
+                  ? { left: 0, width: undefined, textAlign: 'left' }
+                  : { left, textAlign: 'center' },
+            ]}
+          >
+            {series[index].label}
+          </Text>
+        )) : null}
       </View>
     </View>
   );
 }
 
+/**
+ * Scrolls the chart's heading into view when it sits above the top of the
+ * area that scrolls it (web): the least move that shows the reading, smooth
+ * unless the viewer asked for less motion.
+ */
+function revealReading(node: unknown, reducedMotion: boolean) {
+  if (Platform.OS !== 'web') return;
+  const heading = node as HTMLElement | null;
+  if (!heading || typeof heading.getBoundingClientRect !== 'function') return;
+  let area = heading.parentElement;
+  while (area && !(area.scrollHeight > area.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(area).overflowY))) {
+    area = area.parentElement;
+  }
+  if (!area) return;
+  const top = readingRevealTop(heading.getBoundingClientRect().top - area.getBoundingClientRect().top, area.scrollTop);
+  if (top === null) return;
+  // The element's own scrollTo: react-native-web gives a ScrollView's node its
+  // own `scrollTo({ x, y })`, which reads these options as the top.
+  (Element.prototype.scrollTo as (this: Element, options: ScrollToOptions) => void)
+    .call(area, { top, behavior: reducedMotion ? 'auto' : 'smooth' });
+}
+
+/** The chart's name, its heading, on the resting words and on every reading. */
+function ChartName() {
+  return <Text accessibilityLabel="Score by night" accessibilityRole="header" {...headingLevel(2)}><Label>Score by night</Label></Text>;
+}
+
+/**
+ * A reading keeps the chart's name on its first line, before the date, so a
+ * picked night never takes the chart's name away and the heading keeps its
+ * height (walk 18 T2-04).
+ */
+function ReadingHead({ children }: { children: string }) {
+  return (
+    <View style={styles.readingHead}>
+      <ChartName />
+      <Text style={styles.readingDate}>{children}</Text>
+    </View>
+  );
+}
+
+/**
+ * The heading while a night is being read: the chart's name and its date,
+ * then each figure after its label. `stacked` puts the figures on the line under the date, where a
+ * narrow chart would wrap the longest reading anyway, so every night reads in
+ * the same two lines.
+ */
+function Reading({ point, previous, stacked = false }: { point: NightPoint; previous: NightPoint | undefined; stacked?: boolean }) {
+  if (point.kind === 'start') {
+    return (
+      <View style={[styles.reading, stacked && styles.readingStacked]}>
+        <ReadingHead>Start</ReadingHead>
+        <Text style={styles.readingCaption}>Everyone starts at $0</Text>
+      </View>
+    );
+  }
+  const { when, fees } = nightReadingParts(point, previous);
+  const figure = (caption: string, value: number) => (
+    <View key={caption} style={styles.readingPair}>
+      <Text style={styles.readingCaption}>{caption}</Text>
+      <FineMoney size="body" value={value} />
+    </View>
+  );
+  return (
+    <View style={[styles.reading, stacked && styles.readingStacked]}>
+      <ReadingHead>{when}</ReadingHead>
+      <View style={styles.readingFigures}>
+        {point.kind === 'night' ? figure('That night', point.change) : figure('Fees', point.fees ?? point.change)}
+        {fees !== 0 ? figure('Fees', fees) : null}
+        {point.adjustments ? figure('Earlier games', point.adjustments) : null}
+        {figure('Score', point.cumulativePnl)}
+      </View>
+    </View>
+  );
+}
+
+
 const styles = StyleSheet.create({
   container: {
-    minHeight: 190,
-    padding: space.lg,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    paddingBottom: 6,
+    backgroundColor: colors.background,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
-    backgroundColor: colors.background,
   },
-  heading: {
-    minHeight: 40,
+  headingRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    columnGap: space.sm,
+  },
+  headingFill: {
+    flex: 1,
+    minWidth: 0,
+  },
+  widen: {
+    marginBottom: space.xs,
+  },
+  // One cell, as tall as the tallest of its layers.
+  heading: {
+    minHeight: 18,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 2,
+  },
+  headingLayer: {
+    width: '100%',
+    flexShrink: 0,
+  },
+  // Laid out, never drawn, read, found or selected.
+  headingGhost: {
+    pointerEvents: 'none',
+    marginLeft: '-100%',
+    ...({ visibility: 'hidden' } as object),
+  },
+  restLine: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    columnGap: space.md,
+  },
+  restStacked: {
+    rowGap: 2,
+  },
+  hint: {
+    color: colors.faint,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.bold,
+  },
+  reading: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'baseline',
     justifyContent: 'space-between',
-    gap: space.md,
+    columnGap: space.md,
   },
-  label: {
-    ...labelStyle,
+  readingStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
   },
-  value: {
+  // The chart's name, then the date: one line, wrapping only if it must.
+  readingHead: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    flexShrink: 1,
+    minWidth: 0,
+    alignItems: 'baseline',
+    columnGap: space.sm,
+  },
+  readingDate: {
+    color: colors.text,
     fontFamily: fonts.display,
-    fontSize: type.title,
+    fontSize: type.body,
     fontWeight: weight.heavy,
-    fontVariant: ['tabular-nums'],
   },
-  positive: {
-    color: colors.green,
+  // Shrinks to its line and wraps a pair (and a pair its figure under its
+  // label) when the letters widen: a reader's text spacing at 320px ran the
+  // longest reading's measuring copy to x=360, so the Roster could pan
+  // sideways (walk 14 T3-01).
+  readingFigures: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    flexShrink: 1,
+    minWidth: 0,
+    alignItems: 'baseline',
+    columnGap: space.md,
+    rowGap: 2,
   },
-  negative: {
-    color: colors.red,
+  readingPair: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    flexShrink: 1,
+    minWidth: 0,
+    alignItems: 'baseline',
+    gap: 4,
   },
-  emptyChart: {
-    height: CHART_HEIGHT,
-    alignItems: 'center',
-    justifyContent: 'center',
+  readingCaption: {
+    color: colors.faint,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.bold,
   },
-  zeroLine: {
+  plot: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  /** Out of flow, so the plot's height is exactly its own. */
+  svg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  // Its own width, on one line: the gutter is sized to it, never the reverse.
+  tickLabel: {
     position: 'absolute',
     left: 0,
-    right: 0,
-    top: CHART_HEIGHT / 2,
-    height: 1,
-    backgroundColor: colors.borderStrong,
+    ...({ whiteSpace: 'nowrap' } as object),
+    color: colors.faint,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.bold,
+    fontVariant: ['tabular-nums'],
+    lineHeight: 14,
+  },
+  // The Low mark inside the plot: a box its words centre in, under the dip.
+  lowInside: {
+    width: LOW_INSIDE_BOX,
+  },
+  axis: {
+    position: 'relative',
+    height: 16,
+  },
+  axisLabel: {
+    position: 'absolute',
+    top: 0,
+    width: AXIS_LABEL_WIDTH,
+    color: colors.faint,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.bold,
+    fontVariant: ['tabular-nums'],
+    lineHeight: 16,
+  },
+  emptyZero: {
+    height: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  emptyZeroLabel: {
+    width: GUTTER,
+    color: colors.faint,
+    fontFamily: fonts.display,
+    fontSize: type.label,
+    fontWeight: weight.bold,
+    fontVariant: ['tabular-nums'],
+  },
+  emptyRule: {
+    flex: 1,
+    height: 0,
+    borderTopWidth: 1,
+    // The $0 line, at 3:1 and solid as on the drawn chart (walk 9 T3-13,
+    // walk 16 T2-02).
+    borderTopColor: colors.muted,
   },
   emptyText: {
-    maxWidth: 320,
-    paddingHorizontal: space.md,
+    marginTop: space.xs,
     color: colors.muted,
-    backgroundColor: colors.background,
-    fontSize: type.body,
-    textAlign: 'center',
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
+    lineHeight: 17,
   },
 });

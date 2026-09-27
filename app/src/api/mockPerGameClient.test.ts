@@ -85,3 +85,16 @@ test('the mock market plays the real rules end to end', async () => {
   assert.equal(closed.account.longSlots.used, 0);
   assert.equal(closed.ledger.items.filter((entry) => entry.kind === 'drop_fee').length, 1);
 });
+
+test('a practice week moves the clock exactly seven days and settles every game night in it', async () => {
+  const client = new MockPerGameApiClient();
+  const before = await client.bootstrap();
+  const start = before.game.lastSettledDate as string;
+  client.advanceDays(7);
+  const after = await client.bootstrap();
+  const expected = new Date(Date.parse(`${start}T00:00:00Z`) + 7 * 86_400_000).toISOString().slice(0, 10);
+  assert.equal(after.game.lastSettledDate, expected);
+  assert.ok((after.game.nextGameDate as string) > expected);
+  client.advanceDays(7, expected);
+  assert.equal((await client.bootstrap()).game.lastSettledDate, expected);
+});

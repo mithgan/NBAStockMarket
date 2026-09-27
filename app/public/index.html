@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>%WEB_TITLE%</title>
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+        /* The app's own reset clears the browser's 8px margin only once it
+           runs; clearing it here keeps the loading lockup from moving up
+           8px when the app takes over. */
+        margin: 0;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+      /* Until the app draws its first frame (a first visit, a restart, a new
+         season): the brand and a quiet line, not a blank page (walk 12 T2-01).
+         The app replaces it. */
+      #shell-loading {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 24px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: var(--shell-ink, #fafafa);
+      }
+      #shell-loading .shell-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #shell-loading .shell-mark {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--shell-gold, #d9a227);
+        color: #1a1408;
+        font-size: 19px;
+        font-weight: 800;
+        line-height: 32px;
+        text-align: center;
+      }
+      #shell-loading .shell-word {
+        color: var(--shell-word, #d9a227);
+        font-size: 22px;
+        font-weight: 800;
+      }
+      #shell-loading .shell-rule {
+        width: 1px;
+        height: 20px;
+        background: var(--shell-muted, #b0b5bf);
+        opacity: 0.5;
+      }
+      #shell-loading .shell-product {
+        color: var(--shell-muted, #b0b5bf);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+      }
+      #shell-loading .shell-note {
+        margin: 0;
+        color: var(--shell-muted, #b0b5bf);
+        font-size: 14px;
+      }
+    </style>
+    <!-- The page paints in the player's look before the app loads, so a
+         restart (a reload) never flashes white on a dark screen (walk 8
+         T4-02). Same choice as ThemeProvider: the saved look, else the
+         device's (more contrast, light, or navy). src/theme/prepaint.test.ts
+         keeps this map in step with src/theme/variants.ts. -->
+    <script id="theme-prepaint">
+      (function () {
+        var backgrounds = {"default":"#0e1218","og":"#1b212c","immersive":"#07090d","tape":"#0c0d10","slab":"#111214","brushed":"#0f1214","grain":"#0e1218","dark":"#040506","light":"#f3ecdf","anvil":"#131211","monochrome":"#0f1114","ambient":"#0a0d14","haze":"#0c0f16","nocturne":"#161d2b","contrast":"#000000"};
+        var choice = null;
+        try {
+          choice = window.localStorage.getItem('nba-stock-market.design-variant');
+        } catch (error) {}
+        var matches = function (query) {
+          return Boolean(window.matchMedia && window.matchMedia(query).matches);
+        };
+        var id = choice && backgrounds[choice] ? choice
+          : matches('(prefers-contrast: more)') ? 'contrast'
+            : matches('(prefers-color-scheme: light)') ? 'light'
+              : 'grain';
+        var style = document.documentElement.style;
+        style.backgroundColor = backgrounds[id];
+        // The loading words under it, in the same look (walk 12 T2-01).
+        if (style.setProperty) {
+          var light = id === 'light';
+          style.setProperty('--shell-ink', light ? '#231f1a' : '#fafafa');
+          style.setProperty('--shell-muted', light ? '#4c4339' : '#b0b5bf');
+          style.setProperty('--shell-word', id === 'contrast' ? '#ffd21f' : light ? '#6a4e0d' : '#d9a227');
+          style.setProperty('--shell-gold', id === 'contrast' ? '#ffd21f' : '#d9a227');
+        }
+      })();
+    </script>
+  </head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"><div id="shell-loading"><div class="shell-brand" aria-hidden="true"><span class="shell-mark">d</span><span class="shell-word">databallr</span><span class="shell-rule"></span><span class="shell-product">STOCK MARKET</span></div><p class="shell-note">Loading…</p></div></div>
+    <!-- The loading line says what is starting, in the app's loading look's
+         words (walk 18 T2-07): a restart leaves them for its new page
+         (src/web/practiceSession.ts), practice says "Starting practice". -->
+    <script id="shell-words">
+      (function () {
+        try {
+          var note = document.querySelector('#shell-loading .shell-note');
+          if (!note) return;
+          var words = null;
+          try {
+            words = window.sessionStorage.getItem('nba-stock-market:start-words');
+          } catch (error) {}
+          if (!words) {
+            var keys = Array.from(new URLSearchParams(location.search).keys()).map(function (key) {
+              return key.trim().toLowerCase().replace(/\/+$/, '');
+            });
+            if (keys.indexOf('mock') !== -1) words = 'Starting practice';
+          }
+          if (words) note.textContent = words;
+        } catch (error) {}
+      })();
+    </script>
+  </body>
+</html>

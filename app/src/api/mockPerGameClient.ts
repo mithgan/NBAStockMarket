@@ -20,6 +20,40 @@ import {
 } from './contracts';
 import { PerGameApiError } from './perGameClient';
 import type { TrendPoint } from '../data/trendPresentation';
+import { rosterReopensLine } from '../copy/terms';
+import { pastSeasonCount } from '../web/practiceSession';
+
+/**
+ * Practice runs on last season's calendar, so its ledger is stamped in that
+ * calendar too: a roster move at midday on the day of the next games, a
+ * settlement late that night. Real wall-clock stamps would put a fee in
+ * September 2026 beside October 2025 games.
+ */
+function simulatedTime(day: string, when: 'move' | 'settlement'): string {
+  return `${day}T${when === 'move' ? '23:45:00' : '23:30:00'}.000Z`;
+}
+
+/** Other players on the practice leaderboard. */
+/**
+ * Practice's market from the best player down, which sets each price (and so
+ * each player's simulated games) and his tier: the top ten are stars, the
+ * next twelve starters, the rest role players.
+ */
+const PRACTICE_QUALITY = [
+  'Nikola Jokic', 'Shai Gilgeous-Alexander', 'Giannis Antetokounmpo', 'Luka Doncic',
+  'Victor Wembanyama', 'Jalen Brunson', 'Cade Cunningham', 'Karl-Anthony Towns',
+  'Donovan Mitchell', 'Kevin Durant', 'Devin Booker', 'Tyrese Maxey', 'Evan Mobley',
+  'Kawhi Leonard', 'LaMelo Ball', 'Jamal Murray', 'Bam Adebayo', 'Scottie Barnes',
+  'Jaylen Brown', 'Chet Holmgren', "De'Aaron Fox", 'Desmond Bane', 'Derrick White',
+  'Amen Thompson', 'Jalen Duren', 'OG Anunoby', 'Dyson Daniels', 'Donovan Clingan',
+  'Collin Gillespie', 'Kon Knueppel',
+];
+/** The best player's price a game; the last on the list costs about a fifth of it. */
+const PRACTICE_TOP_PRICE = 462_500;
+/** Players with no NBA season before this one. */
+const PRACTICE_ROOKIES = new Set(['Kon Knueppel']);
+
+const PRACTICE_RIVALS = ['Fast Break FC', 'Deep Threes', 'Glass Cleaners', 'Pick and Roll Club', 'Bench Mob'];
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -43,14 +77,55 @@ function makeRng(seed: number) {
   };
 }
 
+/**
+ * The seed for a season's nights. Each practice season plays its own games
+ * (so "Play another season" is a new season, not a replay); `?mock&seed=42`
+ * pins the first, and each later season this visit plays seed + its number,
+ * so a seed link replays the same run of seasons (walk 9 T2-11: every season
+ * replayed the first). The market itself is always the same.
+ */
+function seasonSeed(): number {
+  if (typeof window !== 'undefined') {
+    const pinned = Number(new URLSearchParams(window.location.search).get('seed'));
+    if (Number.isInteger(pinned) && pinned > 0) return pinned + pastSeasonCount();
+    return 1 + Math.floor(Math.random() * 2_147_483_000);
+  }
+  return 20_262_027;
+}
+
+/**
+ * A pretend network delay for checking the app under a slow connection
+ * (`?mock&latency=600`, up to 3 s). Practice answers at once without it.
+ */
+function mockLatencyMs(): number {
+  if (typeof window === 'undefined') return 0;
+  const asked = Number(new URLSearchParams(window.location.search).get('latency'));
+  return Number.isFinite(asked) && asked > 0 ? Math.min(3000, Math.round(asked)) : 0;
+}
+
+function networkPause(): Promise<void> {
+  const ms = mockLatencyMs();
+  return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
+}
+
 export class MockPerGameApiClient {
   private snapshot: PerGameBootstrap;
-  private rng = makeRng(20_262_027);
+  private rng = makeRng(seasonSeed());
   private sequence: number;
   private cursor: number;
   private positionCounter = 0;
   /** Full nightly history per listed player, for the in-depth profile. */
   private trendsByPlayer: Record<string, TrendPoint[]> = {};
+  /** Each player's last two game days, so his schedule reads like a team's. */
+  private recentGamesByPlayer = new Map<string, string[]>();
+  /**
+   * What each player's games are really worth a game this season: between
+   * his opening price and last season's dividend, so the market's "over his
+   * price" line is a real (if noisy) signal a player can learn to use.
+   */
+  private trueValueByPlayer = new Map<string, number>();
+  /** Each practice rival's steady lean per night: some climb, some sink. */
+  private rivalLeanByEntry = new Map<string, number>();
 
   /** The sandbox season's opening date, for the sim bar's day counter. */
   seasonStart: string | null;
@@ -69,7 +144,8 @@ export class MockPerGameApiClient {
     this.sequence = this.cursor;
     this.positionCounter = 0;
     this.trendsByPlayer = {};
-    this.rng = makeRng(20_262_027);
+    this.recentGamesByPlayer = new Map();
+    this.rng = makeRng(seasonSeed());
   }
 
   private openingSnapshot(): PerGameBootstrap {
@@ -93,12 +169,68 @@ export class MockPerGameApiClient {
       rosterMutationsLocked: false,
       rosterLockGameDate: null,
     };
-    snapshot.account = { ...snapshot.account, displayName: 'Mock preview' };
+    snapshot.account = { ...snapshot.account, displayName: 'You' };
+    // A practice season starts everyone at $0, as the Leaders screen says;
+    // the fixture's standings belong to the live sample, not to night zero.
+    // Rivals get readable names instead of account hashes.
+    let rival = 0;
+    snapshot.leaderboard = snapshot.leaderboard.map((row, index) => ({
+      ...row,
+      rank: index + 1,
+      displayName: row.isCurrentUser ? 'You' : PRACTICE_RIVALS[rival++ % PRACTICE_RIVALS.length],
+      cumulativePnl: row.isCurrentUser ? snapshot.account.cumulativePnl : 0,
+    }));
+    // Practice prices follow how good each player is, in three tiers, with
+    // uneven steps (the fixture prices the list as a $12.5K staircase in
+    // alphabetical-ish order, so Jokic was the cheapest player and every
+    // "mid" player cost more than every "star"). Games are simulated around
+    // each price, so a fair price stays fair. Seeded: every practice season
+    // starts from the same market.
+    const priceRng = makeRng(20_251_021);
+    snapshot.market = snapshot.market.map((player) => {
+      const quality = PRACTICE_QUALITY.findIndex((name) => name === player.name);
+      if (quality === -1) return player;
+      const base = PRACTICE_TOP_PRICE * (1 - (quality / PRACTICE_QUALITY.length) * 0.78);
+      const jitter = 1 + (priceRng() - 0.5) * 0.06;
+      return {
+        ...player,
+        tier: quality < 10 ? 'star' : quality < 22 ? 'starter' : 'role',
+        currentGameCost: Math.round((base * jitter) / 500) * 500,
+      };
+    });
+    // Last season's value per game, varied per player (the fixture puts every
+    // player exactly $20K from his price, which makes a Value sort pointless).
+    // A rookie has no last season. Seeded, so every practice season starts
+    // from the same market.
+    const valueRng = makeRng(20_262_028);
+    snapshot.market = snapshot.market.map((player) => {
+      if (PRACTICE_ROOKIES.has(player.name)) return { ...player, priorSeasonValuePerGame: null };
+      const ratio = 0.82 + valueRng() * 0.36;
+      return { ...player, priorSeasonValuePerGame: Math.round((player.currentGameCost * ratio) / 500) * 500 };
+    });
+    // A player's real worth this season sits a little under halfway from his
+    // price to last season's dividend; a rookie's is a coin toss around his
+    // price. Fair on average, so a season is won by picking, not by luck.
+    this.trueValueByPlayer = new Map(snapshot.market.map((player) => {
+      const price = player.currentGameCost;
+      const prior = player.priorSeasonValuePerGame;
+      const worth = prior === null ? price * (0.94 + valueRng() * 0.12) : price + (prior - price) * 0.3;
+      return [player.playerId, worth];
+    }));
+    // Rivals lean from about +$22K to -$14K a night: the best finish a few
+    // million up, the worst a million or two down, so a well-picked roster
+    // can win and a careless one ends mid-table or last.
+    const rivals = snapshot.leaderboard.filter((row) => !row.isCurrentUser);
+    this.rivalLeanByEntry = new Map(rivals.map((row, index) => [
+      row.entryId,
+      rivals.length > 1 ? Math.round(22_000 - (36_000 * index) / (rivals.length - 1)) : 0,
+    ]));
     return snapshot;
   }
 
   async bootstrap(afterCursor?: number): Promise<PerGameBootstrap> {
     void afterCursor;
+    await networkPause();
     const copy = clone(this.snapshot);
     copy.ledger.nextCursor = null;
     return copy;
@@ -110,9 +242,14 @@ export class MockPerGameApiClient {
     expectedAccountVersion,
     expectedQuoteVersion,
   }: PerGameOpenPositionRequest): Promise<PerGamePositionMutationResult> {
+    await networkPause();
     const state = this.snapshot;
     if (state.ruleset.rosterMutationsLocked) {
-      throw new PerGameApiError('Roster changes are locked for the current game.', 'roster_locked', 423);
+      throw new PerGameApiError(
+        `Your roster is locked. ${rosterReopensLine(state.ruleset.rosterLockGameDate)}.`,
+        'roster_locked',
+        423,
+      );
     }
     if (expectedAccountVersion !== state.account.version) {
       throw new PerGameApiError('Your account changed. Refresh and retry.', 'account_version_conflict', 409);
@@ -150,8 +287,10 @@ export class MockPerGameApiClient {
       lockedGameCost: player.currentGameCost,
       openedEventSequence: this.sequence,
       closedEventSequence: null,
+      // The last day the short counts: a 7-day short opened before the Oct 21
+      // games plays Oct 21-27 and ends when the Oct 27 games are in.
       expiresOn: side === 'short' && state.ruleset.shortTermDays !== null && state.game.nextGameDate
-        ? addDays(state.game.nextGameDate, state.ruleset.shortTermDays)
+        ? addDays(state.game.nextGameDate, Math.max(0, state.ruleset.shortTermDays - 1))
         : null,
       cumulativeGameCost: 0,
       cumulativeDividend: 0,
@@ -188,9 +327,14 @@ export class MockPerGameApiClient {
     positionId: string,
     expectedAccountVersion: number,
   ): Promise<PerGameClosePositionMutationResult> {
+    await networkPause();
     const state = this.snapshot;
     if (state.ruleset.rosterMutationsLocked) {
-      throw new PerGameApiError('Roster changes are locked for the current game.', 'roster_locked', 423);
+      throw new PerGameApiError(
+        `Your roster is locked. ${rosterReopensLine(state.ruleset.rosterLockGameDate)}.`,
+        'roster_locked',
+        423,
+      );
     }
     if (expectedAccountVersion !== state.account.version) {
       throw new PerGameApiError('Your account changed. Refresh and retry.', 'account_version_conflict', 409);
@@ -234,10 +378,35 @@ export class MockPerGameApiClient {
   }
 
   /** Settle one night: every active position whose player plays gets paid. */
+  /**
+   * A believable NBA schedule for one player (walk 4 T1-08: four nights in a
+   * row for one, a single game in ten days for another). Never three nights
+   * running (after a back-to-back he rests), never more than three days
+   * without a game, otherwise about half of the game nights, and never more
+   * than 82 in a season: three games a week or so, like a real team. One
+   * roll every night, so a pinned seed stays reproducible.
+   */
+  private playsTonight(playerId: string, date: string): boolean {
+    const roll = this.rng();
+    // An NBA team plays 82 games; nobody plays more (walk 5 T2-17 counted
+    // 84-90 for players held all season).
+    if ((this.trendsByPlayer[playerId]?.length ?? 0) >= 82) return false;
+    const recent = this.recentGamesByPlayer.get(playerId) ?? [];
+    const last = recent[recent.length - 1];
+    const before = recent[recent.length - 2];
+    const backToBack = last !== undefined && before !== undefined
+      && addDays(before, 1) === last && addDays(last, 1) === date;
+    const plays = backToBack ? false : last === undefined || addDays(last, 3) <= date ? true : roll < 0.54;
+    if (plays) this.recentGamesByPlayer.set(playerId, [...recent.slice(-1), date]);
+    return plays;
+  }
+
   advanceNight(): void {
     const state = this.snapshot;
     const date = state.game.nextGameDate;
     if (!date) return;
+    // A lock covers one night; tonight's lock ends when tonight's games are in.
+    const lockedTonight = state.ruleset.rosterMutationsLocked && state.ruleset.rosterLockGameDate === date;
     state.ruleset.rosterMutationsLocked = false;
     state.ruleset.rosterLockGameDate = null;
 
@@ -247,10 +416,17 @@ export class MockPerGameApiClient {
     // anyone holds him — the profile chart reads the whole league.
     const actualByPlayer = new Map<string, number>();
     for (const player of state.market) {
-      if (this.rng() > 0.55) continue;
-      const expectedNp = player.currentGameCost / rate;
-      const noise = (this.rng() + this.rng() + this.rng() - 1.5) * 14;
-      const actualNp = Math.round((expectedNp + noise) * 10) / 10;
+      if (!this.playsTonight(player.playerId, date)) continue;
+      const expectedNp = (this.trueValueByPlayer.get(player.playerId) ?? player.currentGameCost) / rate;
+      // Most nights land within about half his worth either way; now and
+      // then a bad night goes below zero, as the rules say it can. Ordinary
+      // nights sit about 9% above his worth, which pays for the bad nights:
+      // on average a player earns what he is worth (the old draw lost about
+      // 9% of the price every game, so every long lost money).
+      const swing = (this.rng() + this.rng() + this.rng() - 1.5) * 0.5;
+      const badNight = this.rng() < 0.06;
+      const rawNp = badNight ? -expectedNp * (0.2 + 0.5 * this.rng()) : expectedNp * (1.093 + swing);
+      const actualNp = Math.round(rawNp * 10) / 10;
       actualByPlayer.set(player.playerId, actualNp);
       const trend = this.trendsByPlayer[player.playerId]
         ?? (this.trendsByPlayer[player.playerId] = []);
@@ -261,18 +437,20 @@ export class MockPerGameApiClient {
         dividend_per_holder: Math.round(actualNp * rate) - player.currentGameCost,
       });
     }
+    // A short whose term ended before tonight (no games on its last days)
+    // closes now, before the games: it never plays past its term.
+    for (const position of state.positions) {
+      if (position.status !== 'active' || position.expiresOn === null || position.expiresOn >= date) continue;
+      this.sequence += 1;
+      position.status = 'closed';
+      position.closedEventSequence = this.sequence;
+      const slots = position.side === 'long' ? state.account.longSlots : state.account.shortSlots;
+      slots.used = Math.max(0, slots.used - 1);
+      slots.remaining = Math.max(0, slots.limit - slots.used);
+    }
     let nightPnl = 0;
     for (const position of state.positions) {
       if (position.status !== 'active') continue;
-      if (position.expiresOn !== null && position.expiresOn < date) {
-        this.sequence += 1;
-        position.status = 'closed';
-        position.closedEventSequence = this.sequence;
-        const slots = position.side === 'long' ? state.account.longSlots : state.account.shortSlots;
-        slots.used = Math.max(0, slots.used - 1);
-        slots.remaining = Math.max(0, slots.limit - slots.used);
-        continue;
-      }
       const actualNp = actualByPlayer.get(position.playerId);
       if (actualNp === undefined) continue;
       const dividend = Math.round(actualNp * rate);
@@ -292,7 +470,7 @@ export class MockPerGameApiClient {
         kind: 'game_cost',
         amountDollars: position.side === 'long' ? -cost : cost,
         adjustsEntryId: null,
-        createdAt: new Date().toISOString(),
+        createdAt: simulatedTime(date, 'settlement'),
       });
       this.cursor += 1;
       state.ledger.items.push({
@@ -306,7 +484,7 @@ export class MockPerGameApiClient {
         kind: 'game_dividend',
         amountDollars: position.side === 'long' ? dividend : -dividend,
         adjustsEntryId: null,
-        createdAt: new Date().toISOString(),
+        createdAt: simulatedTime(date, 'settlement'),
       });
       this.cursor += 1;
       state.settledResults.push({
@@ -333,8 +511,16 @@ export class MockPerGameApiClient {
     state.account.latestGamePnl = nightPnl;
     state.account.cumulativePnl += nightPnl;
 
+    // A short ends once its last game is in, so its slot is free for the
+    // next night's games (no $250 to close a short that is already over).
+    this.closeShortsEndedBy(date);
+
     for (const player of state.market) {
-      const drift = 1 + (this.rng() - 0.5) * 0.04;
+      // Prices wander, and slowly follow what the player is really worth, so
+      // a price you locked early can turn out to be a bargain (or not).
+      const worth = this.trueValueByPlayer.get(player.playerId) ?? player.currentGameCost;
+      const pull = Math.max(-1, Math.min(1, (worth - player.currentGameCost) / player.currentGameCost));
+      const drift = 1 + (this.rng() - 0.5) * 0.03 + 0.012 * pull;
       const next = Math.max(25_000, Math.round(player.currentGameCost * drift));
       if (next !== player.currentGameCost) {
         player.currentGameCost = next;
@@ -346,7 +532,7 @@ export class MockPerGameApiClient {
       if (row.isCurrentUser) {
         row.cumulativePnl = state.account.cumulativePnl;
       } else {
-        row.cumulativePnl += Math.round((this.rng() - 0.48) * 800_000);
+        row.cumulativePnl += Math.round((this.rng() - 0.5) * 500_000) + (this.rivalLeanByEntry.get(row.entryId) ?? 0);
       }
     }
     state.leaderboard.sort((left, right) => right.cumulativePnl - left.cumulativePnl);
@@ -360,9 +546,49 @@ export class MockPerGameApiClient {
 
     // A quarter of nights close with the next slate already locked, so the
     // LOCKED chip and disabled mutation states stay reviewable in the mock.
-    if (this.rng() < 0.25) {
+    // Never two nights in a row: "Moves reopen after <date>" must hold.
+    // The opening week never locks: a new player's first nights are for
+    // building a roster.
+    const openingWeek = this.seasonStart !== null && date < addDays(this.seasonStart, 7);
+    if (!lockedTonight && !openingWeek && this.rng() < 0.25) {
       state.ruleset.rosterMutationsLocked = true;
       state.ruleset.rosterLockGameDate = state.game.nextGameDate;
+    }
+  }
+
+  /**
+   * Settle every game night in the next `days` calendar days, then move the
+   * clock the full span, so a practice week is seven days on the track even
+   * when its last day has no games. Never runs past `lastDay` when given.
+   */
+  advanceDays(days: number, lastDay?: string | null): void {
+    const start = this.snapshot.game.lastSettledDate;
+    if (!start || days <= 0) return;
+    let target = addDays(start, days);
+    if (lastDay && target > lastDay) target = lastDay;
+    while (this.snapshot.game.nextGameDate && this.snapshot.game.nextGameDate <= target) {
+      this.advanceNight();
+    }
+    if ((this.snapshot.game.lastSettledDate ?? start) < target) {
+      this.snapshot.game.lastSettledDate = target;
+      // The clock passed days with no games: a short whose term ended on one
+      // of them is over too, not left holding its slot and offering a $250
+      // close that changes nothing (walk 4 T2-12).
+      this.closeShortsEndedBy(target);
+    }
+  }
+
+  /** Close every active short whose term ends on or before `date`. */
+  private closeShortsEndedBy(date: string): void {
+    const state = this.snapshot;
+    for (const position of state.positions) {
+      if (position.status !== 'active' || position.expiresOn === null || position.expiresOn > date) continue;
+      this.sequence += 1;
+      position.status = 'closed';
+      position.closedEventSequence = this.sequence;
+      const slots = position.side === 'long' ? state.account.longSlots : state.account.shortSlots;
+      slots.used = Math.max(0, slots.used - 1);
+      slots.remaining = Math.max(0, slots.limit - slots.used);
     }
   }
 
@@ -385,7 +611,12 @@ export class MockPerGameApiClient {
       kind,
       amountDollars: -fee,
       adjustsEntryId: null,
-      createdAt: new Date().toISOString(),
+      // Booked on the day the status bar shows (the move is made after that
+      // day's games), so Results files it where the player made it.
+      createdAt: simulatedTime(
+        this.snapshot.game.lastSettledDate ?? SANDBOX_OPENING_EVE,
+        'move',
+      ),
     });
     this.snapshot.account.cumulativePnl -= fee;
     this.snapshot.game.eventCursor = this.cursor;
@@ -414,10 +645,17 @@ export function mockSeasonStart(): string | null {
   return singleton?.seasonStart ?? null;
 }
 
-/** Settle several nights in one gesture (the sim bar's +1 WEEK). */
+/** Settle several game nights in one gesture (+1 night uses one; +1 week uses advanceMockDays). */
 export function advanceMockNights(count: number): boolean {
   if (!singleton) return false;
   for (let night = 0; night < count; night += 1) singleton.advanceNight();
+  return true;
+}
+
+/** Settle a practice span of calendar days (the practice bar's +1 week). */
+export function advanceMockDays(days: number, lastDay?: string | null): boolean {
+  if (!singleton) return false;
+  singleton.advanceDays(days, lastDay);
   return true;
 }
 

@@ -3,6 +3,36 @@ import { BASE_FONTS, BASE_PALETTE, colors } from '../theme';
 const STYLE_ELEMENT_ID = 'nba-stock-market-global-styles';
 const FONT_LINK_ID = 'nba-stock-market-font';
 
+/** The brand face's weight the frame's buttons use, for a load check. */
+const BRAND_FONT_PROBE = '800 16px "DM Sans"';
+
+/**
+ * Resolve once the brand font can draw (its stylesheet, then the face), or
+ * after `capMs`, whichever is first: the frame waits for it so its buttons do
+ * not jump 28px when the font lands (walk 10 T2-01).
+ */
+export function brandFontReady(capMs: number): Promise<void> {
+  if (typeof document === 'undefined' || !document.fonts) return Promise.resolve();
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    setTimeout(finish, capMs);
+    const loadFace = () => {
+      document.fonts.load(BRAND_FONT_PROBE).then(finish, finish);
+    };
+    const link = document.getElementById(FONT_LINK_ID) as HTMLLinkElement | null;
+    if (!link || link.sheet) loadFace();
+    else {
+      link.addEventListener('load', loadFace, { once: true });
+      link.addEventListener('error', finish, { once: true });
+    }
+  });
+}
+
 /** databallr.com's display face. Falls back to the system stack if it fails. */
 const DM_SANS = 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&display=swap';
 
@@ -49,6 +79,14 @@ ${seededProperties}
 
 html, body, #root {
   background-color: ${colors.background};
+}
+
+/* A pull down at the top of a screen must never reload the page: practice
+   lives in memory, and iPhone Safari leaves without asking first (walk 7
+   T1-16). The screens scroll inside; the page itself never chains into the
+   browser's pull-to-refresh or its bounce. */
+html, body {
+  overscroll-behavior-y: none;
 }
 
 /* Rows answer the pointer.
@@ -122,13 +160,14 @@ html, body, #root {
    the screen, and the raking light crossing it is what makes the two read as
    one milled surface instead of as stripes. Both are held near the threshold of
    visibility on purpose: this sits under live numbers, and a texture a reader
-   can actually resolve is a texture competing with them. */
+   can actually resolve is a texture competing with them. At 2.1% the grain read
+   as a pinstripe "screen glitch" in empty space (walk 8 T1-13). */
 #variant-texture-brushed {
   background-image:
     repeating-linear-gradient(
       90deg,
-      rgba(255, 255, 255, 0.021) 0px,
-      rgba(255, 255, 255, 0.021) 1px,
+      rgba(255, 255, 255, 0.012) 0px,
+      rgba(255, 255, 255, 0.012) 1px,
       transparent 1px,
       transparent 3px
     ),
@@ -171,8 +210,71 @@ input:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid ${colors.focus} !important;
   outline-offset: 2px !important;
+  /* Scrolled into view with its whole ring showing, clear of the notice strip
+     and the edges (walk 9 T3-04: the strip cut the ring's bottom). */
+  scroll-margin: 8px;
   border-radius: 4px;
 }
+
+/* Tabs answer a pointer like every other button (walk 9 T2-09); a finger has
+   no hover, so a touch never leaves one tinted. */
+@media (hover: hover) {
+  [role="tab"][aria-selected="false"]:hover {
+    background-color: var(--c-surfaceHigh, ${BASE_PALETTE.surfaceHigh});
+  }
+}
+
+/* Tabs sit flush against the screen edge on phones; draw their ring inside
+   so it is never cut off. */
+[role="tab"]:focus-visible {
+  outline-offset: -3px !important;
+}
+
+/* Windows High Contrast (forced colours) strips tints and coloured text,
+   which is how the current tab, side, sort and theme were marked; give them
+   a system-coloured edge that forced colours keep. */
+@media (forced-colors: active) {
+  [role="tab"][aria-selected="true"] {
+    border-bottom: 3px solid Highlight !important;
+  }
+  [role="radio"][aria-checked="true"],
+  [role="switch"][aria-checked="true"] {
+    outline: 2px solid Highlight !important;
+    outline-offset: -2px !important;
+  }
+}
+
+/* A focus ring drawn inside where the box would clip it: the More menu's
+   items and rows that span the screen (their 2px ring fell off the edges),
+   and the notice's buttons, which sit on the tab bar at 400% zoom (walk 18
+   T3-05: "less ▴" lost its ring's bottom edge under the bar). */
+#latest-notice [role="button"]:focus-visible,
+#practice-more [role="button"]:focus-visible,
+[role="button"][aria-label$="View profile"]:focus-visible,
+[data-row="full"]:focus-visible,
+[data-scroll-pane]:focus-visible {
+  outline-offset: -3px !important;
+}
+
+/* Inside a sheet (Rules, Settings, a player) the scroll area clips a ring
+   drawn outside a full-width item, so only its top line showed (walk 6
+   T3-14): draw every ring there inside the item. */
+[aria-modal="true"] [tabindex]:focus-visible,
+[aria-modal="true"] [role="button"]:focus-visible,
+[aria-modal="true"] [role="link"]:focus-visible {
+  outline-offset: -3px !important;
+}
+
+/* Text focused by script there (a question's title, a Rules section's
+   heading) is no full-width control: an inset ring ran through its first
+   letters at 400% zoom (walk 17 T3-01). Its ring sits just outside it, in the
+   panel's own padding. */
+[aria-modal="true"] [tabindex="-1"]:focus-visible {
+  outline-offset: 2px !important;
+}
+
+/* The screen container is a skip-link target, not a control: no ring. */
+#app-screen:focus { outline: none; }
 
 /* Dense data table: keep the scrollbar from stealing row width. */
 ::-webkit-scrollbar { width: 10px; height: 10px; }

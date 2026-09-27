@@ -72,7 +72,7 @@ test('settlement equations reconcile long and inverse base cash flow', () => {
   assert.deepEqual(settlementEquation(long), {
     firstLabel: 'Dividend',
     firstAmount: 504_000,
-    secondLabel: 'Locked game cost',
+    secondLabel: 'Price paid',
     secondAmount: 480_000,
     operator: '-',
     netPnl: 24_000,
@@ -88,7 +88,7 @@ test('settlement equations reconcile long and inverse base cash flow', () => {
     netPnl: 50_000,
   };
   assert.equal(settlementEquation(short).reconciles, true);
-  assert.equal(settlementEquation(short).firstLabel, 'Game cost credit');
+  assert.equal(settlementEquation(short).firstLabel, 'Price credited');
 });
 
 test('correction equation uses the ledger delta but reconciles corrected game totals', () => {
@@ -521,7 +521,7 @@ test('market rows show unavailable prior-season value and enforce full slots', (
   assert.equal(row.player.priorSeasonValuePerGame, null);
   assert.equal(row.isFull, true);
   assert.equal(row.canSubmit, false);
-  assert.equal(row.unavailableReason, 'Long slots are full.');
+  assert.equal(row.unavailableReason, 'Your roster is full.');
 });
 
 test('market blocks an opposing-side CTA unless the active rules allow it', () => {
@@ -532,7 +532,7 @@ test('market blocks an opposing-side CTA unless the active rules allow it', () =
   }, 'short')[0];
   assert.equal(blocked.canSubmit, false);
   assert.equal(blocked.blockedByOpposingPosition, true);
-  assert.match(blocked.unavailableReason ?? '', /Close the roster position/);
+  assert.match(blocked.unavailableReason ?? '', /Drop him to short him/);
 
   const allowed = buildPerGameMarketRows({
     ...value,

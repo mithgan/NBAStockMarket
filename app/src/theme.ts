@@ -35,6 +35,12 @@ export const BASE_PALETTE = {
   chromeSoft: '#0e1218',
   border: '#212936',
   borderStrong: '#323c4e',
+  /**
+   * The edge of a control (buttons, toggles, inputs): 3:1 against the page,
+   * card and raised-card colours (WCAG 1.4.11), so a field never reads as
+   * floating text, even on a raised band like the practice welcome.
+   */
+  controlBorder: '#66738e',
   text: '#f7f8fa',
   muted: '#aab2c0',
   faint: '#8d97a8',
@@ -42,6 +48,8 @@ export const BASE_PALETTE = {
   goldInk: '#ffcd57',
   goldSoft: '#2f2610',
   goldLine: '#6b571f',
+  /** Text and icons that sit on a gold fill (primary buttons). */
+  onGold: '#0e1218',
   cyan: '#3abff8',
   cyanSoft: '#12303f',
   green: '#3ddc97',
@@ -61,6 +69,7 @@ export const colors = {
   chromeSoft: webVar('chromeSoft', BASE_PALETTE.chromeSoft),
   border: webVar('border', BASE_PALETTE.border),
   borderStrong: webVar('borderStrong', BASE_PALETTE.borderStrong),
+  controlBorder: webVar('controlBorder', BASE_PALETTE.controlBorder),
   text: webVar('text', BASE_PALETTE.text),
   muted: webVar('muted', BASE_PALETTE.muted),
   faint: webVar('faint', BASE_PALETTE.faint),
@@ -68,6 +77,7 @@ export const colors = {
   goldInk: webVar('goldInk', BASE_PALETTE.goldInk),
   goldSoft: webVar('goldSoft', BASE_PALETTE.goldSoft),
   goldLine: webVar('goldLine', BASE_PALETTE.goldLine),
+  onGold: webVar('onGold', BASE_PALETTE.onGold),
   cyan: webVar('cyan', BASE_PALETTE.cyan),
   cyanSoft: webVar('cyanSoft', BASE_PALETTE.cyanSoft),
   green: webVar('green', BASE_PALETTE.green),
@@ -111,12 +121,24 @@ export const fonts = {
 
 export const type = {
   label: 11,
+  caption: 12,
   body: 13,
   value: 15,
   title: 17,
   display: 34,
   hero: 46,
 };
+
+/**
+ * Touch targets. 44 is the floor on every platform and every size: a control
+ * is never made to look smaller by shrinking its hit area, and `hitSlop` is
+ * not used to paper over a small one.
+ */
+export const control = {
+  height: 44,
+  /** Square icon buttons: settings, refresh, rules. */
+  icon: 44,
+} as const;
 
 export const weight = {
   regular: '400',
