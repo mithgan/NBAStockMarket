@@ -71,7 +71,7 @@ test('a move refused after it waited marks its row for a few seconds, then Add a
   assert.equal(refusedWord('short'), 'Not shorted');
   assert.equal(refusedActionName('long', 'Devin Booker', 330_000), 'Not added: his price moved to $330K. Add Devin Booker at $330K a game');
   assert.equal(refusedActionName('short', 'Cade Cunningham', 388_500), 'Not shorted: his price moved to $388.5K. Short Cade Cunningham at $388.5K a game');
-  assert.equal(refusedActionName('long', 'Devin Booker', 330_000, 'Roster changes are locked. Moves reopen after Oct 28.'), 'Not added: Roster changes are locked. Moves reopen after Oct 28.');
+  assert.equal(refusedActionName('long', 'Devin Booker', 330_000, 'Roster changes are locked. Moves reopen after Oct 28.'), 'Not added: Devin Booker. Roster changes are locked. Moves reopen after Oct 28.');
   assert.ok(REFUSED_MARK_MS >= 3000 && REFUSED_MARK_MS <= 6000, 'a few seconds');
 });
 

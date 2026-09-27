@@ -653,10 +653,14 @@ function MarketRow({
     });
   };
   // The mark shows while he is still unheld and nothing else is under way.
+  // A lock the games brought is the reason first: his price moves with every
+  // night, so a price check first named a price for a move the lock refused
+  // ("Not added: his price moved to $332.1K" under "Moves pause for the Oct
+  // 28 games, so … were not added"; walk 16 lead).
   const refusal = refusedAt !== null && !position && !waiting && !opening && !justOpened && !justClosed && !confirming
-    ? player.quoteVersion !== pressedQuote.current
-      ? refusedActionName(side, player.name, currentGameCost)
-      : rosterLocked ? refusedActionName(side, player.name, currentGameCost, rosterLockHint) : null
+    ? rosterLocked
+      ? refusedActionName(side, player.name, currentGameCost, rosterLockHint)
+      : player.quoteVersion !== pressedQuote.current ? refusedActionName(side, player.name, currentGameCost) : null
     : null;
   const word = waiting ? 'Waiting' : refusal ? refusedWord(side) : actionWord({
     side,

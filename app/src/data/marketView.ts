@@ -1866,11 +1866,13 @@ export function refusedWord(side: PerGamePositionSide): string {
 
 /**
  * Its name, why first and then what a press does now: "Not added: his price
- * moved to $330K. Add Devin Booker at $330K a game"; locked, the lock and
- * when moves reopen.
+ * moved to $330K. Add Devin Booker at $330K a game"; locked, who, then the
+ * lock and when moves reopen ("Not added: Devin Booker. Roster changes are
+ * locked. …"; without his name a reader or voice control could not tell
+ * whose row it was; walk 16 lead).
  */
 export function refusedActionName(side: PerGamePositionSide, playerName: string, price: number, lock: string | null = null): string {
-  if (lock) return `${refusedWord(side)}: ${lock}`;
+  if (lock) return `${refusedWord(side)}: ${playerName}. ${lock}`;
   return `${refusedWord(side)}: his price moved to ${moneyCompact(price)}. ${actionName('open', side, playerName, price)}`;
 }
 
