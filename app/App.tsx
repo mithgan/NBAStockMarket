@@ -1149,7 +1149,8 @@ function AppBody() {
                 name is also the page title, so nothing is lost. */}
             {brandOnly ? <View style={styles.brandCopy} /> : (
               <>
-                <View style={styles.brandDivider} />
+                {/* With the lockup it divides (walk 17 T3-06: alone, it read as a broken bar). */}
+                <View style={[styles.brandDivider, !fontReady && styles.waitingForFont]} />
                 <View style={[styles.brandCopy, notice ? styles.brandCopyBeside : null]}>
                   <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[styles.product, !fontReady && styles.waitingForFont]}>STOCK MARKET</Text>
                 </View>
@@ -1560,7 +1561,7 @@ const styles = StyleSheet.create({
   stateDetails: {
     maxWidth: 420,
     marginTop: space.lg,
-    fontFamily: fonts.body,
+    fontFamily: fonts.display,
     color: colors.faint,
     fontSize: type.caption,
     lineHeight: 17,
@@ -1659,8 +1660,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: space.md,
   },
+  // Its paragraph in the app's face too, as the Roster welcome's copy is (walk
+  // 17 T3-11: the system face beside the DM Sans heading).
   stateCopy: {
-    fontFamily: fonts.body,
+    fontFamily: fonts.display,
     color: colors.muted,
     fontSize: type.body,
     lineHeight: 20,
