@@ -28,7 +28,7 @@ import { Button, visuallyHidden } from './src/ui/kit';
 import { registerSettingsOpener, registerTabOpener, settingsReturnStep } from './src/state/uiActions';
 import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
 import { pressedByPointer, settleTaps, tapsSettling } from './src/web/tapSettle';
-import { consumeArrivedByKeyboard, consumeLastSeasonResult, consumeLeftByTap, consumePracticeRestarted, goToPractice, leftPractice, noteFinishedSeason, setPracticeProgress } from './src/web/practiceSession';
+import { consumeArrivedByKeyboard, consumeLastSeasonResult, consumeLeftByTap, consumePracticeRestarted, goToPractice, leftPractice, noteFinishedSeason, practiceStartWords, setPracticeProgress } from './src/web/practiceSession';
 import { chromeFolded, practiceProgress } from './src/data/chromeView';
 import { rankLine } from './src/data/rosterView';
 import {
@@ -1173,7 +1173,7 @@ function AppBody() {
           ? 'Still setting up your practice season. If nothing changes in a moment, reload the page.'
           : 'Setting up a practice season in this browser.'}
         onAction={reload}
-        title="Starting practice"
+        title={practiceStartWords}
       />
     ) : (
       <LoadingLook

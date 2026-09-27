@@ -51,6 +51,12 @@ export function setPracticeProgress(progress: boolean): void {
 }
 
 const LAST_RESULT_KEY = 'nba-stock-market:last-season-result';
+// What the next page's loading line says while its season starts (walk 18
+// T2-07: a new season or a restart showed a bare "Loading…"). The page shell
+// (public/index.html) shows it before the app runs, the app's loading look
+// after; a first visit says "Starting practice".
+const START_WORDS_KEY = 'nba-stock-market:start-words';
+const FIRST_START_WORDS = 'Starting practice';
 
 /** A finished practice season, for "Your seasons this visit" on Leaders. */
 export interface PastSeason {
@@ -154,9 +160,30 @@ export function restartPractice(lastResult?: string): void {
   carryPastSeasons();
   try {
     window.sessionStorage.setItem(RESTARTED_KEY, '1');
+    window.sessionStorage.setItem(START_WORDS_KEY, startWords(pastSeasons.length, finishedSeason !== null));
   } catch {}
   window.location.reload();
 }
+
+/**
+ * The loading line for the season a restart starts: the next season's number
+ * when this one finished ("Starting season 2"), "Starting over" otherwise.
+ */
+export function startWords(finishedBefore: number, finished: boolean): string {
+  return finished ? `Starting season ${finishedBefore + 2}` : 'Starting over';
+}
+
+/** What this page's loading line says while its practice season starts, taken once. */
+export const practiceStartWords: string = (() => {
+  if (!isWeb) return FIRST_START_WORDS;
+  try {
+    const words = window.sessionStorage.getItem(START_WORDS_KEY);
+    window.sessionStorage.removeItem(START_WORDS_KEY);
+    return words || FIRST_START_WORDS;
+  } catch {
+    return FIRST_START_WORDS;
+  }
+})();
 
 /** Leave practice for the live market (after the player confirmed). */
 export function leavePractice(): void {

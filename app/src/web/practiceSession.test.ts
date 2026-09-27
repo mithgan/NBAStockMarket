@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { carrySeasons, takeCarriedSeasons, type PastSeason } from './practiceSession';
+import { carrySeasons, startWords, takeCarriedSeasons, type PastSeason } from './practiceSession';
 
 function memoryStore() {
   const map = new Map<string, string>();
@@ -42,4 +42,13 @@ test('only the latest twenty seasons are kept', () => {
   const kept = takeCarriedSeasons(store);
   assert.equal(kept.length, 20);
   assert.equal(kept[0].score, 5);
+});
+
+test('a restart names the season it starts while the new page loads (walk 18 T2-07)', () => {
+  // Play another season after the first: the second season.
+  assert.equal(startWords(0, true), 'Starting season 2');
+  // After three finished seasons, a fourth finished one: the fifth.
+  assert.equal(startWords(3, true), 'Starting season 5');
+  // Restart before the season finished: the same season number, again.
+  assert.equal(startWords(1, false), 'Starting over');
 });

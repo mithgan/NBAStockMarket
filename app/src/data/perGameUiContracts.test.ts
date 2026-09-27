@@ -311,3 +311,15 @@ test('opening a FULL note keeps the latest notice: the adds that filled the rost
   assert.doesNotMatch(market, /dismissNotice/);
   assert.match(market, /const toggleNote = repeatSafe\(\(\) => \{\s+setNoting\(\(open\) => !open\);\s+\}\);/);
 });
+
+test('the loading line says what is starting, the same before and after the app runs (walk 18 T2-07)', () => {
+  const shell = readFileSync(resolve(import.meta.dirname, '../../public/index.html'), 'utf8');
+  // The shell reads the words a restart left, else "Starting practice" on ?mock.
+  assert.match(shell, /window\.sessionStorage\.getItem\('nba-stock-market:start-words'\)/);
+  assert.match(shell, /if \(keys\.indexOf\('mock'\) !== -1\) words = 'Starting practice';/);
+  // The app's loading look takes the same words, once.
+  assert.match(app, /title=\{practiceStartWords\}/);
+  const session = source('../web/practiceSession.ts');
+  assert.match(session, /const START_WORDS_KEY = 'nba-stock-market:start-words';/);
+  assert.match(session, /const FIRST_START_WORDS = 'Starting practice';/);
+});
