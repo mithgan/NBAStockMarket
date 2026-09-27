@@ -1014,12 +1014,17 @@ function MarketRow({
           // "Waiting", "Added ✓" or "Dropped ✓" says what the move did and what
           // the button will do once it is back (walk 12 T4-02: it was silent).
           // A press that raced the lock the games just brought is a refused
-          // move, named with the games' notice (walk 12 T4-07).
+          // move, named with the games' notice (walk 12 T4-07), and its row
+          // says so like the others that notice names (walk 18 T1-07: the
+          // notice named two, one row said "NOT ADDED", the other "LOCKED").
           onDisabledPress={rosterLocked
-            ? () => lockedPress({
-              name: player.name,
-              verb: position ? (side === 'long' ? 'dropped' : 'closed') : side === 'long' ? 'added' : 'shorted',
-            })
+            ? () => {
+              const raced = lockedPress({
+                name: player.name,
+                verb: position ? (side === 'long' ? 'dropped' : 'closed') : side === 'long' ? 'added' : 'shorted',
+              });
+              if (raced && !position) setRefusedAt(Date.now());
+            }
             : waiting && waitingFor
               ? () => notify(`${waitingActionName(side, player.name, waitingFor, optimistic === 'close' ? 'close' : 'open')}.`)
               : justOpened || justClosed
@@ -1028,7 +1033,6 @@ function MarketRow({
           label={fullButton ? FULL_BUTTON_WORDS : word}
           onPress={() => {
             // FULL opens a note under the row: why, and "Choose who to drop".
-            // One message at a time: it replaces the last notice (walk 3 T3-15).
             if (fullButton) {
               toggleNote();
               return;

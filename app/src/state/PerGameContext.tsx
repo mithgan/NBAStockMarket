@@ -102,7 +102,8 @@ interface PerGameContextValue {
    * A press on a LOCKED Add / Short / Drop: named with the games' notice when
    * it raced the lock the games just brought, else the lock's own sentence.
    */
-  lockedPress: (move: { name: string; verb: string }) => void;
+  /** Answers a LOCKED press; true when it raced the lock and is told as a refused move. */
+  lockedPress: (move: { name: string; verb: string }) => boolean;
   /**
    * Speak the notice on screen, shown silently a moment ago (`silent`, or
    * `spoken: ''`): a run of quick +1 night presses is heard once, when it
@@ -545,7 +546,7 @@ export function PerGameProvider({
   // A press on Add (or Short) that turned LOCKED as the games landed raced the
   // lock: it is a move that failed, named with the others in the games'
   // notice. A LOCKED pressed later only explains the lock (walk 12 T4-07).
-  const lockedPress = useCallback((move: { name: string; verb: string }) => {
+  const lockedPress = useCallback((move: { name: string; verb: string }): boolean => {
     const began = lockBeganAt.current;
     // Only an Add or a Short acts on the press; a Drop or Close only opens a
     // question, so one that meets a lock was never tried: it is told the lock,
@@ -553,7 +554,7 @@ export function PerGameProvider({
     const acts = move.verb === 'added' || move.verb === 'shorted';
     if (acts && began !== null && Date.now() - began < LOCK_RACE_MS) {
       sayWaitedMove({ verb: move.verb, name: move.name, locked: true, cost: null, lockDate: bootstrapRef.current?.ruleset.rosterLockGameDate ?? null });
-      return;
+      return true;
     }
     const date = bootstrapRef.current?.ruleset.rosterLockGameDate ?? null;
     const answer = lockNotice(date);
@@ -563,9 +564,10 @@ export function PerGameProvider({
     const shown = shownMessage.current;
     if (shown && date && shown.includes(`Moves pause for the ${humanDate(date)} games`)) {
       say(shown, shownTone.current, answer);
-      return;
+      return false;
     }
     say(answer);
+    return false;
   }, [say, sayWaitedMove]);
 
   const runPositionAction = useCallback(async <T extends { accountVersion: number },>(
