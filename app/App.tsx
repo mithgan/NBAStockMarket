@@ -280,7 +280,9 @@ function NoticeToast({
   // player row still fits above it; the rest scrolls inside (walk 7 T3-05).
   const tinyDock = placement === 'dock' && height < TINY_DOCK_MAX_HEIGHT;
   // How many lines the strip shows before "more ▾" (0: all of it).
-  const clampLines = tinyDock ? 1 : placement === 'dock' && height < SHORT_DOCK_MAX_HEIGHT ? 2 : 0;
+  // In the brand bar too: a long combined notice took 5-7 lines there and
+  // pushed the practice controls down 100px (walk 13 T4-05).
+  const clampLines = tinyDock ? 1 : placement !== 'dock' || height < SHORT_DOCK_MAX_HEIGHT ? 2 : 0;
   // A one-line strip whose words run on says so ("more ▾") and waits to be
   // read, closed or replaced: at 400% a keyboard user could not reach it
   // before it cleared (walk 9 T3-06, T3-N5). Settings keeps it in Recent
@@ -390,7 +392,7 @@ function NoticeToast({
       onBlur: () => setHeld(false),
     } as object)
     : null;
-  const words = placement === 'dock' ? (
+  const words = placement === 'dock' || clampLines > 0 ? (
     <View style={styles.noticeWords}>
       <ScrollView
         onContentSizeChange={(_contentWidth, contentHeight) => setOverflowing(clampLines > 0 && contentHeight > TINY_NOTICE_LINE * clampLines + 2)}
@@ -430,9 +432,9 @@ function NoticeToast({
         // brand bar it stays hidden from screen readers: the live region
         // spoke it, and it sits in the page's first lines.
         {...(placement === 'dock' ? ({ role: 'region', 'aria-label': 'Latest notice' } as object) : null)}
-        accessibilityElementsHidden={placement !== 'dock'}
-        aria-hidden={placement !== 'dock'}
-        importantForAccessibility={placement === 'dock' ? 'auto' : 'no-hide-descendants'}
+        accessibilityElementsHidden={placement !== 'dock' && !overflowing}
+        aria-hidden={placement !== 'dock' && !overflowing}
+        importantForAccessibility={placement === 'dock' || overflowing ? 'auto' : 'no-hide-descendants'}
         onHoverIn={() => setHeld(true)}
         onHoverOut={() => setHeld(false)}
         onPress={dismissByTap}
