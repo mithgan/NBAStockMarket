@@ -108,6 +108,23 @@ export function outcomeFirst(message: string): string {
   return `Your score ${verb} ${amount} in the ${span}.${rest}`;
 }
 
+/**
+ * A notice as drawn: its dates never break across lines ("Oct 21–27" split
+ * "Oct 21–" from "27" in an opened notice; walk 17 T1-09). A date keeps its
+ * month (a no-break space) and a span its dash (word joiners), as the status
+ * row draws them; screen readers hear the same words.
+ */
+export function keepDatesTogether(text: string): string {
+  return text.replace(
+    /\b([A-Z][a-z]{2}) (\d{1,2})(?:–(?:([A-Z][a-z]{2}) )?(\d{1,2}))?\b/g,
+    (_whole, month: string, day: string, endMonth: string | undefined, endDay: string | undefined) => {
+      const start = `${month}\u00a0${day}`;
+      if (!endDay) return start;
+      return `${start}\u2060–\u2060${endMonth ? `${endMonth}\u00a0` : ''}${endDay}`;
+    },
+  );
+}
+
 /** A sentence saying a move the player pressed did not happen. */
 const REFUSED_MOVE = /\bnot (added|dropped|shorted|closed)\b/;
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameBootstrap, PerGameLedgerEntry, PerGamePosition } from '../api/contracts';
-import { coversGames, isSeasonCompleteNotice, newsFirst, outcomeFirst, refreshHasNews, refreshNotice } from './perGameNotices';
+import { coversGames, isSeasonCompleteNotice, keepDatesTogether, newsFirst, outcomeFirst, refreshHasNews, refreshNotice } from './perGameNotices';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -235,4 +235,12 @@ test('the season\'s end after a run keeps its words on a phone: only a date span
   // Spans still turn around.
   assert.equal(outcomeFirst('Oct 21–Apr 12 games (25 weeks): your score rose $4.95M.'), 'Your score rose $4.95M in the Oct 21–Apr 12 games (25 weeks).');
   assert.equal(outcomeFirst('Oct 22 games: your score fell $9K.'), 'Your score fell $9K in the Oct 22 games.');
+});
+
+test('a notice\'s dates never break across lines (walk 17 T1-09)', () => {
+  assert.equal(keepDatesTogether('Oct 21–27 games: your score fell $167.5K.'), 'Oct\u00a021\u2060–\u206027 games: your score fell $167.5K.');
+  assert.equal(keepDatesTogether('Your score rose $529K in the Oct 21–Nov 10 games (3 weeks). Moves pause for the Nov 11 games.'),
+    'Your score rose $529K in the Oct\u00a021\u2060–\u2060Nov\u00a010 games (3 weeks). Moves pause for the Nov\u00a011 games.');
+  // Money and names are left alone.
+  assert.equal(keepDatesTogether('Luka Doncic added at $417.5K a game, locked in. $250 fee.'), 'Luka Doncic added at $417.5K a game, locked in. $250 fee.');
 });
