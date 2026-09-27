@@ -57,16 +57,23 @@ export function revealFocused(node: HTMLElement): void {
     scroller.scrollBy({ top: rect.bottom + RING_AIR - view.bottom });
   }
   // 2. Then clear of anything drawn over it in that window.
-  rect = node.getBoundingClientRect();
-  const topHit = coverAt(node, rect, rect.top + 2);
-  if (topHit) {
-    const cover = topHit.getBoundingClientRect();
-    // A band over its top (the frame, a pinned header): up past it.
-    if (cover.bottom < rect.bottom) {
-      scroller.scrollBy({ top: -(cover.bottom + RING_AIR - rect.top) });
-      return;
-    }
+  // A band over its top (the frame, a pinned header): up past it. What the
+  // edge meets first can end before its band does (a pinned bar's line of
+  // text over the bar's own padding), so it looks again from there (walk 16
+  // lead: the profile's chart stayed 14px under its Drop bar).
+  let topHit: Element | null = null;
+  let cleared = false;
+  for (let pass = 0; pass < 3; pass += 1) {
+    rect = node.getBoundingClientRect();
+    topHit = coverAt(node, rect, rect.top + 2);
+    const cover = topHit?.getBoundingClientRect();
+    if (!cover || cover.bottom >= rect.bottom) break;
+    const before = scroller.scrollTop;
+    scroller.scrollBy({ top: -(cover.bottom + RING_AIR - rect.top) });
+    cleared = true;
+    if (scroller.scrollTop === before) break;
   }
+  if (cleared) return;
   const lowHit = coverAt(node, rect, rect.bottom - 2) ?? topHit;
   if (!lowHit) return;
   const cover = lowHit.getBoundingClientRect();
