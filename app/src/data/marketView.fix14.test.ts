@@ -17,7 +17,7 @@ test('once he has played for you, a held row leads with today\'s price and says 
   const steps = heldPlayedWordings(towns, 'long', 379_500).map(plain);
   assert.deepEqual(steps, [
     'Price now $384.7K · last season -$59.5K a game at your price',
-    'Price now $384.7K · last season -$59.5K at your price',
+    // Where both halves do not fit, today's price stays: it leads once he has played for you.
     'Price now $384.7K',
   ]);
   assert.ok(steps.every((step) => !/^Value\b/.test(step)), 'never a verdict word against his result');
@@ -29,12 +29,12 @@ test('once he has played for you, a held row leads with today\'s price and says 
     'Price now $100.2K · last season even at your price',
     'Price now $100.2K',
   ]);
-  assert.deepEqual(heldPlayedWordings({ currentGameCost: 112_200, priorSeasonValuePerGame: null }, 'long', 111_500), ['Price now $112.2K']);
+  assert.deepEqual(heldPlayedWordings({ currentGameCost: 112_200, priorSeasonValuePerGame: null }, 'long', 111_500), ['Price now $112.2K · no last season', 'Price now $112.2K']);
   // A short: the sign is the short's.
-  assert.equal(plain(heldPlayedWordings({ currentGameCost: 150_000, priorSeasonValuePerGame: 120_000 }, 'short', 140_000)[1]), 'Price now $150K · last season +$20K at your price');
+  assert.equal(plain(heldPlayedWordings({ currentGameCost: 150_000, priorSeasonValuePerGame: 120_000 }, 'short', 140_000)[0]), 'Price now $150K · last season +$20K a game at your price');
   // Aloud, the same order.
   assert.equal(heldValuePhrase(towns, 'long', 379_500, true), 'price now $384.7K a game, last season -$59.5K a game at your price');
-  assert.equal(heldValuePhrase({ currentGameCost: 112_200, priorSeasonValuePerGame: null }, 'long', 111_500, true), 'price now $112.2K a game');
+  assert.equal(heldValuePhrase({ currentGameCost: 112_200, priorSeasonValuePerGame: null }, 'long', 111_500, true), 'price now $112.2K a game, no last season');
   assert.equal(heldValuePhrase(towns, 'long', 379_500), 'value -$59.5K a game at your price, dividend $320K a game, price now $384.7K a game', 'before games: unchanged');
 });
 

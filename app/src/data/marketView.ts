@@ -441,6 +441,44 @@ export const PLAYER_NICKNAMES: Readonly<Record<string, string>> = {
   'the beard': 'James Harden',
 };
 
+/**
+ * Well-known players a fan may search for by name. Practice lists 30 of the
+ * league, so a search for one it leaves out says so by name (walk 15 T1-N4:
+ * "lebron" read "No listed player matches", and the fan scrolled 30 rows to
+ * see who is here).
+ */
+export const WELL_KNOWN_PLAYERS: readonly string[] = [
+  'LeBron James', 'Stephen Curry', 'Kevin Durant', 'Joel Embiid', 'James Harden', 'Anthony Davis',
+  'Jayson Tatum', 'Jimmy Butler', 'Ja Morant', 'Zion Williamson', 'Paul George', 'Kyrie Irving',
+  'Damian Lillard', 'Anthony Edwards', 'Trae Young', 'Tyrese Haliburton', 'Paolo Banchero', 'Chris Paul',
+  'Klay Thompson', 'Russell Westbrook', 'Zach LaVine', 'DeMar DeRozan', 'Domantas Sabonis', 'Pascal Siakam',
+  'Jalen Williams', 'Alperen Sengun', 'Franz Wagner', 'Lauri Markkanen', 'Jaren Jackson Jr.', 'Darius Garland',
+  'Kristaps Porzingis', 'Jrue Holiday', 'Draymond Green', 'Rudy Gobert', 'Julius Randle', 'Mikal Bridges',
+  'Jalen Green', 'Cooper Flagg', 'Luka Doncic', 'Nikola Jokic', 'Giannis Antetokounmpo', 'Shai Gilgeous-Alexander',
+  'Victor Wembanyama', 'Jalen Brunson', 'Donovan Mitchell', 'Devin Booker', 'Kawhi Leonard', 'Jaylen Brown',
+];
+
+/**
+ * The well-known player a search names when practice does not list him
+ * ("lebron", "steph curry", "king james" → "LeBron James", "Stephen Curry"),
+ * or null: nobody, a listed player, or more than one ("james").
+ */
+export function unlistedStarFor(query: string, listed: readonly string[]): string | null {
+  if (!searchHasLetters(query)) return null;
+  const listedKeys = new Set(listed.map((name) => searchKey(name)));
+  const nick = nicknameFor(query);
+  const byNick = nick ? WELL_KNOWN_PLAYERS.find((name) => searchKey(name) === nick) ?? null : null;
+  const found = byNick ? [byNick] : nearestNames(query, WELL_KNOWN_PLAYERS, 2).map((entry) => entry.label);
+  // One whole name only: a shared first name ("jalen") offers a word.
+  if (found.length !== 1 || !WELL_KNOWN_PLAYERS.includes(found[0])) return null;
+  return listedKeys.has(searchKey(found[0])) ? null : found[0];
+}
+
+/** "LeBron James is not in this practice season's 30 players" (walk 15 T1-N4). */
+export function unlistedStarLine(name: string, listedCount: number): string {
+  return `${name} is not in this practice season's ${listedCount} players`;
+}
+
 /** The player a nickname names, as a search key ("wemby" → "victor wembanyama"), or null. */
 export function nicknameFor(query: string): string | null {
   const key = searchKey(query).replace(/[\s-]+/g, ' ');
@@ -562,6 +600,18 @@ export function accountValueByPlayer(
 }
 
 /**
+ * A per-game figure as the rows write it, in K to one decimal ("+$1.5K a
+ * game"), except that one game's figure is its total and reads the same as
+ * the total everywhere ("+$7.15K" on the Roster, the Market and the profile;
+ * walk 15 T1-04: "+$7.1K" beside "+$7.15K" for one game).
+ */
+export function perGameFigure(summary: Pick<ValueSummary, 'games' | 'avgNet'>): string {
+  if (summary.avgNet === null) return '';
+  // One game's average is its total: written as totals are.
+  return summary.games === 1 ? signedMoney(summary.avgNet) : signedMoneyCompact(summary.avgNet);
+}
+
+/**
  * Each position's own settled games, keyed by position id: exactly
  * positionValue(results, id) for every position, in one pass. A held market
  * row reads its current position from here, the same source as its Roster row.
@@ -608,7 +658,7 @@ export function heldDetail(summary: ValueSummary | undefined, lockedGameCost: nu
     // "+$1,473"), the profile's for the total (walk 4 T4-13).
     const one = summary.games === 1;
     const below = summary.avgDividend !== null && Math.round(summary.avgDividend) < 0;
-    const total = one ? `${signedMoneyCompact(summary.avgNet)} in 1 game` : `${signedMoney(summary.total)} over ${summary.games} games`;
+    const total = one ? `${perGameFigure(summary)} in 1 game` : `${signedMoney(summary.total)} over ${summary.games} games`;
     return {
       text: one ? total : `${total}, ${signedMoneyCompact(summary.avgNet)} a game`,
       total,
@@ -681,13 +731,17 @@ export function heldValueLine(
 }
 
 /**
- * A held phone row's second line once he has played for you, fullest first;
- * the row shows the first that fits on its one line (walk 14 T1-09: "+$310K
- * over 4 games" above "Value -$59.5K at your price" read as a verdict against
- * his result). Today's price leads, then last season as history, "last season
- * -$59.5K a game at your price", in the row's neutral ink; a narrow row keeps
- * today's price alone. Before his first game for you the row keeps "Value …
- * at your price" (heldValueLine), a guide for the pick.
+ * A held phone row's second line once he has played for you, fullest first
+ * (walk 14 T1-09: "+$310K over 4 games" above "Value -$59.5K at your price"
+ * read as a verdict against his result): today's price, then last season as
+ * history, "last season -$59.5K a game at your price", in the row's neutral
+ * ink. Every step says "a game" with the figure (walk 15 T1-03: "+$71K at
+ * your price" read as money made last season), and the steps line up across
+ * players, so the list shows every held row at one step (heldStepFloor): at
+ * 360-390px all keep last season together (walk 15 T1-02: one row of three
+ * lost it). A narrow row keeps last season, the figure the list sorts by;
+ * today's price is in his profile. Before his first game for you the row
+ * keeps "Value … at your price" (heldValueLine), a guide for the pick.
  */
 export function heldPlayedWordings(
   player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
@@ -696,15 +750,21 @@ export function heldPlayedWordings(
 ): string[] {
   const now = `Price now ${money(player.currentGameCost)}`;
   const edge = player.priorSeasonValuePerGame === null ? null : rowValueEdge(player, side, { lockedGameCost });
-  if (edge === null) return [now];
+  // Once he has played for you, today's price is the line's lead (walk 14
+  // T1-09): where both halves do not fit, it is today's price that stays.
+  if (edge === null) return [`${now} · no last season`, now];
   const yours = 'at your price';
-  if (netTone(edge) === 'even') return [`${now} · last season even ${yours}`, now];
-  const figure = signedMoneyCompact(edge);
-  return [
-    `${now} · last season ${figure} a game ${yours}`,
-    `${now} · last season ${figure} ${yours}`,
-    now,
-  ];
+  const past = netTone(edge) === 'even' ? `last season even ${yours}` : `last season ${signedMoneyCompact(edge)} a game ${yours}`;
+  return [`${now} · ${past}`, now];
+}
+
+/**
+ * The step every held row of a list shows (heldPlayedWordings): the most
+ * compact any of them needs, so rows at one width say the same things (walk
+ * 15 T1-02). `needed` is each row's own step, measured before paint.
+ */
+export function heldStepFloor(needed: readonly number[]): number {
+  return needed.reduce((most, step) => Math.max(most, step), 0);
 }
 
 /**
@@ -1062,6 +1122,31 @@ export function slotLineBeside(width: number): boolean {
 }
 
 /**
+ * Beside the side toggle each part of the slot line takes two lines at most
+ * ("3 of 10" / "on your roster", "Reopens" / "after Oct 28"). A reader's text
+ * spacing (or a larger font) that wraps a part to three or more ("3 of 10" /
+ * "on your" / "roster") puts the slot line under the toggle, full width, so a
+ * whole player shows in the first view (walk 15 T3-01). Each part is its
+ * drawn height and its computed line height, in px.
+ */
+export function slotLinesCrowded(parts: ReadonlyArray<{ height: number; lineHeight: number }>): boolean {
+  return parts.some(({ height, lineHeight }) => height > 0 && lineHeight > 0 && Math.round(height / lineHeight) > 2);
+}
+
+/**
+ * Below this height a phone toolbar whose slot line was crowded (a reader's
+ * text spacing) also folds search, sort and Watching behind "Search & sort",
+ * as at 200% zoom: at 320x568 the spaced toolbar took 270px, and with the
+ * week's four-line notice strip up no whole player showed even with the slot
+ * line under the toggle (walk 15 T3-01). Folded, two whole players show.
+ */
+export const CROWDED_FOLD_BELOW_HEIGHT = 600;
+
+export function crowdedToolbarFolds(height: number): boolean {
+  return height < CROWDED_FOLD_BELOW_HEIGHT;
+}
+
+/**
  * The share of the window the rows keep under a pinned toolbar and column
  * labels. Below it (a laptop at 125-150% zoom, 960x600: the rows scrolled in
  * the bottom 206px) the toolbar folds search, sort and Watching behind its
@@ -1096,6 +1181,27 @@ export const ROWS_MIN_SHARE_ON_ARRIVAL = 0.5;
 export function rowsUnderToolbarTooFew(rowsHeight: number, windowHeight: number): boolean {
   if (!(windowHeight > 0)) return false;
   return rowsHeight < windowHeight * ROWS_MIN_SHARE_ON_ARRIVAL;
+}
+
+/**
+ * Whether a table keeps its toolbar and column labels in view while its rows
+ * scroll. A short table (500-559px tall: 853x533, a 1280x800 laptop at 150%)
+ * scrolled them away with the list and left rows of bare figures ("$365K
+ * $376.5K +$11.5K", walk 15 T2-06); now every table 500px tall or more keeps
+ * them, as 960x600 and 1280x610 do.
+ */
+export function tablePinsChrome(height: number): boolean {
+  return height >= SHORT_WINDOW_BELOW;
+}
+
+/**
+ * Whether a table's toolbar folds search, sort and Watching behind "Search &
+ * sort" for its height alone: under 560px the full toolbar left the rows two
+ * players (walk 11 T3-13), so it folds at once, with nothing to measure, and
+ * the order line scrolls away as the table's first row (walk 15 T2-06).
+ */
+export function shortTableFolds(height: number): boolean {
+  return height < ROOMY_MIN_HEIGHT;
 }
 
 /**
@@ -1228,7 +1334,7 @@ export function heldValuePhrase(
   const now = `price now ${perGame(player.currentGameCost)}`;
   const edge = rowValueEdge(player, side, { lockedGameCost });
   if (played) {
-    if (edge === null || player.priorSeasonValuePerGame === null) return now;
+    if (edge === null || player.priorSeasonValuePerGame === null) return `${now}, no last season`;
     return `${now}, last season ${netTone(edge) === 'even' ? 'even' : `${signedMoneyCompact(edge)} a game`} at your price`;
   }
   if (edge === null || player.priorSeasonValuePerGame === null) return `no last season, ${now}`;
@@ -1871,8 +1977,17 @@ export function heldTag(side: PerGamePositionSide, seasonOver: boolean): string 
 
 /** The slot line once the season is over: what you held at its end ("2 held at season end"). */
 export function seasonEndSlotLine(side: PerGamePositionSide, used: number): string {
-  if (side === 'long') return used === 0 ? 'None held at season end' : `${used}\u00A0held at season end`;
-  return used === 0 ? 'No shorts at season end' : `${used}\u00A0shorted at season end`;
+  // "at season end" never leaves "end" alone on a line (walk 15 T1-08).
+  if (side === 'long') return used === 0 ? 'None held at season\u00A0end' : `${used}\u00A0held at season\u00A0end`;
+  // The Short side says its state once: the slot says the season is over, so
+  // no "The season is over" line under it; its explainer says what comes next
+  // (walk 15 T1-08: said twice within 50px, "end" alone on a line).
+  return used === 0 ? 'No shorts · season\u00A0over' : `${used}\u00A0shorted · season\u00A0over`;
+}
+
+/** The slot's status line at season end: the Short side's slot already says it (walk 15 T1-08). */
+export function seasonEndStatusShown(side: PerGamePositionSide): boolean {
+  return side === 'long';
 }
 
 /**
@@ -1883,7 +1998,8 @@ export function seasonEndSlotLine(side: PerGamePositionSide, used: number): stri
  * held, their season is in Your profit a game.
  */
 export function seasonEndExplainer(side: PerGamePositionSide, held = 0): string {
-  if (side === 'short') return 'The season is over. Shorts open again in a new season.';
+  // The slot above says "No shorts · season over" (walk 15 T1-08): this line says what comes next.
+  if (side === 'short') return 'Shorts open again in a new season.';
   const value = "The season is over. Value still compares last season's dividend with his price.";
   return held > 0 ? `${value} Your profit a game shows how your players did.` : value;
 }

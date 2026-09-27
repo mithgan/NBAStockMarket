@@ -53,7 +53,8 @@ test('the season-end sentence says what Value is, and where your own players\' s
     "The season is over. Value still compares last season's dividend with his price. Your profit a game shows how your players did.",
   );
   assert.doesNotMatch(seasonEndExplainer('long', 2), /how each player did/);
-  assert.equal(seasonEndExplainer('short', 2), 'The season is over. Shorts open again in a new season.');
+  // Walk 15 T1-08: the Short side's slot says the season is over; its line says what comes next.
+  assert.equal(seasonEndExplainer('short', 2), 'Shorts open again in a new season.');
 });
 
 // walk 12 T4-06: turned to landscape, the Drop question and its focused Keep sat below the fold.

@@ -60,10 +60,11 @@ test('a finished season is said in the past tense on the Market', async () => {
   assert.equal(heldTag('long', false), 'On your roster');
   assert.equal(heldTag('long', true), 'On your roster this season');
   assert.equal(heldTag('short', true), 'Shorted this season');
-  assert.equal(seasonEndSlotLine('long', 2), '2 held at season end');
-  assert.equal(seasonEndSlotLine('long', 0), 'None held at season end');
-  assert.equal(seasonEndSlotLine('short', 0), 'No shorts at season end');
-  assert.equal(seasonEndExplainer('short'), 'The season is over. Shorts open again in a new season.');
+  assert.equal(seasonEndSlotLine('long', 2), '2 held at season end');
+  assert.equal(seasonEndSlotLine('long', 0), 'None held at season end');
+  // Walk 15 T1-08: the Short side says its state once, in the slot.
+  assert.equal(seasonEndSlotLine('short', 0), 'No shorts · season over');
+  assert.equal(seasonEndExplainer('short'), 'Shorts open again in a new season.');
   // walk 12 T2-05: Value is still last season's dividend against his price, not this season's result.
   assert.equal(seasonEndExplainer('long'), "The season is over. Value still compares last season's dividend with his price.");
 });
