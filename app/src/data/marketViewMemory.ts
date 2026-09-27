@@ -51,6 +51,27 @@ const FRESH: MarketMemory = {
 
 let memory: MarketMemory = { ...FRESH };
 
+/**
+ * Window sizes at which the phone rows were measured to need the tier after
+ * the surname (a long given name beside its tier wrapped or was cut): later
+ * visits start there, so the list is drawn once, not drawn and then redrawn
+ * in the other arrangement on every tab switch (fix 14 perf: +70ms a switch
+ * at 390px on a 4x-slowed CPU). A reader's text spacing is measured again.
+ */
+const tierAfterSurnameAt = new Set<string>();
+
+export function tierAfterSurnameKey(width: number, fontScale: number): string {
+  return `${Math.round(width)}|${fontScale}`;
+}
+
+export function tierAfterSurnameKnown(key: string): boolean {
+  return tierAfterSurnameAt.has(key);
+}
+
+export function rememberTierAfterSurname(key: string): void {
+  tierAfterSurnameAt.add(key);
+}
+
 export function marketMemory(): MarketMemory {
   return memory;
 }

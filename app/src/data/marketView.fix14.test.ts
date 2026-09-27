@@ -91,3 +91,14 @@ test('a search that finds nobody offers the nearest name (walk 14 T4-N1)', async
   assert.equal(didYouMeanLine([{ label: 'Jalen Brunson', query: 'Jalen Brunson' }, { label: 'Jalen Duren', query: 'Jalen Duren' }]), 'Did you mean Jalen Brunson or Jalen Duren?');
   assert.equal(didYouMeanLine([]), '');
 });
+
+test('the phone rows\' tier place is remembered per window size, so a Market visit draws its list once (fix 14 perf)', async () => {
+  const { rememberTierAfterSurname, tierAfterSurnameKey, tierAfterSurnameKnown } = await import('./marketViewMemory');
+  const key = tierAfterSurnameKey(390.4, 1);
+  assert.equal(key, '390|1');
+  assert.equal(tierAfterSurnameKnown(key), false);
+  rememberTierAfterSurname(key);
+  assert.equal(tierAfterSurnameKnown(key), true);
+  assert.equal(tierAfterSurnameKnown(tierAfterSurnameKey(430, 1)), false, 'another width measures for itself');
+  assert.equal(tierAfterSurnameKnown(tierAfterSurnameKey(390, 1.3)), false, 'larger text measures for itself');
+});

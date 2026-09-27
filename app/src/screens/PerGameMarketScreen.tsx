@@ -156,7 +156,15 @@ import {
   type MarketSort,
   type SignalTone,
 } from '../data/marketView';
-import { MARKET_DEFAULT_SORT, marketMemory, openingSide, rememberMarket } from '../data/marketViewMemory';
+import {
+  MARKET_DEFAULT_SORT,
+  marketMemory,
+  openingSide,
+  rememberMarket,
+  rememberTierAfterSurname,
+  tierAfterSurnameKey,
+  tierAfterSurnameKnown,
+} from '../data/marketViewMemory';
 import type { ValueSummary } from '../data/perGameMetrics';
 import { positionSlotHint } from '../data/perGameRules';
 import { splitPlayerName } from '../data/playerName';
@@ -1468,10 +1476,11 @@ export function PerGameMarketScreen({
   // walk 7 T3-07): once any row's given name is cut beside its tier, every
   // row puts its tier after the surname, the narrow phones' place, so names
   // stay whole. Checked after each layout and when a style sheet is added.
-  const [tierAfterSurname, setTierAfterSurname] = useState(false);
+  const tierKey = tierAfterSurnameKey(width, fontScale);
+  const [tierAfterSurname, setTierAfterSurname] = useState(() => tierAfterSurnameKnown(tierKey));
   useEffect(() => {
-    setTierAfterSurname(false);
-  }, [width]);
+    setTierAfterSurname(tierAfterSurnameKnown(tierKey));
+  }, [tierKey]);
   // The list keeps its order while the player works through it: an Add
   // nudges that player's price (and so his value), and a re-sort swapped
   // rows under the finger (Barnes and Booker traded places after an Add).
@@ -1533,7 +1542,11 @@ export function PerGameMarketScreen({
         if (!parts || !price || price === parts) return false;
         return parts.getBoundingClientRect().top >= price.getBoundingClientRect().bottom - 4;
       });
-      if (cut || wrapped) setTierAfterSurname(true);
+      if (cut || wrapped) {
+        // Remembered for the session at this size: the next visit starts there.
+        if (wrapped) rememberTierAfterSurname(tierKey);
+        setTierAfterSurname(true);
+      }
     };
     const later = () => {
       if (!frame) frame = requestAnimationFrame(check);
@@ -1545,7 +1558,7 @@ export function PerGameMarketScreen({
       if (frame) cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-  }, [layout, tierAfterSurname, width, rows]);
+  }, [layout, tierAfterSurname, width, rows, tierKey]);
   const positionValues = useMemo(
     () => valueByPosition(bootstrap?.settledResults ?? []),
     [bootstrap?.settledResults],
