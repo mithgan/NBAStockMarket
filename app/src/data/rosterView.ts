@@ -820,6 +820,20 @@ export function formatAt(amount: number, precision: PartPrecision, signed: boole
   return twoDecimalMillions(signed ? signedMoneyFine(amount) : moneyFine(amount));
 }
 
+/**
+ * The precision of a row's per-game figure (price, dividend or profit a game)
+ * beside its Total (walk 15 T1-04). Per-game money reads compact, one decimal
+ * in K as on the Market ("+$3.6K a game"); a figure that is the same money as
+ * the row's Total (one game played, where his profit a game is his total)
+ * reads as the Total does, so one short game shows "+$7.15K" under both
+ * "Profit a game" and "Total", never "+$7.1K" beside "+$7.15K". Only the
+ * $1K-$10K band differs between the two; from $10K up they read alike.
+ */
+export function perGamePrecision(amount: number | null, total: number): PartPrecision {
+  if (amount === null) return 'compact';
+  return formatAt(Math.abs(amount), 'fine', false) === formatAt(Math.abs(total), 'fine', false) ? 'fine' : 'compact';
+}
+
 /** An amount as `moneyFine` shows it, back in dollars: 148,449 reads "$148.4K", so 148,400. */
 export function fineValue(amount: number): number {
   const match = /^(-?)\$([\d.]+)([KM]?)$/.exec(moneyFine(amount));

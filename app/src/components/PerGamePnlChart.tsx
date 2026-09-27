@@ -24,7 +24,7 @@ import {
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { buildPnlSeries, pnlChartDomain } from '../state/perGameState';
 import { colors, fonts, space, type, weight } from '../theme';
-import { headingLevel, Label, visuallyHidden } from '../ui/kit';
+import { Button, headingLevel, Label, repeatSafe, visuallyHidden } from '../ui/kit';
 import { FineMoney } from './roster/FineMoney';
 import { usePlotPointer, type PlotIntent } from './roster/usePlotPointer';
 
@@ -57,12 +57,29 @@ export function PerGamePnlChart({
   entries,
   plotHeight = 80,
   seasonOver = false,
+  widen,
 }: {
   entries: readonly PerGameLedgerEntry[];
   plotHeight?: number;
   /** A finished season with no nights says so instead of promising a first one. */
   seasonOver?: boolean;
+  /**
+   * Desktop (walk 15 T2-02): a toggle beside the heading spans the chart
+   * across the whole Roster, so a mouse can pick one night of a season (the
+   * score column's plot gave a season's 174 nights about 240px). `focus`
+   * moves keyboard focus to the toggle once the chart has moved, then
+   * `onFocused` clears it.
+   */
+  widen?: { wide: boolean; onToggle: () => void; focus: boolean; onFocused: () => void };
 }) {
+  const toggleRef = useRef<View | null>(null);
+  const widenFocus = widen?.focus ?? false;
+  const onWidenFocused = widen?.onFocused;
+  useEffect(() => {
+    if (!widenFocus) return;
+    (toggleRef.current as unknown as { focus?: () => void } | null)?.focus?.();
+    onWidenFocused?.();
+  }, [onWidenFocused, widenFocus]);
   const points = useMemo(() => buildPnlSeries(entries), [entries]);
   // Every point is drawn, fees since the last night included, so the line
   // ends on your score as the block above says it and the Low mark is the
@@ -217,8 +234,11 @@ export function PerGamePnlChart({
         {/* Keyed apart from the plot: react-native-web only starts observing
             onLayout when a view mounts, so the plot must mount fresh when the
             first night arrives instead of reusing this view. */}
-        <View key="empty" accessible accessibilityLabel={chartSummary(series)}>
-          <View style={styles.emptyZero}>
+        <View key="empty">
+          {/* The sentence under the drawn $0 line is what a reader hears (it
+              says why, at season end too); a name on this role-less view was
+              not read everywhere (walk 15 T3-09). */}
+          <View aria-hidden style={styles.emptyZero}>
             <Text maxFontSizeMultiplier={1.3} style={styles.emptyZeroLabel}>$0</Text>
             <View style={styles.emptyRule} />
           </View>
@@ -255,7 +275,8 @@ export function PerGamePnlChart({
           so reading a night never pushes the chart and the rows under it
           (walk 9 T1-03): unseen copies of the resting words and of the
           longest reading share its one cell with what is shown. */}
-      <View ref={headingRef} style={styles.heading}>
+      <View style={styles.headingRow}>
+      <View ref={headingRef} style={[styles.heading, styles.headingFill]}>
         <View style={styles.headingLayer}>
           {point ? <Reading point={point} previous={series[shownIndex - 1]} stacked={tallReading} /> : restWords}
         </View>
@@ -279,6 +300,17 @@ export function PerGamePnlChart({
             <Reading point={series[widest]} previous={series[widest - 1]} stacked />
           </View>
         ) : null}
+      </View>
+      {/* Outside the heading's layers, so it stays while a night is read. */}
+      {widen ? (
+        <Button
+          ref={toggleRef}
+          accessibilityLabel={widen.wide ? 'Score by night: back beside your score' : 'Score by night: full width, to pick one night'}
+          label={widen.wide ? 'Narrow' : 'Full width'}
+          onPress={repeatSafe(widen.onToggle)}
+          style={styles.widen}
+        />
+      ) : null}
       </View>
       {/* How the keys move, said once after the slider's name (walk 9 T3-N1). */}
       <Text nativeID={keysId} style={visuallyHidden}>Arrow keys move a night, Page keys a week.</Text>
@@ -477,6 +509,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
+  },
+  headingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    columnGap: space.sm,
+  },
+  headingFill: {
+    flex: 1,
+    minWidth: 0,
+  },
+  widen: {
+    marginBottom: space.xs,
   },
   // One cell, as tall as the tallest of its layers.
   heading: {

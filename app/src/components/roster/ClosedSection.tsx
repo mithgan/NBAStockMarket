@@ -245,16 +245,15 @@ export function FeesLine({ fees, moves, feeEach = 0, unplayed = [], unplayedShor
   // Moves, not "roster moves": shorts opened and closed cost the same fee.
   const detail = feesDetail({ moves, feeEach, dropped: unplayed, closedShorts: unplayedShorts });
   return (
-    <View
-      accessible
-      accessibilityLabel={`Fees, ${spokenRepeats(detail).replace(/ \u00b7 /g, ', ')}, ${formatAt(fees, precision, true)}`}
-      style={[styles.row, table ? null : styles.rowBaseline]}
-    >
-      <View style={styles.copy}>
+    <View style={[styles.row, table ? null : styles.rowBaseline]}>
+      {/* One sentence in text a reader gets; the drawn line is hidden from it
+          (a name on the role-less row was not read everywhere; walk 15 T3-09). */}
+      <Text style={visuallyHidden}>{`Fees, ${spokenRepeats(detail).replace(/ \u00b7 /g, ', ')}, ${formatAt(fees, precision, true)}`}</Text>
+      <View aria-hidden style={styles.copy}>
         <Text style={styles.name}>Fees</Text>
         <DotLine parts={detail.split(' \u00b7 ')} style={styles.detail} />
       </View>
-      <View style={{ marginRight: totalInset }}>
+      <View aria-hidden style={{ marginRight: totalInset }}>
         <FineMoney precision={precision} value={fees} />
       </View>
     </View>

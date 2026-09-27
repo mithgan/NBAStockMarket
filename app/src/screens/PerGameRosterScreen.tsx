@@ -47,11 +47,10 @@ import {
   SHORT_EXPLAINER,
   sideHeading,
   signedMoney,
-  signedMoneyCompact,
   unbrokenName,
 } from '../copy/terms';
 import { chromeFolded, keepTogether, practiceProgress, resultSpan } from '../data/chromeView';
-import { isSeasonOver } from '../data/marketView';
+import { isSeasonOver, waitingActionName } from '../data/marketView';
 import { earningsBetween, scoreBreakdown, seasonSummary } from '../data/perGameMetrics';
 import {
   againRows,
@@ -62,7 +61,9 @@ import {
   earnLine,
   feeMoves,
   figureCaptions,
+  formatAt,
   movesLine,
+  perGamePrecision,
   pickValue,
   pressLine,
   rankLine,
@@ -81,6 +82,7 @@ import {
   type RowLayout,
 } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
+import { practicePlaying, usePracticePlaying } from '../state/practicePlaying';
 import { openRules, openTab, takeRosterPick } from '../state/uiActions';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
 import { Button, ConfirmStrip, EmptyState, headingLevel, repeatSafe, Tag, tapsSettling, useAriaDisabled, visuallyHidden } from '../ui/kit';
@@ -95,6 +97,8 @@ const ACTION_WIDTH = 72;
 const TABLE_COLUMN_COUNT = 6;
 /** A second press on Drop this soon after it opened the confirm is a double tap: ignored. */
 const DOUBLE_TAP_MS = 400;
+/** A pinned section title lets go this far before its section ends: about one row (`stickyScope`). */
+const STICKY_RELEASE = 60;
 /** Phone lists narrower than this leave out Profit a game (see `StackedFigures`). */
 const NARROW_LIST_MAX_WIDTH = 380;
 
@@ -246,12 +250,26 @@ function PositionRow({
   /** The row's outer view, held in view while its question is open (walk 14 T4-05). */
   holdRef?: (node: unknown) => void;
 }) {
-  const { bootstrap, lockedPress, pendingActions } = usePerGame();
+  const { bootstrap, lockedPress, notify, pendingActions } = usePerGame();
   const nameFit = useTableNameFit(layout === 'table', position.playerName);
   const actionKey = `position:${position.side}:${position.playerId}`;
   // A move waiting its turn counts as this row's; another row's move does
   // not rest this one (its press would wait its turn; walk 5 T4-01).
   const pending = pendingActions.has(actionKey) || pendingActions.has(`queued:${actionKey}`);
+  // A Drop or Close confirmed while games play waits for them (he plays
+  // them, then goes): the button says "Waiting" and names those games, as the
+  // Market's does ("Waiting for the Oct 21–27 games to drop Luka Doncic"),
+  // never "Dropping" as if it were under way (walk 15 lead note). The games
+  // are the ones playing when it was confirmed. Once they are in, it is only
+  // saving (the spinner) until the row leaves.
+  const [waitingFor, setWaitingFor] = useState<string | null>(null);
+  const playingNow = usePracticePlaying();
+  useEffect(() => {
+    if (!pending) setWaitingFor(null);
+  }, [pending]);
+  const waitingName = pending && waitingFor !== null && playingNow !== null
+    ? waitingActionName(position.side, position.playerName, waitingFor, 'close')
+    : null;
   const rosterLocked = bootstrap?.ruleset.rosterMutationsLocked ?? true;
   const rosterLockDate = bootstrap?.ruleset.rosterLockGameDate ?? null;
   const nextGameDate = bootstrap?.game.nextGameDate ?? null;
@@ -300,9 +318,10 @@ function PositionRow({
     // The tag already says "No games yet" when he has none.
     view.games || null,
     `total ${signedMoney(position.cumulativePnl)}`,
-    view.summary.avgNet === null ? null : `profit ${signedMoneyCompact(view.summary.avgNet)} a game`,
-    `${short ? 'credited' : 'price'} ${moneyCompact(position.lockedGameCost)} a game${priceMoved ? `, now ${moneyCompact(marketPrice as number)}` : ''}`,
-    view.summary.avgDividend === null ? null : `dividend ${moneyCompact(view.summary.avgDividend)} a game`,
+    // A per-game figure that is the total's money is heard as the total (walk 15 T1-04).
+    view.summary.avgNet === null ? null : `profit ${formatAt(view.summary.avgNet, perGamePrecision(view.summary.avgNet, position.cumulativePnl), true)} a game`,
+    `${short ? 'credited' : 'price'} ${formatAt(position.lockedGameCost, perGamePrecision(position.lockedGameCost, position.cumulativePnl), false)} a game${priceMoved ? `, now ${moneyCompact(marketPrice as number)}` : ''}`,
+    view.summary.avgDividend === null ? null : `dividend ${formatAt(view.summary.avgDividend, perGamePrecision(view.summary.avgDividend, position.cumulativePnl), false)} a game`,
     belowZero ? belowZero.replace(/\.$/, '') : null,
     view.expiry ? view.expiry.replace(/ · /g, ', ') : null,
     // The season's sums, last and short: what the total is made of.
@@ -355,6 +374,11 @@ function PositionRow({
       lockedPress({ name: position.playerName, verb: position.side === 'long' ? 'dropped' : 'closed' });
       return;
     }
+    // A tap on Waiting says what it waits for (as on the Market).
+    if (waitingName) {
+      notify(`${waitingName}.`);
+      return;
+    }
     if (disabled) return;
     if (!confirming) {
       // Stamped here, in the press itself: a second tap handled before the
@@ -377,8 +401,8 @@ function PositionRow({
       // react-native-web drops accessibilityHint, so the name carries the reason.
       accessibilityLabel={rosterLocked
         ? `${actionName}: locked. ${rosterLockHint}`
-        : pending ? (short ? `Closing your short on ${position.playerName}` : `Dropping ${position.playerName}`)
-          : actionName}
+        : waitingName ?? (pending ? (short ? `Closing your short on ${position.playerName}` : `Dropping ${position.playerName}`)
+          : actionName)}
       accessibilityRole="button"
       // A locked button stays in the Tab order (aria-disabled only), so a
       // keyboard or screen-reader user reaches it and hears why.
@@ -390,15 +414,16 @@ function PositionRow({
         confirming && styles.actionArmed,
         // LOCKED is read and pressed for its reason: full-contrast words and a
         // dashed edge, not a faded button (walk 3 T3-16).
-        rosterLocked ? styles.actionLocked : disabled && styles.disabled,
+        // Waiting is read, not faded: it says what the move waits for.
+        rosterLocked ? styles.actionLocked : waitingName ? null : disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
       ]}
     >
-      {pending && !rosterLocked ? (
+      {pending && !rosterLocked && !waitingName ? (
         <ActivityIndicator color={colors.muted} size="small" />
       ) : (
-        <Text style={[styles.actionText, confirming && styles.actionTextArmed]}>
-          {rosterLocked ? 'LOCKED' : verb.toUpperCase()}
+        <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[styles.actionText, confirming && styles.actionTextArmed, waitingName !== null && styles.actionTextWaiting]}>
+          {rosterLocked ? 'LOCKED' : waitingName ? 'WAITING' : verb.toUpperCase()}
         </Text>
       )}
     </Pressable>
@@ -424,7 +449,10 @@ function PositionRow({
         dropImpactBps: bootstrap?.ruleset.quoteDropImpactBps ?? 0,
       })}
       onCancel={() => onConfirmClose(position, 'kept')}
-      onConfirm={() => onConfirmClose(position, 'closed')}
+      onConfirm={() => {
+        setWaitingFor(practicePlaying());
+        onConfirmClose(position, 'closed');
+      }}
       style={styles.strip}
     />
   ) : null;
@@ -837,6 +865,10 @@ export function PerGameRosterScreen({
   }, []);
   const onShorted = useCallback((playerId: string) => focusNewRow('short', playerId), [focusNewRow]);
   const onReadded = useCallback((playerId: string) => focusNewRow('long', playerId), [focusNewRow]);
+  // Desktop: the chart spans the Roster while "Full width" is on (walk 15 T2-02).
+  const [chartWide, setChartWide] = useState(false);
+  const [chartFocus, setChartFocus] = useState(false);
+  const onChartFocused = useCallback(() => setChartFocus(false), []);
 
   if (!bootstrap) return null;
   const profilePosition = profileId
@@ -1180,6 +1212,7 @@ export function PerGameRosterScreen({
   ) : null;
 
   // On the opening eve the welcome says what the empty chart would.
+  const chartSpans = wide && chartWide;
   const chart = showWelcome ? null : (
     <PerGamePnlChart
       entries={bootstrap.ledger.items}
@@ -1188,8 +1221,21 @@ export function PerGameRosterScreen({
       // it scrolls with the page. Desktop is capped so nightly swings stay
       // readable. At season end the chart is the season's story, and a
       // finger picks one of 174 nights: it gets more room (walk 8 T1-09).
-      plotHeight={wide ? 208 : seasonOver ? 140 : 120}
+      plotHeight={wide ? (chartSpans ? 180 : 208) : seasonOver ? 140 : 120}
       seasonOver={seasonOver}
+      // Desktop: "Full width" spans the chart across the Roster, above both
+      // columns, so a mouse can pick one night of a whole season (walk 15
+      // T2-02); "Narrow" puts it back beside the score. Focus follows the
+      // toggle to the chart's new place.
+      widen={wide ? {
+        wide: chartWide,
+        onToggle: () => {
+          setChartFocus(true);
+          setChartWide((current) => !current);
+        },
+        focus: chartFocus,
+        onFocused: onChartFocused,
+      } : undefined}
     />
   );
   // A short one-column window (a laptop at 960x600, a phone on its side)
@@ -1225,13 +1271,14 @@ export function PerGameRosterScreen({
           weekWords={lastPress}
         />
       )}
-      {chartLast ? null : chart}
+      {chartLast || chartSpans ? null : chart}
       {wide && started && !seasonOver ? <SeasonSoFar fees={breakdown.fees} movesText={movesText} summary={season} /> : null}
     </>
   );
   const lists = (
     <>
-      <View style={styles.section}>
+      <View style={[styles.section, sticky && longs.length > 0 && styles.stickySection]}>
+        <View>
         <SectionHead
           count={`${longSlots.used} of ${longSlots.limit}`}
           headingRef={rosterHeading}
@@ -1276,6 +1323,8 @@ export function PerGameRosterScreen({
             title={hadLongs ? 'Your roster is empty' : seasonOver ? 'No players this season' : welcomeMarket ? 'No players yet' : 'Add your first player'}
           />
         )}
+        {sticky && longs.length > 0 ? <View style={styles.stickyRelease} /> : null}
+        </View>
       </View>
       {quietShorts ? (
         // Before your first games the short side is one quiet line, not a
@@ -1285,7 +1334,8 @@ export function PerGameRosterScreen({
           <Text style={styles.shortsLater}>{SHORTS_LATER}</Text>
         </View>
       ) : (
-      <View style={styles.section}>
+      <View style={[styles.section, sticky && shorts.length > 0 && styles.stickySection]}>
+        <View>
         <SectionHead
           caption={shorts.length > 0 ? SHORT_EXPLAINER : undefined}
           count={`${shortSlots.used} of ${shortSlots.limit}`}
@@ -1320,6 +1370,8 @@ export function PerGameRosterScreen({
             title={hadShorts ? 'No open shorts' : seasonOver ? 'No shorts this season' : 'No shorts yet'}
           />
         )}
+        {sticky && shorts.length > 0 ? <View style={styles.stickyRelease} /> : null}
+        </View>
       </View>
       )}
       <ClosedSection
@@ -1352,6 +1404,7 @@ export function PerGameRosterScreen({
       <View style={visuallyHidden}>
         <Text accessibilityRole="header" {...headingLevel(1)}>Roster</Text>
       </View>
+      {chartSpans && chart ? <View style={styles.chartBand}>{chart}</View> : null}
       {wide ? (
         <View style={styles.columns}>
           <ScrollView contentContainerStyle={styles.summaryContent} style={[styles.summaryColumn, { width: summaryWidth(width) }]}>
@@ -1394,6 +1447,11 @@ const styles = StyleSheet.create({
     minHeight: 0,
     flexDirection: 'row',
   },
+  // The chart across the whole Roster (desktop, "Full width"): in the layout
+  // above both columns, never over them.
+  chartBand: {
+    flexShrink: 0,
+  },
   summaryColumn: {
     flexGrow: 0,
     flexShrink: 0,
@@ -1419,6 +1477,19 @@ const styles = StyleSheet.create({
   section: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
+  },
+  // A pinned title's scope (walk 15 T2-10): CSS sticky keeps a title inside
+  // its parent's content box. The release spacer, the scope's last child,
+  // pulls that box's end up one row (a negative top margin), and the section
+  // pads the same back, so nothing moves: the title leaves with its last row
+  // instead of staying pinned over the next section when the list cannot
+  // scroll its section away.
+  stickySection: {
+    paddingBottom: STICKY_RELEASE,
+  },
+  stickyRelease: {
+    height: 0,
+    marginTop: -STICKY_RELEASE,
   },
   // Score by night under the lists in a short window (walk 13 T2-04): ruled
   // off from the Fees line, as the lists are from each other.
@@ -1643,6 +1714,10 @@ const styles = StyleSheet.create({
   },
   actionTextArmed: {
     color: colors.goldInk,
+  },
+  // "WAITING" keeps inside the 72px button.
+  actionTextWaiting: {
+    letterSpacing: 0.3,
   },
   disabled: {
     opacity: 0.45,

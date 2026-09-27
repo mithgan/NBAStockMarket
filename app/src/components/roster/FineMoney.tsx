@@ -39,8 +39,10 @@ export function FineMoney({
   const headline = fontSize >= type.display;
   return (
     <Text
-      // Screen readers hear the figure the screen shows.
-      accessibilityLabel={accessibilityLabel ?? formatAt(value, precision, signed)}
+      // Screen readers hear the figure the screen shows, as its text; a name
+      // is set only when a caller asks for other words (a copy of the text as
+      // a name on role-less text added nothing, and was left on unseen copies).
+      accessibilityLabel={accessibilityLabel}
       maxFontSizeMultiplier={headline ? 1.2 : 1.4}
       style={[
         styles.money,

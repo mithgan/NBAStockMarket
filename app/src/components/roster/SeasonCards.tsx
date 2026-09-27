@@ -14,6 +14,9 @@ import { ScoreParts } from './ScoreHeader';
 /** The welcome's heading: a new practice season moves keyboard focus here. */
 export const PRACTICE_WELCOME_TITLE_ID = 'practice-welcome-title';
 
+/** Below this width (400% zoom) the welcome's × takes its own line; above it, it sits beside the title. */
+const WELCOME_HEAD_STACK_WIDTH = 150;
+
 /**
  * The first thing a new player reads in a practice season: what to do, what
  * +1 night does, that nothing is saved, and where the rules are. Once a
@@ -56,16 +59,20 @@ export function WelcomeCard({
   const games = nextGameDate ? `the ${humanDate(nextGameDate)} games` : 'the first games';
   const again = season > 1;
   const title = hasPlayers ? 'Ready for the first games' : again ? `Season ${season}` : 'Your practice season';
-  // At 400% zoom (about 100px wide) the × takes its own line and the buttons
-  // run full width, so the words keep the whole card (walk 3 T3-05).
+  // Under 200px (a phone at 200% zoom and up) the buttons run full width. Only
+  // at 400% zoom (about 100px wide) does the × take its own line, so the words
+  // keep the whole card (walk 3 T3-05); at 200% (195px) it stays beside the
+  // title, which wraps beside it, and the three steps start one row higher
+  // (walk 15 T3-11).
   const windowWidth = useWindowDimensions().width;
   const tiny = windowWidth < 200;
+  const headStacked = windowWidth < WELCOME_HEAD_STACK_WIDTH;
   // A 320px phone keeps both buttons on one line (their padding trimmed, the
   // 44px height kept), so the roster shows under the card (walk 10 T1-01).
   const tight = !tiny && windowWidth < 360 ? styles.actionTight : undefined;
   return (
     <View style={[styles.band, tiny && styles.bandTiny]}>
-      <View style={[styles.headRow, tiny && styles.headRowTiny]}>
+      <View style={[styles.headRow, headStacked && styles.headRowTiny]}>
         <View style={styles.headText}>
           {/* The steps' title says "practice" itself; the next step's and a
               later season's do not. */}
@@ -85,7 +92,7 @@ export function WelcomeCard({
           accessibilityRole="button"
           hitSlop={4}
           onPress={onHide}
-          style={({ pressed }) => [styles.hide, tiny && styles.hideTiny, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.hide, headStacked && styles.hideTiny, pressed && styles.pressed]}
         >
           <Text style={styles.hideGlyph}>×</Text>
         </Pressable>

@@ -3,8 +3,9 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { PerGamePositionSide } from '../../api/contracts';
 import { moneyCompact } from '../../copy/terms';
-import { figureCaptions } from '../../data/rosterView';
+import { figureCaptions, perGamePrecision } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
+import { visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
 
 export interface Figures {
@@ -21,9 +22,18 @@ export interface Figures {
   now?: number | null;
 }
 
-/** A number that does not exist yet (no settled games), kept in its column. */
+/**
+ * A number that does not exist yet (no settled games), kept in its column:
+ * a drawn dash, heard as "none yet" in text a reader gets (a name on the
+ * role-less dash was not read by every screen reader; walk 15 T3-09).
+ */
 function Missing() {
-  return <Text accessibilityLabel="none yet" style={styles.missing}>—</Text>;
+  return (
+    <View>
+      <Text aria-hidden style={styles.missing}>—</Text>
+      <Text style={visuallyHidden}>none yet</Text>
+    </View>
+  );
 }
 
 /** Shares of a phone row's width: the dividend column is widest because its caption is longest. */
@@ -40,7 +50,8 @@ function Share({ grow, children }: { grow: number; children: ReactNode }) {
  * game, which is the dividend minus the price, so the rest never run
  * together. A value never shrinks below its own width: with enlarged letter
  * or word spacing a figure wraps to a second line instead of touching the
- * next one.
+ * next one. A per-game figure that is the same money as the Total (one
+ * game) reads as the Total does (`perGamePrecision`, walk 15 T1-04).
  */
 export function StackedFigures({ price, dividend, net, total, narrow = false }: Figures & { narrow?: boolean }) {
   // Drawn for the eye: the row's own name already says each figure with its
@@ -48,11 +59,11 @@ export function StackedFigures({ price, dividend, net, total, narrow = false }: 
   // (fix 10 roster owner's note).
   return (
     <View aria-hidden style={styles.line}>
-      <Share grow={PHONE_SHARES.price}><FineMoney precision="compact" signed={false} value={price} /></Share>
+      <Share grow={PHONE_SHARES.price}><FineMoney precision={perGamePrecision(price, total)} signed={false} value={price} /></Share>
       <Share grow={PHONE_SHARES.dividend}>
-        {dividend === null ? <Missing /> : <FineMoney precision="compact" signed={false} value={dividend} />}
+        {dividend === null ? <Missing /> : <FineMoney precision={perGamePrecision(dividend, total)} signed={false} value={dividend} />}
       </Share>
-      {narrow ? null : <Share grow={PHONE_SHARES.net}>{net === null ? <Missing /> : <FineMoney precision="compact" value={net} />}</Share>}
+      {narrow ? null : <Share grow={PHONE_SHARES.net}>{net === null ? <Missing /> : <FineMoney precision={perGamePrecision(net, total)} value={net} />}</Share>}
       <Share grow={PHONE_SHARES.total}><FineMoney value={total} /></Share>
     </View>
   );
@@ -89,9 +100,9 @@ export function ListFigures({ side, price, dividend, net, total }: Figures) {
   );
   return (
     <View style={styles.list}>
-      {line(captions.price, <FineMoney precision="compact" signed={false} value={price} />)}
-      {line(captions.dividend, dividend === null ? <Missing /> : <FineMoney precision="compact" signed={false} value={dividend} />)}
-      {line(captions.net, net === null ? <Missing /> : <FineMoney precision="compact" value={net} />)}
+      {line(captions.price, <FineMoney precision={perGamePrecision(price, total)} signed={false} value={price} />)}
+      {line(captions.dividend, dividend === null ? <Missing /> : <FineMoney precision={perGamePrecision(dividend, total)} signed={false} value={dividend} />)}
+      {line(captions.net, net === null ? <Missing /> : <FineMoney precision={perGamePrecision(net, total)} value={net} />)}
       {line(captions.total, <FineMoney value={total} />)}
     </View>
   );
@@ -134,12 +145,13 @@ export function TableFigures({ price, dividend, net, total, now = null }: Figure
     <>
       {cell(TABLE_COLUMNS.price, (
         <>
-          <FineMoney precision="compact" signed={false} value={price} />
-          {moved ? <Text accessibilityLabel={`market price now ${moneyCompact(now)} a game`} style={styles.now}>now {moneyCompact(now)}</Text> : null}
+          <FineMoney precision={perGamePrecision(price, total)} signed={false} value={price} />
+          {moved ? <Text aria-hidden style={styles.now}>now {moneyCompact(now)}</Text> : null}
+          {moved ? <Text style={visuallyHidden}>{`market price now ${moneyCompact(now)} a game`}</Text> : null}
         </>
       ))}
-      {cell(TABLE_COLUMNS.dividend, dividend === null ? <Missing /> : <FineMoney precision="compact" signed={false} value={dividend} />)}
-      {cell(TABLE_COLUMNS.net, net === null ? <Missing /> : <FineMoney precision="compact" value={net} />)}
+      {cell(TABLE_COLUMNS.dividend, dividend === null ? <Missing /> : <FineMoney precision={perGamePrecision(dividend, total)} signed={false} value={dividend} />)}
+      {cell(TABLE_COLUMNS.net, net === null ? <Missing /> : <FineMoney precision={perGamePrecision(net, total)} value={net} />)}
       {cell(TABLE_COLUMNS.total, <FineMoney value={total} />)}
     </>
   );

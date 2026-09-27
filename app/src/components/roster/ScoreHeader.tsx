@@ -176,7 +176,10 @@ export function ScoreHeader({
       )}
       {rank ? (
         <StackRow label="Rank">
-          <Text accessibilityLabel={`Rank ${spokenRanks(rank)}`} style={styles.stackText}>{rank}</Text>
+          {/* Drawn only, like the whole block: the sentence above says the
+              place in words, "first of 5" (walk 15 T3-09). A name on this
+              role-less text was never heard. */}
+          <Text style={styles.stackText}>{rank}</Text>
         </StackRow>
       ) : null}
     </View>
@@ -288,15 +291,19 @@ export function ScoreParts({ title, parts, precision, variant, hidden = false }:
   /** `line`: one line, each figure right after its label (a short window side by side). */
   variant: 'compact' | 'narrow' | 'panel' | 'line';
 }) {
+  // Heard as one sentence in text a reader gets ("Your score by source:
+  // Roster +$704.5K, …"), the drawn parts hidden from it: a name on the
+  // role-less block is not read by every screen reader (walk 15 T3-09).
+  const spoken = `${title} by source: ${parts.map((part) => `${part.label} ${formatAt(part.value, precision, true)}`).join(', ')}`;
   return (
     <View
-      accessibilityLabel={hidden ? undefined : `${title} by source: ${parts.map((part) => `${part.label} ${formatAt(part.value, precision, true)}`).join(', ')}`}
-      accessible={!hidden}
       aria-hidden={hidden || undefined}
       style={[styles.parts, variant === 'compact' && styles.partsGrid, variant === 'line' && styles.partsLine]}
     >
+      {hidden ? null : <Text style={visuallyHidden}>{spoken}</Text>}
       {parts.map((part) => (
         <View
+          aria-hidden
           key={part.key}
           style={[styles.part, variant === 'compact' && styles.partHalf, variant === 'line' && styles.partInline]}
         >
