@@ -34,7 +34,6 @@ import {
   closeActionName,
   closeVerb,
   confirmCloseButton,
-  confirmCloseMessage,
   exactMoney,
   moneyCompact,
   perGame,
@@ -56,6 +55,7 @@ import {
   againRows,
   breakdownParts,
   closedRows,
+  closeQuestion,
   earnLine,
   exactFinalLine,
   feeMoves,
@@ -73,6 +73,7 @@ import {
   tipRetired,
   belowZeroNote,
   backLines,
+  SHORTS_LATER,
   type ClosedRow,
   type RowLayout,
 } from '../data/rosterView';
@@ -399,7 +400,7 @@ function PositionRow({
     <ConfirmStrip
       confirmAccessibilityLabel={confirmCloseName(position.side, position.playerName, fee)}
       confirmLabel={confirmCloseButton(position.side, fee)}
-      message={confirmCloseMessage({
+      message={closeQuestion({
         side: position.side,
         playerName: position.playerName,
         feeDollars: fee,
@@ -407,7 +408,10 @@ function PositionRow({
         // Left alone a short ends by itself on its last day, at no cost: the
         // question says so whenever it is asked (walk 3 T1-N3).
         endsFreeAfter: position.expiresOn,
+        // The comeback price as the Closed row will show it right after
+        // (walk 11 T1-05).
         priceNow: marketPrice,
+        dropImpactBps: bootstrap?.ruleset.quoteDropImpactBps ?? 0,
       })}
       onCancel={() => onConfirmClose(position, 'kept')}
       onConfirm={() => onConfirmClose(position, 'closed')}
@@ -855,6 +859,11 @@ export function PerGameRosterScreen({
   const totalInset = layout === 'table' ? ACTION_WIDTH + space.sm : 0;
   const hadLongs = bootstrap.positions.some((position) => position.side === 'long' && position.status === 'closed');
   const hadShorts = bootstrap.positions.some((position) => position.side === 'short' && position.status === 'closed');
+  // The welcome carries the way to the Market while nobody is held: the
+  // empty roster card does not repeat it (walk 11 T1-01, T3-01).
+  const welcomeMarket = showWelcome && active.length === 0;
+  // Before any short and while the welcome is up, shorts are one quiet line.
+  const quietShorts = showWelcome && !seasonOver && shorts.length === 0 && !hadShorts;
   const { longSlots, shortSlots } = bootstrap.account;
   const lockLine = rosterLocked ? `${rosterReopensLine(rosterLockDate)}.` : null;
   // Why Drop and Close are unavailable, in words on the screen (not only in a
@@ -1067,6 +1076,7 @@ export function PerGameRosterScreen({
       earn={earnLine(bootstrap.ruleset.dividendDollarsPerNetPoint)}
       feeDollars={fee}
       hasPlayers={active.length > 0}
+      locked={rosterLocked}
       nextGameDate={bootstrap.game.nextGameDate}
       onHide={hideWelcome}
       onOpenMarket={() => onOpenMarket('long')}
@@ -1177,11 +1187,11 @@ export function PerGameRosterScreen({
         {errand('long')}
         {longs.length > 0 ? tableOf('long', rows(longs)) : (
           <EmptyState
-            // Always a way to the Market (walk 8 T1-02): on a phone the
-            // welcome's own button is off screen by the time you read this.
-            // Beside the welcome it is the plain button, so the welcome's
-            // stays the one primary.
-            action={seasonOver ? undefined : lockLine ? (
+            // Always a way to the Market (walk 8 T1-02), but one at a time:
+            // while the welcome carries its own (nobody held), the first
+            // screen has one Open market, and this card just says no one is
+            // here yet (walk 11 T1-01, T3-01).
+            action={seasonOver || welcomeMarket ? undefined : lockLine ? (
               <Button
                 accessibilityLabel="Browse the player market"
                 label="Browse the market"
@@ -1192,17 +1202,28 @@ export function PerGameRosterScreen({
                 accessibilityLabel="Open market: browse players to add"
                 label="Open market"
                 onPress={() => onOpenMarket('long')}
-                variant={showWelcome && !(active.length > 0) ? 'secondary' : 'primary'}
+                variant="primary"
               />
             )}
             copy={seasonOver
               ? 'The season is over. There are no more players to add.'
-              : lockLine ? `${lockLine} You can look around the market until then.` : ROSTER_EXPLAINER}
+              // Beside the welcome the list's note (or the folded frame)
+              // already says when moves reopen, and the welcome explains.
+              : welcomeMarket ? undefined
+                : lockLine ? `${lockLine} You can look around the market until then.` : ROSTER_EXPLAINER}
             style={styles.empty}
-            title={hadLongs ? 'Your roster is empty' : seasonOver ? 'No players this season' : 'Add your first player'}
+            title={hadLongs ? 'Your roster is empty' : seasonOver ? 'No players this season' : welcomeMarket ? 'No players yet' : 'Add your first player'}
           />
         )}
       </View>
+      {quietShorts ? (
+        // Before your first games the short side is one quiet line, not a
+        // card with its own button: the welcome's one next step stays the
+        // Market (walk 11 T1-01).
+        <View style={styles.section}>
+          <Text style={styles.shortsLater}>{SHORTS_LATER}</Text>
+        </View>
+      ) : (
       <View style={styles.section}>
         <SectionHead
           caption={shorts.length > 0 ? SHORT_EXPLAINER : undefined}
@@ -1239,6 +1260,7 @@ export function PerGameRosterScreen({
           />
         )}
       </View>
+      )}
       <ClosedSection
         actionFor={shortAgain}
         backFor={(row) => backOn.get(row.positionId) ?? null}
@@ -1332,6 +1354,14 @@ const styles = StyleSheet.create({
   empty: {
     paddingVertical: space.lg,
     paddingHorizontal: space.lg,
+  },
+  // The short side before your first games: one quiet line.
+  shortsLater: {
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.body,
   },
   stackRow: {
     position: 'relative',

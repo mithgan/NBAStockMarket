@@ -1,11 +1,21 @@
-import { useState, type ReactNode } from 'react';
-import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { gamesCount, unbrokenName } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
-import { closedSpoken, feesDetail, formatAt, spokenRepeats, type ClosedRow, type PartPrecision } from '../../data/rosterView';
+import {
+  closedGroupSpoken,
+  feesDetail,
+  formatAt,
+  mergeClosedRows,
+  spokenRepeats,
+  stintParts,
+  stintSpoken,
+  type ClosedRow,
+  type PartPrecision,
+} from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
-import { Button, visuallyHidden } from '../../ui/kit';
+import { Button, repeatSafe, visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
 import { TABLE_COLUMNS } from './RowFigures';
 import { SectionHead } from './SectionHead';
@@ -53,6 +63,7 @@ export function DotLine({ parts, style }: { parts: readonly string[]; style?: St
  * (walk 9 T2-07), in the room the price columns leave free on a closed row.
  */
 export function ClosedSection({ rows: allRows, total, totalInset = 0, precision = 'fine', actionFor, noteFor, backFor }: {
+  /** Every closed stint, most recent first; the section shows one row per player and side. */
   rows: readonly ClosedRow[];
   total: number;
   totalInset?: number;
@@ -65,14 +76,25 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
   backFor?: (row: ClosedRow) => string | null;
 }) {
   const [showAll, setShowAll] = useState(false);
+  // The rows opened to list their stints, by player and side.
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  // A row that opens and closes: a double tap never undoes itself.
+  const toggle = useMemo(() => repeatSafe((key: string) => setOpen((current) => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  })), []);
   // The roster table (a wide list) keeps a Total column and an action column
   // at the right; `totalInset` is the action column plus its gap.
   const table = totalInset > 0;
-  // A player dropped before his first game moved nothing but fees; the Fees
-  // line counts him instead of a row of zeros.
-  const rows = allRows.filter((row) => !row.unplayed);
+  // One row per player and side, his stints folded in (walk 11 T1-11). A
+  // player dropped before his first game every time moved nothing but fees;
+  // the Fees line counts him instead of a row of zeros.
+  const rows = mergeClosedRows(allRows).filter((row) => !row.unplayed);
   if (rows.length === 0) return null;
   const shown = showAll ? rows : rows.slice(0, COLLAPSED_COUNT);
+  const figureStyle = table ? { marginRight: totalInset, minWidth: TABLE_COLUMNS.total, alignItems: 'flex-end' as const } : null;
   return (
     <View style={styles.section}>
       <SectionHead
@@ -84,34 +106,81 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
         totalLabel="Closed total"
       />
       {shown.map((row) => {
+        const key = `${row.side}:${row.playerId}`;
         const action = actionFor ? actionFor(row) : null;
         const note = noteFor ? noteFor(row) : null;
         const back = backFor ? backFor(row) : null;
+        // Several stints: the row is a button that opens the list of them.
+        const grouped = row.stints.length > 1;
+        const isOpen = grouped && open.has(key);
+        const spoken = closedGroupSpoken(row, formatAt(row.total, precision, true), back);
         const figure = (hidden: boolean) => (
-          <View aria-hidden={hidden || undefined} style={[styles.money, table && { marginRight: totalInset, minWidth: TABLE_COLUMNS.total, alignItems: 'flex-end' }]}>
+          <View aria-hidden={hidden || undefined} style={[styles.money, figureStyle]}>
             <FineMoney precision={precision} value={row.total} />
           </View>
         );
+        const detail = grouped
+          ? [`${row.how}\u00a0${isOpen ? '\u25b2' : '\u25bc'}`, keepTogether(gamesCount(row.games))]
+          : [...row.how.split(' \u00b7 ').map(bindDates), keepTogether(gamesCount(row.games))];
+        const facts = (
+          <>
+            <View style={styles.copy}>
+              <Text style={styles.name}>{unbrokenName(row.name)}</Text>
+              <DotLine parts={detail} style={styles.detail} />
+              {back ? <Text style={styles.back}>{back}</Text> : null}
+            </View>
+            {table ? null : figure(false)}
+          </>
+        );
         return (
-          <View key={row.positionId} style={styles.item}>
+          <View key={key} style={styles.item}>
             <View style={styles.row}>
-              {/* Heard as one sentence with its figure, "Scottie Barnes,
-                  dropped Oct 28 after 4 games: -$612K" (walk 10 T3-04): a
-                  name on a role-less box is not read in reading mode, so the
-                  sentence is hidden text and the drawn row is hidden from
-                  screen readers. A follow-up button stays its own stop. */}
-              <Text style={visuallyHidden}>{closedSpoken(row, formatAt(row.total, precision, true), back)}</Text>
-              <View aria-hidden style={[styles.facts, table && styles.factsTable]}>
-                <View style={styles.copy}>
-                  <Text style={styles.name}>{unbrokenName(row.name)}</Text>
-                  <DotLine parts={[...row.how.split(' · ').map(bindDates), keepTogether(gamesCount(row.games))]} style={styles.detail} />
-                  {back ? <Text style={styles.back}>{back}</Text> : null}
-                </View>
-                {table ? null : figure(false)}
-              </View>
+              {grouped ? (
+                // Heard as one sentence with his total, "Scottie Barnes, 3
+                // stints, 2 games in all: -$368.4K", and whether it is open.
+                <Pressable
+                  accessibilityLabel={spoken}
+                  accessibilityRole="button"
+                  aria-expanded={isOpen}
+                  onPress={() => toggle(key)}
+                  style={({ pressed }) => [styles.facts, styles.factsButton, table && styles.factsTable, pressed && styles.pressed]}
+                >
+                  {facts}
+                </Pressable>
+              ) : (
+                <>
+                  {/* Heard as one sentence with its figure, "Scottie Barnes,
+                      dropped Oct 28 after 4 games: -$612K" (walk 10 T3-04):
+                      a name on a role-less box is not read in reading mode,
+                      so the sentence is hidden text and the drawn row is
+                      hidden from screen readers. A follow-up button stays
+                      its own stop. */}
+                  <Text style={visuallyHidden}>{spoken}</Text>
+                  <View aria-hidden style={[styles.facts, table && styles.factsTable]}>{facts}</View>
+                </>
+              )}
               {table && action ? <View style={styles.inlineAction}>{action}</View> : null}
               {table ? figure(true) : null}
             </View>
+            {isOpen ? (
+              // Each stint: when, how many games, and what it made; they add
+              // up to the row's figure (walk 11 T1-11).
+              <View role="list" style={styles.stints}>
+                {row.stints.map((stint) => (
+                  <View key={stint.positionId} role="listitem" style={styles.stint}>
+                    <Text style={visuallyHidden}>{stintSpoken(stint, formatAt(stint.total, precision, true))}</Text>
+                    <View aria-hidden style={styles.stintDrawn}>
+                      <View style={styles.copy}>
+                        <DotLine parts={stintParts(stint).map(bindDates)} style={styles.detail} />
+                      </View>
+                      <View style={[styles.money, figureStyle]}>
+                        <FineMoney precision={precision} size="body" value={stint.total} />
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
             {!table && action ? <View style={styles.actionLine}>{action}</View> : null}
             {note}
           </View>
@@ -206,6 +275,11 @@ const styles = StyleSheet.create({
   factsTable: {
     flexBasis: 0,
   },
+  // A row that opens: a full-size target, its lines centred in it.
+  factsButton: {
+    minHeight: 44,
+    alignContent: 'center',
+  },
   // Its own line under the words (a phone): the button never shares the
   // figure's line, so neither squeezes the other.
   actionLine: {
@@ -216,6 +290,26 @@ const styles = StyleSheet.create({
   },
   inlineAction: {
     flexShrink: 0,
+  },
+  pressed: {
+    opacity: 0.72,
+  },
+  // An opened row's stints, indented under his name, figures under his.
+  stints: {
+    paddingLeft: space.lg + space.md,
+    paddingRight: space.lg,
+    paddingBottom: space.sm,
+    marginTop: -2,
+  },
+  stint: {
+    minHeight: 28,
+    justifyContent: 'center',
+  },
+  stintDrawn: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    columnGap: space.md,
   },
   copy: {
     flexGrow: 1,

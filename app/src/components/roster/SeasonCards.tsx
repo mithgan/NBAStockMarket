@@ -26,11 +26,18 @@ export function WelcomeCard({
   nextGameDate,
   feeDollars,
   earn,
+  locked = false,
   onOpenMarket,
   onOpenRules,
   onHide,
 }: {
   hasPlayers: boolean;
+  /**
+   * Moves are paused for the next games (walk 11 T1-10): the steps lead with
+   * +1 night, and the Market is there to look around (the outlined "Browse
+   * the market"), as the frame's tinted +1 night already says.
+   */
+  locked?: boolean;
   /** What a player earns, in one plain line (`earnLine`, walk 6 T1-02). */
   earn: string;
   nextGameDate: string | null;
@@ -76,14 +83,18 @@ export function WelcomeCard({
         </Pressable>
       </View>
       {hasPlayers ? (
-        <Text style={styles.copy}>{`Press +1 night to play ${games}. You can keep adding players until then.`}</Text>
+        <Text style={styles.copy}>
+          {locked
+            ? `Press +1 night to play ${games}. Moves are paused until they have played.`
+            : `Press +1 night to play ${games}. You can keep adding players until then.`}
+        </Text>
       ) : (
         <>
           {/* What to do, as three short steps the eye takes in at once; how
               a game scores, the fee and the reload in a smaller part under
               them (walk 10 T1-01). */}
           <View role="list" style={styles.steps}>
-            {welcomeSteps(nextGameDate).map((step, index) => (
+            {welcomeSteps(nextGameDate, locked).map((step, index) => (
               <View key={step} role="listitem" style={styles.step}>
                 <Text style={styles.stepNumber}>{index + 1}</Text>
                 <Text style={styles.stepText}>{step}</Text>
@@ -94,7 +105,9 @@ export function WelcomeCard({
         </>
       )}
       <View style={[styles.actions, tiny && styles.actionsTiny]}>
-        {hasPlayers ? null : (
+        {hasPlayers ? null : locked ? (
+          <Button accessibilityLabel="Browse the player market" label="Browse the market" onPress={onOpenMarket} style={tight} />
+        ) : (
           <Button accessibilityLabel="Open market: browse players to add" label="Open market" onPress={onOpenMarket} style={tight} variant="primary" />
         )}
         {onOpenRules ? <Button label="How scoring works" onPress={onOpenRules} style={tight} /> : null}

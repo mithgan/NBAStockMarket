@@ -16,6 +16,7 @@ import type {
   PerGameSettledResult,
 } from '../api/contracts';
 import {
+  confirmCloseMessage,
   exactMoney,
   exactSignedMoney,
   humanDate,
@@ -922,24 +923,38 @@ export function finalSummary(
  * score in one number."
  */
 export function earnLine(dollarsPerNetPoint: number | null | undefined): string {
+  // What a net point is, in a few words (walk 11 T1-02): the full rule,
+  // with the example, is Rules > Scoring.
   const rate = dollarsPerNetPoint && dollarsPerNetPoint > 0
-    ? `: ${moneyCompact(dollarsPerNetPoint)} for every net point, his box score in one number`
+    ? `: ${moneyCompact(dollarsPerNetPoint)} for every net point (${NET_POINT_WORDS})`
     : ', his box score in money';
   return `Each game a player plays, you pay his price and collect his dividend${rate}.`;
 }
 
 /**
+ * A net point in a few words, his box score as one number (walk 11 T1-02):
+ * everything Rules > Scoring counts, short enough that a 320px phone still
+ * shows the roster under the welcome (walk 10 T1-01).
+ */
+export const NET_POINT_WORDS =
+  'points, rebounds, assists, steals and blocks, minus misses, turnovers and minutes played';
+
+/**
  * The welcome's first part (walk 10 T1-01): what to do, as three short
  * numbered steps a new fan can take in at a glance, the call to action
- * first. "Press +1 night to play Oct 21".
+ * first. "Press +1 night to play Oct 21". On a locked night (moves paused
+ * for those games) the step you can take comes first (walk 11 T1-10): "Press
+ * +1 night to play Oct 28 (moves are paused)", then adding players.
  */
-export function welcomeSteps(nextGameDate: string | null | undefined): string[] {
-  return [
-    'Add players from the Market',
-    `Press +1 night to play ${nextGameDate ? humanDate(nextGameDate) : 'the first games'}`,
-    "Beat each player's price to score",
-  ];
+export function welcomeSteps(nextGameDate: string | null | undefined, locked = false): string[] {
+  const play = `Press +1 night to play ${nextGameDate ? humanDate(nextGameDate) : 'the first games'}`;
+  const add = 'Add players from the Market';
+  const beat = "Beat each player's price to score";
+  return locked ? [`${play} (moves are paused)`, add, beat] : [add, play, beat];
 }
+
+/** The quiet line that stands in for the empty shorts card while the welcome is up (walk 11 T1-01). */
+export const SHORTS_LATER = 'Shorts: bet against a player. Try after your first games.';
 
 /**
  * The welcome's smaller second part (walk 10 T1-01): how a game scores
@@ -985,6 +1000,103 @@ export function closedSpoken(row: Pick<ClosedRow, 'name' | 'how' | 'games'>, mon
   const when = /\b(after|before)\b/.test(first) ? `${how}, ${games}` : `${how} after ${games}`;
   const more = rest.length > 0 ? `, ${rest.join(', ')}` : '';
   return `${row.name}, ${when}${more}: ${money}${back ? `. ${back}` : ''}`;
+}
+
+/**
+ * His price a game right after you drop him (or close your short on him):
+ * the move itself nudges his quote by the ruleset's drop impact, down for a
+ * drop and up for a closed short, as the backend moves it (walk 11 T1-05).
+ */
+export function priceAfterClose(side: PerGamePositionSide, priceNow: number, dropImpactBps: number): number {
+  const step = Math.round((priceNow * Math.max(0, dropImpactBps)) / 10_000);
+  return side === 'long' ? Math.max(0, priceNow - step) : priceNow + step;
+}
+
+/**
+ * The Roster's Drop / Close question (`confirmCloseMessage`) with the
+ * comeback price the Closed row shows seconds later, in its format: "His
+ * price right after this drop: about $261.4K a game." beside "Add again ·
+ * $261.4K", never "today about $262K" (walk 11 T1-05). "About": nights move
+ * prices too.
+ */
+export function closeQuestion({ priceNow = null, dropImpactBps = 0, ...question }: Parameters<typeof confirmCloseMessage>[0] & {
+  /** The ruleset's `quoteDropImpactBps`. */
+  dropImpactBps?: number;
+}): string {
+  const base = confirmCloseMessage({ ...question, priceNow: null });
+  if (priceNow === null || priceNow <= 0) return base;
+  const after = moneyCompact(priceAfterClose(question.side, priceNow, dropImpactBps));
+  const when = dropImpactBps <= 0 ? 'today' : question.side === 'long' ? 'right after this drop' : 'right after this close';
+  return `${base} His price ${when}: about ${after} a game.`;
+}
+
+/** A Closed row with every stint it stands for. */
+export interface ClosedGroup extends ClosedRow {
+  /** His stints on this side, newest first, including any dropped before he played. */
+  stints: readonly ClosedRow[];
+}
+
+/** "3 stints" on your roster, "2 shorts" on the short side. */
+export function stintsWord(side: PerGamePositionSide, count: number): string {
+  return side === 'long' ? `${count} stints` : `${count} shorts`;
+}
+
+/**
+ * One Closed row per player and side (walk 11 T1-11, T2-10; walk 10 T4-N4):
+ * a player dropped and added again reads "Scottie Barnes · 3 stints · 2
+ * games · -$368.4K" with one Add again, instead of a row per stint that looks
+ * like a duplicate and leaves the sum to you. A stint dropped before he played
+ * counts as a stint (its fee stays in the Fees line, which still names him);
+ * a player whose every stint went unplayed stays folded into Fees. The row
+ * keeps his newest shown stint's id and dates, so Add again, "Back on your
+ * roster" and a full side's note find it as before. Rows come most recent
+ * first, and so do the groups and each group's stints.
+ */
+export function mergeClosedRows(rows: readonly ClosedRow[]): ClosedGroup[] {
+  const bySide = new Map<string, ClosedRow[]>();
+  for (const row of rows) {
+    const key = `${row.side}:${row.playerId}`;
+    const stints = bySide.get(key);
+    if (stints) stints.push(row);
+    else bySide.set(key, [row]);
+  }
+  return [...bySide.values()].map((stints) => {
+    const shown = stints.find((stint) => !stint.unplayed) ?? stints[0];
+    if (stints.length === 1) return { ...shown, stints };
+    return {
+      ...shown,
+      how: stintsWord(shown.side, stints.length),
+      games: stints.reduce((sum, stint) => sum + stint.games, 0),
+      total: stints.reduce((sum, stint) => sum + stint.total, 0),
+      unplayed: stints.every((stint) => stint.unplayed),
+      stints,
+    };
+  });
+}
+
+/**
+ * A Closed row as heard, one sentence with its total: a single stint as
+ * `closedSpoken` says it, several as "Scottie Barnes, 3 stints, 2 games in
+ * all: -$368.4K".
+ */
+export function closedGroupSpoken(group: Pick<ClosedGroup, 'name' | 'how' | 'games' | 'stints'>, money: string, back: string | null = null): string {
+  if (group.stints.length <= 1) return closedSpoken(group, money, back);
+  const games = `${group.games} ${group.games === 1 ? 'game' : 'games'}`;
+  return `${group.name}, ${group.how}, ${games} in all: ${money}${back ? `. ${back}` : ''}`;
+}
+
+/**
+ * One stint's line when his Closed row opens: "Dropped Oct 22 · 1 game"; a
+ * stint dropped before he played says where its fee went.
+ */
+export function stintParts(stint: Pick<ClosedRow, 'how' | 'games' | 'unplayed'>): string[] {
+  const games = `${stint.games} ${stint.games === 1 ? 'game' : 'games'}`;
+  return [...stint.how.split(' · '), stint.unplayed ? 'fee in Fees' : games];
+}
+
+/** A stint as heard: "Dropped Oct 22, 1 game: -$53.4K". */
+export function stintSpoken(stint: Pick<ClosedRow, 'how' | 'games' | 'unplayed'>, money: string): string {
+  return `${stintParts(stint).join(', ')}: ${money}`;
 }
 
 /** The first-night tip's reading: a tag the screen shows and what it means, or the words alone. */
@@ -1187,9 +1299,12 @@ export function chartSummary(series: readonly NightPoint[]): string {
   const span = nights.length === 1
     ? `after ${nights[0].label}`
     : `from ${nights[0].label} to ${nights.at(-1)!.label}`;
-  return twoDecimalMillions(`Your score by night ${span}: started at $0, now ${signedMoney(end.cumulativePnl)}. `
-    + `Best ${signedMoney(best.cumulativePnl)} ${best.kind === 'now' ? 'now' : `after ${best.label}`}, `
-    + `lowest ${signedMoney(worst.cumulativePnl)} ${worst.kind === 'now' ? 'now' : `after ${worst.label}`}.`);
+  // In the score's own format, so "now" is heard as the score block says it
+  // ("+$194.3K", not "+$194K"; walk 11 T1-04).
+  const score = (value: number) => formatAt(value, 'fine', true);
+  return twoDecimalMillions(`Your score by night ${span}: started at $0, now ${score(end.cumulativePnl)}. `
+    + `Best ${score(best.cumulativePnl)} ${best.kind === 'now' ? 'now' : `after ${best.label}`}, `
+    + `lowest ${score(worst.cumulativePnl)} ${worst.kind === 'now' ? 'now' : `after ${worst.label}`}.`);
 }
 
 /**
@@ -1286,10 +1401,10 @@ export function axisMoney(value: number): string {
 }
 
 /**
- * A value mark as drawn: millions in the Roster's one precision (two
- * decimals, so the chart's "+$1.60M" matches the score above it; walk 7
- * T4-14), smaller amounts as `axisMoney` ("-$334K"). The gutter is sized to
- * the mark (PerGamePnlChart), so the longer millions never cut.
+ * A short value mark: millions in the Roster's one precision (two decimals,
+ * so "+$1.60M" matches the score; walk 7 T4-14), smaller amounts as
+ * `axisMoney` ("-$334K"). The score chart's High and Low now use the score's
+ * own format instead (`valueMark`, walk 11 T1-04).
  */
 export function axisMark(value: number): string {
   return Math.abs(Math.round(value)) >= 999_950 ? formatAt(value, 'fine', true) : axisMoney(value);
@@ -1299,11 +1414,14 @@ export function axisMark(value: number): string {
  * A value mark's words on the score chart: "$0", "High +$4.56M", "Low
  * -$334K" (walk 10 T1-04). Named, so a season whose line ends just under
  * its high never reads as ending at the high: the final score is the
- * score block's, and a night's reading gives any other.
+ * score block's, and a night's reading gives any other. The figure is in
+ * the score's own format (walk 11 T1-04): a high that is tonight's score
+ * reads "High +$194.3K" beside "+$194.3K", never "+$194K". The gutter is
+ * sized to the mark as drawn (PerGamePnlChart), so a longer one never cuts.
  */
 export function valueMark(kind: 'zero' | 'high' | 'low', value: number): string {
   if (kind === 'zero') return '$0';
-  return `${kind === 'high' ? 'High' : 'Low'} ${axisMark(value)}`;
+  return `${kind === 'high' ? 'High' : 'Low'} ${formatAt(value, 'fine', true)}`;
 }
 
 /** Clear air above the score chart's heading when a tap brings it into view. */

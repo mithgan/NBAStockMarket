@@ -769,7 +769,7 @@ test('at season end the row tags read in the past tense (walk 6 T1-10c)', async 
 test('the welcome says what a player earns, from the ruleset rate, each word before it is used (walk 6 T1-02, walk 7 T1-03)', async () => {
   const { earnLine } = await import('./rosterView');
   const line = earnLine(40_000);
-  assert.equal(line, 'Each game a player plays, you pay his price and collect his dividend: $40K for every net point, his box score in one number.');
+  assert.equal(line, 'Each game a player plays, you pay his price and collect his dividend: $40K for every net point (points, rebounds, assists, steals and blocks, minus misses, turnovers and minutes played).');
   // Price and dividend are said before the welcome asks for a dividend that beats a price.
   assert.ok(line.indexOf('price') < line.indexOf('net point'));
   assert.equal(earnLine(null), 'Each game a player plays, you pay his price and collect his dividend, his box score in money.');
