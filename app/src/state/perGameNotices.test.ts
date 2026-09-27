@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameBootstrap, PerGameLedgerEntry, PerGamePosition } from '../api/contracts';
-import { isSeasonCompleteNotice, newsFirst, outcomeFirst, refreshHasNews, refreshNotice } from './perGameNotices';
+import { coversGames, isSeasonCompleteNotice, newsFirst, outcomeFirst, refreshHasNews, refreshNotice } from './perGameNotices';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -212,4 +212,18 @@ test('a bar narrower than a desktop\'s leads with moves that did not happen, the
     'Your roster is locked. Moves reopen after Nov 11.',
     'Season complete. Final score +$4.95M, #1 of 5.',
   ]) assert.equal(newsFirst(unchanged), unchanged);
+});
+
+test('a run\'s notice covers the notice of its own first week, and nothing else (walk 16 T4-11)', () => {
+  const week = 'Oct 21–27 games: your score fell $167.5K. Moves pause for the Oct 28 games, so Jalen Duren was not added.';
+  const run = 'Oct 21–Nov 10 games (3 weeks): your score fell $529K. Jalen Duren was not added: moves paused for the Oct 28 games. Moves pause for the Nov 11 games.';
+  assert.equal(coversGames(run, week), true);
+  assert.equal(coversGames('Oct 21–23 games (3 nights): your score rose $205K.', 'Oct 21 games: your score rose $84K.'), true);
+  // Later weeks start elsewhere; a new season's first night ends before the old week did.
+  assert.equal(coversGames('Oct 28–Nov 3 games: your score rose $9K.', week), false);
+  assert.equal(coversGames('Oct 21 games: your score rose $84K.', week), false);
+  // Across the new year: Dec 30–Jan 5 covers Dec 30.
+  assert.equal(coversGames('Dec 30–Jan 5 games: your score rose $1K.', 'Dec 30 games: your score rose $1K.'), true);
+  assert.equal(coversGames('Luka Doncic added at $417.5K a game, locked in. $250 fee.', week), false);
+  assert.equal(coversGames(week, week), false);
 });

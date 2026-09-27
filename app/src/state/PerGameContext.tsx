@@ -26,7 +26,7 @@ import { practiceProgress } from '../data/chromeView';
 import { isAppResume } from './appResume';
 import { ActionLock } from './actionLock';
 import { loadPerGameBootstrapSnapshot } from './perGameBootstrapLoader';
-import { refreshHasNews, refreshNotice } from './perGameNotices';
+import { coversGames, refreshHasNews, refreshNotice } from './perGameNotices';
 import { runPerGameMutation } from './perGameMutation';
 import {
   MutationReconciliationCoordinator,
@@ -147,6 +147,8 @@ const PROBLEM_JOIN_MS = 8000;
 const WAITED_REJOIN_MS = 2000;
 /** How soon a fuller notice replaces its shorter form in Recent notices. */
 const NOTICE_GREW_MS = 3000;
+/** How far back a run's notice finds its own first week's in Recent notices (a long run takes seconds). */
+const RUN_GREW_MS = 60_000;
 /** A notice that leads with the games it reports ("Oct 21–27 games: …", "Oct 21–Nov 3 games (2 weeks): …"). */
 const GAMES_HEADLINE = /^[A-Z][a-z]{2} \d{1,2}(?:–(?:[A-Z][a-z]{2} )?\d{1,2})? games\b/;
 
@@ -201,20 +203,40 @@ export function PerGameProvider({
   const silentNotice = useRef<{ text: string; tone: NoticeTone; id: number } | null>(null);
   // The whole sentence as it was heard; a repeat of the last one (a second
   // LOCKED press) only moves its time.
-  const remember = useCallback((heard: string, tone: NoticeTone, id: number) => {
+  const remember = useCallback((heard: string, tone: NoticeTone, id: number, replaces: number | null = null) => {
     setRecentNotices((list) => {
       const last = list[0];
-      if (last?.text === heard) return [{ ...last, at: Date.now() }, ...list.slice(1)];
+      const now = Date.now();
+      if (last?.text === heard) return [{ ...last, at: now }, ...list.slice(1)];
+      const entry = { text: heard, tone, at: now, id };
+      // Quick moves shown as one notice are one entry, as the screen showed
+      // them (walk 16 T4-12: ten quick adds pushed the season's results out).
+      if (replaces !== null && list.some((item) => item.id === replaces)) {
+        return [entry, ...list.filter((item) => item.id !== replaces)];
+      }
       // A notice that grew a moment later (one more refused name, the same
       // games) takes its place: one entry for one event (walk 15 T4-05).
-      if (last && Date.now() - last.at < NOTICE_GREW_MS && firstSentence(last.text) === firstSentence(heard) && heard.length > last.text.length) {
-        return [{ text: heard, tone, at: Date.now(), id }, ...list.slice(1)];
+      if (last && now - last.at < NOTICE_GREW_MS && firstSentence(last.text) === firstSentence(heard) && heard.length > last.text.length) {
+        return [entry, ...list.slice(1)];
       }
-      return [{ text: heard, tone, at: Date.now(), id }, ...list].slice(0, RECENT_NOTICES_MAX);
+      // So does a run's notice, for its own first week's (walk 16 T4-11: a
+      // refusal in that week left both, the refusal said twice).
+      const covered = list.findIndex((item) => now - item.at < RUN_GREW_MS && coversGames(heard, item.text));
+      if (covered >= 0) return [entry, ...list.filter((_, index) => index !== covered)];
+      return [entry, ...list].slice(0, RECENT_NOTICES_MAX);
     });
   }, []);
-  /** `spoken`: what screen readers hear instead, when it differs. */
-  const say = useCallback((text: string, tone: NoticeTone = 'problem', spoken?: string) => {
+  /**
+   * `spoken`: what screen readers hear instead, when it differs. `recent`:
+   * what Recent notices keeps instead, and the entry it takes the place of.
+   * Returns the notice's id.
+   */
+  const say = useCallback((
+    text: string,
+    tone: NoticeTone = 'problem',
+    spoken?: string,
+    recent?: { text: string; replaces: number | null },
+  ): number => {
     const lock = tone === 'success' ? text.match(LOCK_SENTENCE) : null;
     const visible = lock && lock.index !== undefined && lock.index > 0 ? text.slice(0, lock.index) + text.slice(lock.index + lock[0].length) : text;
     // A refused move still on screen stays there: the success joins it, and
@@ -240,13 +262,14 @@ export function PerGameProvider({
     // once ("Oct 21 games: … Scottie Barnes was not added. …").
     const pending = silentNotice.current;
     silentNotice.current = spoken === '' ? { text, tone, id } : null;
-    if (spoken === '') return;
+    if (spoken === '') return id;
     const heard = spoken ?? text;
     if (pending) {
       remember(pending.text, pending.tone, pending.id);
       setNoticeSpoken(`${pending.text} ${heard}`);
     }
-    remember(heard, tone, id);
+    remember(recent?.text ?? heard, tone, id, recent?.replaces ?? null);
+    return id;
   }, [remember]);
   const shownMessage = useRef<string | null>(null);
   shownMessage.current = message;
@@ -403,6 +426,9 @@ export function PerGameProvider({
   // "Luka Doncic and Scottie Barnes added. $500 in fees." Screen readers
   // still hear each move's own sentence, with its price.
   const recentMoves = useRef<{ verb: string; names: string[]; shown: string; at: number } | null>(null);
+  // The Recent notices entry of the last move that succeeded: a quick move
+  // after it, shown with it, takes its place there too.
+  const lastMoveEntry = useRef<number | null>(null);
   const burstNotice = useCallback((move: { name: string; verb: string }, text: string): string => {
     const now = Date.now();
     const last = recentMoves.current;
@@ -576,7 +602,8 @@ export function PerGameProvider({
         }
         const text = typeof successMessage === 'function' ? successMessage(outcome.result) : successMessage;
         const shown = failedMove?.folds ? burstNotice(failedMove, text) : text;
-        say(shown, 'success', shown === text ? undefined : text);
+        const grouped = shown !== text;
+        lastMoveEntry.current = say(shown, 'success', grouped ? text : undefined, grouped ? { text: shown, replaces: lastMoveEntry.current } : undefined);
         return true;
       }
       const suffix = outcome.reconciliationReason === 'ambiguous'

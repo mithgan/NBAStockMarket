@@ -123,6 +123,32 @@ export function newsFirst(message: string): string {
   return [...refused, outcomeFirst(head), ...tail].filter(Boolean).join(' ');
 }
 
+/** The practice season's months, in playing order, for comparing game spans. */
+const SEASON_MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+const GAMES_SPAN = /^([A-Z][a-z]{2}) (\d{1,2})(?:–(?:([A-Z][a-z]{2}) )?(\d{1,2}))? games\b/;
+
+/** A games notice's first and last day, as season-ordered numbers, or null. */
+function gamesSpan(text: string): { start: number; end: number } | null {
+  const match = GAMES_SPAN.exec(text);
+  if (!match) return null;
+  const [, startMonth, startDay, endMonth = startMonth, endDay = startDay] = match;
+  const day = (month: string, date: string) => SEASON_MONTHS.indexOf(month) * 100 + Number(date);
+  return { start: day(startMonth, startDay), end: day(endMonth, endDay) };
+}
+
+/**
+ * Whether a games notice reports a run that includes the earlier one's games
+ * (same first night, reaching as far or further): "Oct 21–Nov 10 games (3
+ * weeks)" covers "Oct 21–27 games". Recent notices keeps the run, not both
+ * (walk 16 T4-11: a refusal in a run's first week left that week's notice
+ * beside the run's, the refusal said twice).
+ */
+export function coversGames(later: string, earlier: string): boolean {
+  const next = gamesSpan(later);
+  const before = gamesSpan(earlier);
+  return Boolean(next && before && next.start === before.start && next.end >= before.end && later !== earlier);
+}
+
 /** How the season's last games are announced; the Roster's result card says the same. */
 export const SEASON_COMPLETE_NOTICE_START = 'Season complete. Final score ';
 
