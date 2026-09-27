@@ -104,9 +104,14 @@ function Section({ title, narrow = false, children }: { title: string; narrow?: 
 const KEEP_NOTICES_NOTE_ID = 'keep-notices-note';
 /** The Reduce motion switch's explanation (its aria-describedby). */
 const REDUCE_MOTION_NOTE_ID = 'reduce-motion-note';
-/** Reduce motion while the device reduces motion and the switch is off: drawn ("On" over this), and in its name. */
-const MOTION_BY_DEVICE_WORD = 'your device';
-const MOTION_BY_DEVICE_NAME = 'Reduce motion: on by your device';
+/**
+ * Reduce motion while the device reduces motion and the switch is off. The
+ * switch is the app's own setting, so it is named and drawn as that, off,
+ * with the device's state beside it: "on by your device" over an off knob and
+ * an off state was heard and seen as on and off at once (walk 17 T3-08).
+ */
+const MOTION_BY_DEVICE_WORD = 'device reduces';
+const MOTION_BY_DEVICE_NAME = 'Reduce motion in this app';
 
 export function SettingsSheet({
   onClose,
@@ -413,7 +418,7 @@ export function SettingsSheet({
                         here, so "Off" never reads as motion being on (walk 11
                         T3-10). */}
                     {motionByDevice
-                      ? 'Reduced now by your device\'s own setting: sheets and figures appear at once. Turn this on to keep it so on any device.'
+                      ? 'Your device already reduces motion, so sheets and figures appear at once now. Turn this on to keep it so on any device.'
                       : 'Sheets and figures appear at once, without fades or counting up. Your device\'s own setting still applies.'}
                   </Text>
                 </View>
@@ -421,9 +426,9 @@ export function SettingsSheet({
                     fill, and a pill alone can be read either way (walk 9
                     T3-07, T3-N4). The switch itself says checked. */}
                 {motionByDevice ? (
-                  // "On" for the device, said small under it at every width.
+                  // The switch's own "Off", with the device's state small under it.
                   <View aria-hidden style={styles.switchWordStack}>
-                    <Text style={[styles.switchWord, styles.switchWordOn]}>On</Text>
+                    <Text style={styles.switchWord}>Off</Text>
                     <Text style={styles.switchWordBy}>{MOTION_BY_DEVICE_WORD}</Text>
                   </View>
                 ) : (

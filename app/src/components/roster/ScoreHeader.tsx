@@ -203,13 +203,15 @@ export function ScoreHeader({
   const weekSpoken = started && week !== null ? ` ${weekName.spoken.charAt(0).toUpperCase()}${weekName.spoken.slice(1)}: ${formatAt(week, 'fine', true)}.` : '';
   const summary = `${head}.${weekSpoken}`;
   // Named for what it opens (walk 16 T1-08): "vs last season", heard as
-  // "Compare with last season's numbers". Beside the score on a phone its
+  // "vs last season: compare with last season's numbers". Beside the score on a phone its
   // words take two short lines, so the score keeps its room.
   const whyTwoLines = !beside && whyBeside;
   const whyWords = `${whyTwoLines ? 'vs last\nseason' : 'vs last season'} ${whyOpen ? '\u25B4' : '\u203A'}`;
   const why = fold ? (
     <Pressable
-      accessibilityLabel="Compare with last season's numbers"
+      // Its visible words first, so speech input finds it by what it shows
+      // ("tap vs last season"; walk 17 T3-10).
+      accessibilityLabel="vs last season: compare with last season's numbers"
       accessibilityRole="button"
       aria-expanded={whyOpen}
       // A double tap opens it once, not open and shut (walk 6 T4-11).

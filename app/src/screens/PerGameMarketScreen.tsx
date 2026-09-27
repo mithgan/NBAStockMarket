@@ -659,7 +659,7 @@ function MarketRow({
   // 28 games, so … were not added"; walk 16 lead).
   const refusal = refusedAt !== null && !position && !waiting && !opening && !justOpened && !justClosed && !confirming
     ? rosterLocked
-      ? refusedActionName(side, player.name, currentGameCost, rosterLockHint)
+      ? refusedActionName(side, player.name, currentGameCost, true)
       : player.quoteVersion !== pressedQuote.current ? refusedActionName(side, player.name, currentGameCost) : null
     : null;
   const word = waiting ? 'Waiting' : refusal ? refusedWord(side) : actionWord({

@@ -262,6 +262,14 @@ input:focus-visible,
   outline-offset: -3px !important;
 }
 
+/* Text focused by script there (a question's title, a Rules section's
+   heading) is no full-width control: an inset ring ran through its first
+   letters at 400% zoom (walk 17 T3-01). Its ring sits just outside it, in the
+   panel's own padding. */
+[aria-modal="true"] [tabindex="-1"]:focus-visible {
+  outline-offset: 2px !important;
+}
+
 /* The screen container is a skip-link target, not a control: no ring. */
 #app-screen:focus { outline: none; }
 

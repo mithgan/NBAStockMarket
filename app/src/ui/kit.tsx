@@ -15,6 +15,7 @@
 import { forwardRef, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 import { useBackFolds } from '../web/appHistory';
+import { revealFocused } from '../web/focusInView';
 import { quietLift, settleTaps, tapsSettling } from '../web/tapSettle';
 import {
   Modal,
@@ -459,6 +460,22 @@ export function ConfirmStrip({
   // button was, focused, so a double tap never pays.
   const [atTitle, setAtTitle] = useState(false);
   const placed = useRef(false);
+  // "more ▾" / "less ▴" keeps focus while the question grows or folds under
+  // it; at 400% zoom the grown text pushed the focused toggle below the
+  // list's visible foot, under the notice strip and the tab bar, until the
+  // next Tab (walk 17 T3-07). Once drawn, the focused toggle comes back into
+  // the clear, as a Tab onto it would bring it.
+  const moreRef = useRef<View>(null);
+  const toggled = useRef(false);
+  useEffect(() => {
+    if (!toggled.current || typeof requestAnimationFrame === 'undefined') return undefined;
+    toggled.current = false;
+    const frame = requestAnimationFrame(() => {
+      const node = moreRef.current as unknown as HTMLElement | null;
+      if (node && typeof document !== 'undefined' && document.activeElement === node) revealFocused(node);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [opened]);
   useLayoutEffect(() => {
     if (placed.current || typeof document === 'undefined') return;
     const strip = stripRef.current as unknown as HTMLElement | null;
@@ -564,10 +581,14 @@ export function ConfirmStrip({
       </Text>
       {folded ? (
         <Pressable
+          ref={moreRef}
           accessibilityLabel={opened ? 'Less of the question' : 'More of the question'}
           accessibilityRole="button"
           aria-expanded={opened}
-          onPress={() => setOpened((open) => !open)}
+          onPress={() => {
+            toggled.current = true;
+            setOpened((open) => !open);
+          }}
           style={({ pressed }) => [styles.confirmMore, pressed && styles.pressed]}
         >
           <Text style={styles.confirmMoreText}>{opened ? 'less ▴' : 'more ▾'}</Text>

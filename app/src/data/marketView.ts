@@ -1866,13 +1866,15 @@ export function refusedWord(side: PerGamePositionSide): string {
 
 /**
  * Its name, why first and then what a press does now: "Not added: his price
- * moved to $330K. Add Devin Booker at $330K a game"; locked, who, then the
- * lock and when moves reopen ("Not added: Devin Booker. Roster changes are
- * locked. …"; without his name a reader or voice control could not tell
- * whose row it was; walk 16 lead).
+ * moved to $330K. Add Devin Booker at $330K a game". Locked, who: "Not added:
+ * Devin Booker" (without his name a reader or voice control could not tell
+ * whose row it was; walk 16 lead). The row's button rests at a lock, and a
+ * resting kit Button adds its hint, the lock line, to its name once ("…
+ * Devin Booker. Roster changes are locked. Moves reopen after Oct 28."); the
+ * name carried it too, so it was heard twice (walk 17 T3-09).
  */
-export function refusedActionName(side: PerGamePositionSide, playerName: string, price: number, lock: string | null = null): string {
-  if (lock) return `${refusedWord(side)}: ${playerName}. ${lock}`;
+export function refusedActionName(side: PerGamePositionSide, playerName: string, price: number, locked = false): string {
+  if (locked) return `${refusedWord(side)}: ${playerName}`;
   return `${refusedWord(side)}: his price moved to ${moneyCompact(price)}. ${actionName('open', side, playerName, price)}`;
 }
 
