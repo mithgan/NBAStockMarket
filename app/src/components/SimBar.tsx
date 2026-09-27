@@ -1399,9 +1399,12 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     // The run so far takes the step's place, silent until the run settles:
     // taking the step's notice down left the logo for most of a second
     // between "Oct 21–27 games…" and the three weeks' notice, as if the
-    // first week's result had been taken back (walk 14 T1-11).
+    // first week's result had been taken back (walk 14 T1-11). From the
+    // first week too: on a slow connection the step lands after the next
+    // press is already waiting, and its own notice came down before it
+    // was ever seen (walk 15 T2-11: the logo for 1.6 s at latency 1500).
     const run = runRef.current;
-    if (run && bootstrap && run.steps.length > 1) {
+    if (run && bootstrap) {
       notify(runNotice(run.steps, refreshNotice(run.start, bootstrap, false, { seasonComplete: seasonOver })), { spoken: '' });
       return;
     }
