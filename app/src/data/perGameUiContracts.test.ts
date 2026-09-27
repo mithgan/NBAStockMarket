@@ -300,9 +300,11 @@ test('loading is one look: the app draws the page shell\'s lockup, value for val
 
 test('clamped notice lines end on "…" before "more ▾", and still know the rest is there (walk 17 T4-02, walk 18 T3-03)', () => {
   // Two lines, and the 400% strip's one line unless the keyboard is scrolling it.
-  assert.match(app, /numberOfLines=\{clampLines > 0 && !expanded && !\(tinyDock && held\) \? clampLines : undefined\}/);
-  // Overflow is read from the text's full scroll height (two lines) or width (one unwrapped line), clamped or not.
-  assert.match(app, /setOverflowing\(node\.scrollHeight > TINY_NOTICE_LINE \* clampLines \+ 2 \|\| node\.scrollWidth > node\.clientWidth \+ 1\);/);
+  assert.match(app, /const folded = clampLines > 0 && !expanded && !\(tinyDock && held\);/);
+  assert.match(app, /numberOfLines=\{folded \? clampLines : undefined\}/);
+  // Overflow and the folded words come from a hidden copy of the whole notice, cut at a word (walk 18 T3-11).
+  assert.match(app, /const clamp = measuredWordClamp\(node, shown, clampLines\);\s+setOverflowing\(clamp !== null\);\s+setClampedText\(clamp\);/);
+  assert.match(app, /\{folded && clampedText \? clampedText : shown\}/);
   assert.doesNotMatch(app, /onContentSizeChange=\{\(_contentWidth, contentHeight\) => \{\s+if \(clampLines < 2\)/);
   // The skip link lands on words with a role that takes their name.
   assert.match(app, /role: 'note',\s+'aria-label': `Notice: \$\{shown\}`,/);

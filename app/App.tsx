@@ -25,6 +25,7 @@ import { DesignPreviewScreen } from './src/screens/DesignPreviewScreen';
 import { PerGameRosterScreen as PortfolioScreen } from './src/screens/PerGameRosterScreen';
 import { humanDateWithYear, spoken } from './src/copy/terms';
 import { Button, visuallyHidden } from './src/ui/kit';
+import { measuredWordClamp } from './src/web/wordClamp';
 import { registerSettingsOpener, registerTabOpener, settingsReturnStep } from './src/state/uiActions';
 import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
 import { pressedByPointer, settleTaps, tapsSettling } from './src/web/tapSettle';
@@ -372,19 +373,25 @@ function NoticeToast({
   // alone closed the notice when tapped (walk 10 T3-01).
   const [expanded, setExpanded] = useState(false);
   useEffect(() => setExpanded(false), [message, seq]);
-  // A clamped text keeps its full height as its scroll height, and one line
-  // (drawn unwrapped, ending on "…") its full width as its scroll width:
-  // whether the rest waits behind "more ▾", clamped or not.
+  // Whether the rest waits behind "more ▾", and the words drawn while it
+  // does: measured on a hidden copy of the whole notice, cut at a word and
+  // never inside a date, ending on "…" (walk 18 T3-11: the browser's clamp
+  // read "Oct 21–Apr 1…"). Measured again once "more ▾" takes its room.
   const noticeTextRef = useRef<Text | null>(null);
+  const [clampedText, setClampedText] = useState<string | null>(null);
   useLayoutEffect(() => {
     if (clampLines === 0) {
       setOverflowing(false);
+      setClampedText(null);
       return;
     }
     const node = noticeTextRef.current as unknown as HTMLElement | null;
     if (!node || typeof node.scrollHeight !== 'number') return;
-    setOverflowing(node.scrollHeight > TINY_NOTICE_LINE * clampLines + 2 || node.scrollWidth > node.clientWidth + 1);
-  }, [clampLines, expanded, held, shown, width]);
+    const clamp = measuredWordClamp(node, shown, clampLines);
+    setOverflowing(clamp !== null);
+    setClampedText(clamp);
+  }, [clampLines, overflowing, shown, width]);
+  const folded = clampLines > 0 && !expanded && !(tinyDock && held);
   useEffect(() => {
     // Held only at 400%, where a keyboard user could not reach it in time,
     // and once opened with "more ▾": the player is reading it (walk 16 T1-15:
@@ -508,10 +515,10 @@ function NoticeToast({
           // (walk 17 T4-02), and at 400% "…rose $194.5K in the" (walk 18
           // T3-03). The one-line strip lets go of it while focused, where
           // the arrow keys scroll the rest.
-          numberOfLines={clampLines > 0 && !expanded && !(tinyDock && held) ? clampLines : undefined}
+          numberOfLines={folded ? clampLines : undefined}
           style={styles.noticeText}
         >
-          {shown}
+          {folded && clampedText ? clampedText : shown}
         </Text>
       </ScrollView>
       {clampLines > 0 && overflowing ? (
