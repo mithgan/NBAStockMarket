@@ -3139,9 +3139,13 @@ export function PerGameMarketScreen({
             tierAfterSurname={tierAfterSurname}
             tierOnGiven={tierOnGiven}
             yoursDropped={yoursDropped}
-            rowFloor={layout === 'phone' ? rowFloor : 0}
+            rowFloor={layout === 'phone' && spacing ? rowFloor : 0}
             floorKey={floorKey}
-            onRowHeight={raiseRowFloor}
+            // Only a reader's text spacing makes rows differ (walk 18 T3-10):
+            // without it every row already has one height, and measuring each
+            // one made opening the Market 240ms slower, long enough for a
+            // double tap's second tap to outlast its guard (walk 18 lead).
+            onRowHeight={spacing ? raiseRowFloor : undefined}
             lockBegan={lockBegan}
             onAnnounce={announce}
             onToggleWatch={toggleWatchStable}
