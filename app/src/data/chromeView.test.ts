@@ -122,7 +122,7 @@ test('the status sentence says the practice clock, last night and next games in 
     statusSummary({
       mode: 'practice', lastSettledDate: '2025-11-05', nextGameDate: '2025-11-06', lastNight: 323_400, progress,
     }),
-    'Practice, day 16 of 174. Nov 5 games +$323,400. Next games Thu, Nov 6.',
+    'Practice, day 16 of 174. Nov 5 games +$323.4K. Next games Thu, Nov 6.',
   );
   assert.equal(
     statusSummary({
@@ -143,7 +143,7 @@ test('the status sentence says the practice clock, last night and next games in 
       lastNight: -12_000,
       progress: practiceProgress(OPENING_EVE, '2026-04-12'),
     }),
-    'Practice, season complete. Apr 12 games -$12,000. Play another season.',
+    'Practice, season complete. Apr 12 games -$12K. Play another season.',
   );
 });
 
@@ -295,7 +295,7 @@ test('the bars name the night, never "last night" (walk 2 T1-07, T1-14, T4-09)',
     lockLine('2025-10-22'),
   ];
   assert.equal(copy[0], 'Practice, day 2 of 174. Oct 22: none of your players played. Next games Fri, Oct 24.');
-  assert.equal(copy[1], 'Practice, day 1 of 174. Oct 21 games +$35,000. Next games Wed, Oct 22.');
+  assert.equal(copy[1], 'Practice, day 1 of 174. Oct 21 games +$35K. Next games Wed, Oct 22.');
   assert.equal(copy[3], 'Moves reopen after Oct 22 · your players still play');
   for (const line of copy) assert.doesNotMatch(line, /last night|lineups set/i);
   const strip = readFileSync(resolve(import.meta.dirname, '../components/PerGameStatusStrip.tsx'), 'utf8');
@@ -315,8 +315,8 @@ test('a folded row at 400% zoom keeps to one line: the day and More (walk 2 T3-1
 });
 
 test('the hint under the advance buttons keeps its line once the first player is in', () => {
-  // No date: the button above names the night (walk 7 T1-11: "Oct 21" four or five times).
-  assert.equal(readyHint('2025-10-21'), "Ready. +1 night plays the next night's games.");
+  // Named where known (walk 13 T2-01 reverses walk 7 T1-11's undated line).
+  assert.equal(readyHint('2025-10-21'), 'Ready. +1 night plays the Oct 21 games.');
   assert.equal(readyHint(null), "Ready. +1 night plays the next night's games.");
 });
 
@@ -345,11 +345,12 @@ test('the empty-roster question is asked once a season; then the hint line says 
   assert.equal(asksBeforeEmptyNight(true, true), false);
   assert.equal(asksBeforeEmptyNight(false, false), false);
   const base = { complete: false, emptyRoster: true, playedWithoutRoster: false, justFilled: true, nextGameDate: '2025-10-21' };
-  assert.equal(practiceHint(base), EMPTY_ROSTER_HINT);
+  assert.equal(practiceHint(base), 'Add a player first. +1 night plays the Oct 21 games.');
+  assert.equal(practiceHint({ ...base, nextGameDate: null }), EMPTY_ROSTER_HINT);
   assert.equal(practiceHint({ ...base, playedWithoutRoster: true }), 'Nobody on your roster: nights play without you');
   assert.equal(EMPTY_ROSTER_PLAYING_HINT, 'Nobody on your roster: nights play without you');
   // The first add swaps in Ready until the next advance, whichever way the empty nights went.
-  assert.equal(practiceHint({ ...base, emptyRoster: false, playedWithoutRoster: true }), "Ready. +1 night plays the next night's games.");
+  assert.equal(practiceHint({ ...base, emptyRoster: false, playedWithoutRoster: true }), 'Ready. +1 night plays the Oct 21 games.');
   assert.equal(practiceHint({ ...base, emptyRoster: false, justFilled: false }), null);
   assert.equal(practiceHint({ ...base, complete: true }), null);
 });
@@ -383,7 +384,7 @@ test('after +1 week the status row names the week it played until the next advan
       mode: 'practice', lastSettledDate: '2025-10-27', nextGameDate: '2025-10-28', lastNight: -32_500,
       progress: practiceProgress(OPENING_EVE, '2025-10-27'), resultLabel: 'Oct 21–27',
     }),
-    'Practice, day 7 of 174. Oct 21–27 games -$32,500. Next games Tue, Oct 28.',
+    'Practice, day 7 of 174. Oct 21–27 games -$32.5K. Next games Tue, Oct 28.',
   );
   assert.equal(
     statusSummary({
@@ -405,7 +406,7 @@ test('a finished season states its final score; only the button names the way on
       progress: practiceProgress(OPENING_EVE, '2026-04-12'),
       finalScore: 209_800,
     }),
-    'Practice, season complete. Apr 12: none of your players played. Final score +$209,800.',
+    'Practice, season complete. Apr 12: none of your players played. Final score +$209.8K.',
   );
   const strip = readFileSync(resolve(import.meta.dirname, '../components/PerGameStatusStrip.tsx'), 'utf8');
   assert.doesNotMatch(strip, /PRACTICE_OVER_TEXT|PLAY AGAIN|'Play again'/);
@@ -671,7 +672,7 @@ test('queued presses can be cancelled, named by their visible words, with a noti
 test('the empty-roster hint fits a player who has held shorts before (walk 8 T4-10)', async () => {
   const { NOBODY_HELD_HINT, practiceHint, practiceHintShort, practiceWeekHint } = await import('./chromeView');
   const base = { complete: false, emptyRoster: true, playedWithoutRoster: false, justFilled: false, nextGameDate: '2025-10-27' };
-  assert.equal(practiceHint(base), "Add a player first. +1 night plays the next night's games.");
+  assert.equal(practiceHint(base), 'Add a player first. +1 night plays the Oct 27 games.');
   assert.equal(practiceHint({ ...base, heldBefore: true }), NOBODY_HELD_HINT);
   assert.match(NOBODY_HELD_HINT, /roster or shorts now/);
   assert.equal(practiceHintShort({ ...base, heldBefore: true }), 'Add or short someone');

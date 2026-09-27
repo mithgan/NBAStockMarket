@@ -102,6 +102,22 @@ export function practiceDateDay(progress: PracticeProgress, settled: string | nu
   return twoLines ? `${date}\n${day}` : `${date}\u00a0·\u00a0${day}`;
 }
 
+/**
+ * From this width the two-line folded row (a 320px phone) keeps the word
+ * under Settings' icon (walk 13 T4-08, T1-11); narrower (a phone at 200%
+ * zoom) the word pushed Settings onto a line of its own, so the icon stays.
+ */
+export const CHROME_FOLDED_SETTINGS_WORD_MIN_WIDTH = 300;
+
+/**
+ * The folded phone row's day, with the season from a visit's second one:
+ * "S2 · Oct 20 · Day 0" (walk 13 T4-04: once the new-season notice went,
+ * nothing on a 320px screen said it was season 2).
+ */
+export function seasonTagged(dayText: string, season: number | null): string {
+  return season !== null && season >= 2 ? `S${season}\u00a0·\u00a0${dayText}` : dayText;
+}
+
 /** "Day 16/174": the day count for the narrowest rows. */
 export function practiceDayShort(progress: PracticeProgress): string {
   return progress.complete ? 'Season complete' : `Day ${progress.day}/${progress.total}`;
@@ -654,8 +670,10 @@ export function playedBetween(
 
 /**
  * The status row as one sentence for screen readers, e.g.
- * "Practice, day 16 of 174. Nov 5 games +$323,000. Next games Thu, Nov 6."
- * Once a night has a result, its sentence carries the date.
+ * "Practice, day 16 of 174. Nov 5 games +$323.4K. Next games Thu, Nov 6."
+ * Once a night has a result, its sentence carries the date. Money reads as
+ * the screen shows it, in K and M (walk 13 T3-01: "-$167,500" was said beside
+ * a drawn "-$167.5K", and every other spoken line uses K).
  */
 export function statusSummary({
   mode,
@@ -686,14 +704,14 @@ export function statusSummary({
   if (named) {
     parts.push(noGames
       ? (nobody && label ? `${label}${noGamesWords(true)}.` : `${label ?? 'Latest games'}: ${nobody ? NOBODY_ON_ROSTER : NO_PLAYERS_PLAYED}.`)
-      : `${label ? `${label} games` : 'Latest games'} ${exactSignedMoney(lastNight)}.`);
+      : `${label ? `${label} games` : 'Latest games'} ${signedMoneyFine(lastNight)}.`);
   }
   const next = nextGamesText(nextGameDate);
   const opener = mode === 'practice' && progress?.day === 0;
   // A finished season states its result; the way on is the Play another
   // season button beside or under this row (walk 3 T4-04).
   if (mode === 'practice' && progress?.complete) {
-    parts.push(finalScore !== null ? `Final score ${exactSignedMoney(finalScore)}.` : `${PRACTICE_OVER_TEXT}.`);
+    parts.push(finalScore !== null ? `Final score ${signedMoneyFine(finalScore)}.` : `${PRACTICE_OVER_TEXT}.`);
   }
   else if (next) parts.push(opener ? `Season opens ${next}.` : `Next games ${next}.`);
   else parts.push('Next games not scheduled yet.');
@@ -958,11 +976,22 @@ export const NOBODY_HELD_HINT = 'Nobody on your roster or shorts now: add or sho
  * line keeps its place, so nothing under the player's finger moves the
  * moment an Add lands (a second tap would otherwise hit the row below).
  */
-export function readyHint(_nextGameDate?: string | null): string {
-  // No date: the +1 night button right above names it ("OCT 21") and the
-  // status row says when the season opens; the first screen said "Oct 21"
-  // four or five times (walk 7 T1-11).
-  return "Ready. +1 night plays the next night's games.";
+export function readyHint(nextGameDate?: string | null): string {
+  return `Ready. ${nightPlaysLine(nextGameDate)}`;
+}
+
+/**
+ * What +1 night plays, by its night where it is known: "+1 night plays the
+ * Oct 21 games." (walk 13 T2-01: "the next night's games" sat beside a button
+ * reading OCT 21 and added words without information).
+ */
+export function nightPlaysLine(nextGameDate?: string | null): string {
+  return nextGameDate ? `+1 night plays the ${humanDate(nextGameDate)} games.` : "+1 night plays the next night's games.";
+}
+
+/** The empty roster's line, naming the night: "Add a player first. +1 night plays the Oct 21 games." */
+export function emptyRosterHint(nextGameDate?: string | null): string {
+  return nextGameDate ? `Add a player first. ${nightPlaysLine(nextGameDate)}` : EMPTY_ROSTER_HINT;
 }
 
 /**
@@ -1031,7 +1060,7 @@ export function practiceHint({
     // Nobody can be added before locked games: say what can be done, not
     // "add someone first", which the lock forbids (walk 9 T4-03).
     if (locked) return lockedEmptyHint(lockGameDate, heldBefore);
-    return heldBefore ? NOBODY_HELD_HINT : EMPTY_ROSTER_HINT;
+    return heldBefore ? NOBODY_HELD_HINT : emptyRosterHint(nextGameDate);
   }
   return justFilled ? readyHint(nextGameDate) : null;
 }
@@ -1081,11 +1110,11 @@ export function playingHint(playing: string, short: boolean): string {
  * waits for them, as moves wait for nights. `moves`: the adds (or shorts)
  * saving, from movesInFlight.
  */
-export function savingHint(moves: readonly Pick<MoveInFlight, 'verb'>[], short: boolean): string {
+export function savingHint(moves: readonly Pick<MoveInFlight, 'verb'>[], short: boolean, nextGameDate?: string | null): string {
   const adds = moves.filter((move) => move.verb === 'add').length;
   const kind = adds === moves.length ? 'add' : adds === 0 ? 'short' : 'move';
   const what = moves.length === 1 ? `your ${kind}` : `${moves.length} ${kind}s`;
-  return short ? `Saving ${what}…` : `Saving ${what}… then +1 night plays the next night's games.`;
+  return short ? `Saving ${what}…` : `Saving ${what}… then ${nightPlaysLine(nextGameDate)}`;
 }
 
 export const EMPTY_ROSTER_HINT_SHORT = 'Add a player first';
@@ -1109,9 +1138,10 @@ export function practiceWeekHint(hint: string | null, weekSpan: string | null): 
   if (/^Playing /.test(plain)) return hint;
   const plays = weekSpan ? `+1 week plays the ${weekSpan} games.` : '+1 week plays the next seven days.';
   // The first adds still saving (savingHint): the week waits for them too.
-  if (/^Saving /.test(plain)) return plain.replace(/\+1 night plays the next night's games\./, plays);
-  // Spoken only (a description), so plain spaces.
-  if (plain === EMPTY_ROSTER_HINT) return `Add a player first. ${plays}`;
+  if (/^Saving /.test(plain)) return plain.replace(/\+1 night plays the [^.]*games\./, plays);
+  // Spoken only (a description), so plain spaces. The line names its night
+  // ("…plays the Oct 21 games.", walk 13 T2-01), so match its start.
+  if (plain.startsWith('Add a player first.')) return `Add a player first. ${plays}`;
   if (plain === NOBODY_HELD_HINT) return 'Nobody on your roster or shorts now: add or short someone before the next week.';
   if (plain === EMPTY_ROSTER_PLAYING_HINT) return 'Nobody on your roster: the week plays without you.';
   return `Ready. ${plays}`;
@@ -1133,7 +1163,7 @@ export function practiceHintShort(input: Parameters<typeof practiceHint>[0]): st
   const full = practiceHint(input);
   if (full === null) return null;
   if (isLockedEmptyHint(full)) return lockShortText(input.lockGameDate);
-  if (full === EMPTY_ROSTER_HINT) return EMPTY_ROSTER_HINT_SHORT;
+  if (full.startsWith('Add a player first.')) return EMPTY_ROSTER_HINT_SHORT;
   if (full === NOBODY_HELD_HINT) return NOBODY_HELD_HINT_SHORT;
   if (full === EMPTY_ROSTER_PLAYING_HINT) return EMPTY_ROSTER_PLAYING_HINT_SHORT;
   return READY_HINT_SHORT;
@@ -1304,6 +1334,41 @@ export function queuedCancelName(queued: readonly QueuedStep[]): string {
 export function queuedCancelledNotice(queued: readonly QueuedStep[], playing: string | null): string {
   const what = queued.length === 1 ? `Queued ${queued[0]}` : queuedPhrase(queued, true);
   return `${what} cancelled.${playing ? ` ${playing} still plays.` : ''}`;
+}
+
+/**
+ * Where +1 night and +1 week were in a folded row once the season is over:
+ * words, not a control, so a steady tap through the last night never lands on
+ * a season-changing button (walk 13 T4-10). The way on waits in More.
+ */
+export const SEASON_DONE_SLOT = { title: 'Season complete', next: 'New season is in More' } as const;
+
+/**
+ * +1 night / +1 week's name while a press would queue behind the games
+ * playing (or a move saving): it says what a press does, and the button is
+ * not announced as unavailable (walk 13 T3-06: "dimmed" while every press
+ * queued a week). "+1 week: queue another week; Oct 21–27 is playing".
+ */
+export function queueingAdvanceName(
+  step: QueuedStep,
+  playing: { step: QueuedStep; date: string | null } | null,
+  queuedOfStep: number,
+): string {
+  const another = queuedOfStep > 0 || playing?.step === step;
+  const what = `+1 ${step}: queue ${another ? 'another' : 'a'} ${step}`;
+  if (!playing) return `${what}; your move is saving`;
+  return `${what}; ${playing.date ? `${playing.date} is` : 'the games are'} playing`;
+}
+
+/**
+ * Queued presses that end without playing for any reason but Cancel are said
+ * with the reason, never dropped in silence (walk 13 T4-09, T4-N2): "2 queued
+ * weeks not played: nobody is on your roster." null with none dropped.
+ */
+export function queueEndedNotice(queued: readonly QueuedStep[], reason: 'empty-roster' | 'season-over'): string | null {
+  if (queued.length === 0) return null;
+  const what = queued.length === 1 ? `Queued ${queued[0]}` : queuedPhrase(queued, true);
+  return `${what} not played: ${reason === 'empty-roster' ? 'nobody is on your roster' : 'the season is over'}.`;
 }
 
 /**

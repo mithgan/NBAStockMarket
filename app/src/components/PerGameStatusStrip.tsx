@@ -38,6 +38,8 @@ import {
   practiceDayShort,
   CHROME_TINY_DAY_ONE_LINE_MIN_WIDTH,
   practiceDayText,
+  seasonTagged,
+  CHROME_FOLDED_SETTINGS_WORD_MIN_WIDTH,
   practiceProgress,
   type PracticeProgress,
   resultSpan,
@@ -211,11 +213,18 @@ export function PerGameStatusStrip() {
   // with the date, so the day says it first: "Oct 20 · Day 0" rather than
   // "Day 0/174" (walk 8 T3-05); the bar beside it shows how far.
   const dateFirst = folded && !foldedFacts;
-  const dayText = progress
+  const plainDayText = progress
     // With a reader's text spacing the narrowest folded row puts the day
     // under the date, so Settings keeps its place beside them (walk 9 T3-05).
     ? (dateFirst ? practiceDateDay(progress, lastSettled, readerSpacing && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH) : keepTogether(shortDay ? practiceDayShort(progress) : practiceDayText(progress)))
     : null;
+  // A folded phone row has no brand bar or lead line: it names the season
+  // from the second one ("S2 · Oct 20 · Day 0"; walk 13 T4-04). Narrower than
+  // a 320px phone the tag pushed Settings onto a line of its own; the spoken
+  // status still names the season there.
+  const dayText = plainDayText && practice && folded && !foldedFacts && !tiny && width >= CHROME_FOLDED_SETTINGS_WORD_MIN_WIDTH
+    ? seasonTagged(plainDayText, seasonNumber)
+    : plainDayText;
   // At season end a full bar only repeats "Season complete", and in the
   // narrowest folded row (a phone at 200% zoom) it pushed Settings onto a
   // line of its own; there the words stand alone and the gear sits beside
@@ -484,8 +493,11 @@ export function PerGameStatusStrip() {
   // when folded where the row is tight; its name stays "Settings"). A folded
   // row with room for the facts keeps its word under the icon, as More beside
   // it does: a bare sliders icon was a guess in landscape (walk 11 T1-06).
+  // The two-line folded row (a 320px phone) has the height for the word too:
+  // a bare sliders icon read as "filters" beside the Market's (walk 13
+  // T4-08, T1-11).
   const settingsPlacement: ChromeButtonPlacement = folded
-    ? (foldedFacts ? 'stacked' : 'icon')
+    ? (foldedFacts || (!tiny && width >= CHROME_FOLDED_SETTINGS_WORD_MIN_WIDTH && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH) ? 'stacked' : 'icon')
     : placement;
   const settingsControl = short && !tiny ? (
     <ChromeButton
@@ -507,6 +519,9 @@ export function PerGameStatusStrip() {
   return (
     <View
       nativeID="status-strip"
+      // With the brand bar folded away (App), this row is the page's banner
+      // landmark (walk 13 T1-11: a 320px phone had none).
+      role={short ? 'banner' : undefined}
       style={[
         styles.strip,
         !practice && styles.stripLive,
