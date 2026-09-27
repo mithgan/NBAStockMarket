@@ -177,6 +177,31 @@ const SECTION_STARTS: ReadonlyArray<readonly [string, string]> = [
   ['Locks', LOCK_EXPLAINER],
 ];
 
+/**
+ * The Rules' contents line, under the title (walk 15 T1-N1: about four
+ * phone screens with no way to jump to "how do shorts work"). Each link
+ * scrolls the sheet to its heading and puts focus there.
+ */
+export const RULES_CONTENTS: ReadonlyArray<{ label: string; heading: string }> = [
+  { label: 'Scoring', heading: 'Scoring' },
+  { label: 'Shorts', heading: 'Shorts' },
+  { label: 'Fees', heading: 'Fees' },
+  { label: 'Prices', heading: 'Prices' },
+  { label: 'Locks', heading: 'Locks' },
+  { label: 'Words', heading: 'Words in the game' },
+];
+
+/**
+ * Touch-only devices (a coarse pointer and no hover) fold the Keyboard
+ * section behind "Keyboard shortcuts ›": on a phone it filled a whole screen
+ * before "Got it" (walk 15 T1-01). A mouse or a keyboard keeps it open.
+ */
+export function rulesFoldKeyboard(coarsePointer: boolean, canHover: boolean): boolean {
+  return coarsePointer && !canHover;
+}
+
+export const KEYBOARD_SHORTCUTS_LABEL = 'Keyboard shortcuts';
+
 export interface RulesSection {
   heading: string;
   text: string;

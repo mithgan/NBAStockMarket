@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -16,6 +16,8 @@ import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
 import { exactMoney, humanDate, PRACTICE_LABEL, rosterReopensLine } from '../copy/terms';
 import { pastSeasonCount } from '../web/practiceSession';
 import {
+  cancelPlace,
+  rulesInFoldedRow,
   CHROME_FOLDED_FACTS_MIN_WIDTH,
   CHROME_FOLDED_ONE_LINE_MIN_WIDTH,
   chromeFolded,
@@ -52,17 +54,17 @@ import {
   statusSummary,
 } from '../data/chromeView';
 import { earningsBetween } from '../data/perGameMetrics';
-import { EXAMPLE_LEAD, KEYBOARD_KEYS, perGameRulesPresentation, positionSlotHint, rulesSections, TOUCH_TIPS, type ScoringParts } from '../data/perGameRules';
+import { EXAMPLE_LEAD, KEYBOARD_KEYS, KEYBOARD_SHORTCUTS_LABEL, perGameRulesPresentation, positionSlotHint, RULES_CONTENTS, rulesFoldKeyboard, rulesSections, TOUCH_TIPS, type ScoringParts } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
 import { openSettings, registerRulesOpener } from '../state/uiActions';
 import { colors, control, fonts, labelStyle, radius, space, type, weight } from '../theme';
-import { Button, headingLevel, moneyColor, Tag, visuallyHidden } from '../ui/kit';
+import { Button, headingLevel, moneyColor, repeatSafe, Tag, visuallyHidden } from '../ui/kit';
 import { useSheetHistory, useSheetShown } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
 import { measuredFloatTop, measuredSheetTop } from './chrome/sheetTop';
-import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, useQueuedThrough, usePracticeRulesContext, useReaderSpacing, useRecentAdvances, useSpacingFold } from './SimBar';
+import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, useQueuedCancelShows, useQueuedThrough, usePracticeRulesContext, useReaderSpacing, useRecentAdvances, useSpacingFold } from './SimBar';
 import { unlessSettling } from '../web/tapSettle';
 
 /**
@@ -101,8 +103,14 @@ export function PerGameStatusStrip() {
     refreshData,
   } = usePerGame();
   const [rulesOpen, setRulesOpen] = useState(false);
+  // The heading the rules open at, focused ("Scoring" for the welcome's "How
+  // scoring works"; walk 15 T3-03), or null for the top.
+  const [rulesSection, setRulesSection] = useState<string | null>(null);
   // Any screen can open the rules (the Roster welcome card does).
-  useEffect(() => registerRulesOpener(() => setRulesOpen(true)), []);
+  useEffect(() => registerRulesOpener((section) => {
+    setRulesSection(section ?? null);
+    setRulesOpen(true);
+  }), []);
   const lastSettled = bootstrap?.game.lastSettledDate ?? null;
   const ledgerItems = bootstrap?.ledger.items;
   // The games the row reports: the last settled night, or after +1 week the
@@ -122,6 +130,7 @@ export function PerGameStatusStrip() {
   // row (landscape, 200% zoom) carries its short form (walk 4 T1-09, T3-11).
   const practiceHint = usePracticeHint();
   const queuedThrough = useQueuedThrough();
+  const queuedCancelShows = useQueuedCancelShows();
   // This visit's season number: the finished ones before it, plus this one.
   const seasonNumber = pastSeasonCount() + 1;
   const practiceHintShort = usePracticeHint(true);
@@ -208,7 +217,10 @@ export function PerGameStatusStrip() {
   const resultDate = span ? keepTogether(span.label).replace('–', '\u2060–\u2060') : settledDate;
   // The narrowest rows (a phone at high zoom, a folded row) keep a short day
   // count, "Day 16/174"; the bar after it is the season's progress.
-  const shortDay = layout.compact || (folded && !foldedFacts);
+  // A landscape row with Rules beside More (walk 15 T1-05): the short day
+  // and closer gaps leave it room.
+  const rulesInRow = folded && rulesInFoldedRow(tiny, width);
+  const shortDay = layout.compact || (folded && !foldedFacts) || rulesInRow;
   // A folded narrow row (a phone at 200% or 400% zoom) has no lead line
   // with the date, so the day says it first: "Oct 20 · Day 0" rather than
   // "Day 0/174" (walk 8 T3-05); the bar beside it shows how far.
@@ -278,7 +290,11 @@ export function PerGameStatusStrip() {
       {settledDate ? `Games through ${settledDate}` : 'No games settled yet'}
     </Text>
   );
-  const night = !named || arrangement === 'pair' ? null : (
+  // A folded row with its facts beside the controls draws Cancel queued
+  // before +1 night for a run; the games figure makes room for it (the
+  // notice above the tabs carries the run's result meanwhile; walk 15 T4-01).
+  const cancelTakesNight = folded && cancelPlace(folded, tiny, width) === 'night' && queuedCancelShows;
+  const night = !named || arrangement === 'pair' || cancelTakesNight ? null : (
     <Text key="night" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
       {resultDate ?? 'Latest'}
       <Text style={styles.factLabel}>{nightWords}</Text>
@@ -414,7 +430,7 @@ export function PerGameStatusStrip() {
     );
   } else if (arrangement === 'wide') {
     facts = (
-      <View style={[styles.line, styles.lineWide]}>
+      <View style={[styles.line, styles.lineWide, rulesInRow && styles.lineWideRoomy]}>
         <View style={styles.dayFact}>
           {lead}
           {meter}
@@ -571,7 +587,8 @@ export function PerGameStatusStrip() {
           {folded ? (
             <PracticeControls
               folded
-              onRules={() => setRulesOpen(true)}
+              // Rules joins More only where the row has no room for it.
+              onRules={rulesInRow ? undefined : () => setRulesOpen(true)}
               onSettings={tiny ? openSettings : undefined}
               tiny={tiny}
             />
@@ -588,19 +605,27 @@ export function PerGameStatusStrip() {
             />
           ) : null}
           {refreshControl}
-          {folded ? null : (
+          {folded && !rulesInRow ? null : (
             <ChromeButton
               accessibilityLabel="Rules: show the game rules"
               icon={(color) => <RulesIcon color={color} />}
               label="Rules"
               onPress={() => setRulesOpen(true)}
-              placement={placement}
+              placement={folded ? 'stacked' : placement}
             />
           )}
           {foldTwoLines ? null : settingsControl}
         </View>
       </View>
-      <RulesSheet onClose={() => setRulesOpen(false)} rules={rules} visible={rulesOpen} />
+      <RulesSheet
+        onClose={() => {
+          setRulesOpen(false);
+          setRulesSection(null);
+        }}
+        rules={rules}
+        section={rulesSection}
+        visible={rulesOpen}
+      />
     </View>
   );
 }
@@ -680,10 +705,13 @@ function RulesSheet({
   visible,
   onClose,
   rules,
+  section = null,
 }: {
   visible: boolean;
   onClose: () => void;
   rules: PerGameRuleset;
+  /** A heading to open at, focused (openRules('Scoring')). */
+  section?: string | null;
 }) {
   const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
@@ -699,6 +727,48 @@ function RulesSheet({
   const sheetTop = visible ? (floats ? measuredFloatTop() : measuredSheetTop()) : null;
   const practiceRules = usePracticeRulesContext();
   const shown = useSheetShown(visible);
+  // Each heading's node, for the contents line and openRules(section): the
+  // sheet scrolls it to the top and focuses it (walk 15 T1-N1, T3-03).
+  const headingNodes = useRef(new Map<string, HTMLElement>());
+  const doneRef = useRef<View>(null);
+  const bodyRef = useRef<ScrollView>(null);
+  const headingRef = (heading: string) => (node: unknown) => {
+    if (node) headingNodes.current.set(heading, node as HTMLElement);
+    else headingNodes.current.delete(heading);
+  };
+  const jumpTo = (heading: string) => {
+    const node = headingNodes.current.get(heading);
+    const scroller = (bodyRef.current as unknown as { getScrollableNode?: () => HTMLElement | null } | null)?.getScrollableNode?.();
+    if (!node?.getBoundingClientRect) return;
+    if (scroller) scroller.scrollTop += node.getBoundingClientRect().top - scroller.getBoundingClientRect().top - space.sm;
+    node.focus?.({ preventScroll: true });
+  };
+  // A heading focused by a jump sends Tab to Done, the sheet's first stop,
+  // not on to "Got it" at the very end.
+  const tabToDone = (event: { key?: string; shiftKey?: boolean; preventDefault?: () => void; nativeEvent?: { key?: string; shiftKey?: boolean } }) => {
+    const key = event.key ?? event.nativeEvent?.key;
+    const shift = event.shiftKey ?? event.nativeEvent?.shiftKey;
+    if (key !== 'Tab' || shift) return;
+    event.preventDefault?.();
+    (doneRef.current as unknown as { focus?: () => void } | null)?.focus?.();
+  };
+  const jumpable = (heading: string) => ({
+    ref: headingRef(heading),
+    ...({ tabIndex: -1, onKeyDown: tabToDone } as object),
+  });
+  useEffect(() => {
+    if (!shown || !visible || !section) return undefined;
+    // After the sheet's own first focus (Done) has landed.
+    const timer = setTimeout(() => jumpTo(section), 120);
+    return () => clearTimeout(timer);
+  }, [shown, visible, section]);
+  // Touch-only devices fold the Keyboard section (walk 15 T1-01).
+  const [keysOpen, setKeysOpen] = useState(false);
+  useEffect(() => {
+    if (!visible) setKeysOpen(false);
+  }, [visible]);
+  const foldKeys = Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && rulesFoldKeyboard(window.matchMedia('(pointer: coarse)').matches, window.matchMedia('(hover: hover)').matches);
   if (!shown) return null;
   const presentation = perGameRulesPresentation(rules, practiceRules);
   const startingScore = presentation.facts.find((fact) => fact.label === 'Starting score')?.value;
@@ -742,6 +812,7 @@ function RulesSheet({
             accessibilityLabel="Done, close the game rules"
             accessibilityRole="button"
             onPress={unlessSettling(onClose)}
+            ref={doneRef}
             style={({ pressed }) => [styles.done, narrow && styles.doneNarrow, pressed && styles.pressed]}
           >
             <Text style={styles.doneText}>Done</Text>
@@ -754,18 +825,35 @@ function RulesSheet({
         <ScrollView
           aria-label="Rules text"
           contentContainerStyle={[styles.sheetContent, narrow && styles.sheetContentNarrow, { paddingBottom: space.xl + insets.bottom }]}
+          ref={bodyRef}
           role="region"
           style={styles.sheetBody}
           tabIndex={0}
         >
+          {/* One line of contents: each jumps to its heading (walk 15 T1-N1). */}
+          <View aria-label="Rules contents" role="navigation" style={styles.contents}>
+            {RULES_CONTENTS.map((entry, index) => (
+              <View key={entry.heading} style={styles.contentsEntry}>
+                {index > 0 ? <Text aria-hidden style={styles.contentsDot}>·</Text> : null}
+                <Pressable
+                  accessibilityLabel={`${entry.label}: go to the section`}
+                  accessibilityRole="button"
+                  onPress={() => jumpTo(entry.heading)}
+                  style={({ pressed }) => [styles.contentsLink, pressed && styles.pressed]}
+                >
+                  <Text style={styles.contentsText}>{entry.label}</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
           {/* In steps, each under a short heading to jump by: Goal, Scoring,
               Shorts, Fees, Prices, Locks (walk 5 T1-09, T3-13). */}
           <View style={styles.explanation}>
-            {rulesSections(presentation.explanation).map((section) => (
-              <View key={section.heading} style={styles.rulesSection}>
-                <Text accessibilityRole="header" {...headingLevel(3)} style={styles.sectionTitle}>{section.heading}</Text>
-                {section.heading === 'Scoring' ? <ScoringText scoring={presentation.scoring} /> : (
-                  <Text style={styles.paragraph}>{section.text}</Text>
+            {rulesSections(presentation.explanation).map((part) => (
+              <View key={part.heading} style={styles.rulesSection}>
+                <Text accessibilityRole="header" {...headingLevel(3)} {...jumpable(part.heading)} style={styles.sectionTitle}>{part.heading}</Text>
+                {part.heading === 'Scoring' ? <ScoringText scoring={presentation.scoring} /> : (
+                  <Text style={styles.paragraph}>{part.text}</Text>
                 )}
               </View>
             ))}
@@ -792,7 +880,7 @@ function RulesSheet({
             </View>
           </View>
           <View style={styles.glossary}>
-            <Text accessibilityRole="header" {...headingLevel(3)} style={styles.glossaryTitle}>
+            <Text accessibilityRole="header" {...headingLevel(3)} {...jumpable('Words in the game')} style={styles.glossaryTitle}>
               Words in the game
             </Text>
             {/* A list of terms, each with its meaning, so a screen reader
@@ -821,10 +909,24 @@ function RulesSheet({
               </View>
             </View>
           ) : null}
-          {/* The keys, for anyone playing without a mouse (walk 12 T3-N1). */}
+          {/* The keys, for anyone playing without a mouse (walk 12 T3-N1).
+              On a touch-only device they fold behind one toggle, so the rules
+              end on the touch tips and Got it (walk 15 T1-01). */}
           {Platform.OS === 'web' ? (
             <View style={styles.glossary}>
-              <Text accessibilityRole="header" {...headingLevel(3)} style={styles.glossaryTitle}>Keyboard</Text>
+              {foldKeys ? (
+                <Button
+                  accessibilityLabel={KEYBOARD_SHORTCUTS_LABEL}
+                  expanded={keysOpen}
+                  label={`${KEYBOARD_SHORTCUTS_LABEL} ${keysOpen ? '▾' : '›'}`}
+                  onPress={repeatSafe(() => setKeysOpen((open) => !open))}
+                  style={styles.keysToggle}
+                  variant="quiet"
+                />
+              ) : (
+                <Text accessibilityRole="header" {...headingLevel(3)} style={styles.glossaryTitle}>Keyboard</Text>
+              )}
+              {foldKeys && !keysOpen ? null : (
               <View aria-label="Keyboard" role="list" style={styles.glossaryList}>
                 {KEYBOARD_KEYS.map((entry) => (
                   <View key={entry.keys} role="listitem" style={styles.glossaryRow}>
@@ -833,6 +935,7 @@ function RulesSheet({
                   </View>
                 ))}
               </View>
+              )}
             </View>
           ) : null}
           {/* Read to the end on a phone, the way out is here, not back at the
@@ -991,6 +1094,10 @@ const styles = StyleSheet.create({
   lineWide: {
     alignItems: 'baseline',
     columnGap: space.xl,
+  },
+  // A landscape row that keeps Rules: the facts sit a little closer.
+  lineWideRoomy: {
+    columnGap: space.lg,
   },
   lead: {
     color: colors.text,
@@ -1163,6 +1270,39 @@ const styles = StyleSheet.create({
   },
   explanation: {
     gap: space.lg,
+  },
+  // The contents line under the title: 44px targets, dots between.
+  contents: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginTop: -space.sm,
+    marginBottom: -space.xs,
+  },
+  contentsEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  contentsDot: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.body,
+  },
+  contentsLink: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  contentsText: {
+    color: colors.goldInk,
+    fontFamily: fonts.body,
+    fontSize: type.body,
+    fontWeight: weight.bold,
+    textDecorationLine: 'underline',
+  },
+  // "Keyboard shortcuts ›" on a touch-only device: a quiet row, left-aligned.
+  keysToggle: {
+    alignSelf: 'flex-start',
   },
   rulesSection: {
     gap: space.xs,

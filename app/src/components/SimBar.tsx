@@ -28,6 +28,8 @@ import {
   playToEndSpanLine,
   queuedCancelControlName,
   queuedCancelHint,
+  cancelPlace,
+  foldedCancelLabel,
   queuedCancelLabel,
   queueEndedNotice,
   queueingAdvanceName,
@@ -51,6 +53,7 @@ import {
   keepControlNames,
   playingHint,
   nightButtonName,
+  weekButtonName,
   PHONE_SLOT_MIN_WIDTH,
   NIGHT_DATE_STACKED_MIN_WIDTH,
   stackedWeekLabel,
@@ -69,6 +72,7 @@ import {
   practiceStakes,
   practiceWeekHint,
   savingHint,
+  savingQueueHint,
   restartHasNothingToDo,
   QUEUED_CANCEL_LABEL,
   queuedCancelledNotice,
@@ -76,6 +80,7 @@ import {
   queuedLabel,
   queuedLine,
   queuedWaitLine,
+  queuedAnswerLine,
   queuedThrough,
   queuedLineThrough,
   nightAfterQueue,
@@ -269,14 +274,22 @@ export function usePracticeHint(short = false): string | null {
   const { bootstrap, pendingActions } = usePerGame();
   const played = usePlayedWithoutRoster();
   const playingNow = usePracticePlaying();
+  const queuedNow = useSyncExternalStore(subscribeQueued, () => queuedPresses, () => NO_QUEUE);
   if (!bootstrap || !isMockActive()) return null;
   const settledOn = bootstrap.game.lastSettledDate ?? '';
   const emptyRoster = !bootstrap.positions.some((position) => position.status === 'active');
   if (emptyRoster) rosterEmptyOn = settledOn;
   // The first adds still saving count as held: "Add a player first" sat
-  // beside rows reading "ADDED ✓" (walk 12 T2-08).
-  const saving = emptyRoster && !playingNow ? savingHolds(pendingActions, bootstrap) : [];
+  // beside rows reading "ADDED ✓" (walk 12 T2-08). Any add still saving
+  // while the line would say "Ready…" too, as the slot line counts it: it
+  // said "Ready" beside "3 of 10 · 1 saving" (walk 15 T2-03).
+  const saving = (emptyRoster || rosterEmptyOn === settledOn) && !playingNow ? savingHolds(pendingActions, bootstrap) : [];
   if (saving.length > 0 && !practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete) {
+    // Presses waiting behind the save: the line describes the queue they
+    // make, not the one night a press would have played (walk 15 T2-03).
+    if (queuedNow.length > 0 && !short) {
+      return keepControlNames(savingQueueHint(saving, queuedNow, bootstrap.game.lastSettledDate, practiceSeasonEnd(mockSeasonStart())));
+    }
     return keepControlNames(savingHint(saving, short, bootstrap.game.nextGameDate));
   }
   const input = {
@@ -584,8 +597,11 @@ function publishPlaying(next: string | null, step: 'night' | 'week' | null = nul
 export function useQueuedThrough(): string | null {
   const { bootstrap } = usePerGame();
   const queued = useSyncExternalStore(subscribeQueued, () => queuedPresses, () => NO_QUEUE);
-  const playing = useSyncExternalStore(subscribeQueued, () => playingNow, () => null);
-  if (!bootstrap || !isMockActive() || playing === null) return null;
+  // Subscribed so the step playing (read below) is current.
+  useSyncExternalStore(subscribeQueued, () => playingNow, () => null);
+  // From the first queued press, also while the presses wait for a move
+  // still saving (walk 15 T2-03: it showed only once the first week played).
+  if (!bootstrap || !isMockActive()) return null;
   return queuedThrough(bootstrap.game.lastSettledDate, playingStepNow, queued, practiceSeasonEnd(mockSeasonStart()));
 }
 
@@ -675,6 +691,20 @@ const appendNoteState = sharedState<string | null>(null);
 const endQueuedState = sharedState(false);
 const runSlotState = sharedState(false);
 const busyLineState = sharedState('');
+
+/**
+ * Whether Cancel queued shows now: anything queued, or a run still playing
+ * (it keeps its place for the whole run). A folded row's facts leave out the
+ * games figure meanwhile, so Cancel fits before +1 night (walk 15 T4-01).
+ */
+export function useQueuedCancelShows(): boolean {
+  const { bootstrap } = usePerGame();
+  const queued = useSyncExternalStore(subscribeQueued, () => queuedPresses, () => NO_QUEUE);
+  const [runSlot] = useSharedState(runSlotState);
+  if (!bootstrap || !isMockActive()) return false;
+  const complete = practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete;
+  return queued.length > 0 || (runSlot && !complete);
+}
 
 /**
  * How long the last +1 night / +1 week took to land, so the queued line says
@@ -774,8 +804,24 @@ function PracticeChoices({ title, lines, onSafe, onRisky, riskyLabel, safeLabel 
     fn();
   };
   const safeRef = useRef<View>(null);
+  const titleRef = useRef<Text>(null);
+  const panelRef = useRef<View>(null);
   useEffect(() => {
-    (safeRef.current as unknown as { focus?: () => void } | null)?.focus?.();
+    type Focusable = { focus?: (options?: object) => void } | null;
+    const safe = safeRef.current as unknown as Focusable;
+    const panel = panelRef.current as unknown as HTMLElement | null;
+    // The panel's ScrollView: its scrolling node, two levels up.
+    const scroller = panel?.parentElement?.parentElement ?? null;
+    // Taller than its window (400% zoom), the question opens at its title,
+    // focused, and the way out is the next Tab: focus on Not now scrolled
+    // the title and the first lines out of sight (walk 15 T3-05, as the
+    // kit's ConfirmStrip does). Where it fits, focus starts on the way out.
+    if (panel?.getBoundingClientRect && scroller && panel.getBoundingClientRect().height > scroller.clientHeight + 1) {
+      scroller.scrollTop = 0;
+      (titleRef.current as unknown as Focusable)?.focus?.({ preventScroll: true });
+      return;
+    }
+    safe?.focus?.();
   }, []);
   const stacked = width < EMPTY_QUESTION_ROW_MIN_WIDTH;
   // A phone at 400% zoom (98px): the margins and padding left a 53px column
@@ -813,8 +859,17 @@ function PracticeChoices({ title, lines, onSafe, onRisky, riskyLabel, safeLabel 
         {/* Taller than the window (400% zoom), the panel scrolls from its
             title: centred, its top was cut off out of reach (walk 12 T4-15). */}
         <ScrollView contentContainerStyle={styles.questionScrollContent} style={styles.questionScroll}>
-        <View style={[styles.questionPanel, tight && styles.questionPanelTight]}>
-          <Text accessibilityRole="header" {...headingLevel(2)} nativeID={QUESTION_TITLE_ID} style={[styles.questionTitle, tight && styles.questionTitleTight]}>{title}</Text>
+        <View ref={panelRef} style={[styles.questionPanel, tight && styles.questionPanelTight]}>
+          <Text
+            accessibilityRole="header"
+            {...headingLevel(2)}
+            {...({ tabIndex: -1 } as object)}
+            nativeID={QUESTION_TITLE_ID}
+            ref={titleRef}
+            style={[styles.questionTitle, tight && styles.questionTitleTight]}
+          >
+            {title}
+          </Text>
           {/* The dialog's description, read after its name on open and in the
               reading order after. The lines never get shorter while it is
               open (a line that updates once something in flight lands), so
@@ -1062,7 +1117,11 @@ function PracticeQuestionView({ asked, bootstrap, close, playingLine, queued, sa
   // Presses queued before the question wait for its answer (the controls
   // hold them while it is open), and it says so (walk 8 T4-06); the step
   // playing when it opened has its own line (walk 11 T4-02).
-  const waiting = [playingLine, queuedWaitLine(queued, null)].filter((line): line is string => Boolean(line));
+  // Restart and Exit say what each answer does to them (walk 15 T4-02).
+  const queuedLine = asked.kind === 'restart' || asked.kind === 'exit'
+    ? queuedAnswerLine(queued, prompt.cancelLabel, prompt.confirmLabel)
+    : queuedWaitLine(queued, null);
+  const waiting = [playingLine, queuedLine].filter((line): line is string => Boolean(line));
   return (
     <PracticeChoices
       lines={[...prompt.lines, ...waiting]}
@@ -1337,6 +1396,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   onSettings?: () => void;
 }) {
   const { fontScale, width } = useWindowDimensions();
+  // Where Cancel queued is drawn, so the words that name it say where
+  // (walk 15 T4-01: "Cancel drops it" while it sat unseen inside More).
+  const cancelAt = cancelPlace(folded, tiny, width);
   const {
     bootstrap,
     dismissNotice,
@@ -1408,7 +1470,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     // While the rest of the season is queued, that stays on screen (heard
     // once) instead of the step's news: it flashed for one week (walk 10 T4-02).
     if (queueFullSaid.current && queuedSteps.current.length > 0) {
-      notify(queueFullLine(practiceSeasonEnd(mockSeasonStart())), { spoken: '' });
+      notify(queueFullLine(practiceSeasonEnd(mockSeasonStart()), cancelAt), { spoken: '' });
       return;
     }
     // The run so far takes the step's place, silent until the run settles:
@@ -1589,7 +1651,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     const line = queuedLineThrough(queuedLine(step, playingDateRef.current, count), through);
     const hint = !cancelHintSaid.current && cancelHintFits(queuedSteps.current.length, lastStepMs);
     if (hint) cancelHintSaid.current = true;
-    sayBusy(hint ? `${line} ${queuedCancelHint(queuedSteps.current.length)}` : line);
+    sayBusy(hint ? `${line} ${queuedCancelHint(queuedSteps.current.length, cancelAt)}` : line);
   };
   const queuePress = (pressed: 'night' | 'week', playingDate: string | null) => {
     // Every deliberate press waits its turn (a bounce on the same spot is
@@ -1607,7 +1669,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       // (walk 11 T3-15: it came merged with a week's result, then again with
       // the cancel), and shown without being queued up to be said again.
       if (!queueFullSaid.current) {
-        const full = queueFullLine(practiceSeasonEnd(mockSeasonStart()));
+        const full = queueFullLine(practiceSeasonEnd(mockSeasonStart()), cancelAt);
         stopQueueLine();
         notify(full, { spoken: '' });
         sayBusy(full);
@@ -1742,10 +1804,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   const hintId = hintText ? PRACTICE_HINT_ID : null;
   useDescribedBy(nightRef, hintId);
   // +1 week says what the week plays, not what +1 night does (walk 7 T3-02).
-  const weekHint = practiceWeekHint(
-    hintText,
-    lastSettledNow ? weekSpanLabel(lastSettledNow, practiceSeasonEnd(mockSeasonStart())) : null,
-  );
+  // The days +1 week plays next ("Oct 30–Nov 5"): its name and description.
+  const nextWeekSpan = lastSettledNow && !complete ? weekSpanLabel(lastSettledNow, practiceSeasonEnd(mockSeasonStart())) : null;
+  const weekHint = practiceWeekHint(hintText, nextWeekSpan);
   useDescribedBy(weekRef, weekHint ? PRACTICE_WEEK_HINT_ID : null);
 
   // Restart or Exit asks first (SimBar draws the question). An item in More
@@ -1840,7 +1901,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // is playing in its place (walk 11 T4-06). Shown, not said again.
   const seasonEndDate = practiceSeasonEnd(mockSeasonStart());
   useLayoutEffect(() => {
-    if (queued.length > 0 || !advancingRef.current || message !== queueFullLine(seasonEndDate)) return;
+    if (queued.length > 0 || !advancingRef.current || message !== queueFullLine(seasonEndDate, cancelAt)) return;
     notify(queueLastLine(playingStepRef.current === 'night' ? 'night' : 'week', seasonEndDate), { spoken: '' });
   }, [queued, message, notify, seasonEndDate]);
   if (!bootstrap || !isMockActive() || typeof window === 'undefined') return null;
@@ -1881,8 +1942,12 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // Quiet while nobody is held, whatever was answered before: "Play anyway"
   // answers one press, and the welcome's Open market stays the one gold
   // call (walk 14 T1-06).
-  const quietNight = advanceQuiet('night', emptyRoster, lockedNight);
-  const quietWeek = advanceQuiet('week', emptyRoster, lockedNight);
+  // The rest of the season already queued: a press does nothing but say so,
+  // so both draw quiet, outlined in muted ink; in gold they read as live
+  // (walk 15 T4-03). The queue's count stays on +1 week.
+  const seasonQueued = advanceBusy && isGameplayReady && !progress.complete && playing?.step !== 'end' && !endQueued && !pressQueues;
+  const quietNight = advanceQuiet('night', emptyRoster, lockedNight) || seasonQueued;
+  const quietWeek = advanceQuiet('week', emptyRoster, lockedNight) || seasonQueued;
   // Near the end something else takes the buttons' spot (Play another
   // season), so a double tap's second click is kept off it there.
   const nearEnd = SEASON_TOTAL_DAYS - progress.day <= 7;
@@ -1892,14 +1957,14 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // after its facts (QueuedCancelButton).
   // Through the whole run it keeps its place: with nothing waiting it is
   // dashed (reachable, unavailable) and a press says why (walk 10 T2-06).
-  const cancelButton = (placement: 'line' | 'menu' | 'slot' | 'row') => (!showCancel ? null : (
+  const cancelButton = (placement: 'line' | 'menu' | 'slot' | 'row' | 'fold') => (!showCancel ? null : (
     <Button
       ref={placement === 'menu' ? undefined : cancelNodeRef}
       accessibilityLabel={queued.length > 0 ? queuedCancelControlName(queued)
         : nothingToCancel ? NOTHING_TO_CANCEL : `${QUEUED_CANCEL_LABEL}: nothing is queued now`}
       disabled={queued.length === 0}
       focusableWhenDisabled
-      label={queued.length === 0 && nothingToCancel ? NOTHING_TO_CANCEL : queuedCancelLabel(queued)}
+      label={queued.length === 0 && nothingToCancel ? NOTHING_TO_CANCEL : placement === 'fold' ? foldedCancelLabel(queued) : queuedCancelLabel(queued)}
       onDisabledPress={() => {
         // On the button, never over the notice: a late tap replaced a run's
         // result with "Nothing is queued." (walk 11 T1-14).
@@ -1909,8 +1974,8 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         sayBusy(`${NOTHING_TO_CANCEL}.`);
       }}
       onPress={cancelQueued}
-      style={[styles.quiet, placement !== 'menu' && styles.quietEdge, placement === 'line' && styles.cancelLine, placement === 'slot' && styles.cancelSlot, placement === 'row' && styles.cancelRow]}
-      textStyle={placement !== 'menu' ? styles.cancelLineText : queued.length > 0 ? styles.menuItemText : undefined}
+      style={[styles.quiet, placement !== 'menu' && styles.quietEdge, placement === 'line' && styles.cancelLine, placement === 'slot' && styles.cancelSlot, placement === 'row' && styles.cancelRow, placement === 'fold' && styles.cancelFold]}
+      textStyle={placement === 'fold' ? [styles.cancelLineText, styles.cancelFoldText] : placement !== 'menu' ? styles.cancelLineText : queued.length > 0 ? styles.menuItemText : undefined}
       variant="quiet"
     />
   ));
@@ -2179,7 +2244,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         ref={weekRef}
         // The span it plays is in the name; the label keeps the button's width.
         accessibilityLabel={queuedName('week', pressQueues ? queueingAdvanceName('week', queueingPlaying, weeksQueued)
-          : playingWeek ? `+1 week: advance one week. ${playingText}` : '+1 week: advance one week')}
+          : playingWeek ? `+1 week: advance one week. ${playingText}` : weekButtonName(nextWeekSpan))}
         disabled={advanceUnavailable}
         focusableWhenDisabled={!progress.complete}
         label={weeksQueued > 0 ? queuedLabel('week', stackLabels, weeksQueued) : playingWeek ? busyLabel(false) : stackLabels ? stackedWeekLabel(width) : '+1 week'}
@@ -2383,6 +2448,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
           {nightInRow ? null : busyAnnouncer}
           {rulesItem}
           {playToEndButton(false, true)}
+          {/* Restart, which wipes the season, is its own group in every
+              More panel (walk 15 T1-07). */}
+          {progress.complete ? null : <View style={styles.menuDivider} />}
           {secondaryButtons(true)}
           {settingsItem}
         </MoreMenu>
@@ -2397,14 +2465,26 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // card): a steady tap through the last night landed on "New season" there
   // and started season 2 before the result was seen (walk 13 T4-10).
   if (folded) {
+    // Cancel queued in the row, before +1 night, wherever the row has room
+    // (landscape phones, a laptop at 150%): inside More it was out of sight
+    // while the queue played on (walk 15 T4-01, T2-08). The status row
+    // leaves out the games figure meanwhile, so nothing else moves.
+    const cancelInRow = cancelAt === 'night' && !progress.complete;
     return (
       <View style={[styles.foldedControls, foldFill && styles.foldedFill]}>
+        {cancelInRow ? cancelButton('fold') : null}
         {progress.complete ? (
           <View style={[styles.seasonDone, foldFill ? styles.advanceFill : styles.seasonDoneFixed]}>
-            <Text maxFontSizeMultiplier={1.3} numberOfLines={2} style={styles.seasonDoneNext}>{SEASON_DONE_SLOT}</Text>
+            {/* On the Roster the result card's gold Play another season sits
+                right below: the frame pointed to More over it (walk 15
+                T1-06). The slot keeps its place, blank; the status row
+                beside it already says "Season complete" and the final score. */}
+            {screenName === 'Roster' ? null : (
+              <Text maxFontSizeMultiplier={1.3} numberOfLines={2} style={styles.seasonDoneNext}>{SEASON_DONE_SLOT}</Text>
+            )}
           </View>
         ) : advanceButtons}
-        {menu(progress.complete ? <>{secondaryButtons(true)}{rulesItem}</> : <>{cancelButton('menu')}{rulesItem}{playToEndButton(false, true)}{secondaryButtons(true)}</>)}
+        {menu(progress.complete ? <>{secondaryButtons(true)}{rulesItem}</> : <>{cancelInRow ? null : cancelButton('menu')}{rulesItem}{playToEndButton(false, true)}<View style={styles.menuDivider} />{secondaryButtons(true)}</>)}
         {busyAnnouncer}
       </View>
     );
@@ -2465,14 +2545,28 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // and Restart at their width, right after +1 week (next in Tab order), so
   // nothing else in the row moves (walk 10 T2-06, T3-09; the status row's
   // 24px Cancel was 500px away and skipped by Tab).
-  const rowCancel = inline && showCancel && !progress.complete;
+  // A tablet (the bar's own row, 720-899px) is laid out the same way, with
+  // the hint beside the buttons: its line under them came and went with the
+  // hint, "Playing…", "games in." and Cancel, and the screen jumped 40px on
+  // a press (walk 15 L1). The row is one height whatever it holds.
+  const tabletRow = !inline;
+  const rowCancel = showCancel && !progress.complete;
   return (
-    <View style={[styles.controls, narrow && styles.controlsNarrow, inline && styles.controlsInline]}>
+    <View style={[styles.controls, narrow && styles.controlsNarrow, inline && styles.controlsInline, tabletRow && styles.controlsTablet]}>
       {progress.complete ? null : (
         <View style={[styles.group, narrow && styles.groupNarrow]}>
           {advanceButtons}
         </View>
       )}
+      {tabletRow && !progress.complete ? (
+        <View style={styles.tabletHintSlot}>
+          {hintText ? (
+            <Text maxFontSizeMultiplier={1.3} nativeID={PRACTICE_HINT_ID} numberOfLines={2} style={styles.tabletHint}>
+              {hintText}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
       <View
         onLayout={rowCancel ? undefined : (event) => setSecondaryWidth(Math.round(event.nativeEvent.layout.width))}
         style={[styles.group, styles.secondary, narrow && styles.secondaryNarrow, inline && styles.secondaryInline, rowCancel && secondaryWidth > 0 && { width: secondaryWidth }]}
@@ -2484,11 +2578,6 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
           </>
         )}
       </View>
-      {/* A tablet keeps the line under the buttons at the Cancel line's
-          height while it holds something (it grew 16px for a queued press),
-          and gives it back when it holds nothing: a blank 40px band sat
-          under the buttons on every other tab (walk 13 T2-11). */}
-      {inline || progress.complete ? hint : hint ? <View style={styles.hintReserve}>{hint}</View> : <View style={styles.hintGap} />}
       {busyAnnouncer}
     </View>
   );
@@ -2939,22 +3028,30 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 0,
   },
-  // The queue's line: Cancel queued, compact, where the hint line sits.
-  // The tablet's line under the buttons, as tall as its Cancel line.
-  // A tablet's frame with nothing under its buttons: a little air above the
-  // screen, not a blank line.
-  hintGap: {
-    flexBasis: '100%',
-    height: 4,
+  // A tablet's one row: the buttons, the hint between them, and a little air
+  // above the screen (the 59px frame it had with nothing under the buttons).
+  controlsTablet: {
+    flexWrap: 'nowrap',
+    paddingBottom: 14,
   },
-  // The Cancel line's height: a queued press never makes the frame taller.
-  hintReserve: {
-    flexBasis: '100%',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
+  // The hint takes the room between +1 week and Play to the end, up to two
+  // lines inside the buttons' 44px, so it never adds height.
+  tabletHintSlot: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
     minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
+  tabletHint: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    lineHeight: 16,
+  },
+  // The queue's line: Cancel queued, compact, where the hint line sits.
   hintRow: {
     flexBasis: '100%',
     flexDirection: 'row',
@@ -2965,6 +3062,16 @@ const styles = StyleSheet.create({
   cancelLine: {
     minHeight: 44,
     paddingHorizontal: space.sm,
+  },
+  // A folded row: "CANCEL" over "3 QUEUED", before +1 night, one width
+  // whatever the count (its right edge beside +1 night never moves).
+  cancelFold: {
+    minHeight: 44,
+    minWidth: 84,
+    paddingHorizontal: 6,
+  },
+  cancelFoldText: {
+    textAlign: 'center',
   },
   // Desktop: Cancel fills the place of Play to the end and Restart.
   cancelRow: {

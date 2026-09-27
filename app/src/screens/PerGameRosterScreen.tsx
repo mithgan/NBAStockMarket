@@ -1161,8 +1161,9 @@ export function PerGameRosterScreen({
       // A visit's second season opens with one line (walk 13 T1-09).
       season={pastSeasonCount() + 1}
       onOpenMarket={() => onOpenMarket('long')}
+      // "How scoring works" opens the Rules at Scoring, focused there (walk 15 T3-03).
       onOpenRules={() => {
-        openRules();
+        openRules('Scoring');
       }}
     />
   ) : tipOpen ? (

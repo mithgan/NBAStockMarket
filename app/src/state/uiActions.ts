@@ -9,7 +9,10 @@ type Opener = () => void;
 /** The app's tabs by key: Roster, Market, Results, Leaders. */
 export type AppTab = 'portfolio' | 'market' | 'plays' | 'leaderboard';
 
-let rulesOpener: Opener | null = null;
+/** Opens the Rules, at a section's heading when one is named ("Scoring"). */
+type RulesOpener = (section?: string) => void;
+
+let rulesOpener: RulesOpener | null = null;
 let settingsOpener: Opener | null = null;
 /** `focusScreen`: the press came from the keyboard, so focus moves to the new screen. */
 export interface TabOpenOptions {
@@ -19,7 +22,7 @@ export interface TabOpenOptions {
 let tabOpener: ((tab: AppTab, options?: TabOpenOptions) => void) | null = null;
 
 /** Register the Rules sheet opener; returns an unregister function. */
-export function registerRulesOpener(open: Opener): () => void {
+export function registerRulesOpener(open: RulesOpener): () => void {
   rulesOpener = open;
   return () => {
     if (rulesOpener === open) rulesOpener = null;
@@ -52,10 +55,14 @@ export function openTab(tab: AppTab, options?: TabOpenOptions): boolean {
   return true;
 }
 
-/** Open the game rules. Returns false when no Rules sheet is mounted. */
-export function openRules(): boolean {
+/**
+ * Open the game rules. Returns false when no Rules sheet is mounted.
+ * `section`: a heading to open at, focused ("Scoring" for the welcome's "How
+ * scoring works"; walk 15 T3-03); Done is the next Tab after it.
+ */
+export function openRules(section?: string): boolean {
   if (!rulesOpener) return false;
-  rulesOpener();
+  rulesOpener(section);
   return true;
 }
 

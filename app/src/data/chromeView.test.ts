@@ -577,7 +577,7 @@ test('Play to the end asks what it plays and what stays, in days (walk 6 T2-N1, 
   // Walk 14 T2-07: the season to its last date, its span in weeks.
   assert.deepEqual(playToEndQuestion(158, false, [], '2026-04-12'), {
     title: 'Play the rest of the season, to Apr 12?',
-    lines: ["That's about 23 weeks (158 days), played in one go.", 'Your roster and shorts stay as they are; no moves between nights.'],
+    lines: ["That's about 23 weeks (158 days), played in one go.", 'Your roster stays as it is; no moves between nights.'],
     confirmLabel: 'Play to the end',
     cancelLabel: 'Not now',
   });
@@ -640,8 +640,8 @@ test('+1 week describes the week; Play to the end says when shorts end; a finish
   ]);
   assert.equal(playToEndQuestion(170, false, ['2025-10-27', '2025-10-31']).lines[2],
     'Your 2 shorts end by themselves by the Oct 31 games; their slots stay empty.');
-  // No shorts: today's line.
-  assert.deepEqual(playToEndQuestion(158, false, []).lines.slice(1), ['Your roster and shorts stay as they are; no moves between nights.']);
+  // No shorts: the roster alone (walk 15 T2-12).
+  assert.deepEqual(playToEndQuestion(158, false, []).lines.slice(1), ['Your roster stays as it is; no moves between nights.']);
   // The row's figure: none on the opening eve or once the season is complete.
   assert.equal(statusRowResult(practiceProgress(OPENING_EVE, '2025-11-05'), 7_890_000), 7_890_000);
   assert.equal(statusRowResult(practiceProgress(OPENING_EVE, '2026-04-12'), 7_890_000), null);

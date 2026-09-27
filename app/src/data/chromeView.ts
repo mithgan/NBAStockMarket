@@ -364,7 +364,9 @@ export function playToEndQuestion(
   cancelLabel: string;
 } {
   const stays = shortEnds.length > 0 ? playToEndShortLines(shortEnds)
-    : emptyRoster ? [] : ['Your roster and shorts stay as they are; no moves between nights.'];
+    // No shorts held: the roster alone (walk 15 T2-12: "and shorts" sent a
+    // player without any looking for shorts they did not have).
+    : emptyRoster ? [] : ['Your roster stays as it is; no moves between nights.'];
   return {
     title: seasonEnd ? `Play the rest of the season, to ${humanDate(seasonEnd)}?` : 'Play the rest of the season?',
     lines: [
@@ -1237,6 +1239,27 @@ export function savingHint(moves: readonly Pick<MoveInFlight, 'verb'>[], short: 
   return short ? `Saving ${what}…` : `Saving ${what}… then ${nightPlaysLine(nextGameDate)}`;
 }
 
+/**
+ * The hint while presses wait behind a move still saving (walk 15 T2-03): the
+ * queue, not the one night a press used to play. "Saving your add… then Oct
+ * 21–Nov 10 plays (3 weeks)." `lastSettled`: the last night in;
+ * `seasonEnd`: the season's last day. Nights in the queue are counted, not
+ * dated (a night plays the next game night).
+ */
+export function savingQueueHint(
+  moves: readonly Pick<MoveInFlight, 'verb'>[],
+  queued: readonly QueuedStep[],
+  lastSettled: string | null | undefined,
+  seasonEnd: string | null | undefined,
+): string {
+  const saving = savingHint(moves, true);
+  const through = queuedThrough(lastSettled, null, queued, seasonEnd);
+  if (through && lastSettled) {
+    return `${saving} then ${keepTogether(dateSpanText(shiftDay(lastSettled, 1), through))} plays (${queuedPhrase(queued)}).`;
+  }
+  return `${saving} then ${queuedPhrase(queued)} ${queued.length === 1 ? 'plays' : 'play'}.`;
+}
+
 export const EMPTY_ROSTER_HINT_SHORT = 'Add a player first';
 export const NOBODY_HELD_HINT_SHORT = 'Add or short someone';
 export const EMPTY_ROSTER_PLAYING_HINT_SHORT = 'No players yet';
@@ -1447,6 +1470,17 @@ export function queuedWaitLine(queued: readonly QueuedStep[], playing: string | 
   return now ? `${now} ${wait}` : wait;
 }
 
+/**
+ * A question that ends the season (Restart, Exit) says what each answer does
+ * to the presses waiting for it (walk 15 T4-02): "3 weeks are queued: Keep
+ * playing plays them; Start over drops them." null with none queued.
+ */
+export function queuedAnswerLine(queued: readonly QueuedStep[], keepLabel: string, dropLabel: string): string | null {
+  if (queued.length === 0) return null;
+  const them = queued.length === 1 ? 'it' : 'them';
+  return `${queuedPhrase(queued)} ${queued.length === 1 ? 'is' : 'are'} queued: ${keepLabel} plays ${them}; ${dropLabel} drops ${them}.`;
+}
+
 /** The control that drops what is queued and has not started (walk 8 T4-N1). */
 export const QUEUED_CANCEL_LABEL = 'Cancel queued';
 
@@ -1521,9 +1555,52 @@ export function queuedCancelControlName(queued: readonly QueuedStep[]): string {
   return mixed ? `${label}: ${queuedPhrase(queued)}` : label;
 }
 
+/**
+ * Where Cancel queued is drawn: beside +1 week (desktop, tablet, portrait
+ * phones), before +1 night (a folded row with room for it: landscape phones,
+ * a laptop at 150%; walk 15 T4-01, T2-08), or inside More (the narrowest
+ * folded rows and 400% zoom).
+ */
+export type CancelPlace = 'week' | 'night' | 'more';
+
+/**
+ * From this width a folded row keeps Cancel in the row, before +1 night: its
+ * facts (two lines, the games figure left out for the run) still fit beside
+ * Cancel, +1 night, +1 week, More and Settings. At 667px they took a third
+ * line; narrower, Cancel is More's first item.
+ */
+export const CHROME_FOLDED_CANCEL_MIN_WIDTH = 760;
+
+/**
+ * From this width a folded row keeps Rules in the row, between More and
+ * Settings, as portrait keeps it in its status row: turning the phone hid it
+ * inside More (walk 15 T1-05). The facts beside it take the short day
+ * ("Day 8/174") and closer gaps, so the widest (the day, then a week's
+ * figure) still keeps to two lines at 844px; narrower, Rules is in More.
+ */
+export const CHROME_FOLDED_RULES_MIN_WIDTH = 840;
+
+export function rulesInFoldedRow(tiny: boolean, width: number): boolean {
+  return !tiny && width >= CHROME_FOLDED_RULES_MIN_WIDTH;
+}
+
+export function cancelPlace(folded: boolean, tiny: boolean, width: number): CancelPlace {
+  if (!folded) return 'week';
+  return !tiny && width >= CHROME_FOLDED_CANCEL_MIN_WIDTH ? 'night' : 'more';
+}
+
 /** Said once a run, after the first press that queues: the way back (walk 9 T3-12). */
-export function queuedCancelHint(count: number): string {
-  return `Press Cancel beside +1 week to drop ${count === 1 ? 'it' : 'them'}.`;
+export function queuedCancelHint(count: number, place: CancelPlace = 'week'): string {
+  const where = place === 'more' ? 'in More' : place === 'night' ? 'beside +1 night' : 'beside +1 week';
+  return `Press Cancel ${where} to drop ${count === 1 ? 'it' : 'them'}.`;
+}
+
+/**
+ * Cancel's two-line words in a folded row, left of +1 night: "CANCEL" over
+ * "3 QUEUED" (its name starts with the same words, queuedCancelControlName).
+ */
+export function foldedCancelLabel(queued: readonly QueuedStep[]): string {
+  return queued.length <= 1 ? 'Cancel\nqueued' : `Cancel\n${queued.length} queued`;
 }
 
 /**
@@ -1555,9 +1632,12 @@ export function queueHasRoom(queued: readonly QueuedStep[], daysLeft: number): b
   return covered < daysLeft;
 }
 
-/** Said once when a press finds the rest of the season already queued. */
-export function queueFullLine(seasonEnd: string | null | undefined): string {
-  return `The rest of the season is already queued${seasonEnd ? `, to the ${humanDate(seasonEnd)} games` : ''}. Cancel drops it.`;
+/**
+ * Said once when a press finds the rest of the season already queued. Where
+ * Cancel is inside More, it says so: "Cancel (in More) drops it." (walk 15 T4-01).
+ */
+export function queueFullLine(seasonEnd: string | null | undefined, place: CancelPlace = 'week'): string {
+  return `The rest of the season is already queued${seasonEnd ? `, to the ${humanDate(seasonEnd)} games` : ''}. Cancel${place === 'more' ? ' (in More)' : ''} drops it.`;
 }
 
 /**
@@ -1588,6 +1668,15 @@ export const QUEUE_LINE_PAUSE_MS = 700;
 export function nightButtonName(nightDate: string | null, showsDate: boolean): string {
   if (!nightDate) return "+1 night: play the next night's games";
   return `+1 night${showsDate ? ` ${nightDate}` : ''}: play the ${nightDate} games`;
+}
+
+/**
+ * +1 week's name, as +1 night's names its night (walk 15 T3-06: after the
+ * first week a reader could not hear which week came next): "+1 week Oct
+ * 30–Nov 5: play the Oct 30–Nov 5 games". `weekSpan`: weekSpanLabel.
+ */
+export function weekButtonName(weekSpan: string | null): string {
+  return weekSpan ? `+1 week ${weekSpan}: play the ${weekSpan} games` : '+1 week: advance one week';
 }
 
 /**
