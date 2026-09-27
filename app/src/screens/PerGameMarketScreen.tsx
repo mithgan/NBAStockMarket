@@ -368,7 +368,7 @@ function SameHeight({ children, ghosts }: { children: ReactNode; ghosts: ReactNo
 }
 
 /** The context's moves, behind one stable object so a row's props do not change with every snapshot. */
-type MarketMoves = Pick<ReturnType<typeof usePerGame>, 'closePosition' | 'dismissNotice' | 'lockedPress' | 'notify' | 'openPosition'>;
+type MarketMoves = Pick<ReturnType<typeof usePerGame>, 'closePosition' | 'lockedPress' | 'notify' | 'openPosition'>;
 
 const TONE_COLOR: Record<SignalTone, string> = {
   gain: colors.green,
@@ -471,7 +471,7 @@ function MarketRow({
   slotLimit: number;
   moves: MarketMoves;
 }) {
-  const { closePosition, dismissNotice, lockedPress, notify, openPosition } = moves;
+  const { closePosition, lockedPress, notify, openPosition } = moves;
   const { player, position, side } = row;
   const rosterLockHint = rosterLockMessage(rosterLockGameDate);
   // Another move saving does not rest this row: a press joins the queue and
@@ -628,7 +628,6 @@ function MarketRow({
     // FULL's note says whose Add took it, and nothing is painted added.
     const takenBy = onClaimSlot(side, player.playerId);
     if (takenBy) {
-      dismissNotice();
       setNoting(true);
       return;
     }
@@ -704,9 +703,13 @@ function MarketRow({
     else if (reopening) node.setAttribute('aria-expanded', 'true');
     else node.removeAttribute('aria-expanded');
   });
-  // A double tap opens the note once (a toggle, walk 6 T4-11).
+  // A double tap opens the note once (a toggle, walk 6 T4-11). The notice
+  // stays: it sits in the brand bar or the strip above the tabs, never over
+  // the note, and clearing it lost the confirmation of the adds that filled
+  // the roster (walk 18 T4-01: "5 players added… $1.25K in fees." was gone
+  // when the burst ended on a FULL tap; walk 3 T3-15's floating notice that
+  // covered the note is long gone).
   const toggleNote = repeatSafe(() => {
-    dismissNotice();
     setNoting((open) => !open);
   });
 
@@ -1423,7 +1426,6 @@ export function PerGameMarketScreen({
   latestPerGame.current = perGame;
   const moves = useMemo<MarketMoves>(() => ({
     closePosition: (position) => latestPerGame.current.closePosition(position),
-    dismissNotice: () => latestPerGame.current.dismissNotice(),
     lockedPress: (move) => latestPerGame.current.lockedPress(move),
     notify: (text) => latestPerGame.current.notify(text),
     openPosition: (intent) => latestPerGame.current.openPosition(intent),

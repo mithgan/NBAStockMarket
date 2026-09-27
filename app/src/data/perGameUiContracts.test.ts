@@ -304,3 +304,10 @@ test('two clamped notice lines end on "…" before "more ▾", and still know th
   assert.match(app, /setOverflowing\(node\.scrollHeight > TINY_NOTICE_LINE \* clampLines \+ 2\);/);
   assert.match(app, /if \(clampLines < 2\) setOverflowing\(clampLines > 0 && contentHeight > TINY_NOTICE_LINE \* clampLines \+ 2\);/);
 });
+
+test('opening a FULL note keeps the latest notice: the adds that filled the roster stay confirmed (walk 18 T4-01)', () => {
+  // Notices sit in the brand bar or the strip above the tabs, never over a
+  // row's note, so the note has no reason to take the last notice down.
+  assert.doesNotMatch(market, /dismissNotice/);
+  assert.match(market, /const toggleNote = repeatSafe\(\(\) => \{\s+setNoting\(\(open\) => !open\);\s+\}\);/);
+});
