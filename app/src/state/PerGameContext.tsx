@@ -21,7 +21,7 @@ import type {
   PerGamePosition,
 } from '../api/contracts';
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
-import { exactMoney, lockNotice, moneyCompact, moneyFine, perGame, rosterReopensLine } from '../copy/terms';
+import { exactMoney, humanDate, lockNotice, moneyCompact, moneyFine, perGame, rosterReopensLine } from '../copy/terms';
 import { practiceProgress } from '../data/chromeView';
 import { isAppResume } from './appResume';
 import { ActionLock } from './actionLock';
@@ -155,8 +155,15 @@ const GAMES_HEADLINE = /^[A-Z][a-z]{2} \d{1,2}(?:–(?:[A-Z][a-z]{2} )?\d{1,2})?
 function firstSentence(text: string): string {
   return text.split(/(?<=[.!?])\s+/)[0] ?? text;
 }
-/** A press on a button that turned LOCKED this soon after a night landed raced the lock. */
-const LOCK_RACE_MS = 1500;
+/**
+ * A press on a button that turned LOCKED this soon after the lock began raced
+ * it: the finger was aimed at Add or Drop. Later it is a question about a
+ * button already locked, answered with when moves reopen (walk 17 T4-01,
+ * T4-07: during a run a games notice lands every half second, so timing from
+ * the last notice made every LOCKED press a "refused" move, "Scottie Barnes
+ * was not dropped" for a Drop never asked for).
+ */
+const LOCK_RACE_MS = 700;
 
 function errorMessage(error: unknown): string {
   if (error instanceof PerGameApiError) return error.message;
@@ -297,7 +304,13 @@ export function PerGameProvider({
     };
   }, []);
 
+  // When the current lock began (the moment the account first said so).
+  const lockBeganAt = useRef<number | null>(null);
   const installBootstrap = useCallback((next: PerGameBootstrap) => {
+    const before = bootstrapRef.current?.ruleset;
+    const locked = next.ruleset.rosterMutationsLocked;
+    if (!locked) lockBeganAt.current = null;
+    else if (!before?.rosterMutationsLocked || before.rosterLockGameDate !== next.ruleset.rosterLockGameDate) lockBeganAt.current = Date.now();
     bootstrapRef.current = next;
     setBootstrap(next);
   }, []);
@@ -460,7 +473,8 @@ export function PerGameProvider({
   // your score rose $194.5K. Scottie Barnes and Devin Booker were not added:
   // their prices moved to $261.4K and $336.1K a game. Add them again if you
   // still want them."
-  type WaitedMove = { verb: string; name: string; locked: boolean; cost: number | null };
+  // `lockDate`: the lock that refused it (null: its price moved).
+  type WaitedMove = { verb: string; name: string; locked: boolean; cost: number | null; lockDate?: string | null };
   const waitedMoves = useRef<{ moves: WaitedMove[]; base: string | null } | null>(null);
   // The last waiting moves told, so a refusal a moment later is told with
   // them, not over them (walk 12 T4-07: a second add refused as the week
@@ -473,7 +487,10 @@ export function PerGameProvider({
       return;
     }
     const last = lastWaited.current;
-    if (last && Date.now() - last.at < WAITED_REJOIN_MS) {
+    // Told again only with moves the same lock refused: a move refused at the
+    // Nov 5 lock was said again under the Nov 11 one (walk 17 T4-01).
+    const sameLock = (entry: WaitedMove) => !entry.locked || !move.locked || (entry.lockDate ?? null) === (move.lockDate ?? null);
+    if (last && Date.now() - last.at < WAITED_REJOIN_MS && last.moves.every(sameLock)) {
       const moves = last.moves.filter((entry) => !(entry.name === move.name && entry.verb === move.verb));
       waitedMoves.current = { moves: [...moves, move], base: last.base };
     } else {
@@ -529,12 +546,26 @@ export function PerGameProvider({
   // lock: it is a move that failed, named with the others in the games'
   // notice. A LOCKED pressed later only explains the lock (walk 12 T4-07).
   const lockedPress = useCallback((move: { name: string; verb: string }) => {
-    const recent = lastRefreshNotice.current;
-    if (recent && Date.now() - recent.at < LOCK_RACE_MS) {
-      sayWaitedMove({ verb: move.verb, name: move.name, locked: true, cost: null });
+    const began = lockBeganAt.current;
+    // Only an Add or a Short acts on the press; a Drop or Close only opens a
+    // question, so one that meets a lock was never tried: it is told the lock,
+    // never "was not dropped" (walk 17 T4-01).
+    const acts = move.verb === 'added' || move.verb === 'shorted';
+    if (acts && began !== null && Date.now() - began < LOCK_RACE_MS) {
+      sayWaitedMove({ verb: move.verb, name: move.name, locked: true, cost: null, lockDate: bootstrapRef.current?.ruleset.rosterLockGameDate ?? null });
       return;
     }
-    say(lockNotice(bootstrapRef.current?.ruleset.rosterLockGameDate));
+    const date = bootstrapRef.current?.ruleset.rosterLockGameDate ?? null;
+    const answer = lockNotice(date);
+    // A notice on screen that already says this lock (a run's result ending
+    // "Moves pause for the Nov 11 games.") stays; the answer is heard (walk 17
+    // T4-01: the run's result gave way to the lock's words alone).
+    const shown = shownMessage.current;
+    if (shown && date && shown.includes(`Moves pause for the ${humanDate(date)} games`)) {
+      say(shown, shownTone.current, answer);
+      return;
+    }
+    say(answer);
   }, [say, sayWaitedMove]);
 
   const runPositionAction = useCallback(async <T extends { accountVersion: number },>(
@@ -551,7 +582,7 @@ export function PerGameProvider({
     // Moves are locked now (it waited for the games that brought the lock;
     // every button says LOCKED otherwise): no call that must fail.
     if (failedMove && bootstrapRef.current?.ruleset.rosterMutationsLocked) {
-      sayWaitedMove({ verb: failedMove.verb, name: failedMove.name, locked: true, cost: null });
+      sayWaitedMove({ verb: failedMove.verb, name: failedMove.name, locked: true, cost: null, lockDate: bootstrapRef.current?.ruleset.rosterLockGameDate ?? null });
       return false;
     }
     // His price moved since the press (it waited for games): the call would
