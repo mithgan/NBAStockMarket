@@ -253,5 +253,6 @@ export const KEYBOARD_KEYS: ReadonlyArray<{ keys: string; does: string }> = [
   { keys: 'Arrow keys', does: "Move along the tabs (Roster, Market, Results, Leaders) and along a row of choices, such as Roster side and Short side or the Market's sort." },
   { keys: 'Score chart', does: 'Arrow keys move a night, Page Up and Page Down a week, Home and End to the first and last night.' },
   { keys: 'Escape', does: 'Closes a sheet, a menu or a question, and puts you back where you were.' },
+  { keys: 'Home and End', does: 'On a screen, End goes to "Back to the practice controls" at its end (then Enter for +1 night), and Home to its first control.' },
   { keys: 'Market list', does: 'Skip to the end of the list jumps past every player.' },
 ];

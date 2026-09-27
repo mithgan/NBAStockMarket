@@ -4,7 +4,9 @@
  * the margins beside the app moved nothing, and Page Down, Space or the
  * arrows did nothing until a row had focus (walk 13 T2-07, T2-08). Both now
  * scroll the screen's main list, unless something under the pointer or in
- * focus takes them itself, or a dialog or sheet is open.
+ * focus takes them itself, or a dialog or sheet is open. With a screen's
+ * control in focus, Home and End go to the screen's first control and to the
+ * "Back to the practice controls" link it ends with.
  */
 import { reduceMotionChosen } from '../state/motionPreference';
 
@@ -14,6 +16,29 @@ const TAKES_KEYS = [
   '[role="button"]', '[role="tab"]', '[role="slider"]', '[role="radio"]', '[role="switch"]',
   '[role="checkbox"]', '[role="menuitem"]', '[role="option"]', '[role="link"]',
 ].join(', ');
+
+/** Controls that use Home and End themselves (a text box, the tabs, a slider, a radio row, a menu). */
+const USES_HOME_END = [
+  'input', 'select', 'textarea', '[contenteditable="true"]', '[role="tab"]', '[role="slider"]',
+  '[role="radio"]', '[role="menuitem"]', '[role="option"]', '[role="spinbutton"]', '[role="gridcell"]',
+].join(', ');
+
+/** The words of the link every screen ends with (the Market's list, SimBar on the others). */
+const BACK_TO_CONTROLS = 'Back to the practice controls';
+
+const STOPS = 'a[href], button, input, select, textarea, [role="button"], [role="link"], [tabindex="0"]';
+
+/** A screen's first Tab stop, and the "Back to the practice controls" link it ends with. */
+function screenEnds(screen: HTMLElement): { first: HTMLElement | null; back: HTMLElement | null } {
+  const stops = Array.from(screen.querySelectorAll<HTMLElement>(STOPS)).filter((node) => (
+    !node.closest('[hidden], [aria-hidden="true"], [inert]')
+    && node.getAttribute('tabindex') !== '-1'
+    && !(node as HTMLButtonElement).disabled
+    && node.getClientRects().length > 0
+  ));
+  const back = stops.filter((node) => (node.getAttribute('aria-label') ?? node.textContent ?? '').trim() === BACK_TO_CONTROLS).pop() ?? null;
+  return { first: stops[0] ?? null, back };
+}
 
 function scrollsVertically(node: Element): node is HTMLElement {
   if (!(node instanceof HTMLElement)) return false;
@@ -89,6 +114,24 @@ export function installScreenScroll(): void {
   document.addEventListener('keydown', (event) => {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
     const active = document.activeElement as HTMLElement | null;
+    // On a screen's own control, End goes to the "Back to the practice
+    // controls" link the screen ends with (one more Enter reaches +1 night)
+    // and Home to the screen's first control, as in a list: from the middle
+    // of the Market it took 21 Shift+Tabs to get back to +1 night (walk 14
+    // T3-N1). Controls that use the keys themselves keep them.
+    if ((event.key === 'Home' || event.key === 'End') && !event.shiftKey && active && active !== document.body) {
+      const screen = document.getElementById('app-screen');
+      if (screen && active !== screen && screen.contains(active) && !active.matches(USES_HOME_END)
+        && !scrollsVertically(active) && !somethingModalOpen()) {
+        const { first, back } = screenEnds(screen);
+        const target = event.key === 'End' ? back : first;
+        if (target && target !== active) {
+          target.focus();
+          event.preventDefault();
+        }
+        return;
+      }
+    }
     // Only with the keyboard on nothing that uses the key: the page, the
     // screen's own landmark (where a screen switch puts focus), or text.
     const idle = !active || active === document.body || active === document.documentElement
