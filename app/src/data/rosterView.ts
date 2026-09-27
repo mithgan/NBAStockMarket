@@ -114,6 +114,17 @@ export function chartAfterLists({ height, wide, seasonOver }: { height: number; 
   return !wide && !seasonOver && height < CHART_FIRST_MIN_HEIGHT;
 }
 
+/**
+ * Whether the season card's "Play another season" sits right under the final
+ * score (walk 17 T2-04): in any window under 720px tall, the Roster's short
+ * window, at every width. The folded frame (853x533) already put it there
+ * (walk 13 T2-09); at 960x600 or 1024x700 it came after the split, Best,
+ * Worst and Moves, the one thing to do next last in view.
+ */
+export function seasonActionFirst(height: number): boolean {
+  return height < CHART_FIRST_MIN_HEIGHT;
+}
+
 // ---------------------------------------------------------------------------
 // Rows
 
@@ -810,6 +821,28 @@ export function scoreArrangement(variant: 'compact' | 'narrow' | 'panel', width:
 }
 
 /**
+ * "vs last season ›" on one line, its padding included, as drawn (13px
+ * heavy display face, measured 112px; walk 17 T1-06).
+ */
+export const WHY_ONE_LINE_WIDTH = 112;
+/** The widest score the block shows ("+$888.8K") at full hero size, as drawn (measured). */
+const HERO_WIDEST_WIDTH = 206;
+/** The gap between the score and "vs last season ›". */
+const WHY_GAP = 12;
+
+/**
+ * Whether "vs last season ›" sits beside the score on a phone (walk 17
+ * T1-06): only where the widest score at full size and its one line both fit
+ * the block (390 and 375px phones). Narrower (a 360px phone, 200% zoom) it
+ * takes a line under the score, so its words never break onto two lines and
+ * the score keeps its size. Chosen by width alone, so the block keeps one
+ * arrangement from night to night whatever the score's digits (walk 5 T1-12).
+ */
+export function whyBesideScore(blockWidth: number): boolean {
+  return blockWidth >= HERO_WIDEST_WIDTH + WHY_GAP + WHY_ONE_LINE_WIDTH;
+}
+
+/**
  * The hero score's font size for a line `room` pixels wide: full size when it
  * fits, smaller when it would run off the edge (a phone at 200% zoom is about
  * 195px wide, and "+$139.5K" at full size did: walk 3 T3-28).
@@ -1031,14 +1064,23 @@ export function shortsQuiet({ welcome, dayZero, seasonOver, openShorts, hadShort
 }
 
 /**
- * The welcome's smaller second part (walk 10 T1-01): how a game scores
- * (`earnLine`), that a bad game can go below zero, the fee, and that
- * practice starts over on a reload. Kept to its 320px height (seven lines)
- * when the minutes' reason joined it (walk 13 T1-02).
+ * The welcome's smaller second part (walk 10 T1-01): three short lines,
+ * money first (walk 17 T1-07), so a first read catches the rate, the fee and
+ * the reload: "$40K for each net point. A bad game can go below zero." /
+ * "$250 for each add or drop." / "Practice starts over if you reload." How a
+ * net point is counted is left to How scoring works, beside it (a six-line
+ * paragraph with the formula in brackets was skipped on a phone). No fee, no
+ * fee line.
  */
-export function welcomeDetails(earn: string, feeDollars: number): string {
-  const fee = feeDollars > 0 ? ` Each add or drop costs ${exactMoney(feeDollars)}.` : '';
-  return `${earn} ${BELOW_ZERO_WELCOME}${fee} Reloading starts over.`;
+export function welcomeDetails(dollarsPerNetPoint: number | null | undefined, feeDollars: number): string[] {
+  const rate = dollarsPerNetPoint && dollarsPerNetPoint > 0
+    ? `${moneyCompact(dollarsPerNetPoint)} for each net point.`
+    : 'Each game pays out his box score.';
+  return [
+    `${rate} A bad game can go below zero.`,
+    ...(feeDollars > 0 ? [`${exactMoney(feeDollars)} for each add or drop.`] : []),
+    'Practice starts over if you reload.',
+  ];
 }
 
 /**
@@ -1348,19 +1390,22 @@ export function hasNights(series: readonly NightPoint[]): boolean {
  * Which points get a date under the x-axis: the first night and the last
  * night always, plus one in the middle when the plot is wide enough that the
  * three labels cannot touch. A `now` point (fees since the last night) is
- * never labelled, so a move never swaps the last date for a word. With one
- * night the line's left end is named too ("Start" under it), so one night
- * reads as one step from the start, not a long climb from an unnamed edge
- * (walk 14 T2-03).
+ * never labelled, so a move never swaps the last date for a word. The
+ * line's left end is named too, "Start" under it, at every length (walk 14
+ * T2-03, walk 17 T2-03): with a week played an unnamed $0 start put "Oct 21"
+ * under the second point, and the flat first step read as "Oct 21 was $0".
+ * Where the first night sits too close to the start for both,
+ * `placeAxisLabels` keeps "Start".
  */
 export function axisLabelIndexes(series: readonly NightPoint[], plotWidth: number): number[] {
   const first = series.findIndex((point) => point.kind === 'night');
   if (first === -1) return [];
   let last = series.length - 1;
   while (last > first && series[last].kind !== 'night') last -= 1;
-  if (last === first) return first > 0 && series[0].kind === 'start' ? [0, first] : [first];
-  const indexes = [first, last];
-  if (plotWidth >= 300 && last - first >= 4) indexes.splice(1, 0, Math.round((first + last) / 2));
+  const start = first > 0 && series[0].kind === 'start' ? [0] : [];
+  if (last === first) return [...start, first];
+  const indexes = [...start, first, last];
+  if (plotWidth >= 300 && last - first >= 4) indexes.splice(indexes.length - 1, 0, Math.round((first + last) / 2));
   return indexes;
 }
 
@@ -1492,8 +1537,10 @@ export interface AxisLabel {
 
 /**
  * Where the x-axis dates go: centred under their night, pulled inside the
- * plot at the edges, and never two boxes closer than `gap` (the most recent
- * date wins, the earlier one is dropped), so no two labels ever touch.
+ * plot at the edges, and never two boxes closer than `gap`, so no two labels
+ * ever touch. The line's two ends win (the last date, then the first label,
+ * "Start"; walk 17 T2-03), then the others from the most recent: the one
+ * dropped is always the earlier.
  */
 export function placeAxisLabels(
   xs: readonly number[],
@@ -1504,12 +1551,15 @@ export function placeAxisLabels(
 ): AxisLabel[] {
   const maxLeft = Math.max(width - boxWidth, 0);
   const placed: AxisLabel[] = [];
-  for (const index of [...indexes].reverse()) {
+  const order = indexes.length > 2
+    ? [indexes[indexes.length - 1], indexes[0], ...indexes.slice(1, -1).reverse()]
+    : [...indexes].reverse();
+  for (const index of order) {
     const left = Math.min(Math.max(xs[index] - boxWidth / 2, 0), maxLeft);
     if (placed.some((label) => Math.abs(label.left - left) < boxWidth + gap)) continue;
     placed.push({ index, left, align: left <= 0 ? 'left' : left >= maxLeft ? 'right' : 'center' });
   }
-  return placed.reverse();
+  return placed.sort((a, b) => a.index - b.index);
 }
 
 export interface ValueTick {
@@ -1564,6 +1614,41 @@ export function axisMark(value: number): string {
 export function valueMark(kind: 'zero' | 'high' | 'low', value: number): string {
   if (kind === 'zero') return '$0';
   return `${kind === 'high' ? 'High' : 'Low'} ${formatAt(value, 'fine', true)}`;
+}
+
+/**
+ * Room kept under the score chart's plot for the Low mark drawn inside it
+ * (`lowInsideIndex`), so its words sit under the dip, inside the plot.
+ */
+export const LOW_INSIDE_ROOM = 8;
+
+/**
+ * The season's low named inside the plot, under its dip (walk 17, T4 idea
+ * 6), when the gutter's Low mark gives way to "$0" (`valueTicks`): a season
+ * that climbed high left its early dip unnamed at the end, so "how low did I
+ * go?" had no answer on the chart. The dip's index, or null when the low
+ * has its gutter mark or never went below $0. Nothing is drawn below the
+ * lowest point, so words under it never cover the line or "$0".
+ */
+export function lowInsideIndex(values: readonly number[], ticks: readonly ValueTick[]): number | null {
+  if (values.length === 0 || ticks.some((tick) => tick.kind === 'low')) return null;
+  let index = 0;
+  values.forEach((value, at) => {
+    if (value < values[index]) index = at;
+  });
+  return Math.round(values[index]) < 0 ? index : null;
+}
+
+/**
+ * Where the inside Low mark's box goes: centred under the dip at `x`, kept
+ * between the gutter and the plot's right edge; at an edge its words hang
+ * from that edge, so they still start (or end) under the dip.
+ */
+export function lowInsidePlace(x: number, boxWidth: number, gutter: number, right: number): { left: number; align: 'left' | 'center' | 'right' } {
+  const centred = x - boxWidth / 2;
+  if (centred <= gutter) return { left: gutter, align: 'left' };
+  if (centred + boxWidth >= right) return { left: Math.max(gutter, right - boxWidth), align: 'right' };
+  return { left: centred, align: 'center' };
 }
 
 /** Clear air above the score chart's heading when a tap brings it into view. */

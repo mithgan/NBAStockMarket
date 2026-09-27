@@ -269,14 +269,14 @@ test('x-axis labels name the first night and the last point, plus a middle one w
     return nightlySeries(buildPnlSeries(entries), entries);
   };
   assert.deepEqual(axisLabelIndexes(make(0), 360), []);
-  // One night names the line's left end too: "Start" (walk 14 T2-03).
+  // The line's left end is named too, "Start", at every length (walk 14 T2-03, walk 17 T2-03).
   assert.deepEqual(axisLabelIndexes(make(1), 360), [0, 1]);
-  assert.deepEqual(axisLabelIndexes(make(3), 360), [1, 3]);
-  assert.deepEqual(axisLabelIndexes(make(9), 360), [1, 5, 9]);
-  assert.deepEqual(axisLabelIndexes(make(9), 240), [1, 9]);
+  assert.deepEqual(axisLabelIndexes(make(3), 360), [0, 1, 3]);
+  assert.deepEqual(axisLabelIndexes(make(9), 360), [0, 1, 5, 9]);
+  assert.deepEqual(axisLabelIndexes(make(9), 240), [0, 1, 9]);
   // Fees since the last night add a final point that never takes the last date.
   const withFees = [...make(3), { eventCursor: 99, cumulativePnl: -250, kind: 'now' as const, date: null, label: 'Now', change: -250 }];
-  assert.deepEqual(axisLabelIndexes(withFees, 360), [1, 3]);
+  assert.deepEqual(axisLabelIndexes(withFees, 360), [0, 1, 3]);
 });
 
 test('a pointer snaps to the nearest real night', () => {

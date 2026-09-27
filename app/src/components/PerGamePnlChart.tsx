@@ -10,6 +10,9 @@ import {
   MARK_MIN_GAP,
   nightReadingParts,
   hasNights,
+  LOW_INSIDE_ROOM,
+  lowInsideIndex,
+  lowInsidePlace,
   nearestIndex,
   nightlySeries,
   placeAxisLabels,
@@ -40,6 +43,8 @@ const GUTTER_GAP = 6;
 const INSET_RIGHT = 6;
 const INSET_Y = 8;
 const AXIS_LABEL_WIDTH = 64;
+/** The Low mark drawn inside the plot: its box, wide enough for "Low -$848.3K". */
+const LOW_INSIDE_BOX = 96;
 const GROW_MS = 520;
 
 /**
@@ -121,15 +126,27 @@ export function PerGamePnlChart({
   const reducedMotion = useReducedMotion();
   const clipId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
 
+  const values = useMemo(() => series.map((night) => night.cumulativePnl), [series]);
+  // A low whose gutter mark gives way to "$0" is named inside the plot,
+  // under its dip, and the plot keeps room there for its words (walk 17, T4
+  // idea 6): a season that climbed high never loses "how low did I go".
+  const lowCrowds = useMemo(() => {
+    const plain = (value: number) => (
+      INSET_Y + ((domain.maximum - value) / (domain.maximum - domain.minimum)) * (plotHeight - INSET_Y * 2)
+    );
+    return lowInsideIndex(values, valueTicks(values, plain, { height: plotHeight, minGap: MARK_MIN_GAP })) !== null;
+  }, [domain.maximum, domain.minimum, plotHeight, values]);
+  const insetBottom = INSET_Y + (lowCrowds ? LOW_INSIDE_ROOM : 0);
   const yOf = useCallback((value: number) => (
-    INSET_Y + ((domain.maximum - value) / (domain.maximum - domain.minimum)) * (plotHeight - INSET_Y * 2)
-  ), [domain.maximum, domain.minimum, plotHeight]);
-  const zeroY = INSET_Y + domain.zeroRatio * (plotHeight - INSET_Y * 2);
+    INSET_Y + ((domain.maximum - value) / (domain.maximum - domain.minimum)) * (plotHeight - INSET_Y - insetBottom)
+  ), [domain.maximum, domain.minimum, insetBottom, plotHeight]);
+  const zeroY = INSET_Y + domain.zeroRatio * (plotHeight - INSET_Y - insetBottom);
   const ticks = useMemo(
     // A high or low close to "$0" gives way to it (walk 9 T1-11).
-    () => valueTicks(series.map((night) => night.cumulativePnl), yOf, { height: plotHeight, minGap: MARK_MIN_GAP }),
-    [plotHeight, series, yOf],
+    () => valueTicks(values, yOf, { height: plotHeight, minGap: MARK_MIN_GAP }),
+    [plotHeight, values, yOf],
   );
+  const lowInside = lowCrowds ? lowInsideIndex(values, ticks) : null;
   // Only the marks drawn now count: a low that is gone no longer widens it.
   const gutter = Math.max(GUTTER, ...ticks.map((tick) => (
     markWidths[tick.kind] ? Math.ceil(markWidths[tick.kind]) + GUTTER_GAP : 0
@@ -446,6 +463,24 @@ export function PerGamePnlChart({
             {valueMark(tick.kind, tick.value)}
           </Text>
         ))}
+        {/* The low that gave way to "$0" in the gutter, named under its dip
+            once the line has reached it (walk 17, T4 idea 6). */}
+        {lowInside !== null && width > 0 && xs[lowInside] !== undefined && xs[lowInside] <= revealX ? (() => {
+          const place = lowInsidePlace(xs[lowInside], LOW_INSIDE_BOX, gutter, width - INSET_RIGHT);
+          return (
+            <Text
+              maxFontSizeMultiplier={1.3}
+              style={[
+                styles.tickLabel,
+                styles.lowInside,
+                // Clear of the end dot (r 3.5) when the low is the latest point.
+                { left: place.left, textAlign: place.align, top: Math.min(yOf(values[lowInside]) + 4, plotHeight - 15) },
+              ]}
+            >
+              {valueMark('low', values[lowInside])}
+            </Text>
+          );
+        })() : null}
       </View>
       <View style={styles.axis}>
         {width > 0 ? axisLabels.map(({ index, left, align }) => (
@@ -648,6 +683,10 @@ const styles = StyleSheet.create({
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
     lineHeight: 14,
+  },
+  // The Low mark inside the plot: a box its words centre in, under the dip.
+  lowInside: {
+    width: LOW_INSIDE_BOX,
   },
   axis: {
     position: 'relative',

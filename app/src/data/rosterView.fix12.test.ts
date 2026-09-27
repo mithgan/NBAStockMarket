@@ -83,7 +83,7 @@ test('the score chart ends on the score when fees were paid around a night none 
   assert.equal(series.at(-1)!.change, -750);
   assert.equal(series[2].cumulativePnl, score + 750);
   // The step of fees never takes the last date: Oct 22 stays the axis's end.
-  assert.deepEqual(axisLabelIndexes(series, 360).map((index) => series[index].label), ['Oct 21', 'Oct 22']);
+  assert.deepEqual(axisLabelIndexes(series, 360).map((index) => series[index].label), ['Start', 'Oct 21', 'Oct 22']);
   // Unselected, the slider reads the end of the line: the score.
   assert.equal(chartValueText(series, null), `After Oct 22: fees -$750, score ${formatAt(score, 'fine', true)}`);
 });

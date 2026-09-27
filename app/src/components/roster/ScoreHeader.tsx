@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { humanDate } from '../../copy/terms';
-import { figuresKeptWithLabels, formatAt, heroFontSize, scoreArrangement, spokenRanks, WEEK_LABEL, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
+import { figuresKeptWithLabels, formatAt, heroFontSize, scoreArrangement, spokenRanks, WEEK_LABEL, whyBesideScore, type BreakdownPart, type PartPrecision } from '../../data/rosterView';
 import { colors, control, fonts, radius, space, type, weight } from '../../theme';
 import { headingLevel, Label, repeatSafe, visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -19,12 +19,6 @@ function StackRow({ label, children }: { label: string; children: ReactNode }) {
 
 /** The measured fit never takes the hero below this (a 200% zoom phone with text spacing). */
 const HERO_FIT_MIN = 18;
-/**
- * Stacked (phones): from this block width "vs last season" sits beside the score, in
- * the room the score leaves; narrower (200% zoom) it takes a line under it,
- * so the score keeps its size.
- */
-const WHY_BESIDE_MIN_ROOM = 280;
 
 /**
  * Web: keep the hero on one line at the largest size that fits its line,
@@ -161,7 +155,10 @@ export function ScoreHeader({
   const tight = arrangement === 'tight';
   const fold = started && Boolean(valueLine) && variant !== 'panel' && (!beside || tight);
   const heroMax = tight ? type.display : type.hero;
-  const whyBeside = width - 2 * space.lg >= WHY_BESIDE_MIN_ROOM;
+  // Stacked (phones): "vs last season ›" sits beside the score where the
+  // widest score and its one line fit; narrower (a 360px phone, 200% zoom)
+  // it takes a line under the score, so the score keeps its size (walk 17 T1-06).
+  const whyBeside = whyBesideScore(width - 2 * space.lg);
   const { box: heroBox, size: heroSize } = useHeroFit(Math.min(estimate, heroMax), scoreText, heroMax);
   // Before any game settles there is no week to report and no standing to
   // claim; the next game date is the one useful fact.
@@ -203,10 +200,9 @@ export function ScoreHeader({
   const weekSpoken = started && week !== null ? ` ${weekName.spoken.charAt(0).toUpperCase()}${weekName.spoken.slice(1)}: ${formatAt(week, 'fine', true)}.` : '';
   const summary = `${head}.${weekSpoken}`;
   // Named for what it opens (walk 16 T1-08): "vs last season", heard as
-  // "vs last season: compare with last season's numbers". Beside the score on a phone its
-  // words take two short lines, so the score keeps its room.
-  const whyTwoLines = !beside && whyBeside;
-  const whyWords = `${whyTwoLines ? 'vs last\nseason' : 'vs last season'} ${whyOpen ? '\u25B4' : '\u203A'}`;
+  // "vs last season: compare with last season's numbers". One line in
+  // sentence case, so it reads as one control, not a caption (walk 17 T1-06).
+  const whyWords = `vs last season ${whyOpen ? '\u25B4' : '\u203A'}`;
   const why = fold ? (
     <Pressable
       // Its visible words first, so speech input finds it by what it shows
@@ -218,7 +214,7 @@ export function ScoreHeader({
       onPress={repeatSafe(() => setWhyOpen((open) => !open))}
       style={({ pressed }) => [styles.why, beside ? styles.whyInRow : !whyBeside && styles.whyLine, pressed && styles.whyPressed]}
     >
-      <Text maxFontSizeMultiplier={1.3} style={[styles.whyText, whyTwoLines && styles.whyTextTwoLines]}>{whyWords}</Text>
+      <Text maxFontSizeMultiplier={1.3} style={styles.whyText}>{whyWords}</Text>
     </Pressable>
   ) : null;
   const hero = (
@@ -381,18 +377,14 @@ const styles = StyleSheet.create({
   whyPressed: {
     opacity: 0.72,
   },
+  // "vs last season ›": one line in sentence case, a control's words, never
+  // a caption's capitals (walk 17 T1-06). Its box keeps its words' width
+  // beside the score; only at 400% zoom, narrower than its words, do they wrap.
   whyText: {
     color: colors.text,
     fontFamily: fonts.display,
-    fontSize: type.label,
-    fontWeight: weight.black,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  // "VS LAST" over "SEASON ›", right-aligned beside the score.
-  whyTextTwoLines: {
-    textAlign: 'right',
-    lineHeight: 15,
+    fontSize: type.body,
+    fontWeight: weight.heavy,
   },
   heroColumn: {
     flexDirection: 'column',

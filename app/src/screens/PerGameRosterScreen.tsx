@@ -59,7 +59,6 @@ import {
   closedRows,
   closeQuestion,
   compactActionBeside,
-  earnLine,
   feeMoves,
   figureCaptions,
   formatAt,
@@ -71,6 +70,7 @@ import {
   rankLine,
   rosterRowView,
   rowLayout,
+  seasonActionFirst,
   shortEndsNext,
   shortsQuiet,
   slotLine,
@@ -122,11 +122,22 @@ function visitFlag(key: string): boolean {
   }
 }
 
-function setVisitFlag(key: string): void {
+function setVisitFlag(key: string, on = true): void {
   try {
-    if (Platform.OS === 'web') window.sessionStorage.setItem(key, '1');
+    if (Platform.OS !== 'web') return;
+    if (on) window.sessionStorage.setItem(key, '1');
+    else window.sessionStorage.removeItem(key);
   } catch {}
 }
+
+const CHART_WIDE_KEY = 'nba-stock-market:chart-full-width';
+
+/**
+ * Desktop: the Score by night chart's Full width / Narrow choice lasts the
+ * visit (walk 17 T2-N3), like the Market's side and sort: a tab switch, a
+ * new season or a restart (each a new page) opens it as it was left.
+ */
+let chartWideChoice = visitFlag(CHART_WIDE_KEY);
 
 /**
  * The welcome stays hidden for the rest of this visit once the player closes
@@ -879,8 +890,9 @@ export function PerGameRosterScreen({
   }, []);
   const onShorted = useCallback((playerId: string) => focusNewRow('short', playerId), [focusNewRow]);
   const onReadded = useCallback((playerId: string) => focusNewRow('long', playerId), [focusNewRow]);
-  // Desktop: the chart spans the Roster while "Full width" is on (walk 15 T2-02).
-  const [chartWide, setChartWide] = useState(false);
+  // Desktop: the chart spans the Roster while "Full width" is on (walk 15
+  // T2-02), kept for the visit (walk 17 T2-N3).
+  const [chartWide, setChartWide] = useState(chartWideChoice);
   // The night picked on the chart stays picked when Full width or Narrow
   // moves it (walk 16 T2-N4).
   const [chartPin, setChartPin] = useState<number | null>(null);
@@ -1172,7 +1184,7 @@ export function PerGameRosterScreen({
   };
   const opening = showWelcome ? (
     <WelcomeCard
-      earn={earnLine(bootstrap.ruleset.dividendDollarsPerNetPoint)}
+      dollarsPerNetPoint={bootstrap.ruleset.dividendDollarsPerNetPoint}
       feeDollars={fee}
       hasPlayers={active.length > 0}
       locked={rosterLocked}
@@ -1225,8 +1237,9 @@ export function PerGameRosterScreen({
       precision={precision}
       summary={season}
       // A short window: the way on sits under the final score, in the first
-      // view, never half under the notice strip (walk 13 T2-09).
-      actionFirst={shortWindow}
+      // view, never half under the notice strip (walk 13 T2-09), in every
+      // window under 720px tall (960x600, 1024x700; walk 17 T2-04).
+      actionFirst={seasonActionFirst(height)}
       valueLine={started ? picks?.text ?? null : null}
       variant={scoreVariant}
     />
@@ -1252,7 +1265,10 @@ export function PerGameRosterScreen({
         wide: chartWide,
         onToggle: () => {
           setChartFocus(true);
-          setChartWide((current) => !current);
+          const next = !chartWide;
+          chartWideChoice = next;
+          setVisitFlag(CHART_WIDE_KEY, next);
+          setChartWide(next);
         },
         focus: chartFocus,
         onFocused: onChartFocused,

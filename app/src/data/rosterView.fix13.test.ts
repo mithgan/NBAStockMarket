@@ -5,7 +5,6 @@ import {
   CHART_FIRST_MIN_HEIGHT,
   chartAfterLists,
   closeQuestion,
-  earnLine,
   SHORTS_LATER,
   splitParts,
   welcomeAgainLine,
@@ -32,11 +31,12 @@ test('walk 13 T1-04, T1-02: the welcome says there is no budget and why minutes 
     "Beat each player's price to score",
   ]);
   assert.equal(welcomeSteps('2025-10-28', true)[1], 'Add any players you like: no budget');
-  const details = welcomeDetails(earnLine(40_000), 250);
-  // The Rules' reason for minutes played.
-  assert.match(details, /minus misses, turnovers and minutes played, so he has to produce for his minutes\)/);
+  const details = welcomeDetails(40_000, 250).join(' ');
+  // The Rules' reason for minutes played stays in How scoring works, with
+  // the net-point formula (walk 17 T1-07).
+  assert.doesNotMatch(details, /minutes/);
   // Every earlier part is still there: the rate, below zero, the fee, the reload.
-  for (const part of [/\$40K a net point/, /below zero; you pay that too/, /Each add or drop costs \$250\./, /Reloading starts over\.$/]) assert.match(details, part);
+  for (const part of [/\$40K for each net point/, /below zero/, /\$250 for each add or drop\./, /Practice starts over if you reload\.$/]) assert.match(details, part);
   // Measured: up to 331 characters is seven lines at 320px (as before the
   // reason joined), so the roster still shows under the welcome at 320x640.
   assert.ok(details.length <= 331, `${details.length}`);

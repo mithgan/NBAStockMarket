@@ -103,7 +103,7 @@ test('walk 14 T2-03: one night on the chart names its start, so it reads as one 
   const now: NightPoint = { eventCursor: 9, cumulativePnl: -121_250, kind: 'now', date: null, label: 'Now', change: -250 };
   const withFees = [start, night, now];
   assert.deepEqual(axisLabelIndexes(withFees, 360).map((index) => withFees[index].label), ['Start', 'Oct 21']);
-  // Two nights and more keep their dates only (the first night sits near the start).
+  // Two nights and more name the start as well (walk 17 T2-03).
   const two = [start, night, { ...night, eventCursor: 7, date: '2025-10-22', label: 'Oct 22' }];
-  assert.deepEqual(axisLabelIndexes(two, 360).map((index) => two[index].label), ['Oct 21', 'Oct 22']);
+  assert.deepEqual(axisLabelIndexes(two, 360).map((index) => two[index].label), ['Start', 'Oct 21', 'Oct 22']);
 });

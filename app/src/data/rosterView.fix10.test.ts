@@ -5,7 +5,6 @@ import type { PerGamePosition, PerGameSettledResult } from '../api/contracts';
 import {
   againRows,
   closedSpoken,
-  earnLine,
   readingRevealTop,
   tipReading,
   valueMark,
@@ -73,11 +72,12 @@ test('walk 10 T1-01: the welcome leads with three short steps, the details in a 
     "Beat each player's price to score",
   ]);
   assert.equal(welcomeSteps(null)[1], 'Press +1 night to play the first games');
-  const details = welcomeDetails(earnLine(40_000), 250);
-  // The $40K a net point, below zero, the fee and the reload, in that order.
-  assert.match(details, /^Each game a player plays, you pay his price and collect his dividend: \$40K a net point/);
-  assert.match(details, /below zero; you pay that too\. Each add or drop costs \$250\. Reloading starts over\.$/);
-  assert.doesNotMatch(welcomeDetails(earnLine(40_000), 0), /costs/);
+  const details = welcomeDetails(40_000, 250).join(' ');
+  // The $40K a net point, below zero, the fee and the reload, in that order
+  // (walk 17 T1-07: three short lines, money first).
+  assert.match(details, /^\$40K for each net point\./);
+  assert.match(details, /below zero\. \$250 for each add or drop\. Practice starts over if you reload\.$/);
+  assert.doesNotMatch(welcomeDetails(40_000, 0).join(' '), /add or drop/);
 });
 
 test('walk 10 T4-07: Add again stays on a player\'s newest shown row when his last stint never played', () => {

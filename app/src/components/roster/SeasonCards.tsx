@@ -28,7 +28,7 @@ export function WelcomeCard({
   hasPlayers,
   nextGameDate,
   feeDollars,
-  earn,
+  dollarsPerNetPoint,
   locked = false,
   season = 1,
   onOpenMarket,
@@ -47,8 +47,8 @@ export function WelcomeCard({
    * the market"), as the frame's tinted +1 night already says.
    */
   locked?: boolean;
-  /** What a player earns, in one plain line (`earnLine`, walk 6 T1-02). */
-  earn: string;
+  /** What a net point pays (the ruleset's rate): the small print's first line (`welcomeDetails`). */
+  dollarsPerNetPoint: number | null | undefined;
   nextGameDate: string | null;
   feeDollars: number;
   onOpenMarket: () => void;
@@ -119,7 +119,12 @@ export function WelcomeCard({
               </View>
             ))}
           </View>
-          <Text style={styles.details}>{welcomeDetails(earn, feeDollars)}</Text>
+          {/* Three short lines, money first (walk 17 T1-07). */}
+          <View style={styles.details}>
+            {welcomeDetails(dollarsPerNetPoint, feeDollars).map((line) => (
+              <Text key={line} style={styles.detailsLine}>{line}</Text>
+            ))}
+          </View>
         </>
       )}
       <View style={[styles.actions, tiny && styles.actionsTiny]}>
@@ -343,7 +348,7 @@ export function SeasonCompleteCard({
             >
               <Text style={styles.finalLabel}>{line.label}</Text>
               {/* Name and total share the middle and wrap there, so the
-                  chevron keeps the row's end on a 195px screen too. */}
+                  chevron stays right after them on a 195px screen too. */}
               <View style={styles.playerFacts}>
                 <Text style={[styles.finalText, styles.playerName]}>{line.name}</Text>
                 <Text style={styles.finalText}>{line.total}</Text>
@@ -497,9 +502,12 @@ const styles = StyleSheet.create({
   actionTight: {
     paddingHorizontal: space.sm,
   },
-  // The second part: smaller and quieter than the steps.
+  // The second part: smaller and quieter than the steps, a line each.
   details: {
     marginTop: space.sm,
+    rowGap: 2,
+  },
+  detailsLine: {
     color: colors.muted,
     fontFamily: fonts.body,
     fontSize: type.caption,
@@ -598,8 +606,11 @@ const styles = StyleSheet.create({
     fontWeight: weight.heavy,
     fontVariant: ['tabular-nums'],
   },
-  // Best / Worst as a row button: full touch height, the chevron at its end.
+  // Best / Worst as a row button: full touch height, as wide as its words,
+  // the chevron right after the figure, so label, name, figure and chevron
+  // read as one control and its tint never spans the card (walk 17 T2-05).
   playerLine: {
+    alignSelf: 'flex-start',
     minHeight: control.height,
     flexWrap: 'nowrap',
     alignItems: 'center',
@@ -617,7 +628,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   playerFacts: {
-    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -628,8 +639,6 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   playerOpen: {
-    marginLeft: 'auto',
-    paddingLeft: space.sm,
     color: colors.muted,
     fontFamily: fonts.display,
     fontSize: type.value,
