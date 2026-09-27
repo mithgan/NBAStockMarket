@@ -335,3 +335,9 @@ test('a key press on Re-sort or "Show all" leaves focus on what now holds the li
   // A finger's tap leaves focus alone.
   assert.match(market, /if \(typeof document === 'undefined' \|\| pressedByPointer\(\)\) return;/);
 });
+
+test('"Back to <player>" in Results does what the browser\'s Back does (walk 18 T1-10)', () => {
+  // One reopen for both: over the screen his profile was open over, once.
+  assert.match(results, /setProfileReopen\(reopenHere\);/);
+  assert.match(results, /const backToProfile = useMemo\(\(\) => repeatSafe\(\(\) => \{\s+reopenHere\(\);\s+if \(returnsElsewhere\) setProfileReopen\(null\);/);
+});

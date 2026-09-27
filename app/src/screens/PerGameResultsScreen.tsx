@@ -1242,26 +1242,35 @@ export function PerGameResultsScreen() {
   const from = only?.from ?? null;
   const fromTab = only?.fromTab;
   const onlyPlayer = only?.playerId ?? null;
+  // True when his profile was open over another screen: Back goes there.
+  const returnsElsewhere = Boolean(fromTab && fromTab !== 'plays' && onlyPlayer);
+  const reopenHere = useCallback(() => {
+    // Opened over another screen (the Market, the Roster): "See his games"
+    // was one step, so Back returns there, with its scroll, side and sort,
+    // and his profile open again in the view it was in; the next Back
+    // closes it there (walk 16 T2-05). The switch waits for the frame's
+    // own history step for this Back to land first.
+    if (returnsElsewhere && from && fromTab && onlyPlayer) {
+      returnToProfile({ playerId: onlyPlayer, view: from, tab: fromTab });
+      setTimeout(() => openTab(fromTab, { focusScreen: false }), 0);
+      return true;
+    }
+    setProfileOpen(true);
+    return true;
+  }, [from, fromTab, onlyPlayer, returnsElsewhere]);
   useEffect(() => {
     if (!from) return undefined;
-    const reopenHere = () => {
-      // Opened over another screen (the Market, the Roster): "See his games"
-      // was one step, so Back returns there, with its scroll, side and sort,
-      // and his profile open again in the view it was in; the next Back
-      // closes it there (walk 16 T2-05). The switch waits for the frame's
-      // own history step for this Back to land first.
-      if (fromTab && fromTab !== 'plays' && onlyPlayer) {
-        returnToProfile({ playerId: onlyPlayer, view: from, tab: fromTab });
-        setTimeout(() => openTab(fromTab, { focusScreen: false }), 0);
-        return true;
-      }
-      setProfileOpen(true);
-      return true;
-    };
     setProfileReopen(reopenHere);
     return () => setProfileReopen(null);
-  }, [from, fromTab, onlyPlayer]);
-  const backToProfile = useMemo(() => repeatSafe(() => setProfileOpen(true)), []);
+  }, [from, reopenHere]);
+  // "Back to <player>" does what the browser's Back does: his profile again
+  // over the screen it was open over, so closing it lands where the trip
+  // began (walk 18 T1-10: it reopened him over Results, and × left the
+  // player on Results). Once, as Back does.
+  const backToProfile = useMemo(() => repeatSafe(() => {
+    reopenHere();
+    if (returnsElsewhere) setProfileReopen(null);
+  }), [reopenHere, returnsElsewhere]);
   // A day's moves render inside their fold, as one list (walk 3 T3-32).
   const visible = useMemo(() => (onlyId ? hisFeed(feed) : foldedFeed(feed)), [feed, onlyId]);
   // Which row the keyboard is on, for the list's drawing (FeedCell).
