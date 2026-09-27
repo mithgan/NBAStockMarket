@@ -2022,7 +2022,8 @@ const styles = StyleSheet.create({
   },
   // A best or worst night: a quiet row that brings its night up.
   soFarRow: {
-    minHeight: 36,
+    // A 44px target like every other control (the audit found 255x36).
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
