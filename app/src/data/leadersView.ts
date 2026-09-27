@@ -1,20 +1,12 @@
 /**
- * Where you stand on the leaderboard, in plain words: your rank, how far you
- * are from the rank above and from #1, or — when you lead — by how much.
- *
- * Everyone else is placed by their board row (`cumulativePnl`, the total
- * score since the season started at $0). You are placed by the score the
- * screen shows you: your account's own figure, the Roster's number. The
- * board ranks you as of the last settled games, so after a roster move its
- * row for you can lag; the rank, ties and gaps here never do, and
- * `boardLag` says how far behind the board's own figure is. Gaps use the
- * app's one money format (`money`: "$250", "$12.5K", "$1.06M"), so a $250
- * gap never reads "$0".
- *
- * Places are competition ranks: equal scores share the best place, and the
- * next score down takes the place after everyone above it ("1, 2, 2, 4").
+ * Production standings preserve the server's ranks and scores. Bootstrap
+ * contains only the top 50 plus the current user, so it cannot establish the
+ * total population or place the current user among unseen accounts.
+ * Practice supplies a complete board and can recompute its competition ranks
+ * from the account's latest score.
  */
 import type { PerGameLeaderboardRow } from '../api/contracts';
+import type { LeaderboardOptions } from './leaderboardContract';
 import { money, ordinalWords, signedMoneyCompact, spokenRanks } from '../copy/terms';
 
 export { ordinalWords, spokenRanks };
@@ -52,7 +44,7 @@ export interface BoardGap {
 
 export type Standing =
   | { kind: 'empty' }
-  | { kind: 'absent'; of: number }
+  | { kind: 'absent'; of: number | null }
   /**
    * Before the first games: every row is still $0, so nobody holds a place
    * yet. `score` is your own figure, which fees may already have moved.
@@ -60,11 +52,11 @@ export type Standing =
   | { kind: 'level'; of: number; score: number }
   | {
       kind: 'ranked';
-      /** The place you hold; in a tie, the best rank in it. */
+      /** Server rank, or a competition rank on the complete practice board. */
       rank: number;
-      /** Board size. */
-      of: number;
-      /** Your score: the account's figure when given, else the board's. Rank, ties and gaps use it. */
+      /** Full board size when known (practice); absent from the production contract. */
+      of: number | null;
+      /** Server board score; practice may substitute the latest account score. */
       score: number;
       /** The board's own figure for you, which can lag your score until the next games settle. */
       boardScore: number;
@@ -152,7 +144,7 @@ function gapTo(row: PerGameLeaderboardRow, score: number, rank = row.rank): Boar
 
 export interface BoardEntry {
   row: PerGameLeaderboardRow;
-  /** The score this row is placed and shown by: your account's for you, the board's for everyone else. */
+  /** The server score, or the latest account score on a complete practice board. */
   score: number;
   /** Its place: an exact tie shares the best place in it. */
   place: number;
@@ -177,11 +169,14 @@ export interface BoardEntry {
  */
 export function closeCallNotes(
   entries: ReadonlyArray<{ score: number; place: number }>,
+  adjacentRanksOnly = false,
 ): string[][] {
-  return entries.map(({ score }) => {
+  return entries.map(({ score, place }) => {
     const text = boardMoney(score);
-    const higher = entries.filter((other) => Math.round(other.score) > Math.round(score));
-    const lower = entries.filter((other) => Math.round(other.score) < Math.round(score));
+    const higher = entries.filter((other) => Math.round(other.score) > Math.round(score)
+      && (!adjacentRanksOnly || other.place === place - 1));
+    const lower = entries.filter((other) => Math.round(other.score) < Math.round(score)
+      && (!adjacentRanksOnly || other.place === place + 1));
     const notes: string[] = [];
     if (higher.length > 0) {
       const next = higher.reduce((best, other) => (other.score < best.score ? other : best));
@@ -196,17 +191,28 @@ export function closeCallNotes(
 }
 
 /**
- * The list under the standing. Everyone else sits where the board has them;
- * you sit where the score shown puts you (your account's, when given), so
- * the list never says "#1 … YOU $0" under a "#5 of 5" headline. Your row
- * keeps the board's own figure as a note while the two differ.
+ * The list under the standing preserves server ranks by default. With a
+ * complete practice board, the current account score can update your place;
+ * its older board figure remains a note while the two differ.
  */
 export function boardList(
   rows: readonly PerGameLeaderboardRow[],
   accountScore?: number,
   /** The fee a move costs: a gap of whole fees is explained by the standing, and the row shows one figure (walk 8 T3-06). */
   feeDollars?: number,
+  { complete = false }: LeaderboardOptions = {},
 ): BoardEntry[] {
+  if (!complete) {
+    const entries = sortBoard(rows).map((row) => ({
+      row,
+      score: row.cumulativePnl,
+      place: row.rank,
+      tied: false,
+      boardScore: null,
+    }));
+    const notes = closeCallNotes(entries, true);
+    return entries.map((entry, index) => ({ ...entry, closeCalls: notes[index] }));
+  }
   // A level board (before the first games) keeps everyone at $0 together,
   // you first and the rest A to Z: no order that reads as places.
   const level = boardIsLevel(rows);
@@ -233,18 +239,35 @@ export function boardList(
 }
 
 /**
- * Your standing among the other rows. Pass your account score to be placed by
- * it (the figure the screen shows); without it the board's own row for you is
- * used.
+ * Your server standing, with adjacent gaps only when those ranks are present.
+ * Complete practice boards can place you by the latest account score instead.
  */
 export function leaderStanding(
   rows: readonly PerGameLeaderboardRow[],
   accountScore?: number,
+  { complete = false }: LeaderboardOptions = {},
 ): Standing {
   const board = sortBoard(rows);
   if (board.length === 0) return { kind: 'empty' };
   const me = board.find((row) => row.isCurrentUser);
-  if (!me) return { kind: 'absent', of: board.length };
+  if (!me) return { kind: 'absent', of: complete ? board.length : null };
+  if (!complete) {
+    const above = board.find((row) => row.rank === me.rank - 1);
+    const first = board.find((row) => row.rank === 1);
+    const runnerUp = me.rank === 1 ? board.find((row) => row.rank === 2) : null;
+    return {
+      kind: 'ranked',
+      rank: me.rank,
+      of: null,
+      score: me.cumulativePnl,
+      boardScore: me.cumulativePnl,
+      tiedWith: [],
+      leading: me.rank === 1,
+      above: above ? gapTo(above, me.cumulativePnl) : null,
+      first: first && first !== me && first !== above ? gapTo(first, me.cumulativePnl) : null,
+      runnerUp: runnerUp ? gapTo(runnerUp, me.cumulativePnl) : null,
+    };
+  }
   // Nobody is ahead of anybody before the first games, whatever your fees
   // have already done to your own score: no "#5 of 5" on a level board.
   if (boardIsLevel(board)) return { kind: 'level', of: board.length, score: accountScore ?? me.cumulativePnl };
@@ -452,8 +475,8 @@ export function pastSeasonLines(seasons: readonly PastSeason[], finishedNow: Pas
 // Places read aloud (walk 6 T3-09, T3-07)
 
 /** Your place, said: "First of 5", "Tied for second of 5". */
-export function spokenPlace(rank: number, of: number, tied = false): string {
-  const place = `${ordinalWords(rank)} of ${of}`;
+export function spokenPlace(rank: number, of: number | null, tied = false): string {
+  const place = `${ordinalWords(rank)}${of === null ? '' : ` of ${of}`}`;
   return tied ? `Tied for ${place}` : `${place.charAt(0).toUpperCase()}${place.slice(1)}`;
 }
 

@@ -203,7 +203,7 @@ import {
   tierAfterSurnameKnown,
   tierOnGivenKnown,
 } from '../data/marketViewMemory';
-import type { ValueSummary } from '../data/perGameMetrics';
+import { positionGamePnl, type ValueSummary } from '../data/perGameMetrics';
 import { positionSlotHint } from '../data/perGameRules';
 import { splitPlayerName } from '../data/playerName';
 import { usePerGame } from '../state/PerGameContext';
@@ -1201,7 +1201,7 @@ function MarketRow({
         side,
         playerName: player.name,
         feeDollars: fee,
-        total: position.cumulativePnl,
+        total: positionGamePnl(position),
         // Left alone a short ends by itself on its last day, at no cost (walk 3 T1-N3).
         endsFreeAfter: position.expiresOn,
         priceNow: player.currentGameCost,

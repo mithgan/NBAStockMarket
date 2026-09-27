@@ -164,11 +164,11 @@ test('the score breakdown adds up by source, shorts and closed positions include
     ...overrides,
   });
   const positions = [
-    position({ positionId: 'a', cumulativePnl: 300_000 }),
-    position({ positionId: 'b', cumulativePnl: -50_000 }),
-    position({ positionId: 'c', side: 'short', cumulativePnl: 120_000 }),
-    position({ positionId: 'd', status: 'closed', cumulativePnl: -80_000 }),
-    position({ positionId: 'e', side: 'short', status: 'closed', cumulativePnl: 40_000 }),
+    position({ positionId: 'a', cumulativeGameCost: 100_000, cumulativeDividend: 400_000, cumulativePnl: 299_500 }),
+    position({ positionId: 'b', cumulativeGameCost: 100_000, cumulativeDividend: 50_000, cumulativePnl: -50_000 }),
+    position({ positionId: 'c', side: 'short', cumulativeGameCost: 200_000, cumulativeDividend: 80_000, cumulativePnl: 120_000 }),
+    position({ positionId: 'd', status: 'closed', cumulativeGameCost: 100_000, cumulativeDividend: 20_000, cumulativePnl: -80_000 }),
+    position({ positionId: 'e', side: 'short', status: 'closed', cumulativeGameCost: 100_000, cumulativeDividend: 60_000, cumulativePnl: 40_000 }),
   ];
   const fee = (amountDollars: number): PerGameLedgerEntry => ({
     eventCursor: 1, entryId: `f${amountDollars}`, positionId: 'a', playerId: 'p', gameId: null,
@@ -190,7 +190,8 @@ test('the score breakdown adds up by source, shorts and closed positions include
 test('season summary: final score, place by your own score, best and worst player, moves', () => {
   const position = (playerId: string, playerName: string, side: 'long' | 'short', cumulativePnl: number): PerGamePosition => ({
     positionId: `${playerId}-${side}-${cumulativePnl}`, playerId, playerName, side, status: 'closed', lockedGameCost: 100_000,
-    openedEventSequence: 1, closedEventSequence: 2, expiresOn: null, cumulativeGameCost: 0, cumulativeDividend: 0, cumulativePnl,
+    openedEventSequence: 1, closedEventSequence: 2, expiresOn: null, cumulativeGameCost: 2_000_000,
+    cumulativeDividend: 2_000_000 + (side === 'long' ? cumulativePnl : -cumulativePnl), cumulativePnl,
   });
   const fee = (id: string): PerGameLedgerEntry => ({
     eventCursor: 1, entryId: id, positionId: 'x', playerId: 'p', gameId: null, gameDate: null, resultRevision: null,
@@ -198,6 +199,7 @@ test('season summary: final score, place by your own score, best and worst playe
   });
   const summary = seasonSummary({
     score: 1_062_500,
+    completeLeaderboard: true,
     positions: [
       position('p1', 'Nikola Jokic', 'long', 1_600_000),
       position('p1', 'Nikola Jokic', 'long', -100_000),
@@ -206,9 +208,9 @@ test('season summary: final score, place by your own score, best and worst playe
     ],
     ledger: [fee('a'), fee('b'), fee('c')],
     leaderboard: [
-      { cumulativePnl: 2_000_000, isCurrentUser: false },
-      { cumulativePnl: 0, isCurrentUser: true },
-      { cumulativePnl: -5_000, isCurrentUser: false },
+      { rank: 1, cumulativePnl: 2_000_000, isCurrentUser: false },
+      { rank: 2, cumulativePnl: 0, isCurrentUser: true },
+      { rank: 3, cumulativePnl: -5_000, isCurrentUser: false },
     ],
   });
   assert.equal(summary.rank, 2);

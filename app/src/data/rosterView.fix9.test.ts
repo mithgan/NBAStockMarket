@@ -188,7 +188,7 @@ test('Page Up and Page Down on the score chart step a week by date (walk 9 T3-N1
 
 test('the chart heading keeps the room of its longest reading (walk 9 T1-03)', () => {
   // Oct 22 carries a fee since the night before: its reading adds "Fees -$250".
-  const series = [START, night('2025-10-21', -120_500, -120_500), night('2025-10-22', -161_250, -40_500), night('2025-10-23', -100_000, 61_250)];
+  const series = [START, night('2025-10-21', -120_500, -120_500), { ...night('2025-10-22', -161_250, -40_500), fees: -250 }, night('2025-10-23', -100_000, 61_250)];
   assert.equal(widestReading(series), 2);
   assert.equal(widestReading([START]), 0);
 });

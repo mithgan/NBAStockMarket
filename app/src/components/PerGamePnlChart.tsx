@@ -621,8 +621,9 @@ function Reading({ point, previous, stacked = false }: { point: NightPoint; prev
     <View style={[styles.reading, stacked && styles.readingStacked]}>
       <ReadingHead>{when}</ReadingHead>
       <View style={styles.readingFigures}>
-        {point.kind === 'night' ? figure('That night', point.change) : figure('Fees', point.change)}
+        {point.kind === 'night' ? figure('That night', point.change) : figure('Fees', point.fees ?? point.change)}
         {fees !== 0 ? figure('Fees', fees) : null}
+        {point.adjustments ? figure('Earlier games', point.adjustments) : null}
         {figure('Score', point.cumulativePnl)}
       </View>
     </View>

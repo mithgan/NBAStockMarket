@@ -3,7 +3,13 @@ import test from 'node:test';
 
 import type { PerGameLeaderboardRow } from '../api/contracts';
 import { money } from '../copy/terms';
-import { boardLag, boardList, closeCallNotes, feesOnly, lagLine, leaderStanding, levelOrder, ordinalWords, shownDollars, shownGap, sortBoard, spokenLagLine, spokenPlace, spokenRanks, standingLines, standingPlace, type Standing } from './leadersView';
+import { boardLag, boardList as serverBoardList, closeCallNotes, feesOnly, lagLine, leaderStanding as serverLeaderStanding, levelOrder, ordinalWords, shownDollars, shownGap, sortBoard, spokenLagLine, spokenPlace, spokenRanks, standingLines, standingPlace, type Standing } from './leadersView';
+
+// Existing cases exercise the complete practice board and its live score.
+const leaderStanding = (rows: readonly PerGameLeaderboardRow[], score?: number) =>
+  serverLeaderStanding(rows, score, { complete: true });
+const boardList = (rows: readonly PerGameLeaderboardRow[], score?: number, fee?: number) =>
+  serverBoardList(rows, score, fee, { complete: true });
 
 function board(scores: Array<[string, number, boolean?]>): PerGameLeaderboardRow[] {
   return scores.map(([displayName, cumulativePnl, isCurrentUser], index) => ({
@@ -438,4 +444,39 @@ test('the Leaders Score column reads one decimal for every K figure, You include
   assert.equal(columnMoney(0), '$0');
   // The standing block keeps the app's usual format.
   assert.equal(boardMoney(-622_000), '-$622K');
+});
+
+test('production top 50 plus current user preserves rank 312 and does not invent population or neighbors', () => {
+  const rows = board(Array.from({ length: 50 }, (_, i) => [`Trader ${i + 1}`, 100_000 - i * 1_000]));
+  rows.push({ rank: 312, entryId: 'me', displayName: 'You', cumulativePnl: -25_000, isCurrentUser: true });
+  const standing = ranked(serverLeaderStanding(rows, -25_250));
+  assert.equal(standing.rank, 312);
+  assert.equal(standing.of, null);
+  assert.equal(standing.score, -25_000, 'rank and score use the same server snapshot');
+  assert.equal(standing.above, null, 'rank 50 is not immediately above rank 312');
+  assert.equal(standing.first?.rank, 1);
+  assert.equal(standing.leading, false);
+  assert.equal(spokenPlace(standing.rank, standing.of), '312th');
+  const list = serverBoardList(rows, -25_250);
+  assert.equal(list.at(-1)?.place, 312);
+  assert.equal(list.at(-1)?.score, -25_000);
+  assert.deepEqual(list.map((entry) => entry.place), [...Array.from({ length: 50 }, (_, i) => i + 1), 312]);
+});
+
+test('production ranks stay authoritative for tied and zero scores', () => {
+  const rows = board([['Ava', 0], ['You', 0, true]]);
+  const standing = ranked(serverLeaderStanding(rows, -250));
+  assert.equal(standing.rank, 2);
+  assert.equal(standing.of, null);
+  assert.deepEqual(standing.tiedWith, []);
+  assert.deepEqual(serverBoardList(rows).map((entry) => [entry.place, entry.tied]), [[1, false], [2, false]]);
+});
+
+test('production close-call notes do not imply adjacency across missing ranks', () => {
+  const rows = board([['Ava', 1_000_001], ['You', 1_000_000, true]]);
+  rows[1].rank = 312;
+  assert.deepEqual(serverBoardList(rows).map((entry) => entry.closeCalls), [[], []]);
+  assert.equal(ranked(serverLeaderStanding(rows)).above, null);
+  const adjacent = board([['Ava', 1_000_001], ['You', 1_000_000, true]]);
+  assert.deepEqual(serverBoardList(adjacent).map((entry) => entry.closeCalls), [['$1 ahead of #2'], ['$1 behind #1']]);
 });

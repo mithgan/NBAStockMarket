@@ -23,6 +23,7 @@ import {
   hasNights,
   nearestIndex,
   nightlySeries,
+  nightReadingText,
   placeAxisLabels,
   rankLine,
   rosterRowView,
@@ -250,6 +251,33 @@ test('a correction posted later moves the night it was posted, not an old one', 
   assert.deepEqual(series.map((point) => point.label), ['Start', 'Oct 21', 'Oct 22']);
   assert.equal(series[1].cumulativePnl, 145_000);
   assert.equal(series[2].cumulativePnl, 145_000 - 40_000 - 20_000);
+  assert.equal(series[1].change, 145_000);
+  assert.equal(series[2].change, -40_000);
+  assert.equal(series[1].fees, 0);
+  assert.equal(series[2].fees, 0);
+  assert.equal(series[2].adjustments, -20_000);
+  assert.doesNotMatch(nightReadingText(series[1], series[0]), /fees/);
+  assert.equal(nightReadingText(series[2], series[1]), 'Wed, Oct 22: that night -$40K, earlier games -$20K, score +$85K');
+});
+
+test('actual fees stay distinct from a late correction and subsequent nights', () => {
+  cursor = 0;
+  const entries = [
+    entry({ kind: 'open_fee' }),
+    ...game('2025-10-21', 'p1', 100_000, 245_000),
+    ...game('2025-10-22', 'p1', 100_000, 60_000),
+    entry({ kind: 'drop_fee' }),
+    entry({ gameId: 'p1-2025-10-21', gameDate: '2025-10-21', resultRevision: 2,
+      kind: 'dividend_correction', amountDollars: -20_000 }),
+    ...game('2025-10-24', 'p2', 100_000, 110_000),
+    entry({ kind: 'open_fee', positionId: 'p2' }),
+  ];
+  const series = nightlySeries(buildPnlSeries(entries), entries);
+  assert.deepEqual(series.slice(1).map(({ fees, adjustments }) => [fees, adjustments]), [
+    [-250, 0], [-250, -20_000], [0, 0], [-250, 0],
+  ]);
+  assert.equal(series.at(-1)!.cumulativePnl, entries.reduce((sum, row) => sum + row.amountDollars, 0));
+  assert.match(nightReadingText(series[2], series[1]), /fees -\$250, earlier games -\$20K/);
 });
 
 test('fees alone draw no night, so the chart shows its $0 start instead', () => {
@@ -319,10 +347,10 @@ test('rows reflow under 330 CSS px or with very large text, and read as a table 
 
 test('the breakdown reads by source, adds up to the score and names Other only when needed', () => {
   const positions = [
-    position({ positionId: 'l1', side: 'long', cumulativePnl: 1_240_000 }),
-    position({ positionId: 'l2', side: 'long', cumulativePnl: -300_000 }),
-    position({ positionId: 's1', side: 'short', cumulativePnl: 345_000 }),
-    position({ positionId: 'c1', side: 'short', status: 'closed', cumulativePnl: 579_300 }),
+    position({ positionId: 'l1', side: 'long', cumulativeDividend: 1_240_000, cumulativePnl: 1_239_750 }),
+    position({ positionId: 'l2', side: 'long', cumulativeGameCost: 300_000, cumulativePnl: -300_250 }),
+    position({ positionId: 's1', side: 'short', cumulativeGameCost: 345_000, cumulativePnl: 344_750 }),
+    position({ positionId: 'c1', side: 'short', status: 'closed', cumulativeGameCost: 579_300, cumulativePnl: 579_300 }),
   ];
   cursor = 0;
   const ledger = [entry({ kind: 'open_fee' }), entry({ kind: 'drop_fee' }), entry({ kind: 'open_fee' })];
@@ -348,9 +376,9 @@ test('closed rows keep dropped players and ended shorts, newest first, with how 
   ];
   const rows = closedRows([
     position({ positionId: 'active', status: 'active' }),
-    position({ positionId: 'expired', playerName: 'Tyrese Maxey', side: 'short', status: 'closed', closedEventSequence: 5, expiresOn: '2025-10-28', cumulativePnl: 345_000 }),
-    position({ positionId: 'dropped', playerName: 'Nikola Jokic', status: 'closed', closedEventSequence: 9, cumulativePnl: 1_632_000 }),
-    position({ positionId: 'closedShort', playerName: 'Scottie Barnes', side: 'short', status: 'closed', closedEventSequence: 3, expiresOn: '2025-10-28', cumulativePnl: -194_000 }),
+    position({ positionId: 'expired', playerName: 'Tyrese Maxey', side: 'short', status: 'closed', closedEventSequence: 5, expiresOn: '2025-10-28', cumulativeGameCost: 345_000, cumulativePnl: 344_750 }),
+    position({ positionId: 'dropped', playerName: 'Nikola Jokic', status: 'closed', closedEventSequence: 9, cumulativeDividend: 1_632_000, cumulativePnl: 1_631_500 }),
+    position({ positionId: 'closedShort', playerName: 'Scottie Barnes', side: 'short', status: 'closed', closedEventSequence: 3, expiresOn: '2025-10-28', cumulativeDividend: 194_000, cumulativePnl: -194_500 }),
     position({ positionId: 'unplayed', playerName: 'Derrick White', status: 'closed', closedEventSequence: 1 }),
   ], ledger, [
     result({ positionId: 'dropped', gameId: 'a', gameDate: '2025-11-03' }),
@@ -513,7 +541,15 @@ test('value against results compares like with like: last season beside what the
   // The made half reconciles with the score: the positions' results plus fees.
   const breakdown = scoreBreakdown(
     -190_000 - 1_250,
-    positions.map((row) => ({ ...row, cumulativePnl: games.filter((game) => game.positionId === row.positionId).reduce((sum, game) => sum + (game.netPnl ?? 0), 0) })),
+    positions.map((row) => {
+      const played = games.filter((game) => game.positionId === row.positionId);
+      return {
+        ...row,
+        cumulativePnl: played.reduce((sum, game) => sum + (game.netPnl ?? 0), 0),
+        cumulativeGameCost: played.reduce((sum, game) => sum + game.lockedGameCost, 0),
+        cumulativeDividend: played.reduce((sum, game) => sum + (game.dividendDollars ?? 0), 0),
+      };
+    }),
     [entry({ kind: 'open_fee', amountDollars: -1_250 })],
   );
   assert.equal(breakdown.roster + breakdown.shorts + breakdown.closed, value.soFar);

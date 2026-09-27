@@ -51,7 +51,7 @@ import {
 } from '../copy/terms';
 import { chromeFolded, keepTogether, practiceProgress, resultSpan } from '../data/chromeView';
 import { isSeasonOver, waitingActionName } from '../data/marketView';
-import { earningsBetween, scoreBreakdown, seasonSummary } from '../data/perGameMetrics';
+import { earningsBetween, positionGamePnl, scoreBreakdown, seasonSummary } from '../data/perGameMetrics';
 import {
   againRows,
   breakdownParts,
@@ -108,7 +108,7 @@ const NARROW_LIST_MAX_WIDTH = 380;
 const WELCOME_HIDDEN_KEY = 'nba-stock-market:welcome-hidden';
 /** A list's rows as its exact line names them, each by the Total it shows (walk 16 T1-05). */
 function sectionFigures(positions: readonly PerGamePosition[]) {
-  return positions.map((position) => ({ name: position.playerName, value: position.cumulativePnl }));
+  return positions.map((position) => ({ name: position.playerName, value: positionGamePnl(position) }));
 }
 
 const TIP_DONE_KEY = 'nba-stock-market:first-night-tip-done';
@@ -361,11 +361,11 @@ function PositionRow({
     view.tag.label,
     // The tag already says "No games yet" when he has none.
     view.games || null,
-    `total ${signedMoney(position.cumulativePnl)}`,
+    `total ${signedMoney(positionGamePnl(position))}`,
     // A per-game figure that is the total's money is heard as the total (walk 15 T1-04).
-    view.summary.avgNet === null ? null : `profit ${formatAt(view.summary.avgNet, perGamePrecision(view.summary.avgNet, position.cumulativePnl), true)} a game`,
-    `${short ? 'credited' : 'price'} ${formatAt(position.lockedGameCost, perGamePrecision(position.lockedGameCost, position.cumulativePnl), false)} a game${priceMoved ? `, now ${moneyCompact(marketPrice as number)}` : ''}`,
-    view.summary.avgDividend === null ? null : `dividend ${formatAt(view.summary.avgDividend, perGamePrecision(view.summary.avgDividend, position.cumulativePnl), false)} a game`,
+    view.summary.avgNet === null ? null : `profit ${formatAt(view.summary.avgNet, perGamePrecision(view.summary.avgNet, positionGamePnl(position)), true)} a game`,
+    `${short ? 'credited' : 'price'} ${formatAt(position.lockedGameCost, perGamePrecision(position.lockedGameCost, positionGamePnl(position)), false)} a game${priceMoved ? `, now ${moneyCompact(marketPrice as number)}` : ''}`,
+    view.summary.avgDividend === null ? null : `dividend ${formatAt(view.summary.avgDividend, perGamePrecision(view.summary.avgDividend, positionGamePnl(position)), false)} a game`,
     belowZero ? belowZero.replace(/\.$/, '') : null,
     view.expiry ? view.expiry.replace(/ · /g, ', ') : null,
     // The season's sums, last and short: what the total is made of.
@@ -406,7 +406,7 @@ function PositionRow({
     price: position.lockedGameCost,
     dividend: view.summary.avgDividend,
     net: view.summary.avgNet,
-    total: position.cumulativePnl,
+    total: positionGamePnl(position),
     now: marketPrice,
     over: seasonOver,
   };
@@ -484,7 +484,7 @@ function PositionRow({
         side: position.side,
         playerName: position.playerName,
         feeDollars: fee,
-        total: position.cumulativePnl,
+        total: positionGamePnl(position),
         // Left alone a short ends by itself on its last day, at no cost: the
         // question says so whenever it is asked (walk 3 T1-N3).
         endsFreeAfter: position.expiresOn,
@@ -798,6 +798,7 @@ export function PerGameRosterScreen({
       positions: bootstrap?.positions ?? [],
       ledger: bootstrap?.ledger.items ?? [],
       leaderboard: bootstrap?.leaderboard ?? [],
+      completeLeaderboard: isMockActive(),
     }),
     [bootstrap?.account.cumulativePnl, bootstrap?.leaderboard, bootstrap?.ledger.items, bootstrap?.positions],
   );

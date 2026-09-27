@@ -161,7 +161,7 @@ function StandingBlock({
           <View style={styles.placeLine}>
             {tied ? <Text style={styles.tiedWord}>Tied for</Text> : null}
             <Text style={styles.place}>#{standing.rank}</Text>
-            <Text style={styles.of}>of {standing.of}</Text>
+            {standing.of !== null ? <Text style={styles.of}>of {standing.of}</Text> : null}
           </View>
           <View style={[styles.scoreBlock, compact && styles.scoreBlockCompact]}>
             <NetMoney format={boardMoney} size="title" value={standing.score} />
@@ -287,14 +287,14 @@ export function PerGameLeaderboardScreen() {
   const compact = fontScale > 1.2 || width < STACK_MAX_WIDTH;
   // Desktop, and a phone in landscape: your standing in a side column beside the board.
   const wide = width >= DESKTOP_MIN_WIDTH || (width >= SHORT_SPLIT_MIN_WIDTH && height < SHORT_MAX_HEIGHT);
-  // Ranked on each row's cumulativePnl: the total score since the season began at $0.
+  const completeBoard = isMockActive();
+  // Production rows retain their server rank; practice supplies its full board.
   const rows = sortBoard(bootstrap.leaderboard);
-  // You are placed by your account score, the figure shown; the others by their rows.
-  const standing = leaderStanding(rows, bootstrap.account.cumulativePnl);
+  // Only practice can recalculate your place from the complete set of rivals.
+  const standing = leaderStanding(rows, bootstrap.account.cumulativePnl, { complete: completeBoard });
   const level = standing.kind === 'level';
-  // The list places you by the same score, with the board's figure as a note while it lags.
-  // A gap of whole fees is said once, in the standing, and the row shows one figure.
-  const list = boardList(rows, bootstrap.account.cumulativePnl, bootstrap.ruleset.transactionFeeDollars);
+  // The list and standing use the same rank/score policy.
+  const list = boardList(rows, bootstrap.account.cumulativePnl, bootstrap.ruleset.transactionFeeDollars, { complete: completeBoard });
   // Practice fills the board with computer rivals: say so once, quietly.
   const practiceRivals = isMockActive() && rows.some((row) => !row.isCurrentUser);
   // The Roster's rule: practice ends on its last day, a live season when no games are left.

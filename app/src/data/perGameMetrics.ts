@@ -12,11 +12,13 @@
  */
 import type {
   PerGameLedgerEntry,
+  PerGameLeaderboardRow,
   PerGameMarketPlayer,
   PerGamePosition,
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
+import { leaderboardPlace } from './leaderboardContract';
 
 /** The latest revision of each (position, game), oldest game first. */
 export function currentResults(
@@ -261,8 +263,20 @@ export function recentEarnings(
 
 const FEE_KINDS = new Set(['open_fee', 'drop_fee', 'fee', 'penalty']);
 
+/**
+ * All settled-game earnings for a position, excluding transaction fees.
+ * Production cumulativePnl already includes fees; cost/dividend aggregates
+ * contain only games and remain complete when the ledger is paginated.
+ */
+export function positionGamePnl(
+  position: Pick<PerGamePosition, 'side' | 'cumulativeGameCost' | 'cumulativeDividend'>,
+): number {
+  const longPnl = position.cumulativeDividend - position.cumulativeGameCost;
+  return position.side === 'long' ? longPnl : -longPnl;
+}
+
 export interface ScoreBreakdown {
-  /** Lifetime result of the players on your roster now. */
+  /** Lifetime game earnings of the players on your roster now, before fees. */
   roster: number;
   /** Lifetime result of your open shorts. */
   shorts: number;
@@ -295,11 +309,12 @@ export function scoreBreakdown(
   let closed = 0;
   let closedCount = 0;
   for (const position of positions) {
+    const gamePnl = positionGamePnl(position);
     if (position.status === 'active') {
-      if (position.side === 'long') roster += position.cumulativePnl;
-      else shorts += position.cumulativePnl;
+      if (position.side === 'long') roster += gamePnl;
+      else shorts += gamePnl;
     } else {
-      closed += position.cumulativePnl;
+      closed += gamePnl;
       closedCount += 1;
     }
   }
@@ -313,8 +328,9 @@ export function scoreBreakdown(
 
 export interface SeasonSummary {
   finalScore: number;
-  /** Your place by your own score among the board's other rows (1-based). */
+  /** Server rank, or score-derived place on a complete practice board. */
   rank: number | null;
+  /** Population is unknown for the server's top-50-plus-current-user slice. */
   of: number | null;
   best: { name: string; total: number } | null;
   worst: { name: string; total: number } | null;
@@ -332,23 +348,24 @@ export function seasonSummary(input: {
   score: number;
   positions: readonly PerGamePosition[];
   ledger: readonly PerGameLedgerEntry[];
-  leaderboard: readonly { cumulativePnl: number; isCurrentUser: boolean }[];
+  leaderboard: readonly Pick<PerGameLeaderboardRow, 'rank' | 'cumulativePnl' | 'isCurrentUser'>[];
+  /** Only practice explicitly provides every account on its board. */
+  completeLeaderboard?: boolean;
 }): SeasonSummary {
   const byPlayer = new Map<string, { name: string; total: number }>();
   let shortsMade = 0;
   for (const position of input.positions) {
     const entry = byPlayer.get(position.playerId) ?? { name: position.playerName, total: 0 };
-    entry.total += position.cumulativePnl;
+    entry.total += positionGamePnl(position);
     byPlayer.set(position.playerId, entry);
     if (position.side === 'short') shortsMade += 1;
   }
   const players = [...byPlayer.values()].sort((left, right) => right.total - left.total);
-  const others = input.leaderboard.filter((row) => !row.isCurrentUser);
-  const hasBoard = input.leaderboard.length > 0;
+  const place = leaderboardPlace(input.leaderboard, input.score, { complete: input.completeLeaderboard });
   return {
     finalScore: input.score,
-    rank: hasBoard ? 1 + others.filter((row) => row.cumulativePnl > input.score).length : null,
-    of: hasBoard ? others.length + 1 : null,
+    rank: place.rank,
+    of: place.of,
     best: players.length > 0 && players[0].total > 0 ? players[0] : null,
     worst: players.length > 0 && players[players.length - 1].total < 0 ? players[players.length - 1] : null,
     moves: input.ledger.filter((entry) => FEE_KINDS.has(entry.kind)).length,

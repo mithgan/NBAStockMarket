@@ -35,6 +35,7 @@ import type { TagTone } from '../ui/kit';
 import {
   currentResults,
   entryDay,
+  positionGamePnl,
   positionValue,
   valueVerdict,
   type ScoreBreakdown,
@@ -649,11 +650,11 @@ export function closedRows(
         playerId: position.playerId,
         name: position.playerName,
         side: position.side,
-        total: position.cumulativePnl,
+        total: positionGamePnl(position),
         games: value.games,
         how,
         endedByTerm: position.side === 'short' && !byYou && Boolean(position.expiresOn),
-        unplayed: value.games === 0 && Math.round(position.cumulativePnl) === 0,
+        unplayed: value.games === 0 && Math.round(positionGamePnl(position)) === 0,
       };
     });
 }
@@ -1306,10 +1307,15 @@ export interface NightPoint {
   /** "Start", "Nov 5" or "Now". */
   label: string;
   /**
-   * What that night's games made, from the ledger by game date — the same
-   * sum the score header calls "Last night". For `now`, the fees since.
+   * What that night's games made when this balance was recorded. Later
+   * corrections to earlier nights appear in adjustments. For `now`, the
+   * balance change since the last night.
    */
   change: number;
+  /** Actual fee entries booked between this point and the preceding point. */
+  fees?: number;
+  /** Changes to earlier games, including corrections posted after their night. */
+  adjustments?: number;
 }
 
 /**
@@ -1328,11 +1334,9 @@ export function nightlySeries(
   entries: readonly PerGameLedgerEntry[],
 ): NightPoint[] {
   const dateByCursor = new Map<number, string>();
-  const changeByDate = new Map<string, number>();
   for (const entry of entries) {
     if (!entry.gameDate) continue;
     dateByCursor.set(entry.eventCursor, entry.gameDate);
-    changeByDate.set(entry.gameDate, (changeByDate.get(entry.gameDate) ?? 0) + entry.amountDollars);
   }
 
   const series: NightPoint[] = [{
@@ -1354,7 +1358,7 @@ export function nightlySeries(
         kind: 'night',
         date,
         label: humanDate(date),
-        change: changeByDate.get(date) ?? 0,
+        change: 0,
       };
       series.push(night);
     } else {
@@ -1379,6 +1383,22 @@ export function nightlySeries(
       label: 'Now',
       change: last.cumulativePnl - plotted.cumulativePnl,
     });
+  }
+  // Keep the chart chronological. A correction to Oct 21 posted after Oct 22
+  // changes the later balance; it must not manufacture a fee on either night.
+  const feeKinds = new Set(['open_fee', 'drop_fee', 'fee', 'penalty']);
+  const ordered = [...entries].sort((left, right) => left.eventCursor - right.eventCursor);
+  let entryIndex = 0;
+  for (const point of series.slice(1)) {
+    point.fees = 0;
+    point.adjustments = 0;
+    if (point.kind === 'night') point.change = 0;
+    while (entryIndex < ordered.length && ordered[entryIndex].eventCursor <= point.eventCursor) {
+      const entry = ordered[entryIndex++];
+      if (feeKinds.has(entry.kind)) point.fees += entry.amountDollars;
+      else if (point.kind === 'night' && entry.gameDate === point.date) point.change += entry.amountDollars;
+      else point.adjustments += entry.amountDollars;
+    }
   }
   return series;
 }
@@ -1470,7 +1490,7 @@ export function chartSummary(series: readonly NightPoint[]): string {
   const score = (value: number) => formatAt(value, 'fine', true);
   // The line's short last step is the fees paid since the last night: said
   // once, so the "now" low is heard for what it is (walk 12 T3-08).
-  const since = end.kind === 'now' ? ` ${sinceWords(end.change, nights.at(-1)!.label)}` : '';
+  const since = end.kind === 'now' ? ` ${sinceWords(end.change, nights.at(-1)!.label, (end.adjustments ?? 0) === 0)}` : '';
   return twoDecimalMillions(`Your score by night ${span}: started at $0, now ${score(end.cumulativePnl)}${since}. `
     + `Best ${score(best.cumulativePnl)} ${best.kind === 'now' ? 'now' : `after ${best.label}`}, `
     + `lowest ${score(worst.cumulativePnl)} ${worst.kind === 'now' ? 'now' : `after ${worst.label}`}.`);
@@ -1497,9 +1517,9 @@ export function holdShift({ top, previousTop, height, viewTop, viewBottom, scrol
 }
 
 /** "after $250 in fees since Oct 22": what moved the score since the last night. */
-function sinceWords(change: number, lastNight: string): string {
+function sinceWords(change: number, lastNight: string, feesOnly = true): string {
   const amount = formatAt(Math.abs(change), 'fine', false);
-  return change < 0 ? `after ${amount} in fees since ${lastNight}` : `with ${formatAt(change, 'fine', true)} since ${lastNight}`;
+  return change < 0 && feesOnly ? `after ${amount} in fees since ${lastNight}` : `with ${formatAt(change, 'fine', true)} since ${lastNight}`;
 }
 
 /**
@@ -1534,9 +1554,7 @@ export function plotXs(series: readonly NightPoint[], left: number, span: number
  */
 export function nightReadingParts(point: NightPoint, previous: NightPoint | undefined): { when: string; fees: number } {
   const when = point.kind === 'night' && point.date ? humanDay(point.date) : `After ${previous?.label ?? 'the last night'}`;
-  const fees = point.kind === 'night' && previous
-    ? Math.round(point.cumulativePnl - previous.cumulativePnl - point.change)
-    : 0;
+  const fees = point.kind === 'night' ? (point.fees ?? 0) : 0;
   return { when, fees };
 }
 
@@ -1545,9 +1563,11 @@ export function nightReadingText(point: NightPoint, previous: NightPoint | undef
   const fine = (amount: number) => formatAt(amount, 'fine', true);
   if (point.kind === 'start') return 'Start: everyone begins at $0';
   const { when, fees } = nightReadingParts(point, previous);
-  if (point.kind !== 'night') return `${when}: fees ${fine(point.change)}, score ${fine(point.cumulativePnl)}`;
+  const adjustments = point.adjustments ?? 0;
+  const adjustmentText = adjustments !== 0 ? `, earlier games ${fine(adjustments)}` : '';
+  if (point.kind !== 'night') return `${when}: fees ${fine(point.fees ?? point.change)}${adjustmentText}, score ${fine(point.cumulativePnl)}`;
   const feeText = fees !== 0 ? `, fees ${fine(fees)}` : '';
-  return `${when}: that night ${fine(point.change)}${feeText}, score ${fine(point.cumulativePnl)}`;
+  return `${when}: that night ${fine(point.change)}${feeText}${adjustmentText}, score ${fine(point.cumulativePnl)}`;
 }
 
 /**
@@ -1732,6 +1752,7 @@ export function widestReading(series: readonly NightPoint[]): number {
       const { when, fees } = nightReadingParts(point, series[index - 1]);
       length = when.length + 'That night'.length + fine(point.change)
         + (fees !== 0 ? 'Fees'.length + fine(fees) : 0)
+        + (point.adjustments ? 'Earlier games'.length + fine(point.adjustments) : 0)
         + 'Score'.length + fine(point.cumulativePnl);
     }
     if (length > room) {

@@ -270,7 +270,9 @@ export function SeasonCompleteCard({
    */
   onOpenPlayer?: (name: string) => void;
 }) {
-  const place = summary.rank !== null && summary.of !== null ? `#${summary.rank} of ${summary.of}` : null;
+  const place = summary.rank !== null
+    ? `#${summary.rank}${summary.of === null ? '' : ` of ${summary.of}`}`
+    : null;
   const split = parts && parts.length > 0 ? parts : null;
   const players = [
     summary.best ? { label: 'Best', name: summary.best.name, total: fineSigned(summary.best.total) } : null,
