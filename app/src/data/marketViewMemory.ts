@@ -69,8 +69,26 @@ let memory: MarketMemory = { ...FRESH };
  */
 const tierAfterSurnameAt = new Set<string>();
 
-export function tierAfterSurnameKey(width: number, fontScale: number): string {
-  return `${Math.round(width)}|${fontScale}`;
+export function tierAfterSurnameKey(width: number, fontScale: number, spacing = ''): string {
+  // A reader's text spacing (letter, word and line spacing forced by a style
+  // sheet) lays the rows out anew: its decisions are its own (walk 18 T3-10).
+  return spacing ? `${Math.round(width)}|${fontScale}|${spacing}` : `${Math.round(width)}|${fontScale}`;
+}
+
+/**
+ * Sizes where a surname pushed the tier after it onto a line of its own
+ * ("Gilgeous-Alexander" / "STAR ›" with a reader's text spacing at 375, walk
+ * 18 T3-10): every row then names its tier beside the given name, as 390px
+ * does, and a given name too long for its line wraps rather than being cut.
+ */
+const tierOnGivenAt = new Set<string>();
+
+export function tierOnGivenKnown(key: string): boolean {
+  return tierOnGivenAt.has(key);
+}
+
+export function rememberTierOnGiven(key: string): void {
+  tierOnGivenAt.add(key);
 }
 
 export function tierAfterSurnameKnown(key: string): boolean {

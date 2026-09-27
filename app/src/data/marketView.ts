@@ -115,8 +115,29 @@ export function valueColumnExplanation(side: PerGamePositionSide): string {
  * yours, walk 6 T2-14: "yours · now $387.5K" wrapped at 768px), or that the
  * price is locked.
  */
-export function heldPriceCaption(lockedGameCost: number, currentGameCost: number): string {
-  return lockedGameCost !== currentGameCost ? `now ${money(currentGameCost)}` : 'yours, locked in';
+export function heldPriceCaption(lockedGameCost: number, currentGameCost: number, seasonOver = false): string {
+  // At season end the market is closed: his last price, as his profile says
+  // it (walk 18 T2-02: "now $439.5K" read as a price still moving).
+  if (lockedGameCost === currentGameCost) return 'yours, locked in';
+  return seasonOver ? `last ${money(currentGameCost)}` : `now ${money(currentGameCost)}`;
+}
+
+/**
+ * Today's price on a held row, or his last one once the season is over (walk
+ * 18 T2-02): "Price now $418.2K" / "Last price $439.5K".
+ */
+export function heldNowWords(currentGameCost: number, seasonOver: boolean, lead = false): string {
+  const words = seasonOver ? `last price ${money(currentGameCost)}` : `price now ${money(currentGameCost)}`;
+  return lead ? `${words[0].toUpperCase()}${words.slice(1)}` : words;
+}
+
+/**
+ * The narrow table's chip on a held Roster-side row: "Yours" while the season
+ * runs, "Held" once it is over (walk 18 T2-17: a present-tense "YOURS" beside
+ * "The season is over"); the row's name says "On your roster this season".
+ */
+export function narrowHeldChip(seasonOver: boolean): string {
+  return seasonOver ? 'Held' : 'Yours';
 }
 
 /** Under half a thousand either way reads as even, matching valueVerdict. */
@@ -822,10 +843,11 @@ export function heldValueLine(
   player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
   side: PerGamePositionSide,
   lockedGameCost: number,
+  seasonOver = false,
 ): { edge: number | null; value: string; now: string; tone: SignalTone } {
   const edge = player.priorSeasonValuePerGame === null ? null : rowValueEdge(player, side, { lockedGameCost });
   // "price now", never a bare "now $418.5K" (walk 13 T1-05: it had no noun).
-  const now = `price now ${money(player.currentGameCost)}`;
+  const now = heldNowWords(player.currentGameCost, seasonOver);
   if (edge === null) return { edge, value: 'No last season', now, tone: 'none' };
   const tone = netTone(edge);
   // Named Value, the word the list sorts by and the Market defines (walk 13
@@ -850,8 +872,9 @@ export function heldPlayedWordings(
   player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
   side: PerGamePositionSide,
   lockedGameCost: number,
+  seasonOver = false,
 ): string[] {
-  const now = `Price now ${money(player.currentGameCost)}`;
+  const now = heldNowWords(player.currentGameCost, seasonOver, true);
   const edge = player.priorSeasonValuePerGame === null ? null : rowValueEdge(player, side, { lockedGameCost });
   // Once he has played for you, today's price is the line's lead (walk 14
   // T1-09): where both halves do not fit, it is today's price that stays.
@@ -885,6 +908,19 @@ export function heldDropsAverage(ownStep: number, hasAverage: boolean): boolean 
  */
 export function heldStepFloor(needed: readonly number[]): number {
   return needed.reduce((most, step) => Math.max(most, step), 0);
+}
+
+/**
+ * The height every phone row's words take in a list: the tallest row's own
+ * (measured without the floor), whole pixels, and never lower than the list
+ * already reserves, so held and unheld rows keep one height and nothing
+ * moves when a night lands (walk 18 T3-10: 95 / 113 / 130 / 136px rows with a
+ * reader's text spacing, and held rows shrank 18px after their first game).
+ */
+export function phoneRowFloor(floor: number, heights: readonly number[]): number {
+  const tallest = heights.reduce((most, height) => (Number.isFinite(height) ? Math.max(most, height) : most), 0);
+  // Sub-pixel rounding never raises the floor (a 112.4px row within 113).
+  return tallest > floor + 0.5 ? Math.ceil(tallest - 0.01) : floor;
 }
 
 /**
@@ -995,6 +1031,52 @@ export function valueLineParts(first: string, second: string, oneLine: boolean):
   // compare with his price"; "even with his price" too).
   const own = oneLine ? second : second.replace(/^\p{Ll}/u, (letter) => letter.toLocaleUpperCase());
   return { first: first.replace(/\s*·\s*$/, ''), joiner: oneLine ? '·\u00A0' : '', second: own };
+}
+
+/**
+ * A folded toolbar's chip for an active search or Watching filter (walk 18
+ * T4-10: after rotating to landscape the search showed only as a dot on
+ * "Search & sort", and the list looked like a market of three players):
+ * '"ja" · 4 of 30', 'Watching · 3 of 30'; null with no filter on. Its ×
+ * clears what the chip says.
+ */
+export function filterChip({
+  query,
+  watchedOnly,
+  count,
+  total,
+}: {
+  query: string;
+  watchedOnly: boolean;
+  count: number;
+  total: number;
+}): { text: string; clearName: string; spoken: string } | null {
+  const searched = query.trim();
+  if (!searched && !watchedOnly) return null;
+  const what = [searched ? `\u201C${searched}\u201D` : '', watchedOnly ? 'Watching' : ''].filter(Boolean).join(', ');
+  const counted = `${count} of ${total}`;
+  const clearName = searched && watchedOnly
+    ? `Clear the search "${searched}" and Watching, show all ${total}`
+    : searched ? `Clear the search "${searched}", show all ${total}` : `Stop showing only Watching, show all ${total}`;
+  const spoken = `${searched ? `Search "${searched}"` : ''}${searched && watchedOnly ? ', ' : ''}${watchedOnly ? 'Watching only' : ''}: ${count} of ${total} players`;
+  return { text: `${what} \u00B7\u00A0${counted}`, clearName, spoken };
+}
+
+/**
+ * A separator never starts a wrapped line (walk 18 T3-07: "· Price now
+ * $418.2K" at 640x400): the dot keeps to the word before it, and the line
+ * may break after it.
+ */
+export function keepSeparators(text: string): string {
+  return text.replace(/ · /g, '\u00A0· ');
+}
+
+/**
+ * On one line, the dot between a row's two value parts ends the first part,
+ * held to its last word, so a second part that wraps starts with its words.
+ */
+export function valueJoinerTail(oneLine: boolean): string {
+  return oneLine ? '\u00A0·' : '';
 }
 
 /**
@@ -1459,8 +1541,10 @@ export function heldValuePhrase(
   lockedGameCost: number,
   /** He has played for you: today's price first, last season as history (heldPlayedWordings). */
   played = false,
+  /** The season is over: "his last price $439.5K a game", as his profile says (walk 18 T2-02). */
+  seasonOver = false,
 ): string {
-  const now = `price now ${perGame(player.currentGameCost)}`;
+  const now = `${seasonOver ? 'his last price' : 'price now'} ${perGame(player.currentGameCost)}`;
   const edge = rowValueEdge(player, side, { lockedGameCost });
   if (played) {
     if (edge === null || player.priorSeasonValuePerGame === null) return `${now}, no last season`;
@@ -1914,6 +1998,24 @@ export function waitingForLine(playing: string): string {
  */
 export const REFUSED_MARK_MS = 5000;
 
+/** How long a LOCKED tap's answer stays on its own row during a run (walk 18 T1-12). */
+export const LOCK_ANSWER_MS = 4000;
+
+/** A lock this new may have met a press on its way (the moves' own race window, lockedPress). */
+const LOCK_JUST_BEGAN_MS = 700;
+
+/**
+ * Whether a LOCKED tap is answered on its own row ("Moves reopen after Oct
+ * 28") rather than by the notice: while practice games play, a run's notice
+ * holds the bar and the next week's took the answer's place before it was
+ * seen (walk 18 T1-12). Not while the lock has only just begun: a press then
+ * may have raced it, and the games' notice names it (walk 12 T4-07).
+ */
+export function lockAnswerOnRow(playing: string | null, lockBeganAt: number | null, now: number): boolean {
+  if (playing === null) return false;
+  return lockBeganAt === null || now - lockBeganAt >= LOCK_JUST_BEGAN_MS;
+}
+
 /** The row's button meanwhile: "Not added" / "Not shorted", in neutral ink. */
 export function refusedWord(side: PerGamePositionSide): string {
   return side === 'long' ? 'Not added' : 'Not shorted';
@@ -2271,8 +2373,10 @@ export function heldOrderLine(
   // phone width (walk 16 T1-02: the two-line wording kept an empty line
   // under "Sorted by value, highest first." from the first view on); the
   // button names the games. It says why the order stayed, as the tables do
-  // (walk 17 T1-05: "Values moved; order kept" gave no reason).
-  if (shape === 'short' || shape === 'phone') return 'Order kept so rows stay put';
+  // (walk 17 T1-05: "Values moved; order kept" gave no reason), and what
+  // moved, so the reason comes with the button (walk 18 T1-06: "Order kept
+  // so rows stay put" read like jargon: which order, kept from what?).
+  if (shape === 'short' || shape === 'phone') return `Rows kept as ${sort === 'price' ? 'prices' : 'values'} moved`;
   return `${moved} in the ${gamesSince(previousNight, night)} games; order kept so rows stay put.`;
 }
 

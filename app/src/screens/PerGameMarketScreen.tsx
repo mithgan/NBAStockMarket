@@ -17,6 +17,7 @@ import { FullNote } from '../components/market/FullNote';
 import { LockIcon, StarIcon } from '../components/market/icons';
 import { ListEnd, SkipLink } from '../components/market/SkipLink';
 import { ExplainerTip } from '../components/market/ExplainerTip';
+import { FilterChip } from '../components/market/FilterChip';
 import { peekProfileReturn, takeProfileReturn, type ProfileReturn, type ProfileView } from '../components/results/playerGames';
 import { OrderLine } from '../components/market/OrderLine';
 import { listenForActivations, pressedInScreen } from '../components/market/lastActivation';
@@ -37,6 +38,7 @@ import {
   perGameShort,
   confirmCloseName,
   rosterReopensLine,
+  lockNotice,
   signedMoney,
   unbrokenName,
   moneyCompact,
@@ -62,6 +64,10 @@ import {
   headerStatus,
   heldDetail,
   heldPriceCaption,
+  narrowHeldChip,
+  filterChip,
+  keepSeparators,
+  valueJoinerTail,
   heldPlayedWordings,
   heldStepFloor,
   heldFirstStep,
@@ -131,6 +137,7 @@ import {
   shortTierLabel,
   ROOMY_MIN_HEIGHT,
   sameMarketRowProps,
+  phoneRowFloor,
   tierLabel,
   SEARCH_NEEDS_LETTERS,
   searchHasLetters,
@@ -170,6 +177,8 @@ import {
   waitingActionName,
   waitingForLine,
   REFUSED_MARK_MS,
+  LOCK_ANSWER_MS,
+  lockAnswerOnRow,
   refusedActionName,
   refusedWord,
   valueSignal,
@@ -189,8 +198,10 @@ import {
   heldYoursDroppedKnown,
   rememberHeldYoursDropped,
   rememberTierAfterSurname,
+  rememberTierOnGiven,
   tierAfterSurnameKey,
   tierAfterSurnameKnown,
+  tierOnGivenKnown,
 } from '../data/marketViewMemory';
 import type { ValueSummary } from '../data/perGameMetrics';
 import { positionSlotHint } from '../data/perGameRules';
@@ -279,6 +290,10 @@ function afterPaint(run: () => void): void {
 
 /** Marks a phone row's given name (`data-kicker-given`), so the list can tell when one is cut. */
 const givenMarker = { dataSet: { kickerGiven: '1' } } as object;
+/** Marks a tier said after a surname (`data-tier-after`), so the list can tell when the surname pushed it down. */
+const tierAfterMarker = { dataSet: { tierAfter: '1' } } as object;
+/** Marks a phone row's words (`data-row-body`): the list measures them for its one row height. */
+const rowBodyMarker = { dataSet: { rowBody: '1' } } as object;
 
 /** The row's hover marker, plus its player (`data-player`), so the list can find its place by player. */
 function playerMarker(playerId: string): object {
@@ -336,6 +351,45 @@ function readAnchor(node: AnchorNode | undefined): { id: string; dy: number } | 
   return null;
 }
 
+/**
+ * The letter, word and line spacing a style sheet forces on the page (a
+ * reader's text-spacing setting, walk 18 T3-10), as one word; '' without
+ * any. The phone list decides its wording and row height once per size and
+ * spacing.
+ */
+function readerSpacing(): string {
+  if (typeof document === 'undefined' || typeof getComputedStyle !== 'function' || !document.body) return '';
+  const style = getComputedStyle(document.body);
+  const forced = [style.letterSpacing, style.wordSpacing].some((value) => value !== 'normal' && parseFloat(value) !== 0);
+  return forced ? `${style.letterSpacing}/${style.wordSpacing}/${style.lineHeight}` : '';
+}
+
+/** The side tabs' panel: the list they switch (walk 18 T3-08). */
+const SIDE_PANEL_ID = 'market-side-panel';
+
+function sideTabId(side: PerGamePositionSide): string {
+  return `market-side-tab-${side}`;
+}
+
+/**
+ * The kit's tabs take no ids: the Market names its side tabs and points them
+ * at the panel they switch, while that panel is drawn.
+ */
+function linkSideTabs(): void {
+  if (typeof document === 'undefined') return;
+  const panel = document.getElementById(SIDE_PANEL_ID);
+  document.querySelectorAll('[role="tablist"][aria-label="Market side"]').forEach((list) => {
+    const tabs = Array.from(list.querySelectorAll('[role="tab"]'));
+    tabs.forEach((tab, index) => {
+      const id = sideTabId(index === 0 ? 'long' : 'short');
+      if (tab.id !== id) tab.id = id;
+      if (panel) {
+        if (tab.getAttribute('aria-controls') !== SIDE_PANEL_ID) tab.setAttribute('aria-controls', SIDE_PANEL_ID);
+      } else if (tab.hasAttribute('aria-controls')) tab.removeAttribute('aria-controls');
+    });
+  });
+}
+
 /** Why a locked button is dimmed, in the app's one lock sentence. */
 function rosterLockMessage(gameDate: string | null): string {
   return `Roster changes are locked. ${rosterReopensLine(gameDate)}.`;
@@ -391,7 +445,12 @@ function MarketRow({
   priceReserve,
   fullTier,
   tierAfterSurname,
+  tierOnGiven = false,
   yoursDropped = false,
+  rowFloor = 0,
+  floorKey = '',
+  onRowHeight,
+  lockBegan,
   onOpenProfile,
   onAnnounce,
   watched,
@@ -435,8 +494,18 @@ function MarketRow({
   fullTier: boolean;
   /** Some given name was cut beside its tier: the tier goes after the surname on every row. */
   tierAfterSurname: boolean;
+  /** A surname pushed its tier onto a line of its own: every row names the tier beside the given name (walk 18 T3-10). */
+  tierOnGiven?: boolean;
   /** A given name still wrapped under the price: no price box says "yours" (walk 17 T1-03). */
   yoursDropped?: boolean;
+  /** The list's one height for a phone row's words (phoneRowFloor, walk 18 T3-10); 0 before it is measured. */
+  rowFloor?: number;
+  /** The list's wording decisions the row was drawn under: its measured height counts for them only. */
+  floorKey?: string;
+  /** A phone row reports its words' own height once its lines have settled. */
+  onRowHeight?: (key: string, height: number) => void;
+  /** When the lock now in force began, as this screen saw it (null: before it opened). */
+  lockBegan?: () => number | null;
   onOpenProfile: (playerId: string) => void;
   onAnnounce: (message: string) => void;
   /** On your watchlist; the table row carries a star to change it in place. */
@@ -497,7 +566,11 @@ function MarketRow({
   const fitted = rowTier({ given, tier: player.tier, width, fullTier });
   // A given name cut on any row (a text-spacing style, walk 7 T3-07) puts
   // every row's tier after the surname, as narrow phones do.
-  const phoneTier = tierAfterSurname ? { ...fitted, place: 'after' as const } : fitted;
+  // A surname that pushed its tier down (walk 18 T3-10) puts every row's
+  // tier beside the given name instead, wherever the width would put it.
+  const phoneTier = tierOnGiven
+    ? { ...fitted, place: 'kicker' as const }
+    : tierAfterSurname ? { ...fitted, place: 'after' as const } : fitted;
   // Below 380px (the large-text row) the tier follows the surname, so every
   // width says the same thing. The chevron says the row opens more.
   const tierAfter = phone
@@ -510,7 +583,7 @@ function MarketRow({
     <>
       {surname}
       {/* One span, kept together, so a wrapped line never splits it. */}
-      <Text style={tierAfter ? styles.tierInline : styles.chevron}>
+      <Text style={tierAfter ? styles.tierInline : styles.chevron} {...(tierAfter && phone ? tierAfterMarker : {})}>
         {tierAfter ? `\u2002${tierAfter.replace(' ', '\u00A0')}\u00A0›` : '\u2002›'}
       </Text>
     </>
@@ -546,6 +619,15 @@ function MarketRow({
     const timer = setTimeout(() => setRefusedAt(null), REFUSED_MARK_MS);
     return () => clearTimeout(timer);
   }, [refusedAt]);
+  // A LOCKED tap during a run is answered on this row for a few seconds, in
+  // place of its value line (walk 18 T1-12: the run's notice kept the bar and
+  // the tap seemed to do nothing).
+  const [lockAnswerAt, setLockAnswerAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (lockAnswerAt === null) return undefined;
+    const timer = setTimeout(() => setLockAnswerAt(null), LOCK_ANSWER_MS);
+    return () => clearTimeout(timer);
+  }, [lockAnswerAt]);
   const pressedQuote = useRef<number | null>(null);
   // Rows are keyed by side, so the tick stays on the side it was pressed on
   // (walk 8 T4-07); coming back to that side while it saves shows it again.
@@ -669,6 +751,7 @@ function MarketRow({
       ? refusedActionName(side, player.name, currentGameCost, true)
       : player.quoteVersion !== pressedQuote.current ? refusedActionName(side, player.name, currentGameCost) : null
     : null;
+  const lockAnswer = lockAnswerAt !== null && rosterLocked && layout !== 'table' ? rosterReopensLine(rosterLockGameDate) : null;
   const word = waiting ? 'Waiting' : refusal ? refusedWord(side) : actionWord({
     side,
     held: shownHeld,
@@ -733,6 +816,8 @@ function MarketRow({
   // alone, the figure alone), so no line ends with one word left over (walk
   // 12 T1-05: "(a below-zero" / "night)" at 360px).
   const heldFirstRef = useRef<Text>(null);
+  // A line of this row is being fitted this pass (its height is not final yet).
+  const fitting = useRef(false);
   const wordings = firstDetail ? heldLineWordings(firstDetail, width < HELD_NOW_MIN_WIDTH) : null;
   const fitKey = `${width}|${layout}|${heldTag(side, seasonOver)}|${firstDetail?.text ?? ''}|${firstDetail?.why ?? ''}`;
   const [fit, setFit] = useState<{ key: string; step: number } | null>(null);
@@ -749,14 +834,17 @@ function MarketRow({
     if (!node || !box || !(box.height > 0)) return;
     // detailText is one 17px line; two lines are 34.
     const line = typeof getComputedStyle === 'function' ? parseFloat(getComputedStyle(node).lineHeight) : NaN;
-    if (box.height > (line > 0 ? line * 1.5 : 26)) setFit({ key: fitKey, step: fitStep + 1 });
+    if (box.height > (line > 0 ? line * 1.5 : 26)) {
+      fitting.current = true;
+      setFit({ key: fitKey, step: fitStep + 1 });
+    }
   });
   // Once he has played for you, the second line leads with today's price and
   // says last season as history where it fits (walk 14 T1-09), the fullest
   // wording that keeps one line, measured before paint like the first line.
   const played = position !== null && currentValue !== undefined && currentValue.avgNet !== null && currentValue.games > 0;
   const heldSecondRef = useRef<Text>(null);
-  const playedWordings = position && played ? heldPlayedWordings(player, side, position.lockedGameCost) : null;
+  const playedWordings = position && played ? heldPlayedWordings(player, side, position.lockedGameCost, seasonOver) : null;
   const secondKey = `${width}|${layout}|${playedWordings?.join('|') ?? ''}`;
   const [secondFit, setSecondFit] = useState<{ key: string; step: number } | null>(null);
   // Its own step, and the list's: every held row shows the most compact any
@@ -772,7 +860,27 @@ function MarketRow({
     const box = node?.getBoundingClientRect?.();
     if (!node || !box || !(box.height > 0)) return;
     const line = typeof getComputedStyle === 'function' ? parseFloat(getComputedStyle(node).lineHeight) : NaN;
-    if (box.height > (line > 0 ? line * 1.5 : 26)) setSecondFit({ key: secondKey, step: secondStep + 1 });
+    if (box.height > (line > 0 ? line * 1.5 : 26)) {
+      fitting.current = true;
+      setSecondFit({ key: secondKey, step: secondStep + 1 });
+    }
+  });
+  // Once both lines have settled on their wording, the row tells the list
+  // how tall its words are, never while a line is still being fitted (a
+  // wrapped first draw raised every row 18px when a night landed).
+  const bodyRef = useRef<View>(null);
+  useLayoutEffect(() => {
+    if (layout !== 'phone' || !onRowHeight) return;
+    if (fitting.current) {
+      fitting.current = false;
+      return;
+    }
+    const node = bodyRef.current as unknown as HTMLElement | null;
+    const first = node?.firstElementChild;
+    const last = node?.lastElementChild;
+    if (!first || !last) return;
+    const height = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
+    if (height > 0) onRowHeight(floorKey, height);
   });
   // His move on the other side still saving: shown as he will be once it
   // saves (no button here), in place, saying it is on its way.
@@ -801,33 +909,34 @@ function MarketRow({
     </View>
   );
   // No line ever ends on a lone "·" (walk 7 T1-02): on two lines the first
-  // drops it; on one line it leads the second part (valueLineParts).
-  const joiner = valueLineParts('', '', oneLine).joiner;
+  // drops it; on one line it ends the first part, held to its last word, so
+  // a second part that wraps never starts its line with "·" (walk 18 T3-07).
+  const joinTail = valueJoinerTail(oneLine);
+  const tail = joinTail ? <Text style={styles.leadText}>{joinTail}</Text> : null;
   const heldLine = (text: string, tone: SignalTone, value: ReturnType<typeof heldValueLine>, why: string | null = null, firstRef?: RefObject<Text | null>, playedLine: string | null = null) => valueLines(
     <Text ref={firstRef} maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.heldText]}>
       {`${heldTag(side, seasonOver)} · `}
       <Text style={{ color: TONE_COLOR[tone] }}>{text}</Text>
       {/* Why a result is bigger than his price, muted (walk 10 T1-03). */}
       {why ? <Text style={styles.leadText}>{` (${why})`}</Text> : null}
+      {tail}
     </Text>,
     // Last season against your price, in neutral ink: the row's only
     // coloured figure is what he made you (walk 9 T1-06). Once he has
     // played for you, today's price leads and last season is history.
     <Text ref={playedLine !== null ? heldSecondRef : undefined} maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>
-      {joiner ? <Text style={styles.leadText}>{joiner}</Text> : null}
-      {playedLine ?? value.value}
-      {playedLine === null && width >= HELD_NOW_MIN_WIDTH ? <Text style={styles.leadText}>{` ·\u00A0${value.now}`}</Text> : null}
+      {playedLine !== null ? keepSeparators(playedLine) : value.value}
+      {playedLine === null && width >= HELD_NOW_MIN_WIDTH ? <Text style={styles.leadText}>{`\u00A0· ${value.now}`}</Text> : null}
     </Text>,
   );
   const unheldLineFor = (shown: typeof signal) => {
     const lines = unheldValueLines(shown);
     const parts = valueLineParts(lines.first, lines.second, oneLine);
     return valueLines(
-      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>{parts.first}</Text>,
+      <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>{parts.first}{parts.joiner ? tail : null}</Text>,
       // At season end the figures only say how he did, in muted ink, never a
       // green invitation ("+$67.9K for a short", walk 11 T1-13).
       <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: seasonOver ? colors.muted : TONE_COLOR[shown.tone] }]}>
-        {parts.joiner ? <Text style={styles.leadText}>{parts.joiner}</Text> : null}
         {parts.second}
       </Text>,
     );
@@ -840,7 +949,7 @@ function MarketRow({
     ? unheldLineFor(valueSignal({ ...player, currentGameCost: position.lockedGameCost }, side))
     : unheldLine;
   // An unheld row's copy of its held line locks today's price, as an Add would.
-  const heldValue = heldValueLine(player, side, position ? position.lockedGameCost : currentGameCost);
+  const heldValue = heldValueLine(player, side, position ? position.lockedGameCost : currentGameCost, seasonOver);
   // What this row says now, over invisible copies of what it would say after
   // an Add (or a Drop), so its height never changes with the tap.
   const valueLine = position && held ? (
@@ -864,9 +973,9 @@ function MarketRow({
           {`${endedShort} · `}
           <Text style={{ color: TONE_COLOR[firstDetail.tone] }}>{heldShown.text}</Text>
           {heldShown.why ? <Text style={styles.leadText}>{` (${heldShown.why})`}</Text> : null}
+          {tail}
         </Text>,
         <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, { color: colors.muted }]}>
-          {joiner ? <Text style={styles.leadText}>{joiner}</Text> : null}
           {endedShortSecondLine(signal)}
         </Text>,
       )}
@@ -915,7 +1024,9 @@ function MarketRow({
   // never changes the row's height, whichever one wraps.
   // The given name gives way (cut short) before the tier or the price move.
   const kickerWords = (
-    <View style={styles.kickerParts}>
+    // Never cut: with the tier moved beside it for the list, a given name
+    // too long for the line keeps it whole and the tier takes the next line.
+    <View style={[styles.kickerParts, tierOnGiven && styles.kickerPartsWrap]}>
       <Text maxFontSizeMultiplier={1.6} numberOfLines={1} style={[styles.kicker, styles.kickerGiven]} {...givenMarker}>{whole(given)}</Text>
       {phoneTier.place === 'kicker' && phoneTier.tier ? (
         <Text maxFontSizeMultiplier={1.6} numberOfLines={1} style={[styles.kicker, styles.kickerTier]}>{`\u00A0· ${phoneTier.tier}`}</Text>
@@ -946,7 +1057,7 @@ function MarketRow({
     detail: blocked
       ? ''
       : position && held
-        ? `${tagText}, ${held.text}${held.why ? ` (${held.why})` : ''}, ${heldValuePhrase(player, side, position.lockedGameCost, played)}`
+        ? `${tagText}, ${held.text}${held.why ? ` (${held.why})` : ''}, ${heldValuePhrase(player, side, position.lockedGameCost, played, seasonOver)}`
         : [
           endedShort && pastDetail ? `${endedShort}, ${pastDetail.total}${pastDetail.why ? ` (${pastDetail.why})` : ''}` : null,
           signal.lead?.replace(/ ·$/, ''),
@@ -1019,18 +1130,31 @@ function MarketRow({
           // notice named two, one row said "NOT ADDED", the other "LOCKED").
           onDisabledPress={rosterLocked
             ? () => {
+              // Games playing (a run): the answer is this row's, heard from
+              // the list, and the run's notice keeps the bar (walk 18 T1-12).
+              const playingNow = practicePlaying();
+              if (!table && lockAnswerOnRow(playingNow, lockBegan?.() ?? null, Date.now())) {
+                setLockAnswerAt(Date.now());
+                onAnnounce(lockNotice(rosterLockGameDate));
+                return;
+              }
               const raced = lockedPress({
                 name: player.name,
                 verb: position ? (side === 'long' ? 'dropped' : 'closed') : side === 'long' ? 'added' : 'shorted',
               });
               if (raced && !position) setRefusedAt(Date.now());
+              // Not a race after all (this screen saw the lock a moment late):
+              // the row still answers while the run holds the bar.
+              else if (!raced && !table && playingNow !== null) setLockAnswerAt(Date.now());
             }
             : waiting && waitingFor
               ? () => notify(`${waitingActionName(side, player.name, waitingFor, optimistic === 'close' ? 'close' : 'open')}.`)
               : justOpened || justClosed
                 ? () => notify(tickPressNotice(side, player.name, justClosed, fee, optimistic !== null || opening))
                 : undefined}
-          label={fullButton ? FULL_BUTTON_WORDS : word}
+          // "MAKE ROOM" is one unbroken line under "FULL" (walk 18 T2-12: "FULL /
+          // MAKE / ROOM" in the 90px table button at 768-899px).
+          label={fullButton ? FULL_BUTTON_WORDS.replace(' ', '\u00A0') : word}
           onPress={() => {
             // FULL opens a note under the row: why, and "Choose who to drop".
             if (fullButton) {
@@ -1057,7 +1181,7 @@ function MarketRow({
             }
           }}
           // "Dropped ✓" and "Shorted ✓" fit the phone button on one line (walk 5 T4-03).
-          style={[!table && styles.phoneButton, !table && (justOpened || justClosed || fullButton) && styles.phoneButtonDone, confirming && styles.buttonArmed, fullButton && noting && styles.buttonArmed, waiting && styles.buttonWaiting]}
+          style={[!table && styles.phoneButton, !table && (justOpened || justClosed || fullButton) && styles.phoneButtonDone, table && fullButton && styles.tableButtonFull, confirming && styles.buttonArmed, fullButton && noting && styles.buttonArmed, waiting && styles.buttonWaiting]}
           textStyle={[styles.buttonText, (justOpened || justClosed) && !waiting && styles.buttonTextDone, fullButton && styles.buttonTextFull, (confirming || (fullButton && noting)) && styles.buttonTextArmed, waiting && styles.buttonTextWaiting]}
           width={large ? undefined : actionWidth}
         />
@@ -1198,7 +1322,7 @@ function MarketRow({
               today's sits under it when your add has nudged it. */}
           <Text maxFontSizeMultiplier={1.4} style={styles.cellValue}>{money(position ? position.lockedGameCost : currentGameCost)}</Text>
           {position ? (
-            <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>{heldPriceCaption(position.lockedGameCost, currentGameCost)}</Text>
+            <Text maxFontSizeMultiplier={1.4} style={styles.cellCaption}>{heldPriceCaption(position.lockedGameCost, currentGameCost, seasonOver)}</Text>
           ) : null}
         </View>
         {/* No last season: one calm dash in both columns (the row's name says it in words). */}
@@ -1327,7 +1451,7 @@ function MarketRow({
               {/* A narrow table's chip is one short word, so it stays on the
                   kicker's line beside "Scottie · Starter" and a held row keeps
                   the list's one height (walk 6 T2-14: 76px beside 60px). */}
-              {position ? <Tag style={styles.kickerTag}>{columns.yours === 0 && side === 'long' ? 'Yours' : tagText}</Tag> : pastTag ? <Tag style={styles.kickerTag}>{pastTag}</Tag> : null}
+              {position ? <Tag style={styles.kickerTag}>{columns.yours === 0 && side === 'long' ? narrowHeldChip(seasonOver) : tagText}</Tag> : pastTag ? <Tag style={styles.kickerTag}>{pastTag}</Tag> : null}
             </View>
             <Text maxFontSizeMultiplier={1.4} style={styles.surname}>{nameLine}</Text>
             {/* The result once he has played; the locked price is "Yours" under
@@ -1376,7 +1500,7 @@ function MarketRow({
             <PlayerAvatar player={{ id: player.playerId, name: player.name }} size={PHONE_AVATAR} />
           </View>
         ) : null}
-        <View style={styles.rowContent}>
+        <View ref={bodyRef} style={[styles.rowContent, !large && rowFloor > 0 && { minHeight: rowFloor }]} {...(large ? {} : rowBodyMarker)}>
           {large ? (
             <>
               <Text maxFontSizeMultiplier={1.6} style={styles.kicker}>{kicker}</Text>
@@ -1398,7 +1522,13 @@ function MarketRow({
               <Text maxFontSizeMultiplier={1.6} style={styles.surname}>{nameLine}</Text>
             </View>
           )}
-          {valueLine}
+          {lockAnswer ? (
+            <SameHeight ghosts={[valueLine]}>
+              <View style={styles.detailLine}>
+                <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.lockAnswerText]}>{`🔒\u00A0${lockAnswer}`}</Text>
+              </View>
+            </SameHeight>
+          ) : valueLine}
         </View>
       </Pressable>
       {action}
@@ -1696,13 +1826,49 @@ export function PerGameMarketScreen({
   // walk 7 T3-07): once any row's given name is cut beside its tier, every
   // row puts its tier after the surname, the narrow phones' place, so names
   // stay whole. Checked after each layout and when a style sheet is added.
-  const tierKey = tierAfterSurnameKey(width, fontScale);
+  // A reader's text spacing is a size of its own (walk 18 T3-10).
+  const [spacing, setSpacing] = useState(readerSpacing);
+  const tierKey = tierAfterSurnameKey(width, fontScale, spacing);
   const [tierAfterSurname, setTierAfterSurname] = useState(() => tierAfterSurnameKnown(tierKey));
+  // A surname that pushed its tier onto a line of its own (walk 18 T3-10:
+  // "Gilgeous-Alexander" / "STAR ›" at 375 with text spacing): every row
+  // names its tier beside the given name instead.
+  const [tierOnGiven, setTierOnGiven] = useState(() => tierOnGivenKnown(tierKey));
   // Then, if a given name still takes a line of its own under the price
   // (walk 17 T1-03, T3-03), every row's price box leaves "yours" out.
   const [yoursDropped, setYoursDropped] = useState(() => heldYoursDroppedKnown(tierKey));
+  // One height for every phone row's words in the list, the tallest row's,
+  // measured from the rows (phoneRowFloor): held and unheld rows, long names
+  // and short, before and after a night (walk 18 T3-10).
+  // Kept per arrangement (size, spacing and the decisions above), so a row
+  // measured under the last one never raises the next.
+  const floorKey = `${tierKey}|${tierOnGiven ? 'g' : ''}${tierAfterSurname ? 'a' : ''}${yoursDropped ? 'y' : ''}`;
+  const [rowFloors, setRowFloors] = useState<Readonly<Record<string, number>>>({});
+  const rowFloor = rowFloors[floorKey] ?? 0;
+  // When the lock now in force began, as this screen saw it: a LOCKED tap
+  // that soon may have raced it (lockAnswerOnRow).
+  const lockId = bootstrap?.ruleset.rosterMutationsLocked ? (bootstrap.ruleset.rosterLockGameDate ?? 'locked') : null;
+  const lockSeen = useRef(lockId);
+  const lockBeganAt = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (lockId === lockSeen.current) return;
+    lockSeen.current = lockId;
+    lockBeganAt.current = lockId === null ? null : Date.now();
+  }, [lockId]);
+  const lockBegan = useCallback(() => lockBeganAt.current, []);
+  // The side tabs point at the list they switch (walk 18 T3-08).
+  useEffect(() => {
+    linkSideTabs();
+  });
+  const raiseRowFloor = useCallback((key: string, height: number) => {
+    setRowFloors((floors) => {
+      const next = phoneRowFloor(floors[key] ?? 0, [height]);
+      return next === (floors[key] ?? 0) ? floors : { ...floors, [key]: next };
+    });
+  }, []);
   useEffect(() => {
     setTierAfterSurname(tierAfterSurnameKnown(tierKey));
+    setTierOnGiven(tierOnGivenKnown(tierKey));
     setYoursDropped(heldYoursDroppedKnown(tierKey));
   }, [tierKey]);
   // The list keeps its order while the player works through it: an Add
@@ -1749,10 +1915,34 @@ export function PerGameMarketScreen({
   // Measured before the first paint, so a list that needs it never shows the
   // other place first; a style sheet added later is checked a frame after.
   useLayoutEffect(() => {
-    if (layout !== 'phone' || yoursDropped || typeof document === 'undefined' || typeof requestAnimationFrame !== 'function') return undefined;
+    if (layout !== 'phone' || typeof document === 'undefined' || typeof requestAnimationFrame !== 'function') return undefined;
     let frame = 0;
     const check = () => {
       frame = 0;
+      const nowSpacing = readerSpacing();
+      if (nowSpacing !== spacing) {
+        setSpacing(nowSpacing);
+        return;
+      }
+      placeTier();
+    };
+    // The list's wording decisions; true when one changed (the rows draw
+    // again, and are measured then).
+    const placeTier = (): boolean => {
+      if (!tierOnGiven && (tierAfterSurname || width < KICKER_TIER_MIN_WIDTH)) {
+        const pushed = Array.from(document.querySelectorAll('[data-tier-after]')).some((node) => {
+          const line = node.parentElement?.getBoundingClientRect();
+          const rects = node.getClientRects();
+          const end = rects.length > 0 ? rects[rects.length - 1] : null;
+          return !!line && !!end && end.top >= line.top + end.height * 0.75;
+        });
+        if (pushed) {
+          rememberTierOnGiven(tierKey);
+          setTierOnGiven(true);
+          return true;
+        }
+      }
+      if (yoursDropped) return false;
       const givens = Array.from(document.querySelectorAll('[data-kicker-given]'));
       const cut = givens.some((node) => node.scrollWidth > node.clientWidth + 1);
       // A given name and its tier too long for the price's line wrap under
@@ -1766,12 +1956,12 @@ export function PerGameMarketScreen({
         if (!parts || !price || price === parts) return false;
         return parts.getBoundingClientRect().top >= price.getBoundingClientRect().bottom - 4;
       });
-      if (!cut && !wrapped) return;
-      if (!tierAfterSurname) {
+      if (!cut && !wrapped) return false;
+      if (!tierAfterSurname && !tierOnGiven) {
         // Remembered for the session at this size: the next visit starts there.
         if (wrapped) rememberTierAfterSurname(tierKey);
         setTierAfterSurname(true);
-        return;
+        return true;
       }
       // The tier already follows the surname and a given name still wraps
       // under the price (walk 17 T1-03: "KARL-ANTHONY" beside "yours
@@ -1781,7 +1971,9 @@ export function PerGameMarketScreen({
       if (wrapped) {
         rememberHeldYoursDropped(tierKey);
         setYoursDropped(true);
+        return true;
       }
+      return false;
     };
     const later = () => {
       if (!frame) frame = requestAnimationFrame(check);
@@ -1793,7 +1985,7 @@ export function PerGameMarketScreen({
       if (frame) cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-  }, [layout, tierAfterSurname, yoursDropped, width, rows, tierKey]);
+  }, [layout, tierAfterSurname, tierOnGiven, yoursDropped, width, rows, tierKey, spacing]);
   const positionValues = useMemo(
     () => valueByPosition(bootstrap?.settledResults ?? []),
     [bootstrap?.settledResults],
@@ -2345,6 +2537,12 @@ export function PerGameMarketScreen({
     short: lockLineShort(width) && !rowToolbar && !folded && !slotUnderToggle,
   });
   const filtersOn = query.trim() !== '' || sort !== MARKET_DEFAULT_SORT || reversed || watchedOnly;
+  const chip = filterChip({ query, watchedOnly, count: resultCount, total: totalCount });
+  // The chip goes with what it cleared: a key press puts focus on "Search & sort".
+  const clearFromChip = () => {
+    clearFilters();
+    focusAfterKeyPress(['[role="button"][aria-label^="Search and sort"]']);
+  };
   const profilePlayer = profileId
     ? bootstrap.market.find((row) => row.playerId === profileId) ?? null
     : null;
@@ -2420,8 +2618,13 @@ export function PerGameMarketScreen({
   // Measured beside the toggle in its plain wording only (not while moves
   // save or wait, not at season end).
   slotMeasurable.current = slotBeside && !rowToolbar && !folded && savingCount === 0 && !waitingNow && !seasonOver;
+  // A 960-1100px laptop table splits its toolbar once the first games are in,
+  // whatever its slot shows (walk 18 T2-08: a night played with the Market
+  // open kept the one-row toolbar and a 159px "Search" box): the order line
+  // takes the second row in the slot's place, so the chrome keeps its height.
+  const splitRows = splitToolbar && wide && roomy && height < LAPTOP_HEIGHT_BELOW && (sentenceGone || gamesIn);
   const slotStatus = (
-    <View ref={slotStatusRef} style={[styles.slotStatus, !slotBeside && styles.slotStatusUnder, rowToolbar && styles.slotStatusWide, rowToolbar && (width >= LOCK_LINE_ROOMY_WIDTH || (splitToolbar && wide && roomy && height < LAPTOP_HEIGHT_BELOW && sentenceGone)) && styles.slotStatusRoomy, folded && !slotOwnLine && styles.slotStatusFolded]}>
+    <View ref={slotStatusRef} style={[styles.slotStatus, !slotBeside && styles.slotStatusUnder, rowToolbar && styles.slotStatusWide, rowToolbar && (width >= LOCK_LINE_ROOMY_WIDTH || splitRows) && styles.slotStatusRoomy, folded && !slotOwnLine && styles.slotStatusFolded]}>
       {slotCount}
       {status.kind === 'lock' ? (
         <View style={styles.lockLine}>
@@ -2507,11 +2710,6 @@ export function PerGameMarketScreen({
   // under the sort, on a laptop-height table in the sentence's place once the
   // first games are in; a tall table keeps its sentence slot.
   const compactSlot = wide && roomy && height < LAPTOP_HEIGHT_BELOW && sentenceGone;
-  // Split only while the slot is the one-line order strip: the second row
-  // then takes its place and the pinned chrome keeps its height (a taller
-  // one folds the toolbar, pinnedChromeTooTall). The sentence, while it
-  // shows, keeps its full-width slot under a one-row toolbar.
-  const splitRows = splitToolbar && compactSlot;
   const order = orderLine({ sort, reversed, heldNote, gamesIn, form: orderLineForm(width, wide) });
   // A short pinned table's order line is the table's first row (walk 15 T2-06).
   const orderRow = pinned && folded && !roomy;
@@ -2561,7 +2759,12 @@ export function PerGameMarketScreen({
   ) : null;
   // A short table's order line: under its folded bar, or (pinned) the
   // table's first row, scrolling away with the rows (walk 15 T2-06).
-  const tableSlot = compactSlot || (rowToolbar && !roomy) || (wide && folded && (!pinned || !roomy)) ? (
+  // A short pinned table (960x600) keeps its helper sentence out from between
+  // the column labels and the rows (walk 18 T2-06: the labels floated 60px
+  // above their figures): it is said in the Search & sort panel instead.
+  const stripSlot = compactSlot || (rowToolbar && !roomy) || (wide && folded && (!pinned || !roomy));
+  const sentenceInPanel = !stripSlot && wide && roomy && pinned && folded && !heldNote && !reversed;
+  const tableSlot = sentenceInPanel ? null : stripSlot ? (
     <View style={[styles.explainerWide, styles.orderSlot, wide && folded && !pinned && styles.orderSlotFolded, orderRow && styles.orderSlotRow]}>{orderStrip}</View>
   ) : wide && roomy ? (
     <View style={[styles.explainerWide, styles.explainerSlot]}>
@@ -2642,17 +2845,25 @@ export function PerGameMarketScreen({
           <View style={styles.foldedRow}>
             {foldWide ? sideToggle : null}
             {slotOwnLine ? null : slotStatus}
+            {/* An active search or Watching filter says itself here while the
+                panel is closed, with a × that clears it (walk 18 T4-10). */}
+            {foldWide && !controlsOpen && chip ? (
+              <FilterChip clearName={chip.clearName} onClear={clearFromChip} spoken={chip.spoken} text={chip.text} />
+            ) : null}
             {/* Landscape has room to say it in words (walk 4 T1-10). */}
             <ControlsToggle active={filtersOn} buttonRef={controlsToggleRef} labelled={foldWide} onToggle={toggleControls} open={controlsOpen} />
           </View>
           {shortExplainer}
           {controlsOpen ? (
             foldWide ? (
-              <View style={styles.foldedOpenRow}>
-                <MarketSearch focusOnMount={openedByKey.current} onChange={setQuery} onEscapeEmpty={closeControls} placeholder={searchPlaceholder} style={styles.searchFlex} value={query} />
-                {sortToggle}
-                {watchingToggle}
-              </View>
+              <>
+                <View style={styles.foldedOpenRow}>
+                  <MarketSearch focusOnMount={openedByKey.current} onChange={setQuery} onEscapeEmpty={closeControls} placeholder={searchPlaceholder} style={styles.searchFlex} value={query} />
+                  {sortToggle}
+                  {watchingToggle}
+                </View>
+                {sentenceInPanel ? sideExplainer : null}
+              </>
             ) : (
               <>
                 <MarketSearch focusOnMount={openedByKey.current} onChange={setQuery} onEscapeEmpty={closeControls} placeholder={searchPlaceholder} value={query} />
@@ -2721,12 +2932,15 @@ export function PerGameMarketScreen({
       {/* The phone rows' list: its items are the rows below, owned in order
           (the toolbar shares their scroll area, so the rows cannot sit in a
           list element of their own). */}
+      {/* The side tabs' panel (walk 18 T3-08): it holds the list the tabs
+          switch, named by the selected tab. */}
       {!wide && resultCount > 0 ? (
-        <View
-          role="list"
-          style={visuallyHidden}
-          {...({ 'aria-owns': rows.map((row) => listItemId(row.side, row.player.playerId)).join(' ') } as object)}
-        />
+        <View nativeID={SIDE_PANEL_ID} role="tabpanel" style={visuallyHidden} {...({ 'aria-labelledby': sideTabId(side) } as object)}>
+          <View
+            role="list"
+            {...({ 'aria-owns': rows.map((row) => listItemId(row.side, row.player.playerId)).join(' ') } as object)}
+          />
+        </View>
       ) : null}
     </View>
   );
@@ -2850,12 +3064,19 @@ export function PerGameMarketScreen({
       {/* Above the toolbar in paint order, so a column's explanation, which
           opens upward over the toolbar, is seen (walk 9 T2-01, T3-01); the
           rows scroll inside the list, so they never reach the toolbar. */}
-      <View style={[styles.list, pinned && styles.listOverToolbar]} {...(pinned ? ({ role: 'table', 'aria-label': listHeading(side, spokenCount, totalCount) } as object) : {})}>
+      {/* A pinned table is the side tabs' panel (walk 18 T3-08), named by the
+          selected tab; its role changes only with the table's own. */}
+      <View
+        nativeID={pinned ? SIDE_PANEL_ID : undefined}
+        style={[styles.list, pinned && styles.listOverToolbar]}
+        {...(pinned ? ({ role: 'tabpanel', 'aria-labelledby': sideTabId(side) } as object) : {})}
+      >
+      <View style={styles.list} {...(pinned ? ({ role: 'table', 'aria-label': listHeading(side, spokenCount, totalCount) } as object) : {})}>
       {pinned && columnHeader ? <View style={styles.tableHeader}>{columnHeader}</View> : null}
       <FlatList
         contentContainerStyle={styles.content}
         data={rows}
-        extraData={[layout, columns, positionValues, pastValues, fee, width, priceReserve, yoursDropped, seasonOver, watchlist.watched, kept, watchedOnly, firstBlockedId, blockedCount, heldFloorNow, averageDropped]}
+        extraData={[layout, columns, positionValues, pastValues, fee, width, priceReserve, yoursDropped, tierOnGiven, rowFloor, seasonOver, watchlist.watched, kept, watchedOnly, firstBlockedId, blockedCount, heldFloorNow, averageDropped]}
         initialNumToRender={Math.min(Math.max(rows.length, 18), WHOLE_LIST_MAX)}
         keyboardShouldPersistTaps="handled"
         // One row per side: a press's "Added ✓" never follows him to the
@@ -2916,7 +3137,12 @@ export function PerGameMarketScreen({
             priceReserve={priceReserve}
             fullTier={fullTier}
             tierAfterSurname={tierAfterSurname}
+            tierOnGiven={tierOnGiven}
             yoursDropped={yoursDropped}
+            rowFloor={layout === 'phone' ? rowFloor : 0}
+            floorKey={floorKey}
+            onRowHeight={raiseRowFloor}
+            lockBegan={lockBegan}
             onAnnounce={announce}
             onToggleWatch={toggleWatchStable}
             watched={watchlist.isWatched(item.player.playerId)}
@@ -2955,6 +3181,7 @@ export function PerGameMarketScreen({
         style={styles.list}
         windowSize={9}
       />
+      </View>
       </View>
       <View style={visuallyHidden}>
         <Text accessibilityLiveRegion="polite">{announcement}</Text>
@@ -3427,6 +3654,13 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
   },
+  kickerPartsWrap: {
+    flexWrap: 'wrap',
+  },
+  lockAnswerText: {
+    color: colors.text,
+    fontWeight: weight.bold,
+  },
   kickerGiven: {
     flexShrink: 1,
     minWidth: 0,
@@ -3607,6 +3841,11 @@ const styles = StyleSheet.create({
   phoneButtonDone: {
     // "DROPPED ✓" and "SHORTED ✓" keep one line in the same 76px (walk 5 T4-03).
     paddingHorizontal: 2,
+  },
+  tableButtonFull: {
+    // "FULL" over "MAKE ROOM" in the narrow table's 90px column: two lines,
+    // never three (walk 18 T2-12).
+    paddingHorizontal: 4,
   },
   buttonText: {
     letterSpacing: 0.5,

@@ -58,9 +58,9 @@ test('the kept-order line says what moved and why the order stayed, in the room 
   assert.equal(orderLineForm(389, false), 'short');
   assert.equal(orderLineForm(390, false), 'phone');
   assert.equal(orderLineForm(768, true), 'long');
-  assert.equal(heldOrderLine('2025-10-20', '2025-10-21', 'short'), 'Order kept so rows stay put');
-  assert.equal(heldOrderLine('2025-10-20', '2025-10-21', 'phone'), 'Order kept so rows stay put');
-  assert.equal(heldOrderLine('2025-10-20', '2025-10-21', 'phone', 'price'), 'Order kept so rows stay put');
+  assert.equal(heldOrderLine('2025-10-20', '2025-10-21', 'short'), 'Rows kept as values moved');
+  assert.equal(heldOrderLine('2025-10-20', '2025-10-21', 'phone'), 'Rows kept as values moved');
+  assert.equal(heldOrderLine('2025-10-20', '2025-10-21', 'phone', 'price'), 'Rows kept as prices moved');
   assert.equal(heldOrderLine('2025-10-20', '2025-10-21', 'long', 'price'), 'Prices moved in the Oct 21 games; order kept so rows stay put.');
   for (const form of ['short', 'phone', 'long'] as const) {
     const line = orderLine({ sort: 'value', reversed: false, heldNote: null, form });

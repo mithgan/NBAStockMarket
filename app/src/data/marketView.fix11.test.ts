@@ -17,14 +17,14 @@ test('a narrow phone says the held order short, on one line beside Re-sort', () 
   assert.equal(orderLineNarrow(390, false), false);
   assert.equal(orderLineNarrow(768, true), false, 'the table has room for the long wording');
   // walk 13 T1-17: the short wording says why the order stayed (Re-sort names the games).
-  assert.equal(heldOrderLine('2025-10-20', '2025-10-21', true), 'Order kept so rows stay put');
-  assert.equal(heldOrderLine('2025-10-20', '2025-10-27', true), 'Order kept so rows stay put');
+  assert.equal(heldOrderLine('2025-10-20', '2025-10-21', true), 'Rows kept as values moved');
+  assert.equal(heldOrderLine('2025-10-20', '2025-10-27', true), 'Rows kept as values moved');
   assert.equal(heldOrderLine('2025-10-20', '2025-10-27'), 'Values moved in the Oct 21–27 games; order kept so rows stay put.');
   const narrow = orderLine({ sort: 'value', reversed: false, heldNote: null, gamesIn: false, narrow: true });
-  assert.equal(narrow.reserve, 'Order kept so rows stay put');
+  assert.equal(narrow.reserve, 'Rows kept as values moved');
   assert.equal(narrow.reserveResort, true, "Re-sort's height is kept before the first games too");
   const stale = orderLine({ sort: 'value', reversed: false, heldNote: heldOrderLine('2025-10-20', '2025-10-27', true), narrow: true });
-  assert.deepEqual([stale.text, stale.resort, stale.reserve], ['Order kept so rows stay put', true, narrow.reserve]);
+  assert.deepEqual([stale.text, stale.resort, stale.reserve], ['Rows kept as values moved', true, narrow.reserve]);
 });
 
 test('the lock line takes the fee line\'s two lines in the narrow slot column', () => {

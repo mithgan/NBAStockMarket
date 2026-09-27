@@ -26,13 +26,13 @@ const listed = [
 ];
 
 test('a phone order line swaps its words in one line with Re-sort (walk 16 T1-02)', () => {
-  assert.equal(heldOrderLine('2025-10-20', '2025-10-21', 'phone'), 'Order kept so rows stay put');
-  assert.equal(heldOrderLine('2025-10-20', '2025-10-27', 'short', 'price'), 'Order kept so rows stay put');
+  assert.equal(heldOrderLine('2025-10-20', '2025-10-21', 'phone'), 'Rows kept as values moved');
+  assert.equal(heldOrderLine('2025-10-20', '2025-10-27', 'short', 'price'), 'Rows kept as prices moved');
   assert.equal(heldOrderLine('2025-10-20', '2025-10-27', 'long'), 'Values moved in the Oct 21–27 games; order kept so rows stay put.', 'tables keep the long form');
   for (const form of ['short', 'phone'] as const) {
     const line = orderLine({ sort: 'value', reversed: false, heldNote: null, form });
     assert.equal(line.text, 'Sorted by value, highest first.');
-    assert.equal(line.reserve, 'Order kept so rows stay put', `${form}: the reserve is one short line`);
+    assert.equal(line.reserve, 'Rows kept as values moved', `${form}: the reserve is one short line`);
   }
 });
 
