@@ -60,14 +60,19 @@ export function revealFocused(node: HTMLElement): void {
   // A band over its top (the frame, a pinned header): up past it. What the
   // edge meets first can end before its band does (a pinned bar's line of
   // text over the bar's own padding), so it looks again from there (walk 16
-  // lead: the profile's chart stayed 14px under its Drop bar).
+  // lead: the profile's chart stayed 14px under its Drop bar). A band pinned
+  // over the list's upper half hides all of a short control the same way
+  // (walk 18 T3-01: the profile's chart tabs, reached by Tab once the sheet
+  // had scrolled, sat wholly under its Drop bar, and a band over all of a
+  // control was taken for a floating bar below it).
+  const upperBand = (cover: DOMRect) => cover.top <= view.top + RING_AIR || cover.top + cover.bottom < view.top + view.bottom;
   let topHit: Element | null = null;
   let cleared = false;
   for (let pass = 0; pass < 3; pass += 1) {
     rect = node.getBoundingClientRect();
     topHit = coverAt(node, rect, rect.top + 2);
     const cover = topHit?.getBoundingClientRect();
-    if (!cover || cover.bottom >= rect.bottom) break;
+    if (!cover || (cover.bottom >= rect.bottom && !upperBand(cover))) break;
     const before = scroller.scrollTop;
     scroller.scrollBy({ top: -(cover.bottom + RING_AIR - rect.top) });
     cleared = true;
