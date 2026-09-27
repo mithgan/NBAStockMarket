@@ -45,6 +45,7 @@ import { brandFontReady, installGlobalWebStyles } from './src/web/globalStyles';
 import { applyVariant } from './src/theme/applyVariant';
 import { startingVariant } from './src/theme/ThemeProvider';
 import { installFocusInView } from './src/web/focusInView';
+import { focusWhenDrawn } from './src/web/focusWhenDrawn';
 import { installScreenScroll } from './src/web/screenScroll';
 import { ignoreHeldKeys } from './src/web/keyRepeat';
 import { treatmentNavigation } from './src/web/treatmentNavigation';
@@ -750,11 +751,17 @@ function AppBody() {
       notify(last
         ? `New practice season. Your last one finished ${last}.`
         : 'New practice season: Day 0, empty roster, score $0.');
-      if (!byKeyboard || typeof document === 'undefined') return;
-      const target = document.getElementById(PRACTICE_WELCOME_TITLE_ID) ?? document.getElementById('app-screen');
-      (target as HTMLElement | null)?.focus?.({ preventScroll: true });
     }, 600);
-    return () => clearTimeout(timer);
+    // The welcome is drawn once the new season has loaded, which on a busy
+    // device can take longer than the notice's wait: focus waits for it
+    // (walk 14 T2-01 found the page itself focused after a keyboard "Play
+    // another season"), and never takes focus back from a player who has
+    // already moved on.
+    const stopFocus = byKeyboard ? focusWhenDrawn(PRACTICE_WELCOME_TITLE_ID) : () => {};
+    return () => {
+      clearTimeout(timer);
+      stopFocus();
+    };
   }, []);
   // Under ~300 CSS px (a phone at 200% zoom) the four tab labels and the
   // brand line only fit at the smallest type size, without side padding.
