@@ -207,6 +207,8 @@ export type ButtonProps = {
   steady?: boolean;
   /** The id of text that explains this button, read after its name (a question's words). */
   describedBy?: string;
+  /** A show/hide button's state, as aria-expanded (react-native-web drops accessibilityState.expanded). */
+  expanded?: boolean;
   accessibilityLabel?: string;
   accessibilityHint?: string;
   width?: number;
@@ -249,6 +251,7 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
   done = false,
   steady = false,
   describedBy,
+  expanded,
   accessibilityLabel,
   accessibilityHint,
   width,
@@ -278,6 +281,7 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
       accessibilityState={{ disabled }}
       disabled={hardDisabled}
       {...(describedBy ? ({ 'aria-describedby': describedBy } as object) : null)}
+      {...(expanded !== undefined ? ({ 'aria-expanded': expanded } as object) : null)}
       onPress={() => {
         // The second tap of a double tap on a confirm that just folded away.
         if (tapsSettling(steady)) return;

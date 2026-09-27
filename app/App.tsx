@@ -28,7 +28,7 @@ import { Button, visuallyHidden } from './src/ui/kit';
 import { registerSettingsOpener, registerTabOpener, settingsReturnStep } from './src/state/uiActions';
 import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
 import { pressedByPointer, settleTaps, tapsSettling } from './src/web/tapSettle';
-import { consumeArrivedByKeyboard, consumeLastSeasonResult, consumePracticeRestarted, goToPractice, leftPractice, noteFinishedSeason, setPracticeProgress } from './src/web/practiceSession';
+import { consumeArrivedByKeyboard, consumeLastSeasonResult, consumeLeftByTap, consumePracticeRestarted, goToPractice, leftPractice, noteFinishedSeason, setPracticeProgress } from './src/web/practiceSession';
 import { chromeFolded, practiceProgress } from './src/data/chromeView';
 import { rankLine } from './src/data/rosterView';
 import {
@@ -148,8 +148,9 @@ function CenteredState({
   useEffect(() => {
     if (!brand) return;
     // The second tap of a double tap on "Leave practice" lands here, where
-    // Back to practice now sits: let it pass (walk 3 T4-06).
-    settleTaps(700);
+    // Back to practice now sits: let it pass (walk 3 T4-06). Only then: a
+    // first visit's quick first tap on Try practice did nothing (walk 11 T1-04).
+    if (consumeLeftByTap()) settleTaps(700);
     // A keyboard press on Leave practice lands on Back to practice; a tap
     // leaves focus alone, so no focus ring is drawn for a finger (T1-15).
     if (!consumeArrivedByKeyboard()) return;
@@ -186,7 +187,9 @@ function CenteredState({
       {details ? (
         <View style={styles.stateDetailsBox}>
           <Button
-            accessibilityLabel={showDetails ? 'Hide details for developers' : 'Show details for developers'}
+            // One name, and its state said as expanded or collapsed (walk 12 T3-05).
+            accessibilityLabel="Details for developers"
+            expanded={showDetails}
             label={showDetails ? 'Hide details' : 'Details for developers'}
             onPress={() => setShowDetails((open) => !open)}
             variant="quiet"
@@ -312,8 +315,20 @@ function NoticeToast({
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
     // Escape dismisses the notice (a sheet open above it takes Escape first).
+    // From inside the strip (its words or "more ▾" at 400% zoom) focus goes
+    // back where it was, as × does, not to the page (walk 12 T3-04).
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !sheetIsOpen()) onDismiss();
+      if (event.key !== 'Escape' || sheetIsOpen()) return;
+      const box = document.getElementById(LATEST_NOTICE_ID);
+      const active = document.activeElement;
+      const fromInside = Boolean(box && active && box.contains(active));
+      onDismiss();
+      if (!fromInside) return;
+      const back = returnFocusTo.current;
+      setTimeout(() => {
+        const target = back && back.isConnected ? back : document.getElementById('app-screen');
+        (target as HTMLElement | null)?.focus?.({ preventScroll: true });
+      }, 0);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -374,9 +389,11 @@ function NoticeToast({
       </ScrollView>
       {tinyDock && overflowing ? (
         <Pressable
-          accessibilityLabel={expanded ? 'Show one line of the notice' : 'Show the whole notice'}
+          // One name, and its state said as expanded or collapsed (walk 12 T3-05).
+          accessibilityLabel="Whole notice"
           accessibilityRole="button"
           accessibilityState={{ expanded }}
+          aria-expanded={expanded}
           onPress={() => setExpanded((open) => !open)}
           style={({ pressed }) => [styles.noticeMoreButton, pressed && styles.pressed]}
         >

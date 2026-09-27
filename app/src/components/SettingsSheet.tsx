@@ -166,6 +166,16 @@ export function SettingsSheet({
   // Appearance is a radio group: arrow keys move and choose, like any other
   // radio group, and only the chosen theme is a Tab stop.
   const onChoiceKey = (event: { key: string; preventDefault: () => void }) => {
+    // Space chooses the focused look, as a radio does; on the one already
+    // chosen it does nothing, and never scrolls the sheet (react-native-web
+    // presses on Space only for buttons; walk 12 T3-01: a 515px jump).
+    if (event.key === ' ' || event.key === 'Spacebar') {
+      event.preventDefault();
+      const focused = typeof document === 'undefined' ? -1
+        : choiceRefs.current.findIndex((node) => (node as unknown as Element | null) === document.activeElement);
+      if (focused >= 0 && CHOICES[focused] !== chosen) setVariant(CHOICES[focused]);
+      return;
+    }
     const index = CHOICES.indexOf(chosen);
     let next = -1;
     if (event.key === 'ArrowDown' || event.key === 'ArrowRight') next = (Math.max(index, 0) + 1) % CHOICES.length;

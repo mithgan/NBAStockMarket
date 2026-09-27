@@ -16,6 +16,11 @@ const BY_KEYBOARD_KEY = 'nba-stock-market:arrived-by-keyboard';
 // Exit was pressed in this tab: the setup screen offers the way back, where a
 // first-time visitor is invited instead (walk 9 T4-06).
 const LEFT_PRACTICE_KEY = 'nba-stock-market:left-practice';
+// When a pointer press on Exit left practice: the page it loads guards only
+// the second tap of that press, never a first visit's first tap (walk 11 T1-04).
+const LEFT_BY_TAP_AT_KEY = 'nba-stock-market:left-by-tap-at';
+/** How long after a tap on Exit its second tap can still land on the new page. */
+const LEFT_BY_TAP_MS = 2500;
 
 function rememberHowPressed(): void {
   try {
@@ -160,8 +165,26 @@ export function leavePractice(): void {
   rememberHowPressed();
   try {
     window.sessionStorage.setItem(LEFT_PRACTICE_KEY, '1');
+    if (pressedByPointer()) window.sessionStorage.setItem(LEFT_BY_TAP_AT_KEY, String(Date.now()));
+    else window.sessionStorage.removeItem(LEFT_BY_TAP_AT_KEY);
   } catch {}
   window.location.search = '';
+}
+
+/**
+ * True once, on the page a tap on Exit just loaded: the second tap of a
+ * double tap can land on the button now in its place (walk 3 T4-06). A first
+ * visit, a reload later on, or a keyboard press is never held back.
+ */
+export function consumeLeftByTap(): boolean {
+  if (!isWeb) return false;
+  try {
+    const at = Number(window.sessionStorage.getItem(LEFT_BY_TAP_AT_KEY));
+    window.sessionStorage.removeItem(LEFT_BY_TAP_AT_KEY);
+    return Number.isFinite(at) && at > 0 && Date.now() - at < LEFT_BY_TAP_MS;
+  } catch {
+    return false;
+  }
 }
 
 /** True when this tab left practice with Exit (not a first visit). */
