@@ -44,6 +44,7 @@ import { reduceMotionChosen } from './src/state/motionPreference';
 import { brandFontReady, installGlobalWebStyles } from './src/web/globalStyles';
 import { applyVariant } from './src/theme/applyVariant';
 import { startingVariant } from './src/theme/ThemeProvider';
+import { installDialogTabWrap } from './src/web/dialogTabWrap';
 import { installFocusInView } from './src/web/focusInView';
 import { focusWhenDrawn } from './src/web/focusWhenDrawn';
 import { installScreenScroll } from './src/web/screenScroll';
@@ -56,6 +57,7 @@ applyVariant(startingVariant());
 ignoreHeldKeys();
 installFocusInView();
 installScreenScroll();
+installDialogTabWrap();
 
 /** Circular databallr mark; radius is derived so it is never a card corner. */
 const BRAND_MARK_SIZE = 24;

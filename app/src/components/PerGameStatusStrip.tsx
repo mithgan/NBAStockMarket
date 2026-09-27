@@ -755,18 +755,12 @@ function RulesSheet({
     if (scroller) scroller.scrollTop += node.getBoundingClientRect().top - scroller.getBoundingClientRect().top - space.sm;
     node.focus?.({ preventScroll: true });
   };
-  // A heading focused by a jump sends Tab to Done, the sheet's first stop,
-  // not on to "Got it" at the very end.
-  const tabToDone = (event: { key?: string; shiftKey?: boolean; preventDefault?: () => void; nativeEvent?: { key?: string; shiftKey?: boolean } }) => {
-    const key = event.key ?? event.nativeEvent?.key;
-    const shift = event.shiftKey ?? event.nativeEvent?.shiftKey;
-    if (key !== 'Tab' || shift) return;
-    event.preventDefault?.();
-    (doneRef.current as unknown as { focus?: () => void } | null)?.focus?.();
-  };
+  // A heading focused by a jump is not a Tab stop of its own; Tab goes on
+  // from it to the control after its section, as a reader expects (walk 16
+  // T3-02: it went back to Done at the top).
   const jumpable = (heading: string) => ({
     ref: headingRef(heading),
-    ...({ tabIndex: -1, onKeyDown: tabToDone } as object),
+    ...({ tabIndex: -1 } as object),
   });
   useEffect(() => {
     if (!shown || !visible || !section) return undefined;

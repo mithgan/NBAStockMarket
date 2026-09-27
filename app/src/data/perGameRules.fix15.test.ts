@@ -30,7 +30,7 @@ test('touch-only devices fold the Keyboard section behind a toggle that says whe
   assert.match(source, /\{foldKeys && !keysOpen \? null : \(/);
 });
 
-test('openRules can open at a section, focused, with Done the next Tab (walk 15 T3-03)', () => {
+test('openRules can open at a section, focused; Tab goes on from it in the page\'s order (walk 15 T3-03, walk 16 T3-02)', () => {
   const calls: Array<string | undefined> = [];
   const unregister = registerRulesOpener((section) => calls.push(section));
   assert.equal(openRules('Scoring'), true);
@@ -40,5 +40,8 @@ test('openRules can open at a section, focused, with Done the next Tab (walk 15 
   assert.deepEqual(calls, ['Scoring', undefined]);
   const source = strip();
   assert.match(source, /const timer = setTimeout\(\(\) => jumpTo\(section\), 120\);/);
-  assert.match(source, /if \(key !== 'Tab' \|\| shift\) return;\s+event\.preventDefault\?\.\(\);\s+\(doneRef\.current/);
+  // A jumped-to heading is focusable but no stop of its own, and it leaves Tab to the browser: the next
+  // Tab reaches the control after its section, not Done at the top (walk 16 T3-02).
+  assert.match(source, /\.\.\.\(\{ tabIndex: -1 \} as object\),/);
+  assert.doesNotMatch(source, /tabToDone/);
 });
