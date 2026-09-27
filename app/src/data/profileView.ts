@@ -24,7 +24,7 @@ import type {
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
-import { gamesCount, humanDate, humanDaySpan, money, moneyFine, perGame, signedMoneyFine } from '../copy/terms';
+import { gamesCount, humanDate, humanDay, humanDaySpan, money, moneyFine, perGame, signedMoneyFine } from '../copy/terms';
 import { shownEdge } from './marketView';
 import { PRICE_EXPLAINER } from './perGameRules';
 import { currentResults, entryDay, lastYearEdge, playerValue, positionValue, type ValueSummary } from './perGameMetrics';
@@ -676,8 +676,8 @@ function asShown(amount: number): number {
 }
 
 export interface HoldingStatus {
-  /** Tag text, or null when you do not hold him. */
-  tag: 'On your roster' | 'Shorted' | null;
+  /** Tag text, or null when you do not hold him; in the past once the season is over, as the Market's `heldTag`. */
+  tag: 'On your roster' | 'Shorted' | 'On your roster this season' | 'Shorted this season' | null;
   /** The sentence beside the tag. */
   text: string;
 }
@@ -696,19 +696,28 @@ export function holdingStatus(
   market?: number,
   /**
    * The season is over (walk 12 T1-09): nothing is locked in a market that
-   * has closed, so the line speaks of the season past, "This season: you paid
-   * $417.5K a game, his last price $439.5K".
+   * has closed, so the tag and line speak of the season past, as the Market
+   * row does (walk 18 T2-01): "On your roster this season", "You paid $417.5K
+   * a game, his last price $439.5K".
    */
   seasonOver = false,
+  /**
+   * He has no games for you yet (walk 18 T1-03: right after an add, "Locked
+   * in, market now $418.5K" read as if the add went through at the wrong
+   * price): a market price off yours is named as your move's doing, in the
+   * room beside the tag ("Market $418.5K after your add").
+   */
+  noGamesYet = false,
 ): HoldingStatus {
   if (position && seasonOver && !saving) {
     const paid = moneyFine(position.lockedGameCost);
     // "his last price $439.5K" wraps as one piece, never leaving the figure alone.
     const last = market === undefined ? ''
       : moneyFine(market) === paid ? ', the same as his last price' : `, ${`his last price ${moneyFine(market)}`.replace(/ /g, '\u00a0')}`;
+    // The tag says "this season", so the line does not say it again.
     return position.side === 'long'
-      ? { tag: 'On your roster', text: `This season: you paid ${paid} a game${last}` }
-      : { tag: 'Shorted', text: `This season: credited ${paid} a game${last}` };
+      ? { tag: 'On your roster this season', text: `You paid ${paid} a game${last}` }
+      : { tag: 'Shorted this season', text: `Credited ${paid} a game${last}` };
   }
   if (!position) {
     if (saving) return { tag: null, text: side === 'long' ? 'Adding him to your roster…' : 'Opening your short on him…' };
@@ -724,6 +733,13 @@ export function holdingStatus(
     // The header leads with your price ("Yours $417.5K a game"; walk 9
     // T1-01), so this line says it is locked and where the market is now.
     const same = moneyFine(market) === moneyFine(position.lockedGameCost);
+    if (noGamesYet && !same) {
+      // Short enough to sit beside the tag at 390px (a short's end date first: "Ends Oct 27, …").
+      const ends = position.expiresOn ? `Ends ${humanDate(position.expiresOn)}, market` : 'Market';
+      return position.side === 'long'
+        ? { tag: 'On your roster', text: `Market ${moneyFine(market)} after your add` }
+        : { tag: 'Shorted', text: `${ends} ${moneyFine(market)} after your short` };
+    }
     const now = same ? 'the same as the market' : `market now ${moneyFine(market)}`;
     return position.side === 'long'
       ? { tag: 'On your roster', text: `Locked in, ${now}` }
@@ -762,8 +778,11 @@ export function breakEvenLine(price: number, rate: number, basis: DividendBasis,
   const beats = exact ? nearest + 1 : Math.ceil(tenths);
   const under = exact ? nearest - 1 : Math.floor(tenths);
   const points = (count: number) => (count / 10).toFixed(1).replace(/\.0$/, '');
-  if (side === 'long') return `Beats his price at ${points(beats)}+ net points a game`;
-  return under < 0 ? null : `Stays under his price at ${points(under)} or fewer net points a game`;
+  // The figure keeps its words and "a game" on its line (walk 18 T1-09: at
+  // 360px "…8.4 or fewer net points a" left "game" alone on the next).
+  const together = (text: string) => text.replace(/ /g, '\u00a0');
+  if (side === 'long') return `Beats his price at ${together(`${points(beats)}+ net points a game`)}`;
+  return under < 0 ? null : `Stays under his price at ${together(`${points(under)} or fewer net points a game`)}`;
 }
 
 /**
@@ -789,21 +808,25 @@ export function priceCompare(side: PerGamePositionSide, now: number, locked: num
 /**
  * His market price's move over the games shown, as the chart's caption, read
  * from the line it sits under: its first point to its last (walk 10 T1-09: a
- * caption measured to today's price said "down 0.1%" under a line that fell
- * 1.2%). "Market price down 1.2% from his first game with you to his latest."
- * One game draws no line: its caption measures to today's price.
+ * caption said "down 0.1%" under a line that fell 1.2%). The line ends at
+ * today's price, the hollow "Now" point (walk 16 T2-N3), so the caption
+ * measures to it (walk 18 T2-14: "down 1.2%" to his latest game sat beside a
+ * line that ended back at its start): "Market price down 0.1% since his first
+ * game with you." With no price today the line ends at his latest game: "…
+ * from his first game with you to his latest."
  */
 export function priceMoveLine(nights: readonly ProfileNight[], now: number, firstWithYou: string | null): string | null {
   const first = nights[0];
   if (!first || first.market === undefined) return null;
   const since = first.date === firstWithYou ? 'his first game with you' : `his ${humanDate(first.date)} game`;
-  const last = nights[nights.length - 1];
-  if (nights.length > 1 && last.market !== undefined) {
-    const change = priceChange(first.market, last.market);
-    return change ? `Market price ${change} from ${since} to his latest.` : `Market price the same at his latest game as at ${since}.`;
+  if (Number.isFinite(now) && now > 0) {
+    const change = priceChange(first.market, now);
+    return change ? `Market price ${change} since ${since}.` : `Market price the same as at ${since}.`;
   }
-  const change = priceChange(first.market, now);
-  return change ? `Market price ${change} since ${since}.` : `Market price the same as at ${since}.`;
+  const last = nights[nights.length - 1];
+  if (nights.length < 2 || last.market === undefined) return null;
+  const change = priceChange(first.market, last.market);
+  return change ? `Market price ${change} from ${since} to his latest.` : `Market price the same at his latest game as at ${since}.`;
 }
 
 /** The app's column on a wide screen (App.tsx `styles.app.maxWidth`): the frame never grows past it. */
@@ -970,6 +993,13 @@ export function heldStints(
  * Held with no games yet: "No games since you added him (Oct 20)" (or
  * "shorted"), and "No games yet at this price" only for a re-add, when he
  * already played for you at another price (`readd`).
+ *
+ * With the calendar (walk 18 T1-01: "No games since you added him (Oct 20)"
+ * the eve of the opener read as if he had sat games out): before the
+ * season's first night, "No games yet · the season opens Tue, Oct 21"; "No
+ * games since you added him (Oct 25)" only once a night was played after the
+ * add (he had no game in it); until then, "No games yet · next games Sun,
+ * Oct 26".
  */
 export function stakeLine(
   summary: Pick<ValueSummary, 'games' | 'total'>,
@@ -981,6 +1011,11 @@ export function stakeLine(
     past?: string | null;
     /** Held after earlier stints on this side (heldStints): the header counts every one. */
     stints?: { count: number; games: number; total: number } | null;
+    /**
+     * The last night played and the next night with games; `opens`, the
+     * season's first night while no night of it has been played.
+     */
+    calendar?: { lastNight: string | null; nextNight: string | null; opens: string | null } | null;
   } = {},
   /** The season is over: the figure is your season with him (walk 12 T1-09). */
   seasonOver = false,
@@ -994,9 +1029,18 @@ export function stakeLine(
   if (summary.games === 0) {
     if (!held) return null;
     if (opened.readd) return { lead: 'No games yet at this price', total: null, tone: 'none' };
+    const calendar = opened.calendar;
+    // A date stays on one line at 320px (walk 9 T4-07): "(Oct 20)", "Tue, Oct 21".
+    const whole = (text: string) => text.replace(/ /g, '\u00a0');
+    if (calendar?.opens) return { lead: `No games yet · the season opens ${whole(humanDay(calendar.opens))}`, total: null, tone: 'none' };
+    // No night played since the add: nothing missed yet. Without the
+    // calendar or the add's day, a night is taken to have been played.
+    if (calendar && opened.since && calendar.lastNight && calendar.lastNight <= opened.since) {
+      const next = calendar.nextNight ? ` · next games ${whole(humanDay(calendar.nextNight))}` : '';
+      return { lead: `No games yet${next}`, total: null, tone: 'none' };
+    }
     const verb = side === 'long' ? 'added' : 'shorted';
-    // "(Oct 20)" stays on one line at 320px (walk 9 T4-07).
-    const day = opened.since ? ` (${humanDate(opened.since).replace(/ /g, '\u00a0')})` : '';
+    const day = opened.since ? ` (${whole(humanDate(opened.since))})` : '';
     return { lead: `No games since you ${verb} him${day}`, total: null, tone: 'none' };
   }
   const tone: StakeTone = Math.abs(summary.total) < EVEN_BAND ? 'even' : summary.total > 0 ? 'gain' : 'loss';

@@ -42,6 +42,7 @@ import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
 import { practiceProgress } from '../data/chromeView';
 import { isSeasonOver, tierLabel } from '../data/marketView';
 import { currentResults, playerValue, positionValue } from '../data/perGameMetrics';
+import { extremeName } from '../data/resultsView';
 import { splitPlayerName } from '../data/playerName';
 import {
   buildProfileNights,
@@ -317,7 +318,8 @@ export function PerGamePlayerProfile({
     lastSettledDate: bootstrap.game.lastSettledDate,
     nextGameDate: bootstrap.game.nextGameDate,
   }) : false;
-  const status = holdingStatus(position, viewSide, false, player.currentGameCost, seasonOver);
+  // Until he plays for you, a market price off yours is your move's doing (walk 18 T1-03).
+  const status = holdingStatus(position, viewSide, false, player.currentGameCost, seasonOver, Boolean(position) && stakeSummary.games === 0);
   // His price in net points, the box-score figure that beats it (walk 16
   // T1-N2), while games are still to come: your price when you hold him,
   // today's otherwise.
@@ -326,8 +328,17 @@ export function PerGamePlayerProfile({
     : breakEvenLine(position ? position.lockedGameCost : player.currentGameCost, dividendRate, bootstrap.ruleset.dividendBasis, viewSide);
   const ledger = bootstrap?.ledger.items;
   const positions = bootstrap?.positions;
+  // Held with no games yet (walk 18 T1-01): before the season's first night
+  // his games start with the season; "No games since you added him" only
+  // after a night he sat out.
+  const lastNight = bootstrap?.game.lastSettledDate ?? null;
+  const nextNight = bootstrap?.game.nextGameDate ?? null;
+  const seasonUnplayed = bootstrap
+    ? (isMockActive() ? practiceProgress(mockSeasonStart(), lastNight).day === 0 : !lastNight)
+    : false;
   const opened = useMemo(() => (position ? {
     since: positionOpenedDay(ledger ?? [], position.positionId),
+    calendar: { lastNight, nextNight, opens: seasonUnplayed ? nextNight : null },
     readd: results.some((row) => row.playerId === player.playerId && row.side === position.side
       && row.positionId !== position.positionId && row.status === 'settled'),
     // Re-added: the header counts every stint on this side, as the Roster does (walk 17 T4-10).
@@ -338,7 +349,7 @@ export function PerGamePlayerProfile({
       currentResults(results).filter((row) => row.playerId === player.playerId),
       pastStints(positions ?? [], ledger ?? [], player.playerId),
     ),
-  }), [ledger, player.playerId, position, positions, results]);
+  }), [lastNight, ledger, nextNight, player.playerId, position, positions, results, seasonUnplayed]);
   const stake = stakeLine(stakeSummary, held, viewSide, opened, seasonOver);
   // One game shown, and it was yours with the header saying its result: the
   // verdict says how it went without the figure, and the averages and the
@@ -346,6 +357,8 @@ export function PerGamePlayerProfile({
   // six times pushed the chart below the fold).
   const oneGame = summary.games === 1;
   const headerSaysIt = held && oneGame && summary.yours === 1 && Boolean(stake?.total);
+  const bestName = extremeName('Best', summary.best?.net ?? 0, 'game');
+  const worstName = extremeName('Worst', summary.worst?.net ?? 0, 'game');
   // Nights with no money to show: he did not play, or the game has not settled.
   const quietNote = unsettledNote(stakeSummary);
   const quiet = useMemo(() => statusNights(results, viewSide), [results, viewSide]);
@@ -623,17 +636,19 @@ export function PerGamePlayerProfile({
                   />
                 ) : (
                   <>
+                    {/* Named for what it is (walk 18 T2-11): a worst game
+                        that gained is the "Smallest gain". */}
                     <Figure
                       caption={summary.best ? `${humanDate(summary.best.date)}\ndividend ${moneyFine(summary.best.dividend)}` : undefined}
-                      label="Best game"
-                      spoken={gameSpoken('Best game', summary.best)}
+                      label={bestName}
+                      spoken={gameSpoken(bestName, summary.best)}
                       style={cell}
                       value={<FineMoney value={summary.best?.net ?? 0} />}
                     />
                     <Figure
                       caption={summary.worst ? `${humanDate(summary.worst.date)}\ndividend ${moneyFine(summary.worst.dividend)}` : undefined}
-                      label="Worst game"
-                      spoken={gameSpoken('Worst game', summary.worst)}
+                      label={worstName}
+                      spoken={gameSpoken(worstName, summary.worst)}
                       style={cell}
                       value={<FineMoney value={summary.worst?.net ?? 0} />}
                     />

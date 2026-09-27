@@ -55,6 +55,7 @@ import {
   shortEndsOn,
   sideWords,
   breakEvenLine,
+  breakEvenLine as breakEvenText,
   nowLabel,
   pastStintLead,
   pastStints,
@@ -1051,10 +1052,10 @@ test('the Price view leads with two cells and one plain line; the move is the ca
   assert.equal(priceCompare('short', 236_000, 225_000).cells[1].label, 'New shorts get');
   const night = (date: string, market: number): ProfileNight => ({ date, dividend: 300_000, price: 259_000, net: 41_000, source: 'yours', market });
   const barnes = [night('2025-10-22', 259_600), night('2025-10-27', 259_700)];
-  // The caption reads the plotted line, first point to last (walk 10 T1-09).
-  assert.equal(priceMoveLine(barnes, 259_800, '2025-10-22'), 'Market price the same at his latest game as at his first game with you.');
-  assert.equal(priceMoveLine(barnes, 259_600, null), 'Market price the same at his latest game as at his Oct 22 game.');
-  // One game draws no line: measured to today's price, as before.
+  // The caption reads the plotted line, first point to last (walk 10 T1-09), which ends at today's price (walk 18 T2-14).
+  assert.equal(priceMoveLine(barnes, 259_800, '2025-10-22'), 'Market price up 0.1% since his first game with you.');
+  assert.equal(priceMoveLine(barnes, 259_600, null), 'Market price the same as at his Oct 22 game.');
+  // One game: measured to today's price, as before.
   assert.equal(priceMoveLine(barnes.slice(0, 1), 259_800, '2025-10-22'), 'Market price up 0.1% since his first game with you.');
   assert.equal(priceMoveLine([{ date: '2025-10-22', dividend: 1, price: 2, net: -1, source: 'market' }], 3, null), null, 'no market price: no line');
 });
@@ -1166,12 +1167,16 @@ test('HIGH and LOW never sit on the price line or run into the next bar (walk 14
   assert.ok(pair.every((label) => label.chip === null && label.y >= 12), 'both inside the chart, no chip');
 });
 
-test('the Price caption matches its plotted line, not today\'s price (walk 10 T1-09)', () => {
+test('the Price caption matches its plotted line, first point to last (walk 10 T1-09, walk 18 T2-14)', () => {
   const night = (date: string, market: number): ProfileNight => ({ date, dividend: 400_000, price: 418_500, net: 0, source: 'yours', market });
   // The tester's Luka: $418.5K at Oct 21, $413.5K at Oct 27, new buyers pay $418.2K today.
   const luka = [night('2025-10-21', 418_500), night('2025-10-23', 416_000), night('2025-10-27', 413_500)];
-  assert.equal(priceMoveLine(luka, 418_200, '2025-10-21'), 'Market price down 1.2% from his first game with you to his latest.');
-  assert.equal(priceMoveLine(luka.slice(1), 418_200, '2025-10-21'), 'Market price down 0.6% from his Oct 23 game to his latest.');
+  // The line ends at "Now $418.2K" (walk 16 T2-N3): the caption measures to it, never "down 1.2%" beside it.
+  assert.equal(priceMoveLine(luka, 418_200, '2025-10-21'), 'Market price down 0.1% since his first game with you.');
+  assert.equal(priceMoveLine(luka.slice(1), 418_200, '2025-10-21'), 'Market price up 0.5% since his Oct 23 game.');
+  // No price today (no Now point): the line ends at his latest game, and so does the caption.
+  assert.equal(priceMoveLine(luka, 0, '2025-10-21'), 'Market price down 1.2% from his first game with you to his latest.');
+  assert.equal(priceMoveLine(luka.slice(1), Number.NaN, '2025-10-21'), 'Market price down 0.6% from his Oct 23 game to his latest.');
 });
 
 test('walk 11 T2-01: the Price view says one game rarely decides a price, in the Rules\' words', async () => {
@@ -1198,15 +1203,16 @@ test('the profile says "On your roster" and "Your result", never "roster spot" (
 
 test('after the season a held player is spoken of in the past (walk 12 T1-09)', () => {
   // Not "Locked in, market now $439.5K": the market has closed.
+  // The tag speaks of the season past, as the Market row does (walk 18 T2-01), so the line leaves "This season:" to it.
   assert.deepEqual(holdingStatus({ side: 'long', lockedGameCost: 417_500, expiresOn: null }, 'long', false, 439_500, true), {
-    tag: 'On your roster',
-    text: 'This season: you paid $417.5K a game, his\u00a0last\u00a0price\u00a0$439.5K',
+    tag: 'On your roster this season',
+    text: 'You paid $417.5K a game, his\u00a0last\u00a0price\u00a0$439.5K',
   });
   assert.deepEqual(holdingStatus({ side: 'long', lockedGameCost: 417_500, expiresOn: null }, 'long', false, 417_500, true).text,
-    'This season: you paid $417.5K a game, the same as his last price');
+    'You paid $417.5K a game, the same as his last price');
   assert.deepEqual(holdingStatus({ side: 'short', lockedGameCost: 259_000, expiresOn: '2026-04-14' }, 'short', false, 250_000, true), {
-    tag: 'Shorted',
-    text: 'This season: credited $259K a game, his\u00a0last\u00a0price\u00a0$250K',
+    tag: 'Shorted this season',
+    text: 'Credited $259K a game, his\u00a0last\u00a0price\u00a0$250K',
   });
   // During the season the line is unchanged.
   assert.equal(holdingStatus({ side: 'long', lockedGameCost: 417_500, expiresOn: null }, 'long', false, 439_500).text, 'Locked in, market now $439.5K');
@@ -1342,6 +1348,8 @@ test('the Price chart ends at his price today, a hollow point named "Now" clear 
 });
 
 test('the profile says the net points that beat his price, on raw net points only (walk 16 T1-N2)', () => {
+  // The words as read; the figure's words are bound with no-break spaces (walk 18 T1-09).
+  const breakEvenLine = (...args: Parameters<typeof breakEvenText>) => breakEvenText(...args)?.replace(/\u00a0/g, ' ') ?? null;
   // $417.5K at $40K a net point: 10.4 pays $416K (under), 10.5 pays $420K (beats).
   assert.equal(breakEvenLine(417_500, 40_000, 'raw_net_points', 'long'), 'Beats his price at 10.5+ net points a game');
   assert.equal(breakEvenLine(417_500, 40_000, 'raw_net_points', 'short'), 'Stays under his price at 10.4 or fewer net points a game');

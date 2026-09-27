@@ -47,6 +47,7 @@ import {
   hisFeed,
   seasonSoFar,
   type SeasonSoFar,
+  extremeName,
   feeExplanation,
   feeTitle,
   hisMoveLine,
@@ -949,16 +950,17 @@ function SeasonSoFarBlock({
 }) {
   const noun = his ? 'game' : 'night';
   const title = his ? (over ? 'His games' : 'His games so far') : over ? 'Your season' : 'Season so far';
+  // Named for what it is: never a "Worst game" of +$10.5K (walk 18 T2-11).
   const extreme = (kind: 'Best' | 'Worst', entry: { date: string; total: number }) => (
     <Pressable
       accessibilityHint={`Shows that ${noun} in the feed.`}
-      accessibilityLabel={`${kind} ${noun}, ${humanDay(entry.date)}, ${netWords(entry.total)}`}
+      accessibilityLabel={`${extremeName(kind, entry.total, noun)}, ${humanDay(entry.date)}, ${netWords(entry.total)}`}
       accessibilityRole="button"
       key={kind}
       onPress={() => onJump(entry.date)}
       style={({ pressed }) => [styles.soFarRow, pressed && styles.rowOpen]}
     >
-      <Text style={styles.soFarLabel}>{kind} {noun}</Text>
+      <Text style={styles.soFarLabel}>{extremeName(kind, entry.total, noun)}</Text>
       <Text style={styles.soFarDate}>{humanDay(entry.date)}</Text>
       <NetMoney size="body" value={entry.total} />
     </Pressable>

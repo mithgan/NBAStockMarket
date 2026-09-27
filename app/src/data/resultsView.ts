@@ -456,6 +456,19 @@ export function seasonSoFar(nights: readonly NightSummary[]): SeasonSoFar | null
 }
 
 /**
+ * A best or worst game (or night) named for what it is (walk 18 T2-11: "Worst
+ * game +$10.5K" in gain colour when every game gained): a worst that gained is
+ * the "Smallest gain", a best that lost the "Smallest loss". An amount shown
+ * as $0 keeps its plain name.
+ */
+export function extremeName(kind: 'Best' | 'Worst', total: number, noun: 'game' | 'night'): string {
+  const shown = Math.round(total);
+  if (kind === 'Worst' && shown > 0) return 'Smallest gain';
+  if (kind === 'Best' && shown < 0) return 'Smallest loss';
+  return `${kind} ${noun}`;
+}
+
+/**
  * The facts under a day's date, one phrase each: "5 of 8 beat their price",
  * "1 of 2 shorts paid off", "2 didn't play". A short pays off when its player
  * stays under his price, so shorts are counted apart instead of "beating" it.
