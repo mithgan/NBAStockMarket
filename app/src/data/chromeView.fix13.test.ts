@@ -32,7 +32,8 @@ test('queued presses that end without playing are said with the reason (walk 13 
 test('a folded row never puts a season-changing button where +1 night was (walk 13 T4-10)', () => {
   const source = simBar();
   const controls = source.slice(source.indexOf('export function PracticeControls('));
-  assert.deepEqual(SEASON_DONE_SLOT, { title: 'Season complete', next: 'New season is in More' });
+  // Words only; the status line above says "Season complete", so the slot says where to go next.
+  assert.equal(SEASON_DONE_SLOT, 'New season is in More');
   // The early season-end row (Restart and Exit in the advance buttons' place) skips folded rows.
   assert.match(controls, /\(compact \|\| phoneRow\) && progress\.complete && !folded\)/);
   const folded = controls.slice(controls.indexOf('  if (folded) {'));

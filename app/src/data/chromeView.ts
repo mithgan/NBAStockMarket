@@ -1339,9 +1339,12 @@ export function queuedCancelledNotice(queued: readonly QueuedStep[], playing: st
 /**
  * Where +1 night and +1 week were in a folded row once the season is over:
  * words, not a control, so a steady tap through the last night never lands on
- * a season-changing button (walk 13 T4-10). The way on waits in More.
+ * a season-changing button (walk 13 T4-10). The way on waits in More. The
+ * status line right above already says "Season complete", so the slot only
+ * says where to go next (walk 14 lead: it read "Season complete" three times
+ * in 120px at 320x568).
  */
-export const SEASON_DONE_SLOT = { title: 'Season complete', next: 'New season is in More' } as const;
+export const SEASON_DONE_SLOT = 'New season is in More';
 
 /**
  * +1 night / +1 week's name while a press would queue behind the games

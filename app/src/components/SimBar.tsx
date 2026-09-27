@@ -2283,8 +2283,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       <View style={[styles.foldedControls, foldFill && styles.foldedFill]}>
         {progress.complete ? (
           <View style={[styles.seasonDone, foldFill ? styles.advanceFill : styles.seasonDoneFixed]}>
-            <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.seasonDoneText}>{SEASON_DONE_SLOT.title}</Text>
-            <Text maxFontSizeMultiplier={1.3} numberOfLines={2} style={styles.seasonDoneNext}>{SEASON_DONE_SLOT.next}</Text>
+            <Text maxFontSizeMultiplier={1.3} numberOfLines={2} style={styles.seasonDoneNext}>{SEASON_DONE_SLOT}</Text>
           </View>
         ) : advanceButtons}
         {menu(progress.complete ? <>{secondaryButtons(true)}{rulesItem}</> : <>{cancelButton('menu')}{rulesItem}{playToEndButton(false, true)}{secondaryButtons(true)}</>)}
@@ -2642,20 +2641,12 @@ const styles = StyleSheet.create({
   seasonDoneFixed: {
     minWidth: 184,
   },
-  seasonDoneText: {
-    color: colors.text,
-    fontFamily: fonts.display,
-    fontSize: type.caption,
-    fontWeight: weight.bold,
-    letterSpacing: 0.4,
-    lineHeight: 15,
-    textTransform: 'uppercase',
-  },
   seasonDoneNext: {
-    color: colors.muted,
+    color: colors.text,
     fontFamily: fonts.body,
     fontSize: type.caption,
-    lineHeight: 15,
+    fontWeight: weight.bold,
+    lineHeight: 16,
   },
   advanceFolded: {
     minWidth: 0,
