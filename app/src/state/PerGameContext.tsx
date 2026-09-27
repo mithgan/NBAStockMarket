@@ -269,6 +269,8 @@ export function PerGameProvider({
       ? shownNow.slice(0, shownNow.length - replacesTail.length - 1)
       : shownNow;
     setMessage(joins ? `${joinedTo} ${visible}` : visible);
+    // The words as written, lock sentence and all, of a notice shown on its own.
+    shownWritten.current = joins ? null : text;
     setNoticeSpoken(spoken ?? (lock || joins ? text : null));
     setNoticeSeq((seq) => seq + 1);
     noticeIds.current += 1;
@@ -290,6 +292,7 @@ export function PerGameProvider({
   }, [remember]);
   const shownMessage = useRef<string | null>(null);
   shownMessage.current = message;
+  const shownWritten = useRef<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -513,9 +516,12 @@ export function PerGameProvider({
       // never fall back to the last week alone (walk 18 T1-11: "$890.5K in
       // the Oct 21–Nov 3 games (2 weeks)" became "$436.5K in the Oct 28–Nov 3
       // games" for a moment).
-      const shown = shownMessage.current;
+      // Only a run wider than those games, and in its written words: the one
+      // on screen leaves out its lock sentence ("Moves pause for the Oct 28
+      // games"), which the refusal is told under.
+      const written = shownMessage.current !== null ? shownWritten.current : null;
       const fresh = recent && Date.now() - recent.at < 6000 ? recent.text : null;
-      const base = fresh && shown && coversGames(shown, fresh) ? shown : fresh;
+      const base = fresh && written && coversGames(written, fresh) && !coversGames(fresh, written) ? written : fresh;
       waitedMoves.current = { moves: [move], base };
     }
     setTimeout(() => {
