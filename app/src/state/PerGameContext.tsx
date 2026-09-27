@@ -96,7 +96,8 @@ interface PerGameContextValue {
   closePosition: (position: PerGamePosition, options?: { also?: string }) => Promise<boolean>;
   dismissNotice: () => void;
   /** A short informational notice (clears itself), e.g. why a LOCKED button did nothing. */
-  notify: (text: string, options?: { spoken?: string }) => void;
+  /** `tone: 'problem'` keeps it until closed (a run's notice that carries a refused move). */
+  notify: (text: string, options?: { spoken?: string; tone?: NoticeTone }) => void;
   /**
    * A press on a LOCKED Add / Short / Drop: named with the games' notice when
    * it raced the lock the games just brought, else the lock's own sentence.
@@ -681,7 +682,7 @@ export function PerGameProvider({
   }, [apiClient, queueMove, runPositionAction]);
 
   const dismissNotice = useCallback(() => setMessage(null), []);
-  const notify = useCallback((text: string, options?: { spoken?: string }) => say(text, 'success', options?.spoken), [say]);
+  const notify = useCallback((text: string, options?: { spoken?: string; tone?: NoticeTone }) => say(text, options?.tone ?? 'success', options?.spoken), [say]);
   const speakNotice = useCallback(() => {
     const silent = silentNotice.current;
     if (!silent || silent.id !== noticeIds.current) return;

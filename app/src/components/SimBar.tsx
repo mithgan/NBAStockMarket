@@ -90,7 +90,10 @@ import {
   queueHasRoom,
   seasonEndControl,
   resultSpan,
+  mergeRefusals,
   runNotice,
+  runRefusals,
+  withRefusals,
   SEASON_TOTAL_DAYS,
   weekSpanLabel,
 } from '../data/chromeView';
@@ -1274,6 +1277,17 @@ interface PracticeRun {
   lastFrom: string | null;
   /** Queued presses cancelled while it played, said at the end of its notice (walk 9 T1-15). */
   note?: string | null;
+  /** Moves refused while it played, carried in its notice (walk 15 T4-04, T4-08). */
+  refusals?: string[];
+}
+
+/** How soon after a run's last step a refused move still belongs to that run. */
+const RUN_REFUSAL_JOIN_MS = 3000;
+
+/** A run's notice: its games, any queued presses it cancelled, and any moves it refused. */
+function runText(run: PracticeRun, now: PerGameBootstrap): string {
+  const games = withCancelledNote(runNotice(run.steps, refreshNotice(run.start, now, false, { seasonComplete: seasonOver })), run.note ?? null);
+  return withRefusals(games, run.refusals ?? []);
 }
 
 /** The practice season is over (its last day has settled), as the notices judge it. */
@@ -1330,6 +1344,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     isRefreshing,
     message,
     noticeSeq,
+    noticeTone,
     notify,
     pendingActions,
     refreshData,
@@ -1405,7 +1420,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     // was ever seen (walk 15 T2-11: the logo for 1.6 s at latency 1500).
     const run = runRef.current;
     if (run && bootstrap) {
-      notify(runNotice(run.steps, refreshNotice(run.start, bootstrap, false, { seasonComplete: seasonOver })), { spoken: '' });
+      const text = runText(run, bootstrap);
+      composedRun.current = text;
+      notify(text, { spoken: '', tone: run.refusals?.length ? 'problem' : 'success' });
       return;
     }
     // Play to the end waits behind this step: the step's result is heard
@@ -1413,6 +1430,29 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     if (endQueuedRef.current && isGamesNotice(message)) notify(message as string, { spoken: '' });
     dismissNotice();
   }, [noticeSeq, dismissNotice]);
+  // A move refused while a run plays (a lock the games brought, a price
+  // that moved) is kept for the run's notice, which would otherwise replace
+  // it with the next week's news; one refused after the run's last step
+  // names the whole run, not only its last week (walk 15 T4-04, T4-08).
+  const composedRun = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (noticeTone !== 'problem' || !message || !bootstrap || message === composedRun.current) return;
+    const landed = landedRun.current;
+    const run = runRef.current ?? (landed && Date.now() - landed.at < RUN_REFUSAL_JOIN_MS ? landed.run : null);
+    if (!run) return;
+    const known = run.refusals ?? [];
+    const fresh = runRefusals(message).filter((line) => !known.includes(line));
+    if (fresh.length === 0) return;
+    run.refusals = mergeRefusals(known, fresh);
+    if (runRef.current || run.steps.length < 2) return;
+    // The run is heard now, with its refusals, in place of the refusal's own
+    // words (replaced before they reached the screen) and of the run's later
+    // announcement.
+    stopSpeakRun();
+    const text = runText(run, bootstrap);
+    composedRun.current = text;
+    notify(text, { tone: 'problem' });
+  }, [message, noticeTone]);
   // In the render that shows the run's last nights, before it paints, so the
   // last step's own notice never shows on its own.
   useLayoutEffect(() => {
@@ -1421,10 +1461,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     const settled = bootstrap.game.lastSettledDate;
     if (!settled || (runOver.lastFrom !== null && settled <= runOver.lastFrom)) return;
     // Shown now, heard once the run settles (see speakRun).
-    notify(withCancelledNote(
-      runNotice(runOver.steps, refreshNotice(runOver.start, bootstrap, false, { seasonComplete: seasonOver })),
-      runOver.note ?? null,
-    ), { spoken: '' });
+    const text = runText(runOver, bootstrap);
+    composedRun.current = text;
+    notify(text, { spoken: '', tone: runOver.refusals?.length ? 'problem' : 'success' });
   }, [runOver, bootstrap, notify]);
   // A cancel that landed while a single step played: its words join the
   // step's result, which replaced them at once (walk 9 T1-15).

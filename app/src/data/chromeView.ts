@@ -667,6 +667,83 @@ export function resultSpan(
  * the run's whole span (state/perGameNotices.refreshNotice from the bootstrap
  * before the run); one without a games span (season complete) is kept as is.
  */
+/**
+ * The sentences of a notice that say a move was refused, as a run's notice
+ * carries them once later games have played, names first and the reason in
+ * the past ("Devin Booker and Jalen Duren were not added: moves paused for
+ * the Oct 28 games."): the run's growing notice replaced them and nothing on
+ * screen said the adds had failed (walk 15 T4-04, T4-08).
+ */
+export function runRefusals(text: string): string[] {
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  const out: string[] = [];
+  sentences.forEach((sentence, index) => {
+    if (!/\b(?:was|were) not (?:added|dropped|shorted|closed)\b/.test(sentence)) return;
+    const paused = /^Moves pause for (the .+? games), so (.+?)\.$/.exec(sentence);
+    if (paused) {
+      out.push(`${paused[2][0].toUpperCase()}${paused[2].slice(1)}: moves paused for ${paused[1]}.`);
+      return;
+    }
+    if (/(?:was|were) not \w+\.$/.test(sentence) && /^Your roster is locked\.?$/.test(sentences[index + 1] ?? '')) {
+      // "…was not added. Your roster is locked. Moves reopen after Nov 11."
+      const reopens = /^Moves reopen after (\w{3} \d{1,2})\.?$/.exec(sentences[index + 2] ?? '');
+      out.push(`${sentence.slice(0, -1)}: ${reopens ? `moves paused for the ${reopens[1]} games` : 'the roster was locked'}.`);
+      return;
+    }
+    // Kept in one form: a lock ahead is put back in the present when shown (withRefusals).
+    out.push(sentence.replace(/: moves pause for /, ': moves paused for '));
+  });
+  return out;
+}
+
+/** Who a refusal names, what was not done, and why in kind (a lock's date, or a moved price). */
+function refusalParts(line: string): { names: string[]; verb: string; why: string } {
+  const match = /^(.*?) (?:was|were) not (\w+)(?:: (.*))?\.$/.exec(line);
+  if (!match) return { names: [line], verb: '', why: line };
+  const names = match[1].split(/, and | and |, /).map((name) => name.trim()).filter(Boolean);
+  const reason = match[3] ?? '';
+  const why = /price/.test(reason) ? 'price' : reason;
+  return { names, verb: match[2], why };
+}
+
+/**
+ * A run's refusals with fresh ones added: a refusal said again with more
+ * names ("Devin Booker" then "Devin Booker and Jalen Duren", the same lock
+ * or a moved price) replaces the one it covers; others are kept.
+ */
+export function mergeRefusals(known: readonly string[], fresh: readonly string[]): string[] {
+  let out = [...known];
+  for (const line of fresh) {
+    const next = refusalParts(line);
+    out = out.filter((entry) => {
+      const old = refusalParts(entry);
+      return !(old.verb === next.verb && old.why === next.why && old.names.every((name) => next.names.includes(name)));
+    });
+    out.push(line);
+  }
+  return out;
+}
+
+/**
+ * A run's games notice with its refusals, before any lock sentence it ends
+ * with. A refusal by the lock still ahead is said in the present and stands
+ * for that lock's sentence ("…were not added: moves pause for the Nov 11
+ * games."); one by a lock the run has played is in the past.
+ */
+export function withRefusals(games: string, refusals: readonly string[]): string {
+  if (refusals.length === 0) return games;
+  const lock = /\s(Moves pause for (the [^.]+ games)\.)$/.exec(games);
+  const head = lock ? games.slice(0, lock.index) : games;
+  const ahead = lock?.[2] ?? null;
+  let saysLock = false;
+  const lines = refusals.map((line) => line.replace(/: moves paused for (the .+ games)\.$/, (whole, which: string) => {
+    if (which !== ahead) return whole;
+    saysLock = true;
+    return `: moves pause for ${which}.`;
+  }));
+  return [head, ...lines, ...(lock && !saysLock ? [lock[1]] : [])].join(' ');
+}
+
 export function runNotice(steps: readonly ('night' | 'week')[], notice: string): string {
   if (steps.length < 2) return notice;
   const nights = steps.filter((step) => step === 'night').length;
