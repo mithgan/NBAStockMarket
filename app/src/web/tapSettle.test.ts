@@ -216,3 +216,25 @@ test('after a question folds, only a finger or mouse below it waits; a key, or a
     mock.timers.reset();
   }
 });
+
+test('a tap heard late by a busy page is judged by when it happened (walk 18 lead)', async () => {
+  // Beyond the real clock: earlier tests in this file ran on it and left guards behind.
+  mock.timers.enable({ apis: ['Date'], now: 6_000_000_000_000 });
+  try {
+    const { notePointer, settleTaps, tapsSettling } = await import('./tapSettle');
+    const start = Date.now();
+    // "Find a short" tapped at (200, 740): the screen switch quiets that spot through its own scroll.
+    notePointer(200, 740);
+    settleTaps(0, 500, 'all', true);
+    // The new screen keeps the page busy 700 ms; the double tap's second tap came 170 ms after the first.
+    mock.timers.tick(700);
+    notePointer(201, 741, true, start + 170);
+    assert.equal(tapsSettling(), true);
+    // A tap that really came after the guard ran out acts.
+    mock.timers.tick(100);
+    notePointer(201, 741, true, start + 780);
+    assert.equal(tapsSettling(), false);
+  } finally {
+    mock.timers.reset();
+  }
+});

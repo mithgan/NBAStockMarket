@@ -79,15 +79,22 @@ function marksMoved(marks: ScrollMark[]): boolean {
  * view) and keeps the spot.
  */
 const SCROLL_RELEASES_AFTER_MS = 150;
-/** Where the last finger or mouse lifted. */
-let lastPointer: { x: number; y: number; at: number } | null = null;
+/**
+ * Where the last finger or mouse lifted: `at` when the page heard it, `t` when
+ * it happened. A busy page hears a tap late (walk 18 lead: opening the Market
+ * took 660ms, and the second tap of a double tap, 170ms after the first, was
+ * handled after its guard had run out and opened a profile); the guards are
+ * judged by when the tap happened.
+ */
+type Lift = { x: number; y: number; at: number; t: number };
+let lastPointer: Lift | null = null;
 /**
  * The last lift whose click has come: the press being handled, or the last
  * one handled. A lift still waiting for its click is the next tap, not this
  * press: a move that quieted that spot swallowed the next Add in a fast fill
  * (walk 8, the lead's own check).
  */
-let lastPressed: { x: number; y: number; at: number } | null = null;
+let lastPressed: Lift | null = null;
 /** How near its lift a click counts as that lift's (px). */
 const CLICK_MATCH_PX = 8;
 /** When Enter or Space last went down: a press after it is the keyboard's. */
@@ -102,8 +109,9 @@ export function notePressKey(): void {
  * Record where a finger or mouse lifted (the page's pointerup, whose click
  * comes after it, or a test's press, already clicked).
  */
-export function notePointer(x: number, y: number, clicked = true): void {
-  lastPointer = { x, y, at: Date.now() };
+export function notePointer(x: number, y: number, clicked = true, happenedAt: number | null = null): void {
+  const at = Date.now();
+  lastPointer = { x, y, at, t: happenedAt === null ? at : Math.min(at, happenedAt) };
   if (clicked) lastPressed = lastPointer;
   // A tap somewhere else, once the short quiet is over, is a new intent: the
   // quieted spot is released, so a later deliberate tap there (Short, then
@@ -143,7 +151,12 @@ export function notePageScroll(): void {
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   // Where the finger or mouse last lifted: presses fire on that lift, so this
   // is where the press being handled happened. Keyboard presses have none.
-  window.addEventListener('pointerup', (event) => notePointer(event.clientX, event.clientY, false), true);
+  window.addEventListener('pointerup', (event) => notePointer(
+    event.clientX,
+    event.clientY,
+    false,
+    typeof performance !== 'undefined' && typeof performance.timeOrigin === 'number' && event.timeStamp > 0 ? performance.timeOrigin + event.timeStamp : null,
+  ), true);
   // Presses fire on the click, which can come a task or two after the lift;
   // a key's click (detail 0) has no pointer.
   window.addEventListener('click', (event) => {
@@ -173,7 +186,7 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
   }, { capture: true, passive: true });
 }
 
-function currentPointer(): { x: number; y: number } | null {
+function currentPointer(): Lift | null {
   if (!lastPressed || lastPressed.at <= lastPressKeyAt) return null;
   return Date.now() - lastPressed.at < POINTER_FRESH_MS ? lastPressed : null;
 }
@@ -205,16 +218,18 @@ export function settleTaps(ms = SETTLE_MS, sameSpotMs = 0, scope: 'all' | 'list'
  */
 export function tapsSettling(steady = false): boolean {
   const now = Date.now();
-  if (now < quietUntil) return true;
+  // A finger's or mouse's press is judged by when it happened, a key's by now.
+  const pointer = currentPointer();
+  const pressAt = pointer ? pointer.t : now;
+  if (pressAt < quietUntil) return true;
   // The list's quiet is for a finger or mouse aimed where a row was before
   // the list moved under it: a key acts on exactly what it is on (walk 17
   // T4-04: Enter on an Add 0.35 s after a Drop was lost, and a season of
   // swaps shrank a roster from 10 to 2).
-  if (!steady && now < listQuietUntil) {
-    const at = currentPointer();
-    if (at && (listQuietFromY === null || at.y >= listQuietFromY)) return true;
+  if (!steady && pressAt < listQuietUntil) {
+    if (pointer && (listQuietFromY === null || pointer.y >= listQuietFromY)) return true;
   }
-  if (!spot || now >= spot.until) return false;
+  if (!spot || pressAt >= spot.until) return false;
   // A list that moved a while after the tap was scrolled on purpose, even
   // if the browser has not said so yet: its scroll event comes a frame
   // late, after a click that scrolled its own button into view (voice
@@ -223,8 +238,7 @@ export function tapsSettling(steady = false): boolean {
     spot = null;
     return false;
   }
-  const at = currentPointer();
-  return at !== null && Math.hypot(at.x - spot.x, at.y - spot.y) <= SPOT_RADIUS;
+  return pointer !== null && Math.hypot(pointer.x - spot.x, pointer.y - spot.y) <= SPOT_RADIUS;
 }
 
 /** True when the press being handled came from a finger or mouse, not a key. */
