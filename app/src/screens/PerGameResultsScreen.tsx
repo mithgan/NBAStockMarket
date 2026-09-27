@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
   View,
   type CellRendererProps,
+  type LayoutChangeEvent,
   type ListRenderItem,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -43,6 +44,7 @@ import {
   feesLineName,
   focusAnchor,
   foldedFeed,
+  mathGroupName,
   monthAnchors,
   movesByDay,
   moveWords,
@@ -98,11 +100,11 @@ const DOCK_MONTH_MIN_WIDTH = 260;
 const FAR_SCREENS = 1.5;
 /** While a month jump lands: rows rendered in one pass, and screens kept around it. */
 const JUMP_BATCH = 1000;
-/** A jump still landing after this long says where it is going. */
-const LANDING_NOTE_MS = 250;
 const AVATAR = 32;
 /** Collapsed height of a row's two lines, so the chevron sits level with them. */
 const STACKED_LINES = 40;
+/** A one-line row's height (one player's games), for its chevron. */
+const ONE_LINE = 20;
 /** Space between a row's headshot, its text and its chevron. */
 const ROW_GAP = space.md;
 /** Row padding on the right edge, before the chevron. */
@@ -210,9 +212,17 @@ function ResultRow({
   result,
   rule,
   titled = false,
+  his = false,
 }: {
   equation: SettlementEquation;
   expanded: boolean;
+  /**
+   * One player's games (from his profile): the night's line above says the
+   * date and how he did, so the row carries only the figures, once each
+   * (walk 13 T1-08, T2-06): no headshot or name, the price and dividend on
+   * the line beside his result.
+   */
+  his?: boolean;
   layout: Layout;
   /** Called with the row's node once it has opened or closed, so the feed can bring its math (or its headline) into view. */
   onOpened?: (node: unknown, open: boolean) => void;
@@ -258,15 +268,21 @@ function ResultRow({
 
   const body = (
     <>
-      {tight ? null : <PlayerAvatar player={{ id: result.playerId, name: playerName }} size={AVATAR} />}
+      {tight || his ? null : <PlayerAvatar player={{ id: result.playerId, name: playerName }} size={AVATAR} />}
       <View style={styles.rowBody}>
         <View style={[styles.rowHeader, columns && styles.rowHeaderColumns, compact && styles.rowHeaderCompact]}>
           <View style={[styles.identity, compact && styles.identityCompact]}>
-            <Text style={styles.playerName}>{unbrokenName(playerName)}</Text>
+            {his ? null : <Text style={styles.playerName}>{unbrokenName(playerName)}</Text>}
             {/* Desktop keeps the tag beside the name; narrower rows lead their
                 second line with it, so a long name never pushes it onto a line
                 of its own. */}
             {columns ? tags : null}
+            {his && !priceColumns ? (
+              <>
+                {columns ? null : tags}
+                <Text style={[styles.detail, styles.detailInline]}>{resultPhrase(result, model)}</Text>
+              </>
+            ) : null}
           </View>
           {priceColumns && math ? (
             <>
@@ -285,7 +301,7 @@ function ResultRow({
             {compact && math ? <Disclosure height={20} open={expanded} /> : null}
           </View>
         </View>
-        {priceColumns ? null : (
+        {priceColumns || his ? null : (
           <View style={styles.detailLine}>
             {columns ? null : tags}
             <Text style={[styles.detail, styles.detailInline]}>{resultPhrase(result, model)}</Text>
@@ -301,7 +317,7 @@ function ResultRow({
         ) : null}
       </View>
       {compact ? null : math ? (
-        <Disclosure height={columns ? AVATAR : STACKED_LINES} open={expanded} />
+        <Disclosure height={columns ? AVATAR : his ? ONE_LINE : STACKED_LINES} open={expanded} />
       ) : <DisclosureSpace />}
     </>
   );
@@ -313,7 +329,7 @@ function ResultRow({
       <View
         accessibilityLabel={label}
         accessible
-        style={[styles.row, rowEdges, styles.rowLine, columns && styles.rowColumns]}
+        style={[styles.row, rowEdges, styles.rowLine, columns && styles.rowColumns, his && styles.rowHis]}
       >
         {body}
       </View>
@@ -334,20 +350,20 @@ function ResultRow({
         // A full-width row: its focus ring is drawn inside (the next row
         // painted over an outside ring, leaving a line on top; walk 4 T3-04).
         {...({ dataSet: { row: 'full' } } as object)}
-        style={({ pressed }) => [styles.row, rowEdges, columns && styles.rowColumns, pressed && styles.rowOpen]}
+        style={({ pressed }) => [styles.row, rowEdges, columns && styles.rowColumns, his && styles.rowHis, pressed && styles.rowOpen]}
       >
         {body}
       </Pressable>
       {expanded ? (
         <View
-          style={[styles.breakdown, { paddingLeft: edge.text, paddingRight: edge.right }]}
+          style={[styles.breakdown, { paddingLeft: his ? edge.left : edge.text, paddingRight: edge.right }]}
           // At 400% the math comes to the top and its row scrolls away: focus
           // moves here (its ring drawn inside) and Escape takes it back to
           // the row (walk 9 T3-10; see revealOpened).
           {...(Platform.OS === 'web' ? {
             tabIndex: -1,
             role: 'group',
-            'aria-label': `${label}: the math`,
+            'aria-label': mathGroupName({ name: playerName, side: result.side, date: result.gameDate, net: model.net }),
             dataSet: { ring: 'inset' },
             onKeyDown: (event: { key: string; preventDefault: () => void; stopPropagation: () => void }) => {
               if (event.key !== 'Escape') return;
@@ -527,13 +543,30 @@ function NightHeader({ night, layout, his = false }: { night: NightSummary; layo
   const pending = nightTotalPending(night);
   const played = night.results > 0;
   const title = night.date ? humanDay(night.date) : 'Undated fees';
-  // One player's games (from his profile): the night's figure is his game's,
-  // so it says so, never the whole night's "Games" (walk 11 T1-07, T2-04).
-  const totalWords = !played ? '' : pending
-    ? his ? ' his game is not settled yet.' : ' games not settled yet.'
-    : his ? ` his game made ${netWords(night.total)}.` : ` your players made ${netWords(night.total)}.`;
   const edge = edges(layout);
   const bare = !played && !summary;
+  if (his) {
+    // One player's games (from his profile): the date and how he did, on one
+    // line over his row, which carries the figures. The night's figure is his
+    // row's, so it is said once, there (walk 13 T1-08, T2-06).
+    return (
+      <View
+        accessibilityLabel={spokenSummary ? `${title}: ${spokenSummary}.` : title}
+        accessibilityRole="header"
+        accessible
+        nativeID={nightAnchorId(night.date)}
+        {...headingLevel(2)}
+        {...({ tabIndex: -1, dataSet: { ring: 'inset' } } as object)}
+        style={[styles.groupHeader, styles.groupHeaderHis, { paddingLeft: edge.left, paddingRight: edge.right }]}
+      >
+        <Text style={styles.groupTitle}>
+          {title}
+          {summary ? <Text style={styles.groupSummaryHis}>{`  ·  ${summary}`}</Text> : null}
+        </Text>
+      </View>
+    );
+  }
+  const totalWords = !played ? '' : pending ? ' games not settled yet.' : ` your players made ${netWords(night.total)}.`;
   return (
     <View
       accessibilityLabel={bare ? title : `${title}:${totalWords}${spokenSummary ? ` ${spokenSummary}.` : ''}`}
@@ -557,7 +590,7 @@ function NightHeader({ night, layout, his = false }: { night: NightSummary; layo
       </View>
       {played ? (
         <View style={[styles.groupTotal, layout.compact && styles.groupTotalCompact]}>
-          <Text style={styles.groupTotalLabel}>{his ? 'His game' : 'Games'}</Text>
+          <Text style={styles.groupTotalLabel}>Games</Text>
           {pending ? (
             <Text style={styles.netUnavailable}>—</Text>
           ) : (
@@ -891,6 +924,9 @@ type FeedFocus = {
   cells: Map<number, { current: CellFocus | undefined }>;
   items: { current: readonly ResultsFeedItem[] };
   short: { current: boolean };
+  /** Each drawn cell's re-measure (web), and the one pass waiting to run them. */
+  layouts: Set<() => void>;
+  relayout: { current: number | null };
 };
 const FeedFocusContext = createContext<FeedFocus | null>(null);
 
@@ -905,6 +941,49 @@ const FeedFocusContext = createContext<FeedFocus | null>(null);
  */
 function FeedCell({ children, index, onFocusCapture, onLayout, style }: CellRendererProps<ResultsFeedItem>) {
   const feed = useContext(FeedFocusContext);
+  const cellRef = useRef<View>(null);
+  // Web: react-native-web measures a cell against its parent, and a pinned
+  // night's cell sits alone in the sticky wrapper the ScrollView adds, so the
+  // list recorded every pinned night at offset 0. It finds the rows to draw by
+  // a binary search over those offsets: the zeros sent it off the end, and on
+  // a phone's full season it fell back to its first 16 rows while Tab was in
+  // February, taking the focused row with it (fix 12 note). A pinned night is
+  // measured where it sits in the feed instead.
+  // It also measures a cell only when its size changes, so once a row opens,
+  // every row below keeps its old offset; the list sized the space it leaves
+  // for rows it stops drawing from those, and the feed jumped by the opened
+  // math's height while you scrolled on. So when any cell changes size, each
+  // drawn cell that has moved reports where it is now (relayoutFeed).
+  const reported = useRef<number | null>(null);
+  const layoutNow = useRef(onLayout);
+  layoutNow.current = onLayout;
+  useLayoutEffect(() => {
+    if (!feed || Platform.OS !== 'web') return undefined;
+    const report = () => {
+      const node = cellRef.current as unknown as HTMLElement | null;
+      if (!node || !node.isConnected || reported.current === null) return;
+      const top = pinnedCellTop(node) ?? node.offsetTop;
+      if (Math.abs(top - reported.current) < 0.5) return;
+      reported.current = top;
+      layoutNow.current?.({
+        nativeEvent: { layout: { x: node.offsetLeft, y: top, width: node.offsetWidth, height: node.offsetHeight } },
+      } as LayoutChangeEvent);
+    };
+    feed.layouts.add(report);
+    return () => {
+      feed.layouts.delete(report);
+    };
+  }, [feed]);
+  const measured = onLayout && Platform.OS === 'web'
+    ? (event: LayoutChangeEvent) => {
+      const node = cellRef.current as unknown as HTMLElement | null;
+      const pinned = node ? pinnedCellTop(node) : null;
+      const layout = pinned === null ? event.nativeEvent.layout : { ...event.nativeEvent.layout, y: pinned };
+      reported.current = layout.y;
+      onLayout(pinned === null ? event : { ...event, nativeEvent: { ...event.nativeEvent, layout } });
+      if (feed) relayoutFeed(feed);
+    }
+    : onLayout;
   const own = useRef<CellFocus | undefined>(undefined);
   own.current = onFocusCapture as CellFocus | undefined;
   useLayoutEffect(() => {
@@ -948,10 +1027,35 @@ function FeedCell({ children, index, onFocusCapture, onLayout, style }: CellRend
   };
   const focus = Platform.OS === 'web' ? { onFocus } : { onFocusCapture: onFocus };
   return (
-    <View onLayout={onLayout} style={style} {...(focus as object)}>
+    <View ref={cellRef} onLayout={measured} style={style} {...(focus as object)}>
       {children}
     </View>
   );
+}
+
+/** After a cell changes size (web): once, before the next frame, every drawn cell that moved says so. */
+function relayoutFeed(feed: FeedFocus): void {
+  if (feed.relayout.current !== null || typeof requestAnimationFrame === 'undefined') return;
+  feed.relayout.current = requestAnimationFrame(() => {
+    feed.relayout.current = null;
+    feed.layouts.forEach((report) => report());
+  });
+}
+
+/**
+ * Where a pinned night's cell sits in the feed (web), however far it is stuck:
+ * the bottom of the last cell before it that is not pinned, plus any pinned
+ * ones between. Null for a cell that is not pinned.
+ */
+function pinnedCellTop(node: HTMLElement): number | null {
+  const wrapper = node.parentElement;
+  if (!wrapper || getComputedStyle(wrapper).position !== 'sticky') return null;
+  let above = node.offsetTop;
+  for (let before = wrapper.previousElementSibling as HTMLElement | null; before; before = before.previousElementSibling as HTMLElement | null) {
+    above += before.offsetHeight;
+    if (getComputedStyle(before).position !== 'sticky') return before.offsetTop + above;
+  }
+  return above;
 }
 
 export function PerGameResultsScreen() {
@@ -1010,16 +1114,24 @@ export function PerGameResultsScreen() {
   // A day's moves render inside their fold, as one list (walk 3 T3-32).
   const visible = useMemo(() => foldedFeed(feed), [feed]);
   // Which row the keyboard is on, for the list's drawing (FeedCell).
-  const feedFocus = useRef<FeedFocus>({ cells: new Map(), items: { current: visible }, short: { current: false } }).current;
+  const feedFocus = useRef<FeedFocus>({
+    cells: new Map(),
+    items: { current: visible },
+    short: { current: false },
+    layouts: new Set(),
+    relayout: { current: null },
+  }).current;
   feedFocus.items.current = visible;
   // What the reading place is recorded against, for the viewability callback.
   const placeNow = useRef({ visible, filtered: false, lastSettled: null as string | null });
   placeNow.current = { visible, filtered: onlyId !== null, lastSettled: bootstrap?.game.lastSettledDate ?? null };
   // A tall window pins the night you are reading under the frame (walk 10
   // T4-N3); phones count the title block above the feed.
+  // One player's games are a log of short, dated lines (walk 13 T1-08): a
+  // pinned date would stand over a game whose figures had scrolled away.
   const stickyIndices = useMemo(
-    () => stickyNightIndices(visible, height, width >= DESKTOP_MIN_WIDTH ? 0 : 1),
-    [visible, height, width],
+    () => (onlyId ? undefined : stickyNightIndices(visible, height, width >= DESKTOP_MIN_WIDTH ? 0 : 1)),
+    [visible, height, width, onlyId],
   );
   const stickyNow = useRef(false);
   stickyNow.current = stickyIndices !== undefined;
@@ -1100,29 +1212,22 @@ export function PerGameResultsScreen() {
   // The jump in progress (its number, row and night heading), or the last
   // one's night once it has landed; null after Back to newest.
   const jumpTarget = useRef<{ seq: number; index: number; id: string } | null>(null);
-  // While a month jump settles the feed is hidden, then shown at the month
-  // (a short fade; none under reduced motion): the months in between never
-  // stream past (walk 5 T4-14).
-  const [landing, setLanding] = useState(false);
+  // While a month jump settles the feed is hidden (the note says where it is
+  // going), then shown at the month: the months in between never stream past
+  // (walk 5 T4-14).
+  // Holds the month being landed on ("2025-10"), null once the feed shows.
+  const [landing, setLanding] = useState<string | null>(null);
   // Every row up to the month is drawn while the jump walks there, and stays
   // drawn until the feed goes back to its newest night (walk 11 T2-07).
   const [jumpWindow, setJumpWindow] = useState(false);
   // The month a jump is landing on: "Jump to" marks it until the feed shows,
   // never a month the hidden view passes on its way (walk 11 T2-07).
   const landingMonth = useRef<string | null>(null);
-  // A far month takes a moment to land (up to 2 s in a full season): after
-  // LANDING_NOTE_MS the hidden feed says where it is going instead of
-  // standing blank (walk 11 lead note, fix 12).
-  const [goingTo, setGoingTo] = useState<string | null>(null);
-  useEffect(() => {
-    setGoingTo(null);
-    if (!landing) return undefined;
-    const timer = setTimeout(() => {
-      const key = landingMonth.current;
-      setGoingTo(anchors.find((anchor) => anchor.key === key)?.name ?? null);
-    }, LANDING_NOTE_MS);
-    return () => clearTimeout(timer);
-  }, [anchors, landing]);
+  // A far month takes a moment to land (up to 2 s in a full season): from the
+  // first frame the feed hides, it says where it is going instead of standing
+  // blank (walk 11 lead note, fix 12; walk 13 T1-15: a phone's jump to October
+  // lands in about 0.3 s, before a delayed note ever showed).
+  const goingTo = landing ? anchors.find((anchor) => anchor.key === landing)?.name ?? null : null;
   // Ends the last jump's hold on its night (holdOnDay).
   const releaseHold = useRef<(() => void) | null>(null);
   useEffect(() => () => releaseHold.current?.(), []);
@@ -1138,7 +1243,7 @@ export function PerGameResultsScreen() {
     jumpTarget.current = null;
     landingMonth.current = null;
     releaseHold.current?.();
-    setLanding(false);
+    setLanding(null);
     setJumpWindow(false);
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
     setFar(false);
@@ -1159,7 +1264,7 @@ export function PerGameResultsScreen() {
     jumpTarget.current = { seq, index: anchor.index, id };
     landingMonth.current = anchor.date.slice(0, 7);
     setCurrentMonth(landingMonth.current);
-    setLanding(true);
+    setLanding(landingMonth.current);
     setJumpWindow(true);
     listRef.current?.scrollToIndex({ index: anchor.index, animated: false, viewPosition: 0 });
     const missing = () => {
@@ -1178,7 +1283,7 @@ export function PerGameResultsScreen() {
       done: () => {
         if (!current()) return;
         landingMonth.current = null;
-        setLanding(false);
+        setLanding(null);
         releaseHold.current?.();
         releaseHold.current = holdOnDay(listRef.current, id, current);
       },
@@ -1467,6 +1572,7 @@ export function PerGameResultsScreen() {
         layout={layout}
         onOpened={(node, open) => revealOpened(item.key, node, open)}
         onToggle={() => toggle(item.key)}
+        his={only !== null}
         playerName={perGamePlayerName(bootstrap, item.result.playerId, item.result.positionId)}
         result={item.result}
         rule={rule}
@@ -1483,7 +1589,11 @@ export function PerGameResultsScreen() {
     />
   );
   const header = (
-    <View style={[styles.header, wide ? styles.headerSide : { paddingHorizontal: edges(layout).left }]}>
+    <View
+      // Above the rows on a phone: a change in its height moves every row.
+      onLayout={wide ? undefined : () => relayoutFeed(feedFocus)}
+      style={[styles.header, wide ? styles.headerSide : { paddingHorizontal: edges(layout).left }]}
+    >
       <Text
         accessibilityRole="header"
         nativeID={TITLE_ID}
@@ -1494,7 +1604,9 @@ export function PerGameResultsScreen() {
         Results
       </Text>
       {played.length > 0 ? (
-        <Text style={styles.caption}>Newest night first. Select a player to see the math.</Text>
+        <Text style={styles.caption}>
+          {only ? 'Newest night first. Select a game to see the math.' : 'Newest night first. Select a player to see the math.'}
+        </Text>
       ) : null}
       {movesOnly ? (
         <Text style={styles.note}>
@@ -1592,7 +1704,7 @@ export function PerGameResultsScreen() {
           viewabilityConfig={viewabilityConfig}
           windowSize={jumpWindow ? JUMP_BATCH : 9}
         />
-        {landing && goingTo ? (
+        {goingTo ? (
           // Where the feed will show, while it is hidden: nothing under it.
           <View accessibilityLiveRegion="polite" style={[styles.goingTo, { paddingHorizontal: edges(layout).left }]}>
             <Text style={styles.note}>Going to {goingTo}…</Text>
@@ -1708,11 +1820,11 @@ const styles = StyleSheet.create({
   listLanding: {
     opacity: 0,
   },
-  // Shown at the month with a short fade (the global reduced-motion rule
-  // makes it instant). The fade is on the way in only: hiding is at once.
+  // Shown at the month at once, in the same frame the "Going to …" note
+  // leaves: a fade in from nothing painted a blank frame or two between them
+  // (walk 13 T1-15).
   listLanded: {
     opacity: 1,
-    ...({ transitionProperty: 'opacity', transitionDuration: '140ms' } as object),
   },
   content: {
     flexGrow: 1,
@@ -1886,6 +1998,20 @@ const styles = StyleSheet.create({
   groupHeaderBare: {
     minHeight: 0,
   },
+  // One player's games: the date line and the row under it read as one game.
+  groupHeaderHis: {
+    minHeight: 0,
+    paddingTop: space.md,
+    paddingBottom: 0,
+    backgroundColor: colors.background,
+    borderBottomWidth: 0,
+  },
+  groupSummaryHis: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    fontWeight: weight.regular,
+  },
   groupCopy: {
     minWidth: 0,
     flex: 1,
@@ -1960,6 +2086,11 @@ const styles = StyleSheet.create({
   },
   rowColumns: {
     minHeight: 52,
+  },
+  // One player's games: one line under its date (groupHeaderHis).
+  rowHis: {
+    minHeight: 44,
+    paddingTop: space.xs,
   },
   rowOpen: {
     backgroundColor: colors.surface,

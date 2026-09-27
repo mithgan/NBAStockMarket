@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
 import { signedMoney } from '../copy/terms';
@@ -207,8 +207,9 @@ function PastSeasons({ lines }: { lines: readonly PastSeasonLine[] }) {
 
 /**
  * One row of the board, a table row of three cells a screen reader reads
- * with their column (walk 8 T3-09): "Rank 2", "Deep Threes", "+$245K". On a
- * level board (before the first games) no one has a rank yet. Every score
+ * with their column (walk 8 T3-09): "2", "Deep Threes", "+$245K". The column
+ * says "Rank", so the cell says the place once (walk 13 T3-05: "Rank, Rank
+ * 2"). On a level board (before the first games) no one has a rank yet. Every score
  * keeps the app's one format; when two different scores read alike, each
  * says how far apart they are ("$191 ahead of #2").
  */
@@ -219,7 +220,7 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
   // Practice names your row "You"; a YOU tag beside it would say it twice.
   const tagged = you && row.displayName.trim().toLowerCase() !== 'you';
   const who = `${row.displayName}${tagged ? ', you' : ''}`;
-  const rankSpoken = level ? 'No rank yet' : `${tied ? 'Tied for' : 'Rank'} ${place}`;
+  const rankSpoken = level ? 'None yet' : tied ? `Tied for ${place}` : `${place}`;
   const scoreSpoken = level
     ? 'level at $0'
     : `${scoreText}${closeCalls.map((note) => `, ${spokenRanks(note)}`).join('')}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`;
@@ -259,6 +260,13 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
 export function PerGameLeaderboardScreen() {
   const { bootstrap } = usePerGame();
   const { fontScale, height, width } = useWindowDimensions();
+  // Web: a scrolling area with nothing inside to focus is a Tab stop of the
+  // browser's own, unnamed, with a thin ring (walk 13 T3-11, Leaders at 200%
+  // and 400%). While the screen scrolls it is a stop on purpose: named, with
+  // the app's ring, so the arrow keys scroll it and a reader hears what it is.
+  const pane = useRef({ height: 0, content: 0 });
+  const [scrolls, setScrolls] = useState(false);
+  const measure = useCallback(() => setScrolls(pane.current.content > pane.current.height + 1), []);
   if (!bootstrap) return null;
   // Rows stack for large text and on very narrow screens; a phone reads one row per line.
   const compact = fontScale > 1.2 || width < STACK_MAX_WIDTH;
@@ -339,7 +347,21 @@ export function PerGameLeaderboardScreen() {
   );
 
   return (
-    <ScrollView contentContainerStyle={[styles.content, wide && styles.contentWide]} style={styles.scroll}>
+    <ScrollView
+      contentContainerStyle={[styles.content, wide && styles.contentWide]}
+      onContentSizeChange={(_, contentHeight) => {
+        pane.current.content = contentHeight;
+        measure();
+      }}
+      onLayout={(event) => {
+        pane.current.height = event.nativeEvent.layout.height;
+        measure();
+      }}
+      style={styles.scroll}
+      {...(Platform.OS === 'web' && scrolls
+        ? { tabIndex: 0, role: 'region', 'aria-label': `${final ? 'Final standings' : 'Leaders'}, scrolls`, dataSet: { row: 'full' } }
+        : {}) as object}
+    >
       {wide ? (
         <View style={styles.split}>
           <View style={styles.side}>

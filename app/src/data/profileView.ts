@@ -257,7 +257,14 @@ export function formVerdict(summary: NightsSummary, options: VerdictOptions = {}
   const count = scope === 'yours'
     ? recent ? `your last ${games} games with him` : `your ${games} games with him`
     : recent ? `his last ${games} games` : `his ${games} games this season`;
-  const lead = `${side === 'long' ? 'Beat' : 'Stayed under'} his price in ${beat} of ${count}`;
+  // Every game or none, said so: "in all 4 of his games this season", never
+  // "in 4 of his 4 games" (walk 13 T1-10).
+  const whose = scope === 'yours' ? 'your' : 'his';
+  const after = scope === 'yours' ? ' with him' : recent ? '' : ' this season';
+  const span = beat === games
+    ? recent ? `all of ${whose} last ${games} games${after}` : `all ${games} of ${whose} games${after}`
+    : beat === 0 ? `none of ${count}` : `${beat} of ${count}`;
+  const lead = `${side === 'long' ? 'Beat' : 'Stayed under'} his price in ${span}`;
   if (even) return `${lead}, about even on average${forWho}.`;
   return `${lead}, ${moneyFine(Math.abs(avgNet))} a game ${avgNet > 0 ? 'ahead' : 'behind'} on average${forWho}.`;
 }
@@ -1026,6 +1033,11 @@ export interface PriceMark {
 /** A mark's words are about 14px tall: 16px between centres keeps them apart. */
 const MARK_GAP = 16;
 const MARK_HALF = 7;
+/**
+ * Two marks' words keep a line of space between them (walk 13 T1-07:
+ * "$422.9K" over "$413.5K" 20px apart nearly touched on a small drift).
+ */
+const LABEL_GAP = 28;
 
 /**
  * Steps two close marks' words apart, inside the chart's height. `yours` is
@@ -1040,11 +1052,11 @@ function spreadMarks(marks: PriceMark[], height: number, yours?: { y: number; va
   else {
     const [high, low] = marks;
     const mid = (high.y + low.y) / 2;
-    let up = low.y - high.y < MARK_GAP ? mid - MARK_GAP / 2 : high.y;
-    let down = low.y - high.y < MARK_GAP ? mid + MARK_GAP / 2 : low.y;
+    let up = low.y - high.y < LABEL_GAP ? mid - LABEL_GAP / 2 : high.y;
+    let down = low.y - high.y < LABEL_GAP ? mid + LABEL_GAP / 2 : low.y;
     up = clamp(up);
-    down = clamp(Math.max(down, up + MARK_GAP));
-    up = Math.min(up, down - MARK_GAP);
+    down = clamp(Math.max(down, up + LABEL_GAP));
+    up = Math.min(up, down - LABEL_GAP);
     placed = [{ ...high, labelY: up }, { ...low, labelY: down }];
   }
   if (!yours) return placed;
@@ -1053,10 +1065,10 @@ function spreadMarks(marks: PriceMark[], height: number, yours?: { y: number; va
   placed = placed.map((mark, index) => (moved[index]
     ? { ...mark, labelY: clamp(mark.value < yours.value ? yours.y + clear : yours.y - clear) }
     : mark));
-  if (placed.length === 2 && placed[1].labelY - placed[0].labelY < MARK_GAP) {
+  if (placed.length === 2 && placed[1].labelY - placed[0].labelY < LABEL_GAP) {
     // The one that stepped aside keeps going, away from the other.
-    if (moved[0]) placed[0] = { ...placed[0], labelY: clamp(placed[1].labelY - MARK_GAP) };
-    else placed[1] = { ...placed[1], labelY: clamp(placed[0].labelY + MARK_GAP) };
+    if (moved[0]) placed[0] = { ...placed[0], labelY: clamp(placed[1].labelY - LABEL_GAP) };
+    else placed[1] = { ...placed[1], labelY: clamp(placed[0].labelY + LABEL_GAP) };
   }
   return placed;
 }
@@ -1069,8 +1081,12 @@ export const PRICE_MIN_SPAN = 0.16;
 
 /** Room around a small drift: the band fills at most about 60% of a shrunk Price chart. */
 const PRICE_ROOM = 1.6;
-/** The least height of a Price chart shrunk to a small drift (walk 9 T2-03). */
-export const PRICE_MIN_HEIGHT = 96;
+/**
+ * The least height of a Price chart shrunk to a small drift (walk 9 T2-03):
+ * two marks a line apart. At 96px a 1.3% drift was a thin band with a blank
+ * half under it (walk 13 T1-07); a tap anywhere in a game's column picks it.
+ */
+export const PRICE_MIN_HEIGHT = 64;
 
 interface PriceFrame {
   /** Your locked price (the latest, when you held him in these games), else the middle of the prices. */

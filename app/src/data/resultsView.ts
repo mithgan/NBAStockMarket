@@ -639,6 +639,24 @@ export function mathTitle({ name, side, date, net }: {
 }
 
 /**
+ * The name of an opened row's math, from its one-line title (walk 13 T3-12):
+ * "The math for Luka Doncic, Oct 24, +$194.5K". It used to be the row's whole
+ * sentence plus ": the math", the figures a second time after a period.
+ */
+export function mathGroupName({ name, side, date, net }: {
+  name: string;
+  side: PerGamePositionSide;
+  date: string | null;
+  net: number | null;
+}): string {
+  return [
+    `The math for ${side === 'short' ? `${name}'s short` : name}`,
+    date ? humanDate(date) : null,
+    net === null ? null : Math.round(net) === 0 ? '$0' : signedMoney(net),
+  ].filter(Boolean).join(', ');
+}
+
+/**
  * Far down a long season the rows at the top had no date on screen (walk 10
  * T4-N3): in a tall enough window each night's header stays pinned under the
  * frame while its rows scroll under it, and the next night's header takes its

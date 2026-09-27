@@ -22,6 +22,7 @@ import {
   playerFeedSource,
   closeScroll,
   clearOfBottom,
+  mathGroupName,
   mathTitle,
   stickyNightIndices,
   pinnedNightClips,
@@ -955,4 +956,12 @@ test('the list hears of the next heading when the keyboard is on the row before 
   // The feed's ends.
   assert.equal(focusAnchor(items, 4, false), 4);
   assert.equal(focusAnchor(items, 1, true), 0);
+});
+
+test('an opened row\'s math is named from its title, not the row\'s sentence again (walk 13 T3-12)', () => {
+  assert.equal(mathGroupName({ name: 'Luka Doncic', side: 'long', date: '2025-10-24', net: 194_500 }), 'The math for Luka Doncic, Oct 24, +$194.5K');
+  assert.equal(mathGroupName({ name: 'Cade Cunningham', side: 'short', date: '2025-10-24', net: -72_500 }), "The math for Cade Cunningham's short, Oct 24, -$72.5K");
+  assert.equal(mathGroupName({ name: 'Luka Doncic', side: 'long', date: null, net: null }), 'The math for Luka Doncic');
+  assert.equal(mathGroupName({ name: 'Luka Doncic', side: 'long', date: '2025-10-24', net: 0.4 }), 'The math for Luka Doncic, Oct 24, $0');
+  assert.doesNotMatch(mathGroupName({ name: 'Luka Doncic', side: 'long', date: '2025-10-24', net: 194_500 }), /\.:|: the math/);
 });

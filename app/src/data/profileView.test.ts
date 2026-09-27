@@ -1183,3 +1183,33 @@ test('the Price view never puts another figure on your dashed line (walk 12 T2-0
   const same = profileChartModel(nights.map((night) => ({ ...night, market: night.market === 258_600 ? 259_000 : night.market })), 'price', 300, height, insets, 176).priceMarks;
   assert.equal(same[1].value, 259_000);
 });
+
+test('a verdict over every game or none says all or none, never "4 of his 4" (walk 13 T1-10)', () => {
+  const won = nights.slice(0, 4).map((night, index) => ({ ...night, net: 10_000 * (index + 1) }));
+  const lost = won.map((night) => ({ ...night, net: -night.net }));
+  assert.equal(formVerdict(summarizeNights(won)), 'Beat his price in all 4 of his games this season, $25K a game ahead on average.');
+  assert.equal(formVerdict(summarizeNights(lost)), 'Beat his price in none of his 4 games this season, $25K a game behind on average.');
+  assert.equal(formVerdict(summarizeNights(won.slice(-3)), { recent: true }), 'Beat his price in all of his last 3 games, $30K a game ahead on average.');
+  assert.equal(formVerdict(summarizeNights(won), { scope: 'yours' }), 'Beat his price in all 4 of your games with him, $25K a game ahead on average.');
+  assert.equal(formVerdict(summarizeNights(won.slice(-3)), { scope: 'yours', recent: true }), 'Beat his price in all of your last 3 games with him, $30K a game ahead on average.');
+  assert.equal(formVerdict(summarizeNights(lost), { side: 'short', held: true }), 'Stayed under his price in none of his 4 games this season, $25K a game behind on average for your short.');
+  assert.equal(formVerdict(summarizeNights(won.slice(0, 1)), { figure: false }), 'Beat his price in his only game so far.');
+});
+
+test('a small drift\'s Price chart has no blank half, and its two marks keep a line apart (walk 13 T1-07)', () => {
+  const insets = { top: 12, right: 6, bottom: 12, left: 52 };
+  const night = (date: string, market: number): ProfileNight => ({ date, dividend: 500_000, price: 417_500, net: 0, source: 'yours', market });
+  // Doncic after two weeks: $413.5K to $422.9K around your $417.5K.
+  const luka = [night('2025-10-21', 418_500), night('2025-10-24', 413_500), night('2025-10-28', 422_900), night('2025-11-03', 420_000)];
+  const height = priceChartHeight(luka, 176, insets);
+  assert.equal(height, 64);
+  const model = profileChartModel(luka, 'price', 316, height, insets, 176);
+  const ys = model.anchors.map((anchor) => anchor.y);
+  const band = Math.max(...ys) - Math.min(...ys);
+  // The band fills a third of the chart or more; the space under it is no bigger than the space over it plus a line.
+  assert.ok(band / height >= 1 / 3, `band ${band} of ${height}`);
+  assert.ok(height - Math.max(...ys) <= Math.min(...ys) + 14, `under ${height - Math.max(...ys)} vs over ${Math.min(...ys)}`);
+  const [high, low] = model.priceMarks;
+  assert.ok(low.labelY - high.labelY >= 28, `marks ${high.labelY} and ${low.labelY}: a line of space between 14px words`);
+  assert.ok(high.labelY >= 7 && low.labelY <= height - 7, 'inside the chart');
+});
