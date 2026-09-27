@@ -326,3 +326,12 @@ test('the loading line says what is starting, the same before and after the app 
   assert.match(session, /const START_WORDS_KEY = 'nba-stock-market:start-words';/);
   assert.match(session, /const FIRST_START_WORDS = 'Starting practice';/);
 });
+
+test('a key press on Re-sort or "Show all" leaves focus on what now holds the list, never the page (walk 18 T2-15, T2-16)', () => {
+  assert.match(market, /const resortFromButton = useCallback\(\(\) => \{\s+resortNow\(\);\s+focusAfterKeyPress\(SORT_IN_USE\);/);
+  assert.match(market, /resort=\{order\.resort \? \{ name: resortName\(night, sortedNight\), onPress: resortFromButton \} : null\}/);
+  assert.match(market, /setWatchedOnly\(false\);\s+focusAfterKeyPress\(\['#app-screen \[role="switch"\]\[aria-label\^="Watching"\]'\]\);/);
+  assert.match(market, /clearFilters\(\);\s+focusAfterKeyPress\(\['input\[aria-label="Search players"\]'/);
+  // A finger's tap leaves focus alone.
+  assert.match(market, /if \(typeof document === 'undefined' \|\| pressedByPointer\(\)\) return;/);
+});

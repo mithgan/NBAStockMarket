@@ -1418,6 +1418,33 @@ function MarketRow({
 const MemoMarketRow = memo(MarketRow, (prev, next) => sameMarketRowProps(prev, next));
 
 /**
+ * After a key press on a button that goes away with what it did (Re-sort,
+ * "Show all 30"), focus moves to the control that now holds it, the first
+ * of `selectors` on screen, never to the page (walk 18 T2-15, T2-16: focus
+ * fell to the page and a screen reader heard nothing). A finger's tap
+ * leaves focus alone, so no keyboard pops up.
+ */
+function focusAfterKeyPress(selectors: string[]): void {
+  if (typeof document === 'undefined' || pressedByPointer()) return;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    for (const selector of selectors) {
+      const target = Array.from(document.querySelectorAll<HTMLElement>(selector)).find((node) => node.getBoundingClientRect().width > 0);
+      if (target) {
+        target.focus();
+        return;
+      }
+    }
+  }));
+}
+
+/** The sort in use: its choice when the sort choices show, else its column header. */
+const SORT_IN_USE = [
+  '#app-screen [role="radio"][aria-checked="true"]',
+  '#app-screen [role="columnheader"][aria-sort="descending"]',
+  '#app-screen [role="columnheader"][aria-sort="ascending"]',
+];
+
+/**
  * A row's Drop / Close question, which says while games play that the move
  * waits for them (walk 18 T4-03). Its own component, so only an open
  * question listens to the games playing, never all thirty rows.
@@ -1868,6 +1895,11 @@ export function PerGameMarketScreen({
     setSortedNight(nightRef.current);
     announce(resortedLine(previous, nightRef.current));
   }, [announce]);
+  // Re-sort goes away with its line: focus goes to the sort it applied.
+  const resortFromButton = useCallback(() => {
+    resortNow();
+    focusAfterKeyPress(SORT_IN_USE);
+  }, [resortNow]);
   // A run that ends the season sorts afresh once it settles (walk 10 T2-03),
   // as a new season does; a night, a week or a run of weeks keeps the order,
   // with the kept line and Re-sort (walk 14 T2-05, resortsAfterRun).
@@ -2483,7 +2515,7 @@ export function PerGameMarketScreen({
       reserve={order.reserve}
       reserveOwn={order.reserveOwn}
       reserveResort={order.reserveResort}
-      resort={order.resort ? { name: resortName(night, sortedNight), onPress: resortNow } : null}
+      resort={order.resort ? { name: resortName(night, sortedNight), onPress: resortFromButton } : null}
       style={orderRow ? styles.orderRowLine : undefined}
       text={order.text}
       tone={order.tone}
@@ -2530,7 +2562,7 @@ export function PerGameMarketScreen({
       {heldNote ? (
         <View style={styles.flipNote}>
           <Text maxFontSizeMultiplier={1.4} style={[styles.explainer, styles.resortText]}>{heldNote}</Text>
-          <Button accessibilityLabel={resortName(night, sortedNight)} label="Re-sort" onPress={resortNow} variant="secondary" />
+          <Button accessibilityLabel={resortName(night, sortedNight)} label="Re-sort" onPress={resortFromButton} variant="secondary" />
         </View>
       ) : reversed ? (
         <View style={styles.flipNote}>
@@ -2778,7 +2810,10 @@ export function PerGameMarketScreen({
       <Button
         accessibilityLabel={`Show all ${totalCount} players`}
         label={`Show all ${totalCount}`}
-        onPress={() => setWatchedOnly(false)}
+        onPress={() => {
+          setWatchedOnly(false);
+          focusAfterKeyPress(['#app-screen [role="switch"][aria-label^="Watching"]']);
+        }}
         variant="secondary"
       />
     </View>
@@ -2792,7 +2827,10 @@ export function PerGameMarketScreen({
       <Button
         accessibilityLabel={`Show all ${totalCount} players`}
         label={`Show all ${totalCount}`}
-        onPress={clearFilters}
+        onPress={() => {
+          clearFilters();
+          focusAfterKeyPress(['input[aria-label="Search players"]', '#app-screen [role="switch"][aria-label^="Watching"]']);
+        }}
         variant="secondary"
       />
     </View>
