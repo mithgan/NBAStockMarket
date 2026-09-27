@@ -34,15 +34,21 @@ type SettingsProfile = {
   memberSince: string | null;
 };
 
-/** Two sliders on rails — settings without borrowing a gear glyph. */
+/**
+ * Two sliders on rails — settings without borrowing a gear glyph. Hidden from
+ * readers, as the frame's other icons are: its button says "Settings" (an
+ * unnamed image inside it was one more thing to hear; walk 16 lead).
+ */
 function SettingsIcon({ color }: { color: string }) {
   return (
-    <Svg height={18} width={18} viewBox="0 0 18 18">
-      <Line stroke={color} strokeLinecap="round" strokeWidth={1.6} x1={2.5} x2={15.5} y1={5.5} y2={5.5} />
-      <Line stroke={color} strokeLinecap="round" strokeWidth={1.6} x1={2.5} x2={15.5} y1={12.5} y2={12.5} />
-      <Circle cx={11.5} cy={5.5} fill={colors.surface} r={2.6} stroke={color} strokeWidth={1.6} />
-      <Circle cx={6.5} cy={12.5} fill={colors.surface} r={2.6} stroke={color} strokeWidth={1.6} />
-    </Svg>
+    <View accessibilityElementsHidden aria-hidden importantForAccessibility="no-hide-descendants">
+      <Svg height={18} width={18} viewBox="0 0 18 18">
+        <Line stroke={color} strokeLinecap="round" strokeWidth={1.6} x1={2.5} x2={15.5} y1={5.5} y2={5.5} />
+        <Line stroke={color} strokeLinecap="round" strokeWidth={1.6} x1={2.5} x2={15.5} y1={12.5} y2={12.5} />
+        <Circle cx={11.5} cy={5.5} fill={colors.surface} r={2.6} stroke={color} strokeWidth={1.6} />
+        <Circle cx={6.5} cy={12.5} fill={colors.surface} r={2.6} stroke={color} strokeWidth={1.6} />
+      </Svg>
+    </View>
   );
 }
 
