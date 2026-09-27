@@ -145,6 +145,14 @@ const MOVE_WAITS_FOR_REFRESH_MS = 10_000;
 const PROBLEM_JOIN_MS = 8000;
 /** A refusal this soon after waiting moves were told is told with them again. */
 const WAITED_REJOIN_MS = 2000;
+/** How soon a fuller notice replaces its shorter form in Recent notices. */
+const NOTICE_GREW_MS = 3000;
+/** A notice that leads with the games it reports ("Oct 21–27 games: …", "Oct 21–Nov 3 games (2 weeks): …"). */
+const GAMES_HEADLINE = /^[A-Z][a-z]{2} \d{1,2}(?:–(?:[A-Z][a-z]{2} )?\d{1,2})? games\b/;
+
+function firstSentence(text: string): string {
+  return text.split(/(?<=[.!?])\s+/)[0] ?? text;
+}
 /** A press on a button that turned LOCKED this soon after a night landed raced the lock. */
 const LOCK_RACE_MS = 1500;
 
@@ -194,20 +202,33 @@ export function PerGameProvider({
   // The whole sentence as it was heard; a repeat of the last one (a second
   // LOCKED press) only moves its time.
   const remember = useCallback((heard: string, tone: NoticeTone, id: number) => {
-    setRecentNotices((list) => (list[0]?.text === heard
-      ? [{ ...list[0], at: Date.now() }, ...list.slice(1)]
-      : [{ text: heard, tone, at: Date.now(), id }, ...list].slice(0, RECENT_NOTICES_MAX)));
+    setRecentNotices((list) => {
+      const last = list[0];
+      if (last?.text === heard) return [{ ...last, at: Date.now() }, ...list.slice(1)];
+      // A notice that grew a moment later (one more refused name, the same
+      // games) takes its place: one entry for one event (walk 15 T4-05).
+      if (last && Date.now() - last.at < NOTICE_GREW_MS && firstSentence(last.text) === firstSentence(heard) && heard.length > last.text.length) {
+        return [{ text: heard, tone, at: Date.now(), id }, ...list.slice(1)];
+      }
+      return [{ text: heard, tone, at: Date.now(), id }, ...list].slice(0, RECENT_NOTICES_MAX);
+    });
   }, []);
   /** `spoken`: what screen readers hear instead, when it differs. */
   const say = useCallback((text: string, tone: NoticeTone = 'problem', spoken?: string) => {
     const lock = tone === 'success' ? text.match(LOCK_SENTENCE) : null;
     const visible = lock && lock.index !== undefined && lock.index > 0 ? text.slice(0, lock.index) + text.slice(lock.index + lock[0].length) : text;
     // A refused move still on screen stays there: the success joins it, and
-    // only the success is heard (walk 12 T4-14).
-    const joins = tone === 'success' && spoken !== '' && shownMessage.current !== null
-      && shownTone.current === 'problem' && Date.now() - shownAt.current < PROBLEM_JOIN_MS;
+    // only the success is heard (walk 12 T4-14). So does the games' result a
+    // waiting move lands behind: it was spoken with it but left the screen
+    // (walk 15 T4-07: "Oct 21–27 games: …" gave way to "Luka Doncic dropped.").
+    const shownSilent = silentNotice.current;
+    const joinsGames = tone === 'success' && spoken !== '' && shownMessage.current !== null
+      && shownSilent !== null && shownSilent.id === noticeIds.current
+      && GAMES_HEADLINE.test(shownMessage.current) && Date.now() - shownAt.current < PROBLEM_JOIN_MS;
+    const joins = joinsGames || (tone === 'success' && spoken !== '' && shownMessage.current !== null
+      && shownTone.current === 'problem' && Date.now() - shownAt.current < PROBLEM_JOIN_MS);
     shownAt.current = Date.now();
-    setNoticeTone(joins ? 'problem' : tone);
+    setNoticeTone(joins && !joinsGames ? 'problem' : joinsGames ? shownTone.current : tone);
     setMessage(joins ? `${shownMessage.current} ${visible}` : visible);
     setNoticeSpoken(spoken ?? (lock || joins ? text : null));
     setNoticeSeq((seq) => seq + 1);
