@@ -83,11 +83,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   close: {
-    width: 40,
+    width: 44,
     minHeight: 44,
-    // 44px tall and 40 wide to a finger, 17px tall and 28 wide to the line.
+    // 44px each way to a finger (the app's floor), 17px tall and 28 wide to
+    // the line: it reaches into the gutter.
     marginVertical: -13.5,
-    marginRight: -12,
+    marginRight: -16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -95,15 +96,19 @@ const styles = StyleSheet.create({
     whiteSpace: 'nowrap',
   } as TextStyle,
   inlineClose: {
-    // Inline padding: a 44px-tall target that leaves the line's height alone.
-    paddingHorizontal: 10,
-    paddingVertical: 13,
+    // Inline padding: a 44px target each way (the app's floor) that leaves
+    // the line's height alone.
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 13,
     // Drawn as an inline block: the margins give the padding's height back to
     // the line, and most of its width (it overhangs the space before it and
-    // the gutter after it), so the × never takes a line of its own.
-    marginVertical: -13,
-    marginLeft: -4,
-    marginRight: -12,
+    // the gutter after it), so the × never takes a line of its own; the glyph
+    // sits where it did with 28px of target.
+    marginTop: -14,
+    marginBottom: -13,
+    marginLeft: -12,
+    marginRight: -20,
     color: colors.muted,
     fontFamily: fonts.display,
     fontSize: type.body,
