@@ -19,6 +19,12 @@ import {
   asksBeforeEmptyWeek,
   cancelHintFits,
   lockedWeekQuestion,
+  emptyQuestionAfterGames,
+  cancelQueuedLabel,
+  seasonQueuedWeekName,
+  menuResultText,
+  CHROME_WIDE_MIN_WIDTH,
+  questionLeadsWithNews,
   NO_ADVANCE_TAPS,
   playToEndLockedLine,
   playToEndOffersMarket,
@@ -30,8 +36,6 @@ import {
   queuedCancelControlName,
   queuedCancelHint,
   cancelPlace,
-  foldedCancelLabel,
-  queuedCancelLabel,
   queueEndedNotice,
   queueingAdvanceName,
   SEASON_DONE_SLOT,
@@ -44,6 +48,7 @@ import {
   tinyRowHoldsNight,
   chromeLayout,
   continuesRun,
+  runSpanFrom,
   RUN_CONTINUE_MS,
   FRESH_SEASON_NOTICE,
   gamesInLine,
@@ -75,7 +80,6 @@ import {
   savingHint,
   savingQueueHint,
   restartHasNothingToDo,
-  QUEUED_CANCEL_LABEL,
   queuedCancelledNotice,
   queuedCancelName,
   queuedLabel,
@@ -91,10 +95,8 @@ import {
   queueFullLine,
   queueLastLine,
   QUEUE_LINE_PAUSE_MS,
-  NOTHING_QUEUED,
   NOTHING_QUEUED_NAME,
   NOTHING_TO_CANCEL,
-  NOTHING_TO_CANCEL_MS,
   queueHasRoom,
   seasonEndControl,
   resultSpan,
@@ -113,7 +115,7 @@ import type { PracticeRulesContext } from '../data/perGameRules';
 import { humanDate, rosterReopensLine, seasonResultLine, spokenRanks } from '../copy/terms';
 import { rankLine } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
-import { isSeasonCompleteNotice, refreshNotice } from '../state/perGameNotices';
+import { isSeasonCompleteNotice, keepDatesTogether, newsFirst, refreshNotice } from '../state/perGameNotices';
 import { setPracticePlaying, usePracticePlaying } from '../state/practicePlaying';
 import { openTab } from '../state/uiActions';
 import { SEASON_RESULT_HEADING_ID } from '../ui/domMarkers';
@@ -523,7 +525,17 @@ function afterDialogCloses(action: () => void): void {
  * and the question has to survive that (walk 2 T4-27): SimBar, which stays
  * mounted, draws the dialog (PracticeQuestionHost).
  */
-type AskedQuestion = { kind: Question; fromMenu: boolean };
+type AskedQuestion = {
+  kind: Question;
+  fromMenu: boolean;
+  /**
+   * +1 night / +1 week asked within a moment of games landing: their news,
+   * which the question's scrim hides, and whether a short was held as they
+   * began (emptyQuestionAfterGames; walk 18 T4-06).
+   */
+  news?: string | null;
+  shortsEnded?: boolean;
+};
 let askedQuestion: AskedQuestion | null = null;
 const questionListeners = new Set<() => void>();
 
@@ -1009,6 +1021,7 @@ function PracticeQuestionView({ asked, bootstrap, close, playingLine, queued, sa
   saving: readonly MoveInFlight[];
   stakes: string;
 }) {
+  const { width } = useWindowDimensions();
   const progress = practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate);
   const open = bootstrap.positions.filter((position) => position.status === 'active');
   // Adds still saving count as players: the question does not offer the
@@ -1068,10 +1081,16 @@ function PracticeQuestionView({ asked, bootstrap, close, playingLine, queued, sa
     focusAsker({ kind: 'empty-night', fromMenu: false });
     advanceFromQuestion?.('night');
   };
+  // Asked as games landed: their news first, as the notice under the scrim
+  // draws it at this width (walk 18 T4-06).
+  const afterGames = {
+    news: asked.news ? keepDatesTogether(width < CHROME_WIDE_MIN_WIDTH ? newsFirst(asked.news) : asked.news) : null,
+    shortsEnded: Boolean(asked.shortsEnded),
+  };
   if (empty && lockedNow && asked.kind === 'empty-week') {
     // Nothing can be added before the locked games: the recommended answer
     // plays just them, then moves reopen (walk 9 T4-03).
-    const locked = lockedWeekQuestion(bootstrap.ruleset.rosterLockGameDate);
+    const locked = emptyQuestionAfterGames(lockedWeekQuestion(bootstrap.ruleset.rosterLockGameDate), afterGames);
     return (
       <PracticeChoices
         lines={locked.lines}
@@ -1085,15 +1104,16 @@ function PracticeQuestionView({ asked, bootstrap, close, playingLine, queued, sa
     );
   }
   if (empty) {
+    const emptyPrompt = emptyQuestionAfterGames(prompt, afterGames);
     return (
       <PracticeChoices
-        lines={prompt.lines}
+        lines={emptyPrompt.lines}
         onRecommended={openMarket}
         onRisky={confirm}
         onSafe={close}
-        recommendedLabel={prompt.cancelLabel}
-        riskyLabel={prompt.confirmLabel}
-        title={prompt.title}
+        recommendedLabel={emptyPrompt.cancelLabel}
+        riskyLabel={emptyPrompt.confirmLabel}
+        title={emptyPrompt.title}
       />
     );
   }
@@ -1367,14 +1387,26 @@ const RUN_REFUSAL_JOIN_MS = 3000;
  * then its whole span, as Play to the end inside a run does (walk 17 T4-06).
  */
 function runText(run: PracticeRun, now: PerGameBootstrap): string {
+  const start = spanStart(run);
   return runNoticeText({
     steps: run.steps,
-    games: refreshNotice(run.start, now, false),
-    seasonEnd: runEndedSeason(run, now) ? refreshNotice(run.start, now, false, { seasonComplete: seasonOver }) : null,
+    games: refreshNotice(start, now, false),
+    seasonEnd: runEndedSeason(run, now) ? refreshNotice(start, now, false, { seasonComplete: seasonOver }) : null,
     note: run.note ?? null,
     moves: run.moves ?? [],
     refusals: run.refusals ?? [],
   });
+}
+
+/**
+ * The account a run's span counts from: from its first night with games
+ * when it began with +1 night or is Play to the end on its own (runSpanFrom;
+ * walk 18 T2-10, T2-03).
+ */
+function spanStart(run: PracticeRun): PerGameBootstrap {
+  const from = runSpanFrom(run.start.game.lastSettledDate, run.start.game.nextGameDate, run.steps[0] ?? null);
+  if (from === run.start.game.lastSettledDate) return run.start;
+  return { ...run.start, game: { ...run.start.game, lastSettledDate: from } };
 }
 
 /** The run's last step played the season out: nothing is left to continue it. */
@@ -1385,7 +1417,7 @@ const runEndedSeason = (run: PracticeRun, now: PerGameBootstrap) => seasonOver(n
  * ("Oct 21–Apr 12 games: your score rose $3.75M."), with what it refused.
  */
 function seasonSpanText(run: PracticeRun, end: PerGameBootstrap): string {
-  return withRefusals(withMoves(refreshNotice(run.start, end, false), run.moves ?? []), run.refusals ?? []);
+  return withRefusals(withMoves(refreshNotice(spanStart(run), end, false), run.moves ?? []), run.refusals ?? []);
 }
 
 /** The practice season is over (its last day has settled), as the notices judge it. */
@@ -1660,14 +1692,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // queues until the run settles, quiet (dashed) while nothing waits: it
   // came and went between weeks, too briefly to hit (walk 10 T2-06, T3-09).
   const [runSlot, setRunSlot] = useSharedState(runSlotState);
-  // Cancel pressed with nothing queued answers on itself, "Nothing to
-  // cancel", for a moment, and leaves the notice (a run's result) alone
-  // (walk 11 T1-14).
-  const [nothingToCancel, setNothingToCancel] = useState(false);
-  const nothingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (nothingTimer.current) clearTimeout(nothingTimer.current);
-  }, []);
+  // Cancel reads "Nothing queued" the moment the queue empties, and a press
+  // then answers on itself, leaving the notice (a run's result) alone (walk
+  // 11 T1-14, walk 18 T4-04).
   const [secondaryWidth, setSecondaryWidth] = useState(0);
   const runSlotTimer = practiceEngine.runSlotTimer;
   const cancelNodeRef = useRef<View>(null);
@@ -1902,7 +1929,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // Restart or Exit asks first (SimBar draws the question). An item in More
   // closes the menu and lets its history entry go before the question adds
   // its own, so Back and the entries stay in step.
-  const askQuestion = (kind: Question | 'play-again') => {
+  const askQuestion = (kind: Question | 'play-again', afterGames?: Pick<AskedQuestion, 'news' | 'shortsEnded'>) => {
     // Nothing to lose (the opening eve with no moves, or a finished season):
     // Restart just restarts, Exit just leaves, and Play another season
     // starts the next one, as the result card's button does (walk 4 T1-13).
@@ -1939,14 +1966,14 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     }
     if (kind === 'play-again') return;
     if (!moreOpen) {
-      setAskedQuestion({ kind, fromMenu: false });
+      setAskedQuestion({ kind, fromMenu: false, ...afterGames });
       return;
     }
     setMoreOpen(false);
     questionComing.current = true;
     afterDialogCloses(() => {
       questionComing.current = false;
-      setAskedQuestion({ kind, fromMenu: true });
+      setAskedQuestion({ kind, fromMenu: true, ...afterGames });
     });
   };
   // The last night is in: the advance buttons have nothing left to play, so
@@ -2050,24 +2077,20 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   const cancelButton = (placement: 'line' | 'menu' | 'slot' | 'row' | 'fold') => (!showCancel ? null : (
     <Button
       ref={placement === 'menu' ? undefined : cancelNodeRef}
-      accessibilityLabel={queued.length > 0 ? queuedCancelControlName(queued)
-        : nothingToCancel ? NOTHING_QUEUED_NAME : `${QUEUED_CANCEL_LABEL}: nothing is queued now`}
+      accessibilityLabel={queued.length > 0 ? queuedCancelControlName(queued) : NOTHING_QUEUED_NAME}
       disabled={queued.length === 0}
       focusableWhenDisabled
-      label={queued.length === 0 && nothingToCancel ? NOTHING_QUEUED : placement === 'fold' ? foldedCancelLabel(queued) : queuedCancelLabel(queued)}
+      label={cancelQueuedLabel(queued, placement === 'fold')}
       onDisabledPress={() => {
         // On the button, never over the notice: a late tap replaced a run's
         // result with "Nothing is queued." (walk 11 T1-14).
-        setNothingToCancel(true);
-        if (nothingTimer.current) clearTimeout(nothingTimer.current);
-        nothingTimer.current = setTimeout(() => setNothingToCancel(false), NOTHING_TO_CANCEL_MS);
         sayBusy(`${NOTHING_TO_CANCEL}.`);
       }}
       onPress={cancelQueued}
       style={[styles.quiet, placement !== 'menu' && styles.quietEdge, placement === 'line' && styles.cancelLine, placement === 'slot' && styles.cancelSlot, placement === 'row' && styles.cancelRow, placement === 'fold' && styles.cancelFold]}
       textStyle={[
         placement === 'fold' ? [styles.cancelLineText, styles.cancelFoldText] : placement !== 'menu' ? styles.cancelLineText : queued.length > 0 ? styles.menuItemText : undefined,
-        queued.length === 0 && nothingToCancel && placement !== 'menu' && styles.cancelNothingText,
+        queued.length === 0 && placement !== 'menu' && styles.cancelNothingText,
       ]}
       variant="quiet"
     />
@@ -2112,6 +2135,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     advancingRef.current = true;
     advancedRef.current = true;
     const startedAt = Date.now();
+    // The last step's notice still waiting to be heard: a press that starts
+    // a run of its own (continuesRun) lets it be heard first, so each night
+    // stepped through one by one is heard once (walk 18 T2-10).
+    const unheard = speakRun.current !== null;
     // This press continues the run (or starts one): its line is not heard yet.
     stopSpeakRun();
     stopRunSlotTimer();
@@ -2125,7 +2152,8 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     const landed = landedRun.current;
     landedRun.current = null;
     const continued = queuedPress ? runRef.current
-      : landed && continuesRun(false, Date.now() - landed.at) ? landed.run : null;
+      : landed && continuesRun(false, Date.now() - landed.at, step) ? landed.run : null;
+    if (!continued && landed && unheard) speakNotice();
     const run: PracticeRun = continued
       ? { ...continued, steps: [...continued.steps, step], lastFrom: from }
       : { start: bootstrap, steps: [step], lastFrom: from };
@@ -2144,7 +2172,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         step,
         from,
         emptyRoster: open.length === 0,
-        runFrom: continued ? run.start.game.lastSettledDate ?? null : undefined,
+        runFrom: continued ? runSpanFrom(run.start.game.lastSettledDate, run.start.game.nextGameDate, run.steps[0] ?? null) : undefined,
       });
       if (step === 'week') playPracticeWeek();
       else playPracticeNight(from, practiceSeasonEnd(mockSeasonStart()));
@@ -2220,7 +2248,12 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     // the season's end replaces it; neither lock is said (walk 14 T4-02).
     const continued = speakRun.current ? landedRun.current?.run ?? null : practiceEngine.endRun.current;
     practiceEngine.endRun.current = null;
-    practiceEngine.seasonEndRun.current = continued;
+    // Pressed on its own it is a run of its own: its notice carries the span
+    // it played too ("Season complete. Final score +$3.96M, #2 of 5. Nov
+    // 19–Apr 12 games: your score rose $3.93M."), as a run's does; 145 days
+    // went by on one press and only the season's totals were said (walk 18
+    // T2-03).
+    practiceEngine.seasonEndRun.current = continued ?? { start: bootstrap, steps: [], lastFrom: from };
     if (speakRun.current) {
       stopSpeakRun();
       if (isGamesNotice(message)) notify(message as string, { spoken: '' });
@@ -2242,17 +2275,17 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         advanceMockDays(7, end);
         await wait(0);
       }
-      // Continuing a run, the season's end comes in silent and is heard as
-      // the run's notice (in the render that shows it, below).
+      // The season's end comes in silent and is heard as the run's notice,
+      // its span with it (in the render that shows it, above).
       let landedEnd = false;
       for (let attempt = 0; attempt < ADVANCE_REFRESH_ATTEMPTS; attempt += 1) {
-        if (await refreshData({ silent: continued !== null })) {
+        if (await refreshData({ silent: true })) {
           landedEnd = true;
           break;
         }
         await wait(ADVANCE_RETRY_MS);
       }
-      if (!landedEnd && continued) {
+      if (!landedEnd) {
         practiceEngine.seasonEndRun.current = null;
         speakNotice();
       }
@@ -2269,11 +2302,20 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     if (step === 'night' ? asksNight : asksFirst) {
       // Presses still queued behind this one do not play: said with why,
       // never dropped in silence (walk 13 T4-09).
-      const ended = queuedPress ? queueEndedNotice(queuedSteps.current, 'empty-roster') : null;
+      // Asked as games land (a press queued behind them, or one pressed as
+      // their notice came in), the question leads with their news: its scrim
+      // hides the notice (walk 18 T4-06).
+      const landed = landedRun.current;
+      const newsRun = questionLeadsWithNews(queuedPress, landed ? Date.now() - landed.at : null)
+        ? (queuedPress ? runRef.current : landed?.run ?? null)
+        : null;
+      const shortsEnded = Boolean(newsRun?.start.positions.some((position) => position.side === 'short' && position.status === 'active'));
+      const news = newsRun && bootstrap.game.lastSettledDate !== newsRun.start.game.lastSettledDate ? runText(newsRun, bootstrap) : null;
+      const ended = queuedPress ? queueEndedNotice(queuedSteps.current, 'empty-roster', shortsEnded) : null;
       runRef.current = null;
       landedRun.current = null;
       setQueue([]);
-      askQuestion(step === 'night' ? 'empty-night' : 'empty-week');
+      askQuestion(step === 'night' ? 'empty-night' : 'empty-week', { news, shortsEnded });
       if (ended) notify(ended);
     } else void advance(step, queuedPress);
   };
@@ -2355,8 +2397,11 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       <Button
         ref={weekRef}
         // The span it plays is in the name; the label keeps the button's width.
-        accessibilityLabel={queuedName('week', pressQueues ? queueingAdvanceName('week', queueingPlaying, weeksQueued)
-          : playingWeek ? `+1 week: advance one week. ${playingText}` : weekButtonName(nextWeekSpan))}
+        // The rest of the season queued: named for what a press does (walk
+        // 18 T3-12), the queue's count in it.
+        accessibilityLabel={seasonQueued ? seasonQueuedWeekName(practiceSeasonEnd(mockSeasonStart()), queued, cancelAt)
+          : queuedName('week', pressQueues ? queueingAdvanceName('week', queueingPlaying, weeksQueued)
+            : playingWeek ? `+1 week: advance one week. ${playingText}` : weekButtonName(nextWeekSpan))}
         disabled={advanceUnavailable}
         focusableWhenDisabled={!progress.complete}
         label={weeksQueued > 0 ? queuedLabel('week', stackLabels, weeksQueued) : playingWeek ? busyLabel(false) : stackLabels ? stackedWeekLabel(width) : '+1 week'}
@@ -2532,8 +2577,12 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     ) : null;
     // How the night (or week) pressed here went, under the buttons, while
     // the menu stays open for the next press (walk 6 T3-04). Not an item.
+    // Above the items, under the lock's note, news first (menuResultText):
+    // pinned under them it sat over RULES at 400% zoom (walk 18 T3-06).
     const resultNote = menuNotice ? (
-      <Text maxFontSizeMultiplier={1.5} style={[styles.moreNote, styles.moreResult]}>{menuNotice}</Text>
+      <Text maxFontSizeMultiplier={1.5} style={[styles.moreNote, styles.moreResult, styles.moreResultTop]}>
+        {keepDatesTogether(menuResultText(menuNotice, newsFirst))}
+      </Text>
     ) : null;
     return (
       <View style={styles.foldedControls}>
@@ -2542,7 +2591,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
             and the busy line, which a press in the row speaks. */}
         {nightInRow && hintText ? <Text nativeID={PRACTICE_HINT_ID} style={visuallyHidden}>{hintText}</Text> : null}
         {nightInRow ? busyAnnouncer : null}
-        <MoreMenu buttonRef={moreRef} footer={resultNote} open={moreOpen} setOpen={setMoreOpen}>
+        <MoreMenu buttonRef={moreRef} open={moreOpen} setOpen={setMoreOpen}>
           {/* The notes above the buttons never get shorter while the menu is
               open (a lock that lifts, say), so the buttons stay put. */}
           <View
@@ -2554,6 +2603,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
           >
             {lockNote}
             {hintNote}
+            {resultNote}
           </View>
           {progress.complete ? null : nightInRow ? weekButton : advanceButtons}
           {cancelButton('menu')}
@@ -2973,6 +3023,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: type.caption,
     lineHeight: 15,
+  },
+  // Above the items (walk 18 T3-06): its edge under it, between it and them.
+  moreResultTop: {
+    borderTopWidth: 0,
+    borderBottomColor: colors.borderStrong,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   morePanelFallback: {
     top: 48,

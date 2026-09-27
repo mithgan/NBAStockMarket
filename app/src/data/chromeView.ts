@@ -147,6 +147,15 @@ export function practiceStakes({ progress, players, shorts, score, savingPlayers
   return parts.join(', ');
 }
 
+/**
+ * "score -$250" never breaks between the word and its figure, or after the
+ * figure's sign: the Restart question ended a line on "score" and began the
+ * next with "-$250." at 390px (walk 18 T1-08).
+ */
+export function keepScoreTogether(text: string): string {
+  return text.replace(/\bscore ([-+\u2212]?)(?=\$)/g, (_match, sign: string) => `score\u00a0${sign ? `${sign}\u2060` : ''}`);
+}
+
 /** A move still saving while a practice question is open (walk 12 T1-07, T4-04). */
 export type FlightVerb = 'add' | 'short' | 'drop' | 'close';
 export interface MoveInFlight {
@@ -304,13 +313,13 @@ export function practiceQuestion(
   return kind === 'restart'
     ? {
       title: 'Start over?',
-      lines: [`You'd lose this season: ${stakes}.`, 'A new season starts at Day 0 with an empty roster.'],
+      lines: [`You'd lose this season: ${keepScoreTogether(stakes)}.`, 'A new season starts at Day 0 with an empty roster.'],
       confirmLabel: 'Start over',
       cancelLabel: 'Keep playing',
     }
     : {
       title: 'Leave practice for the live market?',
-      lines: [`You'd lose this season: ${stakes}.`, "Practice isn't saved anywhere, so it can't be picked up later."],
+      lines: [`You'd lose this season: ${keepScoreTogether(stakes)}.`, "Practice isn't saved anywhere, so it can't be picked up later."],
       confirmLabel: 'Leave practice',
       cancelLabel: 'Keep playing',
     };
@@ -1630,6 +1639,23 @@ export function nightAfterQueue(
   };
 }
 
+/**
+ * +1 week's name once the queue covers the rest of the season: a press only
+ * says so, and "+1 week: advance one week. Playing Feb 17–23… 7 weeks
+ * queued." promised a week it would not play (walk 18 T3-12). Its visible
+ * words first, then what a press does: "+1 week: the rest of the season is
+ * queued, to Apr 12 (7 weeks). Cancel drops it."
+ */
+export function seasonQueuedWeekName(
+  seasonEnd: string | null | undefined,
+  queued: readonly QueuedStep[],
+  place: CancelPlace = 'week',
+): string {
+  const to = seasonEnd ? `, to ${humanDate(seasonEnd)}` : '';
+  const count = queued.length > 0 ? ` (${queuedPhrase(queued)})` : '';
+  return `+1 week: the rest of the season is queued${to}${count}. Cancel${place === 'more' ? ' (in More)' : ''} drops it.`;
+}
+
 /** "12 weeks queued, through Feb 9. They play once Nov 4–10 is in." */
 export function queuedLineThrough(line: string, through: string | null): string {
   return through ? line.replace(/^([^.]*)\./, `$1, through ${humanDate(through)}.`) : line;
@@ -1721,10 +1747,16 @@ export function queueingAdvanceName(
  * with the reason, never dropped in silence (walk 13 T4-09, T4-N2): "2 queued
  * weeks not played: nobody is on your roster." null with none dropped.
  */
-export function queueEndedNotice(queued: readonly QueuedStep[], reason: 'empty-roster' | 'season-over'): string | null {
+export function queueEndedNotice(
+  queued: readonly QueuedStep[],
+  reason: 'empty-roster' | 'season-over',
+  /** A short was held as the games before them began (walk 18 T4-06). */
+  shortsEnded = false,
+): string | null {
   if (queued.length === 0) return null;
   const what = queued.length === 1 ? `Queued ${queued[0]}` : queuedPhrase(queued, true);
-  return `${what} not played: ${reason === 'empty-roster' ? 'nobody is on your roster' : 'the season is over'}.`;
+  const nobody = shortsEnded ? 'nobody is on your roster or shorts' : 'nobody is on your roster';
+  return `${what} not played: ${reason === 'empty-roster' ? nobody : 'the season is over'}.`;
 }
 
 /**
@@ -1792,6 +1824,18 @@ export function queuedCancelHint(count: number, place: CancelPlace = 'week'): st
  */
 export function foldedCancelLabel(queued: readonly QueuedStep[]): string {
   return queued.length <= 1 ? 'Cancel\nqueued' : `Cancel\n${queued.length} queued`;
+}
+
+/**
+ * Cancel's words through a run: what a press drops, and "Nothing queued" the
+ * moment the queue empties, in the same place and size (two lines in a
+ * folded row). "Cancel queued" stayed beside "Playing…" while the last week
+ * played, and a player pressed it expecting to stop that week (walk 18
+ * T4-04). Its name then is NOTHING_QUEUED_NAME.
+ */
+export function cancelQueuedLabel(queued: readonly QueuedStep[], folded: boolean): string {
+  if (queued.length === 0) return folded ? NOTHING_QUEUED.replace(' ', '\n') : NOTHING_QUEUED;
+  return folded ? foldedCancelLabel(queued) : queuedCancelLabel(queued);
 }
 
 /**
@@ -2013,9 +2057,38 @@ export const RUN_CONTINUE_MS = 1500;
  * RUN_CONTINUE_MS of the last step landing (`sinceLandedMs`, null when no run
  * has landed or the last one was closed by Play to the end or a question).
  */
-export function continuesRun(queued: boolean, sinceLandedMs: number | null): boolean {
+export function continuesRun(queued: boolean, sinceLandedMs: number | null, step: 'night' | 'week' = 'week'): boolean {
   if (queued) return true;
-  return sinceLandedMs !== null && sinceLandedMs >= 0 && sinceLandedMs <= RUN_CONTINUE_MS;
+  const within = step === 'night' ? NIGHT_RUN_CONTINUE_MS : RUN_CONTINUE_MS;
+  return sinceLandedMs !== null && sinceLandedMs >= 0 && sinceLandedMs <= within;
+}
+
+/**
+ * +1 night pressed this long after the last step landed starts a notice of
+ * its own: a player stepping night by night, a press about once a second
+ * after reading each night, saw one growing run ("Oct 29–Nov 11 games
+ * -$2.20M") and never a single night's figure after the first (walk 18
+ * T2-10). A quick double press (the next press within a moment of the
+ * landing) is still one run (walk 7 T4-03).
+ */
+export const NIGHT_RUN_CONTINUE_MS = 600;
+
+/**
+ * The settled day a run's span counts from. A run that began with +1 night
+ * counts from its first night with games (`nextGameDate` as it began), as
+ * that night's own notice named it: "Oct 30 games" became "Oct 29–31" once a
+ * second night joined, although Oct 29 had none (walk 18 T2-10); Play to the
+ * end on its own (no step: null) too ("Nov 19–Apr 12 games"). One that began
+ * with +1 week keeps the week's first day, as the week's notice said it.
+ */
+export function runSpanFrom(
+  from: string | null | undefined,
+  nextGameDate: string | null | undefined,
+  firstStep: 'night' | 'week' | null,
+): string | null {
+  if (!from || firstStep === 'week' || !nextGameDate) return from ?? null;
+  const dayBefore = shiftDay(nextGameDate, -1);
+  return dayBefore > from ? dayBefore : from;
 }
 
 /**
@@ -2101,6 +2174,58 @@ export function lockedWeekQuestion(lockGameDate: string | null | undefined): {
 }
 
 /**
+ * How soon after games land a +1 night / +1 week question still leads with
+ * their news (see emptyQuestionAfterGames).
+ */
+export const QUESTION_NEWS_MS = 2000;
+
+/**
+ * Whether a question asked `sinceLandedMs` after the last games landed leads
+ * with their news: a press queued behind them always does, any other within
+ * QUESTION_NEWS_MS (null: no games have landed in this run).
+ */
+export function questionLeadsWithNews(queued: boolean, sinceLandedMs: number | null): boolean {
+  if (queued) return true;
+  return sinceLandedMs !== null && sinceLandedMs >= 0 && sinceLandedMs <= QUESTION_NEWS_MS;
+}
+
+/**
+ * A +1 night / +1 week question asked within a moment of games landing (a
+ * press queued behind them, or one pressed as their notice came in): its
+ * scrim hid the notice, so the week's result was only seen after "Not now"
+ * and "nobody on your roster" looked wrong to someone who had held a short
+ * all week. The question leads with the games' news (`news`, as the notice
+ * draws it), and says "nobody on your roster or shorts" when a short was
+ * held as the games began (walk 18 T4-06).
+ */
+export function emptyQuestionAfterGames<T extends { title: string; lines: string[] }>(
+  prompt: T,
+  { news, shortsEnded }: { news: string | null; shortsEnded: boolean },
+): T {
+  const title = shortsEnded ? prompt.title.replace(NOBODY_ON_ROSTER, `${NOBODY_ON_ROSTER} or shorts`) : prompt.title;
+  // The lock is the question's own next line ("Moves are locked for the Oct
+  // 28 games…"): the news leaves it out rather than say it twice.
+  const lead = news ? withoutLockSentence(news) || null : null;
+  return { ...prompt, title, lines: lead ? [lead, ...prompt.lines] : prompt.lines };
+}
+
+/** A notice without its "Moves pause for the Oct 28 games." (said where the lock is drawn). */
+export function withoutLockSentence(text: string): string {
+  return text.replace(/\s*Moves pause for (?:the [^.]+ games|the next games)\.(?=\s|$)/g, '').trim();
+}
+
+/**
+ * The result of a press inside More at 400% zoom, drawn above its items under
+ * "Locked · Oct 28" (walk 18 T3-06: pinned under the items it sat over RULES,
+ * date first). `newsFirst`: state/perGameNotices.newsFirst, as every other
+ * narrow place draws a notice ("Your score fell $158K in the Oct 21–27
+ * games."); the lock is left to its own note.
+ */
+export function menuResultText(message: string, newsFirst: (text: string) => string): string {
+  return newsFirst(withoutLockSentence(message) || message);
+}
+
+/**
  * Play to the end with nobody on the roster: the question offers the Market
  * first (walk 9 T4-12), unless moves are locked for the next games.
  */
@@ -2164,8 +2289,76 @@ export function playToEndShortsOnlyLines(shortEnds: readonly (string | null)[]):
   ];
 }
 
-/** How long a short stays open, in words. */
+/**
+ * Whether Settings' scrolling content is a Tab stop of its own: only while it
+ * scrolls with nothing focusable in view (a 400% zoom scrolled to the season
+ * notes), so the keyboard can still reach and scroll it there. Holding
+ * focusable controls in view it is not: Tab went Done, "Settings content"
+ * (a stop whose purpose was never said), then the first choice (walk 18
+ * T3-02); arrows and Page keys on a control scroll it anyway.
+ */
+export const SETTINGS_PANE_NAME = 'Settings, scrolls';
+
+export function settingsPaneStop(scrolls: boolean, focusableInView: number): boolean {
+  return scrolls && focusableInView === 0;
+}
+
+/**
+ * What a theme's small tile in Settings paints: the look's own ground, card
+ * and marks, and what sets it apart. Navy, Dark and Aurora read as the same
+ * dark square with the same three dots, so a player could not tell which
+ * they wanted before trying each (walk 18 T1-04). The ground shows above
+ * the card; a brushed look on a navy ground draws its grain as hairlines in
+ * its strong border colour (a near-black ground stays the flat black it
+ * reads as); a look with a glow shows its warm field in the corner.
+ */
+export interface ThemeTile {
+  ground: string;
+  card: string;
+  ink: string;
+  marks: string[];
+  grain: string | null;
+  glow: string | null;
+}
+
+export function themeTile(theme: {
+  palette: { background: string; surface: string; text: string; green: string; red: string; gold: string; borderStrong: string };
+  texture?: 'plate' | 'brushed';
+  glow?: { accentColor?: string };
+}): ThemeTile {
+  const { palette } = theme;
+  return {
+    ground: palette.background,
+    card: palette.surface,
+    ink: palette.text,
+    marks: [palette.green, palette.red, palette.gold],
+    grain: theme.texture === 'brushed' && hexLuminance(palette.background) >= NEAR_BLACK_LUMINANCE ? palette.borderStrong : null,
+    glow: theme.glow ? theme.glow.accentColor ?? palette.gold : null,
+  };
+}
+
+/** Below this relative luminance a ground reads as black (Dark's #040506; Navy's #0e1218 is 0.006). */
+const NEAR_BLACK_LUMINANCE = 0.003;
+
+function hexLuminance(hex: string): number {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) return 1;
+  const value = parseInt(match[1], 16);
+  const channel = (shift: number) => {
+    const c = ((value >> shift) & 255) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0);
+}
+
+/**
+ * How long a short stays open, in words. Its days start with the next night
+ * that has games: a short opened on Oct 28 (no games Oct 29) runs through Nov
+ * 5, which read as an off-by-one against "a short runs 7 days" (walk 18 T2-09).
+ */
+export const SHORT_DAYS_START = 'starting with the next night that has games';
+
 export function shortTermText(shortTermDays: number | null): string {
   if (shortTermDays === null) return 'A short stays open until you close it';
-  return `A short runs ${shortTermDays} ${shortTermDays === 1 ? 'day' : 'days'}, then ends by itself with no fee`;
+  return `A short runs ${shortTermDays} ${shortTermDays === 1 ? 'day' : 'days'}, ${SHORT_DAYS_START}, then ends by itself with no fee`;
 }

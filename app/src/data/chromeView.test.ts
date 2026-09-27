@@ -183,8 +183,9 @@ test('rule wording matches the shared rules copy for both dividend bases', () =>
   // In K, as the welcome and Scoring say it (walk 8 T1-04).
   assert.equal(dividendText('raw_net_points', 40_000), 'His net points each game · $40K\u00a0for\u00a0each\u00a0net\u00a0point');
   assert.equal(dividendText('raw_net_points', 12_500), 'His net points each game · $12.5K\u00a0for\u00a0each\u00a0net\u00a0point');
-  assert.equal(shortTermText(7), 'A short runs 7 days, then ends by itself with no fee');
-  assert.equal(shortTermText(1), 'A short runs 1 day, then ends by itself with no fee');
+  // Its days start with the next night that has games (walk 18 T2-09).
+  assert.equal(shortTermText(7), 'A short runs 7 days, starting with the next night that has games, then ends by itself with no fee');
+  assert.equal(shortTermText(1), 'A short runs 1 day, starting with the next night that has games, then ends by itself with no fee');
   assert.equal(shortTermText(null), 'A short stays open until you close it');
 });
 

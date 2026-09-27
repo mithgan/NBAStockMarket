@@ -27,6 +27,21 @@ function dividendLine(rate: number, raw: boolean): string {
     : `His dividend is how far his net points beat his pregame projection, × ${each}.`;
 }
 
+/**
+ * The Rules as drawn keep each figure with the words it needs: "× $40K"
+ * never leaves "$40K." alone on a line (walk 18 T1-09, 360px), a figure
+ * keeps its "a game", a sign stays on its figure, and "price" / "profit"
+ * keep theirs. No-break spaces and a word joiner only: the words read the
+ * same, and the data (explanation, sections) keeps plain spaces.
+ */
+export function keepFiguresTogether(text: string): string {
+  return text
+    .replace(/× (?=[-+\u2212]?\$)/g, '×\u00a0')
+    .replace(/\b(price|profit|score) (?=[-+\u2212]?\$)/g, '$1\u00a0')
+    .replace(/(\$[\d.,]+[KMB]?) a game\b/g, '$1\u00a0a\u00a0game')
+    .replace(/([-+\u2212])(?=\$)/g, '$1\u2060');
+}
+
 /** The worked game's label, set apart in the Rules sheet. */
 export const EXAMPLE_LEAD = 'Example: ';
 
@@ -131,7 +146,8 @@ export function perGameRulesPresentation(rules: PerGameRuleset, practice: Practi
         term: 'Short',
         meaning: rules.shortTermDays === null
           ? 'A bet that he comes in under his price. It lasts until you close it.'
-          : `A bet that he comes in under his price. It lasts ${rules.shortTermDays} ${rules.shortTermDays === 1 ? 'day' : 'days'}, then ends by itself.`,
+          // Its days start with the next night that has games (walk 18 T2-09).
+          : `A bet that he comes in under his price. It lasts ${rules.shortTermDays} ${rules.shortTermDays === 1 ? 'day' : 'days'}, starting with the next night that has games, then ends by itself.`,
       },
       { term: 'Tier', meaning: 'Star, starter or role: how good the market thinks he is. Pricier tiers are not always better value.' },
       // A guide, not a promise: over a season players paid out well under

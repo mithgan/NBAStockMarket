@@ -58,7 +58,7 @@ import {
   statusSummary,
 } from '../data/chromeView';
 import { earningsBetween } from '../data/perGameMetrics';
-import { EXAMPLE_LEAD, KEYBOARD_KEYS, KEYBOARD_SHORTCUTS_LABEL, perGameRulesPresentation, positionSlotHint, RULES_CONTENTS, rulesFoldKeyboard, rulesSections, TOUCH_TIPS, type ScoringParts } from '../data/perGameRules';
+import { EXAMPLE_LEAD, keepFiguresTogether, KEYBOARD_KEYS, KEYBOARD_SHORTCUTS_LABEL, perGameRulesPresentation, positionSlotHint, RULES_CONTENTS, rulesFoldKeyboard, rulesSections, TOUCH_TIPS, type ScoringParts } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
 import { openSettings, registerRulesOpener } from '../state/uiActions';
@@ -701,15 +701,16 @@ function ProgressMeter({ progress, tiny = false }: { progress: PracticeProgress;
  */
 function ScoringText({ scoring }: { scoring: ScoringParts }) {
   const example = scoring.example.startsWith(EXAMPLE_LEAD) ? scoring.example.slice(EXAMPLE_LEAD.length) : scoring.example;
+  // Figures keep their words ("× $40K", "profit +$22K"; walk 18 T1-09).
   return (
     <>
       <View style={styles.scoringLines}>
-        {scoring.lines.map((line) => <Text key={line} style={styles.paragraph}>{line}</Text>)}
+        {scoring.lines.map((line) => <Text key={line} style={styles.paragraph}>{keepFiguresTogether(line)}</Text>)}
       </View>
       <Text style={styles.paragraph}>{scoring.netPoints}</Text>
       <View style={styles.example}>
         <Text style={styles.exampleLabel}>Example</Text>
-        <Text style={styles.paragraph}>{example}</Text>
+        <Text style={styles.paragraph}>{keepFiguresTogether(example)}</Text>
       </View>
       <Text style={styles.paragraph}>{scoring.luck}</Text>
     </>
@@ -874,7 +875,7 @@ function RulesSheet({
               <View key={part.heading} style={styles.rulesSection}>
                 <Text accessibilityRole="header" {...headingLevel(3)} {...jumpable(part.heading)} style={styles.sectionTitle}>{part.heading}</Text>
                 {part.heading === 'Scoring' ? <ScoringText scoring={presentation.scoring} /> : (
-                  <Text style={styles.paragraph}>{part.text}</Text>
+                  <Text style={styles.paragraph}>{keepFiguresTogether(part.text)}</Text>
                 )}
               </View>
             ))}

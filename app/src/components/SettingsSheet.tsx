@@ -3,7 +3,8 @@ import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDime
 import Svg, { Circle, Line } from 'react-native-svg';
 
 import type { PerGameRuleset } from '../api/contracts';
-import { appearanceTagUnder, chromeFolded, deviceChoiceName, NO_RECENT_NOTICES, noticeAgeText, sheetFloats, sheetNarrow } from '../data/chromeView';
+import { appearanceTagUnder, chromeFolded, deviceChoiceName, NO_RECENT_NOTICES, noticeAgeText, SETTINGS_PANE_NAME, settingsPaneStop, sheetFloats, sheetNarrow, themeTile } from '../data/chromeView';
+import { setScrollPaneStop } from '../web/scrollPane';
 import { perGameRulesPresentation, rulesSummary } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { tapsSettling, unlessSettling } from '../web/tapSettle';
@@ -154,6 +155,21 @@ export function SettingsSheet({
   useSheetHistory(visible, onClose);
   const sheetTop = visible ? (floating ? measuredFloatTop() : measuredSheetTop()) : null;
   const choiceRefs = useRef<Array<View | null>>([]);
+  // The scrolling content: a Tab stop only while it scrolls with nothing
+  // focusable in view (settingsPaneStop; walk 18 T3-02).
+  const bodyRef = useRef<ScrollView | null>(null);
+  const checkPaneStop = () => {
+    const node = (bodyRef.current as unknown as { getScrollableNode?: () => HTMLElement | null } | null)?.getScrollableNode?.() ?? null;
+    if (!node || typeof node.getBoundingClientRect !== 'function') return;
+    const box = node.getBoundingClientRect();
+    const scrolls = node.scrollHeight > node.clientHeight + 1;
+    const inView = scrolls ? Array.from(node.querySelectorAll<HTMLElement>('[tabindex]:not([tabindex="-1"]), a[href], button, input')).filter((control) => {
+      if (control === node) return false;
+      const rect = control.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && rect.bottom > box.top && rect.top < box.bottom;
+    }).length : 0;
+    setScrollPaneStop(node, settingsPaneStop(scrolls, inView) ? SETTINGS_PANE_NAME : null);
+  };
   // Rules opened from here hand back to Settings when they close (the frame
   // reopens it); focus goes back to "Read the full rules", where the player
   // was, not to Done at the top (walk 3 T3-25).
@@ -257,10 +273,18 @@ export function SettingsSheet({
             <Text style={styles.closeText}>Done</Text>
           </Pressable>
         </View>
-        {/* A named, focusable scroll region, as Rules and the profile have, so
-            arrow keys reach This season and Practice mode below the themes
-            (on a theme, arrows change the theme; walk 4 T3-06). */}
-        <ScrollView aria-label="Settings content" role="region" style={styles.sheetBody} tabIndex={0}>
+        {/* No Tab stop of its own while it holds controls in view: Tab goes
+            from Done to the first choice (walk 18 T3-02). Scrolled at 400%
+            to text alone it becomes one, named, so the keyboard can reach
+            and scroll it (settingsPaneStop; web/scrollPane). */}
+        <ScrollView
+          onContentSizeChange={checkPaneStop}
+          onLayout={checkPaneStop}
+          onScroll={checkPaneStop}
+          ref={bodyRef}
+          scrollEventThrottle={100}
+          style={styles.sheetBody}
+        >
           <Section narrow={narrow} title="Appearance">
             <View accessibilityLabel="Theme" accessibilityRole="radiogroup" {...({ onKeyDown: onChoiceKey } as object)}>
               {CHOICES.map((choice, index) => {
@@ -276,18 +300,31 @@ export function SettingsSheet({
                 // shows Default and Light side by side, each half a smaller
                 // card with its gain and loss marks, inside the same 44px box
                 // (three full-size marks ran 7px out of it).
-                const preview = (theme: DesignVariant, half?: 'left' | 'right') => (
-                  <View style={[styles.swatch, half && styles.swatchHalf, half === 'left' && styles.swatchLeft, half === 'right' && styles.swatchRight, { backgroundColor: theme.palette.background }]}>
-                    <View style={[styles.swatchCard, half && styles.swatchCardHalf, { backgroundColor: theme.palette.surface }]}>
-                      <View style={[styles.swatchLine, half && styles.swatchLineHalf, { backgroundColor: theme.palette.text }]} />
-                      <View style={[styles.swatchMarks, half && styles.swatchMarksHalf]}>
-                        <View style={[styles.swatchMark, half && styles.swatchMarkHalf, { backgroundColor: theme.palette.green }]} />
-                        <View style={[styles.swatchMark, half && styles.swatchMarkHalf, { backgroundColor: theme.palette.red }]} />
-                        {half ? null : <View style={[styles.swatchMark, { backgroundColor: theme.palette.gold }]} />}
+                // Each look's own ground (shown above the card), card and
+                // marks, with Navy's grain and Aurora's warm glow, so the
+                // three dark looks differ before a tap (themeTile; walk 18
+                // T1-04: they were the same dark square).
+                const preview = (theme: DesignVariant, half?: 'left' | 'right') => {
+                  const tile = themeTile(theme);
+                  return (
+                    <View style={[styles.swatch, half && styles.swatchHalf, half === 'left' && styles.swatchLeft, half === 'right' && styles.swatchRight, { backgroundColor: tile.ground }]}>
+                      {tile.grain ? (
+                        <View aria-hidden style={styles.swatchGrain}>
+                          {[0, 1, 2].map((line) => <View key={line} style={[styles.swatchGrainLine, { backgroundColor: tile.grain as string }]} />)}
+                        </View>
+                      ) : null}
+                      {tile.glow ? <View aria-hidden style={[styles.swatchGlow, { backgroundColor: tile.glow }]} /> : null}
+                      <View style={[styles.swatchCard, half && styles.swatchCardHalf, { backgroundColor: tile.card }]}>
+                        <View style={[styles.swatchLine, half && styles.swatchLineHalf, { backgroundColor: tile.ink }]} />
+                        <View style={[styles.swatchMarks, half && styles.swatchMarksHalf]}>
+                          <View style={[styles.swatchMark, half && styles.swatchMarkHalf, { backgroundColor: tile.marks[0] }]} />
+                          <View style={[styles.swatchMark, half && styles.swatchMarkHalf, { backgroundColor: tile.marks[1] }]} />
+                          {half ? null : <View style={[styles.swatchMark, { backgroundColor: tile.marks[2] }]} />}
+                        </View>
                       </View>
                     </View>
-                  </View>
-                );
+                  );
+                };
                 const swatch = device ? (
                   <View style={styles.swatchPair}>
                     {preview(VARIANTS[DEFAULT_VARIANT], 'left')}
@@ -695,11 +732,36 @@ const styles = StyleSheet.create({
     width: 44,
     height: 36,
     padding: 5,
+    // The look's ground shows above its card (walk 18 T1-04).
+    paddingTop: 12,
+    paddingBottom: 3,
     justifyContent: 'center',
     flexShrink: 0,
     borderRadius: radius.sm,
     borderColor: colors.borderStrong,
     borderWidth: 1,
+    overflow: 'hidden',
+  },
+  // Navy's brushed grain, drawn where it can be seen: hairlines across the ground.
+  swatchGrain: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 2,
+    gap: 2,
+    pointerEvents: 'none',
+  },
+  swatchGrainLine: { height: 1 },
+  // Aurora's warm field, in the ground's corner.
+  swatchGlow: {
+    position: 'absolute',
+    top: -11,
+    right: -9,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    opacity: 0.5,
+    pointerEvents: 'none',
   },
   // "Match device": Default and Light halves in the same 44px box.
   swatchPair: {
@@ -711,6 +773,8 @@ const styles = StyleSheet.create({
   swatchHalf: {
     width: 22,
     padding: 2,
+    paddingTop: 10,
+    paddingBottom: 2,
     overflow: 'hidden',
   },
   swatchCardHalf: { paddingHorizontal: 2 },
