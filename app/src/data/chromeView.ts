@@ -1056,6 +1056,16 @@ export function lockShortText(lockGameDate: string | null | undefined): string {
 export const LOCK_SLOT_LINE_MIN_WIDTH = 360;
 
 /**
+ * A landscape phone's folded row says the lock in full ("Moves reopen after
+ * Oct 28") from this width, and "Locked · Oct 28" below it, so a locked night
+ * keeps the row to two lines (walk 15 lead: 740px and 667px wrapped). With
+ * nobody held the games' words ("nobody on your roster") are longer, so the
+ * full words need more room.
+ */
+export const FOLDED_LOCK_WORDS_MIN_WIDTH = 700;
+export const FOLDED_LOCK_WORDS_MIN_WIDTH_NOBODY = 800;
+
+/**
  * The lock's words in the phone slot beside +1 week: the reopen line where
  * it fits, "Locked · Oct 28" on narrow phones, and with a reader's own text
  * spacing just the date beside the padlock, so the date is never cut to

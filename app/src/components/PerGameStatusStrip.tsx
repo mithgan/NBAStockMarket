@@ -19,6 +19,8 @@ import {
   cancelPlace,
   rulesInFoldedRow,
   CHROME_FOLDED_FACTS_MIN_WIDTH,
+  FOLDED_LOCK_WORDS_MIN_WIDTH,
+  FOLDED_LOCK_WORDS_MIN_WIDTH_NOBODY,
   CHROME_FOLDED_ONE_LINE_MIN_WIDTH,
   chromeFolded,
   chromeLayout,
@@ -179,6 +181,15 @@ export function PerGameStatusStrip() {
   // ("Moves reopen after Apr 13") is never shown or said (walk 12 T4-12).
   const locked = frameLocked(rules.rosterMutationsLocked, progress);
   const lockDate = rules.rosterLockGameDate;
+  // A landscape phone's folded row keeps to its two lines on a locked night:
+  // it took three at 844px with nobody held and four at 667px, growing the
+  // frame and pressing the first line to its top edge (walk 15 lead). The
+  // lock names the night the next games are, and +1 night shows its date, so
+  // "Next Tue, Oct 28" gives way to it; "nobody on your roster" already says
+  // what the hint would; and a narrow landscape row says the lock in its short
+  // words, "Locked · Oct 28", as a portrait phone's slot does, and leaves
+  // "games" out of "Oct 21–27: nobody on your roster", as a phone's lead does.
+  const foldedLockNight = foldedFacts && locked && !!lockDate && lockDate === nextGameDate && !progress?.complete;
   const lockSentence = locked
     ? (rules.rosterLockGameDate
       ? `Roster changes are locked for the ${humanDate(rules.rosterLockGameDate)} games. They reopen once those games are in.`
@@ -258,7 +269,7 @@ export function PerGameStatusStrip() {
   // the date to it.
   const named = lastNight !== null;
   // "games" keeps to its date (a no-break space), as the figure's words do.
-  const nightWords = noGames ? noGamesWords(span?.nobody ?? false, arrangement === 'pair').replace(/^ /, '\u00a0') : ' games ';
+  const nightWords = noGames ? noGamesWords(span?.nobody ?? false, arrangement === 'pair' || (foldedLockNight && width < FOLDED_LOCK_WORDS_MIN_WIDTH)).replace(/^ /, '\u00a0') : ' games ';
 
   // First line. Practice: the mode, plus the day on a wide screen or the
   // latest night on a phone. Signed in: how far the results go, until a night
@@ -347,7 +358,8 @@ export function PerGameStatusStrip() {
   // A portrait phone's practice row carries the lock beside +1 week, so a
   // week landing on a lock adds no line here (walk 9 T4-08).
   const lockInControls = practice && !layout.wide && !folded && width >= PHONE_SLOT_MIN_WIDTH && !progress?.complete;
-  const lock = tiny || lockInControls ? null : locked && ((folded && !foldedFacts) || lockCompact) ? (
+  const lockShortInRow = foldedLockNight && width < (emptyNow ? FOLDED_LOCK_WORDS_MIN_WIDTH_NOBODY : FOLDED_LOCK_WORDS_MIN_WIDTH);
+  const lock = tiny || lockInControls ? null : locked && ((folded && !foldedFacts) || lockCompact || lockShortInRow) ? (
     // The narrowest folded rows: "Locked · Nov 1" under the day count, so
     // the row still says it in words and Settings keeps the first line (the
     // padlock alone pushed it down a line, walk 3 T3-29). One image to a
@@ -402,7 +414,7 @@ export function PerGameStatusStrip() {
         <Text style={styles.factLabel}>Queued through </Text>
         {keepTogether(humanDate(queuedThrough))}
       </Text>
-    ) : (
+    ) : foldedLockNight ? null : (
       <Text key="next" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
         <Text style={styles.factLabel}>{progress?.day === 0 ? 'Season opens ' : 'Next '}</Text>
         {next ? keepTogether(next) : 'not scheduled yet'}
@@ -439,7 +451,7 @@ export function PerGameStatusStrip() {
         {night}
         {upcoming}
         {lockCompact ? null : lock}
-        {practiceHint && (layout.merged || foldedFacts) && !lockSaysNobody ? (
+        {practiceHint && (layout.merged || foldedFacts) && !lockSaysNobody && !(foldedFacts && noGames && span?.nobody) ? (
           <Text key="hint" maxFontSizeMultiplier={1.5} nativeID={PRACTICE_HINT_ID} style={[styles.fact, styles.factLabel]}>
             {layout.merged ? practiceHint : practiceHintShort}
           </Text>

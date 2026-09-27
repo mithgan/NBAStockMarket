@@ -234,3 +234,18 @@ test('at season end the Roster says "The season is over" once: its empty section
   assert.equal((roster.match(/The season is over/g) ?? []).length, 1, 'only the roster line says it');
   assert.match(roster, /title=\{hadShorts \? 'No open shorts' : seasonOver \? 'No shorts this season'/);
 });
+
+test('a landscape phone keeps its folded status to two lines on a locked night (walk 15 lead)', async () => {
+  const { FOLDED_LOCK_WORDS_MIN_WIDTH, FOLDED_LOCK_WORDS_MIN_WIDTH_NOBODY, lockShortText, noGamesWords } = await import('./chromeView');
+  // Measured: "Moves reopen after Oct 28" fits beside a held week's figure from 700px and beside "nobody on your roster" from 800px.
+  assert.equal(FOLDED_LOCK_WORDS_MIN_WIDTH, 700);
+  assert.equal(FOLDED_LOCK_WORDS_MIN_WIDTH_NOBODY, 800);
+  assert.equal(lockShortText('2026-10-28'), 'Locked · Oct 28');
+  assert.equal(noGamesWords(true, true), ': nobody on your roster');
+  assert.match(status, /const foldedLockNight = foldedFacts && locked && !!lockDate && lockDate === nextGameDate && !progress\?\.complete;/);
+  // "Next Tue, Oct 28" gives way to the lock, which names the same night (+1 night shows it too).
+  assert.match(status, /\) : foldedLockNight \? null : \(\s*<Text key="next"/);
+  // "No players yet" never sits beside "nobody on your roster".
+  assert.match(status, /!\(foldedFacts && noGames && span\?\.nobody\)/);
+  assert.match(status, /lockCompact \|\| lockShortInRow\) \? \(/);
+});
