@@ -40,16 +40,39 @@ function appRoot(): HTMLElement | null {
   return isWeb ? document.getElementById('app-root') : null;
 }
 
+let hideWatch = 0;
+
 function setBackgroundInert(inert: boolean) {
   const root = appRoot();
   if (!root) return;
-  if (inert) {
-    root.setAttribute('inert', '');
-    root.setAttribute('aria-hidden', 'true');
-  } else {
+  if (hideWatch) {
+    cancelAnimationFrame(hideWatch);
+    hideWatch = 0;
+  }
+  if (!inert) {
     root.removeAttribute('inert');
     root.removeAttribute('aria-hidden');
+    return;
   }
+  // inert keeps the page behind a sheet out of reach and out of the
+  // accessibility tree at once. aria-hidden (for browsers without inert)
+  // waits until focus has left the page: react-native-web's modal takes
+  // focus a frame or two after it opens, and aria-hidden over the control
+  // that still has focus (the row that opened a profile) is refused by the
+  // browser, which warns and keeps the page in the tree (walk 14 T3-05).
+  root.setAttribute('inert', '');
+  let frames = 0;
+  const hideOnceFocusLeaves = () => {
+    hideWatch = 0;
+    const active = document.activeElement;
+    if (!active || !root.contains(active) || frames >= 60) {
+      root.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    frames += 1;
+    hideWatch = requestAnimationFrame(hideOnceFocusLeaves);
+  };
+  hideOnceFocusLeaves();
 }
 
 /**
