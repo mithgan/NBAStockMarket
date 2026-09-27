@@ -427,7 +427,9 @@ test('portfolio provides server-backed activity, history, and exact cost basis',
 
 test('global server action notices are visible and dismissible', () => {
   assert.match(appSource, /dismissNotice/);
-  assert.match(appSource, /message \? \(/);
+  // Every notice, the new-season one included, renders from the game's message
+  // (walk 12 T4-05 folded the app's own notice slot into it).
+  assert.match(appSource, /message && \(noticeTone === 'problem' \|\| !sheetOpen\) \? \(/);
   assert.match(appSource, /message=\{message\}/);
   assert.match(appSource, /accessibilityLiveRegion="polite"/);
 });

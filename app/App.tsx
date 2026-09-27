@@ -573,7 +573,6 @@ function AppBody() {
   // zoom) the bar is folded away, so the notice docks above the tab bar.
   const noticePlacement: NoticePlacement = short ? 'dock' : width < NOTICE_BAR_WIDE_MIN_WIDTH ? 'bar' : 'barWide';
   const tabRefs = useRef<Array<View | null>>([]);
-  const [appNotice, setAppNotice] = useState<string | null>(null);
   // The brand bar never gets shorter by itself: a notice that needed a third
   // line leaves its height behind when it clears on its timer, until the
   // player's next press or a screen switch, so nothing under a finger jumps
@@ -605,10 +604,19 @@ function AppBody() {
 
   // Tabs live in browser history, so Back steps back through the tabs a
   // player visited (after closing any open sheet) before it leaves the app.
+  // One screen entry at most above the Roster's: Back from any tab returns
+  // to the Roster once, then leaves, as phone apps do (walk 12 T4-11: after
+  // bouncing between tabs Back replayed every tap). Sheets still close first.
   const pushTab = useCallback((tab: Tab) => {
     if (typeof window === 'undefined') return;
-    const current = (window.history.state as { tab?: Tab } | null)?.tab;
-    if (current !== tab) window.history.pushState({ tab }, '');
+    const state = window.history.state as { tab?: Tab; tabEntry?: boolean } | null;
+    if (state?.tab === tab) return;
+    if (state?.tabEntry) {
+      if (tab === 'portfolio') window.history.back();
+      else window.history.replaceState({ ...state, tab }, '');
+      return;
+    }
+    if (tab !== 'portfolio') window.history.pushState({ tab, tabEntry: true }, '');
   }, []);
   const changeTab = (tab: Tab) => {
     if (tab === activeTab) {
@@ -671,7 +679,7 @@ function AppBody() {
       if (activeTabRef.current === 'plays' && reopenGamesProfile()) {
         // Once: after his profile closes, Back leaves Results as usual.
         setProfileReopen(null);
-        window.history.pushState({ tab: 'plays' }, '');
+        window.history.pushState({ tab: 'plays', tabEntry: true }, '');
         return;
       }
       const tab = (event.state as { tab?: Tab } | null)?.tab;
@@ -708,7 +716,9 @@ function AppBody() {
     const timer = setTimeout(() => {
       // Short: the welcome card and "Add a player first" already say what to
       // do next, and a kept notice stays in the bar (walk 5 T4-08).
-      setAppNotice(last
+      // Through the game's notices, so Settings' Recent notices lists it too
+      // (walk 12 T4-05: "No notices yet" beside it).
+      notify(last
         ? `New practice season. Your last one finished ${last}.`
         : 'New practice season: Day 0, empty roster, score $0.');
       if (!byKeyboard || typeof document === 'undefined') return;
@@ -732,6 +742,7 @@ function AppBody() {
     bootstrap,
     confirmLocalTransition,
     dismissNotice,
+    notify,
     isLoading,
     isTransitioning,
     displayName,
@@ -997,8 +1008,6 @@ function AppBody() {
     <NoticeToast message={authError} onDismiss={clearAuthMessage} placement={noticePlacement} seq={-2} tone="problem" />
   ) : message && (noticeTone === 'problem' || !sheetOpen) ? (
     <NoticeToast message={message} onDismiss={dismissNotice} placement={noticePlacement} seq={noticeSeq} tone={noticeTone} />
-  ) : appNotice && !sheetOpen && !message ? (
-    <NoticeToast message={appNotice} onDismiss={() => setAppNotice(null)} placement={noticePlacement} seq={-1} tone="success" />
   ) : null;
   barNoticeRef.current = Boolean(notice) && noticePlacement !== 'dock';
 
@@ -1072,7 +1081,7 @@ function AppBody() {
       <View accessibilityLiveRegion="polite" style={visuallyHidden}>
         {/* Keyed by the notice's count, so a notice that repeats the last one
             word for word is new text to a screen reader, not silence. */}
-        <Text key={noticeSeq}>{spoken(authError ?? (message ? noticeSpoken ?? message : null) ?? appNotice ?? '')}</Text>
+        <Text key={noticeSeq}>{spoken(authError ?? (message ? noticeSpoken ?? message : null) ?? '')}</Text>
       </View>
       {ready ? (wide ? null : renderTabBar('bottom')) : null}
       <SettingsSheet
