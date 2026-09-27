@@ -42,6 +42,9 @@ import {
 } from '../copy/terms';
 import { practiceProgress } from '../data/chromeView';
 import {
+  didYouMeanLine,
+  nearestNames,
+  type NameSuggestion,
   accountValueByPlayer,
   actionableFirst,
   actionName,
@@ -57,6 +60,7 @@ import {
   headerStatus,
   heldDetail,
   heldPriceCaption,
+  heldPlayedWordings,
   heldValueLine,
   heldValuePhrase,
   HELD_NOW_MIN_WIDTH,
@@ -279,7 +283,10 @@ function readAnchor(node: AnchorNode | undefined): { id: string; dy: number } | 
   for (let index = 0; index < rows.length; index += 1) {
     const rect = rows[index].getBoundingClientRect();
     const id = rows[index].getAttribute('data-player');
-    if (id && rect.bottom > top + 1) return { id, dy: rect.top - top };
+    // The first row mostly in view: a sliver of the one above him is not the
+    // player you are looking at (walk 14 T4-04: a 7px sliver was kept, and
+    // the player under it came back half under the table's pinned labels).
+    if (id && rect.bottom > top + Math.max(1, (rect.bottom - rect.top) / 2)) return { id, dy: rect.top - top };
   }
   return null;
 }
@@ -640,6 +647,24 @@ function MarketRow({
     const line = typeof getComputedStyle === 'function' ? parseFloat(getComputedStyle(node).lineHeight) : NaN;
     if (box.height > (line > 0 ? line * 1.5 : 26)) setFit({ key: fitKey, step: fitStep + 1 });
   });
+  // Once he has played for you, the second line leads with today's price and
+  // says last season as history where it fits (walk 14 T1-09), the fullest
+  // wording that keeps one line, measured before paint like the first line.
+  const played = position !== null && currentValue !== undefined && currentValue.avgNet !== null && currentValue.games > 0;
+  const heldSecondRef = useRef<Text>(null);
+  const playedWordings = position && played ? heldPlayedWordings(player, side, position.lockedGameCost) : null;
+  const secondKey = `${width}|${layout}|${playedWordings?.join('|') ?? ''}`;
+  const [secondFit, setSecondFit] = useState<{ key: string; step: number } | null>(null);
+  const secondStep = playedWordings ? Math.min(secondFit && secondFit.key === secondKey ? secondFit.step : 0, playedWordings.length - 1) : 0;
+  const playedShown = playedWordings ? playedWordings[secondStep] : null;
+  useLayoutEffect(() => {
+    if (!playedWordings || secondStep >= playedWordings.length - 1) return;
+    const node = heldSecondRef.current as unknown as HTMLElement | null;
+    const box = node?.getBoundingClientRect?.();
+    if (!node || !box || !(box.height > 0)) return;
+    const line = typeof getComputedStyle === 'function' ? parseFloat(getComputedStyle(node).lineHeight) : NaN;
+    if (box.height > (line > 0 ? line * 1.5 : 26)) setSecondFit({ key: secondKey, step: secondStep + 1 });
+  });
   // His move on the other side still saving: shown as he will be once it
   // saves (no button here), in place, saying it is on its way.
   const busy = busyElsewhere !== null && !position && !row.blockedByOpposingPosition;
@@ -669,7 +694,7 @@ function MarketRow({
   // No line ever ends on a lone "·" (walk 7 T1-02): on two lines the first
   // drops it; on one line it leads the second part (valueLineParts).
   const joiner = valueLineParts('', '', oneLine).joiner;
-  const heldLine = (text: string, tone: SignalTone, value: ReturnType<typeof heldValueLine>, why: string | null = null, firstRef?: RefObject<Text | null>) => valueLines(
+  const heldLine = (text: string, tone: SignalTone, value: ReturnType<typeof heldValueLine>, why: string | null = null, firstRef?: RefObject<Text | null>, playedLine: string | null = null) => valueLines(
     <Text ref={firstRef} maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.heldText]}>
       {`${heldTag(side, seasonOver)} · `}
       <Text style={{ color: TONE_COLOR[tone] }}>{text}</Text>
@@ -677,11 +702,12 @@ function MarketRow({
       {why ? <Text style={styles.leadText}>{` (${why})`}</Text> : null}
     </Text>,
     // Last season against your price, in neutral ink: the row's only
-    // coloured figure is what he made you (walk 9 T1-06).
-    <Text maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>
+    // coloured figure is what he made you (walk 9 T1-06). Once he has
+    // played for you, today's price leads and last season is history.
+    <Text ref={playedLine !== null ? heldSecondRef : undefined} maxFontSizeMultiplier={1.6} style={[styles.detailText, styles.leadText]}>
       {joiner ? <Text style={styles.leadText}>{joiner}</Text> : null}
-      {value.value}
-      {width >= HELD_NOW_MIN_WIDTH ? <Text style={styles.leadText}>{` ·\u00A0${value.now}`}</Text> : null}
+      {playedLine ?? value.value}
+      {playedLine === null && width >= HELD_NOW_MIN_WIDTH ? <Text style={styles.leadText}>{` ·\u00A0${value.now}`}</Text> : null}
     </Text>,
   );
   const unheldLineFor = (shown: typeof signal) => {
@@ -712,7 +738,7 @@ function MarketRow({
     // Below 360px the why is said short, and a line too narrow for the
     // average too keeps the total, so it stays one line (walk 10 T1-03, T1-05).
     <SameHeight ghosts={[unheldGhost]}>
-      {heldLine(heldShown ? heldShown.text : held.total, held.tone, heldValue, heldShown ? heldShown.why : held.why, heldFirstRef)}
+      {heldLine(heldShown ? heldShown.text : held.total, held.tone, heldValue, heldShown ? heldShown.why : held.why, heldFirstRef, playedShown)}
     </SameHeight>
   ) : blocked ? (
     <SameHeight ghosts={[unheldLine]}>
@@ -794,7 +820,7 @@ function MarketRow({
     detail: blocked
       ? ''
       : position && held
-        ? `${tagText}, ${held.text}${held.why ? ` (${held.why})` : ''}, ${heldValuePhrase(player, side, position.lockedGameCost)}`
+        ? `${tagText}, ${held.text}${held.why ? ` (${held.why})` : ''}, ${heldValuePhrase(player, side, position.lockedGameCost, played)}`
         : [signal.lead?.replace(/ ·$/, ''), signal.text].filter(Boolean).join(', '),
     reason: blocked ? (busy && busyElsewhere ? busyElsewhere.reason : blockedReason) : null,
     // A held row's name leads with your price, as the row shows it.
@@ -1494,8 +1520,20 @@ export function PerGameMarketScreen({
     let frame = 0;
     const check = () => {
       frame = 0;
-      const cut = Array.from(document.querySelectorAll('[data-kicker-given]')).some((node) => node.scrollWidth > node.clientWidth + 1);
-      if (cut) setTierAfterSurname(true);
+      const givens = Array.from(document.querySelectorAll('[data-kicker-given]'));
+      const cut = givens.some((node) => node.scrollWidth > node.clientWidth + 1);
+      // A given name and its tier too long for the price's line wrap under
+      // it, so that row stood 10px taller and its name started lower than
+      // its neighbours' (walk 14 T1-02: "KARL-ANTHONY · STAR" under
+      // "$384.8K/game" at 390px): every row then names the tier after the
+      // surname, as narrow phones do, and the given name keeps the price's line.
+      const wrapped = givens.some((node) => {
+        const parts = node.parentElement;
+        const price = parts?.parentElement?.lastElementChild;
+        if (!parts || !price || price === parts) return false;
+        return parts.getBoundingClientRect().top >= price.getBoundingClientRect().bottom - 4;
+      });
+      if (cut || wrapped) setTierAfterSurname(true);
     };
     const later = () => {
       if (!frame) frame = requestAnimationFrame(check);
@@ -1557,8 +1595,9 @@ export function PerGameMarketScreen({
     setSortedNight(nightRef.current);
     announce(resortedLine(previous, nightRef.current));
   }, [announce]);
-  // A run longer than a week, or one that ends the season, sorts afresh once
-  // it settles (walk 10 T2-03); a night or a week keeps the order.
+  // A run that ends the season sorts afresh once it settles (walk 10 T2-03),
+  // as a new season does; a night, a week or a run of weeks keeps the order,
+  // with the kept line and Re-sort (walk 14 T2-05, resortsAfterRun).
   const seasonDone = bootstrap !== null && isSeasonOver({
     practiceComplete: isMockActive() && practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete,
     lastSettledDate: bootstrap.game.lastSettledDate,
@@ -1624,7 +1663,9 @@ export function PerGameMarketScreen({
   // reflow came back at the top of the list). Recorded only while the
   // window keeps its size, so the resize's own scroll never overwrites it.
   const scrollNode = () => listRef.current?.getScrollableNode?.() as AnchorNode | undefined;
-  const anchor = useRef<{ id: string; dy: number; width: number; height: number } | null>(null);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  const anchor = useRef<{ id: string; dy: number; width: number; height: number; layout: MarketLayout } | null>(null);
   const recordAnchor = useCallback((force = false) => {
     if (typeof window === 'undefined' || !window.innerWidth) return;
     const shown = { width: window.innerWidth, height: window.innerHeight };
@@ -1633,7 +1674,7 @@ export function PerGameMarketScreen({
     if (!force && saved && (saved.width !== shown.width || saved.height !== shown.height)) return;
     const found = readAnchor(listRef.current?.getScrollableNode?.() as AnchorNode | undefined);
     if (!found) return;
-    anchor.current = { ...found, ...shown };
+    anchor.current = { ...found, ...shown, layout: layoutRef.current };
     place.current.anchorId = found.id;
   }, []);
   const aligning = useRef(false);
@@ -1660,7 +1701,8 @@ export function PerGameMarketScreen({
     let tries = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const restore = () => {
-      if (remembered.offset <= 0) return;
+      // A side switched meanwhile starts at its top (below).
+      if (remembered.offset <= 0 || shownSide.current !== remembered.side) return;
       if (remembered.width !== widthRef.current) {
         scrollToPlayer(remembered.anchorId);
         return;
@@ -1743,7 +1785,12 @@ export function PerGameMarketScreen({
         const delta = questionScrollDelta(view, { top: row.getBoundingClientRect().top, bottom: cell.getBoundingClientRect().bottom });
         if (Math.abs(delta) > 1) node.scrollTop += delta;
       } else if (node && row && saved) {
-        const delta = row.getBoundingClientRect().top - node.getBoundingClientRect().top - saved.dy;
+        // His row starts whole at the list's top edge, just under the frame
+        // or the table's pinned labels, never half under them (walk 14
+        // T4-04): from the phone list to the table (the rows change height)
+        // at that edge, otherwise where it was.
+        const dy = saved.layout !== layoutRef.current ? 0 : Math.max(0, saved.dy);
+        const delta = row.getBoundingClientRect().top - node.getBoundingClientRect().top - dy;
         if (Math.abs(delta) > 1) node.scrollTop += delta;
       } else {
         // Laid out further down than the list has drawn: jump near, then refine.
@@ -1759,6 +1806,18 @@ export function PerGameMarketScreen({
       finish();
     };
   }, [width, height, recordAnchor, scrollToPlayer]);
+  // A side switch sorts that side afresh, so its list starts at its top, as
+  // a fresh list does, before it paints (walk 14 T2-09: back on the Roster
+  // side the list opened at its end, the worst values, your own players out
+  // of view). Leaving the Market and coming back still keeps your place.
+  const shownSide = useRef(side);
+  useLayoutEffect(() => {
+    if (shownSide.current === side) return;
+    shownSide.current = side;
+    place.current = { anchorId: null, offset: 0 };
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    recordAnchor(true);
+  }, [side, recordAnchor]);
 
   // Screen readers hear what a search, a cleared search or the Watching
   // filter did, once typing pauses; the new line replaces the old one.
@@ -1769,6 +1828,15 @@ export function PerGameMarketScreen({
   const keptShown = watchedOnly ? rows.filter((row) => kept.includes(row.player.playerId) && !watchlist.isWatched(row.player.playerId)).length : 0;
   const spokenCount = resultCount - keptShown;
   const totalCount = allRows.length;
+  // A search that finds nobody offers the nearest listed name, among the
+  // players this list could show (walk 14 T4-N1: "jokci", "lukka", "shai ga").
+  const suggestions = useMemo<NameSuggestion[]>(() => {
+    if (!searchText || resultCount > 0 || !searchHasLetters(searchText)) return [];
+    const shown = watchedOnly ? allRows.filter((row) => watchlist.isWatched(row.player.playerId)) : allRows;
+    return nearestNames(searchText, shown.map((row) => row.player.name));
+  }, [allRows, resultCount, searchText, watchedOnly, watchlist]);
+  const suggestionsRef = useRef(suggestions);
+  suggestionsRef.current = suggestions;
   const spokenOnce = useRef(false);
   const lastSearch = useRef(searchText);
   const lastWatchedOnly = useRef(watchedOnly);
@@ -1789,7 +1857,12 @@ export function PerGameMarketScreen({
     // Names the button that is really there: "Show all 30" under a list,
     // "Show everyone" in an empty one (walk 8 T2-07).
     const line = listCountLine({ query: searchText, count: spokenCount, total: totalCount, watchedOnly, cleared, listed: resultCount });
-    const timer = setTimeout(() => announce(note ? `${note} ${line}` : line), note || filterFlipped ? 150 : 700);
+    const timer = setTimeout(() => {
+      // The nearest name is heard with the empty result ("… Did you mean Nikola Jokic?").
+      const offer = resultCount === 0 ? didYouMeanLine(suggestionsRef.current) : '';
+      const said = offer ? `${line} ${offer}` : line;
+      announce(note ? `${note} ${said}` : said);
+    }, note || filterFlipped ? 150 : 700);
     return () => clearTimeout(timer);
   }, [searchText, spokenCount, totalCount, watchedOnly, announce, resultCount]);
   // Opened with a search or the Watching filter still on (coming back to the
@@ -2156,6 +2229,18 @@ export function PerGameMarketScreen({
   );
 
   const trimmed = query.trim();
+  // A suggestion searches for him; focus goes to the player found, whose Add
+  // is the next stop (the pressed button leaves with the empty list).
+  const takeSuggestion = (entry: NameSuggestion) => {
+    setQuery(entry.query);
+    if (typeof document === 'undefined') return;
+    setTimeout(() => {
+      const row = document.querySelector('[data-player]');
+      const buttons = row ? (Array.from(row.querySelectorAll('[role="button"], button')) as HTMLElement[]) : [];
+      const target = buttons.find((node) => /view profile/i.test(node.getAttribute('aria-label') ?? '')) ?? buttons[0];
+      target?.focus();
+    }, 60);
+  };
   const emptyState = watchedOnly && watchlist.watched.length === 0 ? (
     <EmptyState
       action={<Button ref={emptyAction} label="Show everyone" onPress={() => setWatchedOnly(false)} />}
@@ -2179,15 +2264,21 @@ export function PerGameMarketScreen({
     <EmptyState
       action={(
         <View style={styles.emptyActions}>
-          <Button ref={emptyAction} label="Clear search" onPress={() => setQuery('')} variant="secondary" />
+          {/* The nearest name, one press away (walk 14 T4-N1). */}
+          {suggestions.map((entry, index) => (
+            <Button key={entry.query} ref={index === 0 ? emptyAction : undefined} label={`Search ${entry.label}`} onPress={() => takeSuggestion(entry)} />
+          ))}
+          <Button ref={suggestions.length === 0 ? emptyAction : undefined} label="Clear search" onPress={() => setQuery('')} variant="secondary" />
           {watchedOnly ? <Button label="Show everyone" onPress={clearFilters} variant="quiet" /> : null}
         </View>
       )}
-      copy={watchedOnly
-        ? 'None of the players you watch match that name.'
-        : isMockActive()
-          ? `Practice lists ${allRows.length} players, so some real players are not here. Clear the search to see them all.`
-          : 'Check the spelling, or clear the search to see the whole market.'}
+      copy={suggestions.length > 0
+        ? didYouMeanLine(suggestions)
+        : watchedOnly
+          ? 'None of the players you watch match that name.'
+          : isMockActive()
+            ? `Practice lists ${allRows.length} players, so some real players are not here. Clear the search to see them all.`
+            : 'Check the spelling, or clear the search to see the whole market.'}
       level={2}
       title={isMockActive() && !watchedOnly ? `No listed player matches "${echoQuery(trimmed)}"` : `No players match "${echoQuery(trimmed)}"`}
     />

@@ -34,13 +34,15 @@ test('a held table Value is captioned as last season at your price, kept whole',
   assert.ok(HELD_VALUE_CAPTION.endsWith('at\u00A0your\u00A0price'), '"at your price" never breaks');
 });
 
-// walk 10 T2-03: a run longer than a week, or one that ends the season, re-sorts.
-test('a night or a week keeps the order; a longer run or the season end re-sorts', () => {
+// walk 10 T2-03: the season's end re-sorts. Walk 14 T2-05: a run of any
+// length pressed while the list shows keeps its order (day 8 re-sorted).
+test('a night, a week or a longer run keeps the order; the season end re-sorts', () => {
   assert.equal(resortsAfterRun('2025-10-20', '2025-10-21', false), false, 'a night');
   assert.equal(resortsAfterRun('2025-10-20', '2025-10-27', false), false, 'a week');
-  assert.equal(resortsAfterRun('2025-10-20', '2025-10-28', false), true, 'more than a week');
-  assert.equal(resortsAfterRun('2025-10-20', '2025-11-10', false), true, 'three weeks');
+  assert.equal(resortsAfterRun('2025-10-20', '2025-10-28', false), false, 'a night then a week (day 8)');
+  assert.equal(resortsAfterRun('2025-10-20', '2025-11-10', false), false, 'three weeks');
   assert.equal(resortsAfterRun('2026-04-08', '2026-04-12', true), true, 'the season ended');
+  assert.equal(resortsAfterRun('2026-04-12', '2025-10-20', false), true, 'a new season went back to its start');
   assert.equal(resortsAfterRun('2025-10-27', '2025-10-27', true), false, 'already sorted for the latest night');
   assert.equal(resortsAfterRun('', '2025-10-27', true), false, 'nothing sorted yet');
 });

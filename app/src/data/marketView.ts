@@ -322,6 +322,95 @@ export function filterMarketRows<T extends { player: PerGameMarketPlayer }>(
   });
 }
 
+/** Edits between two words, a swap of neighbours counting as one ("jokci" is one from "jokic"). */
+function typoDistance(a: string, b: string): number {
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length];
+}
+
+/** Typos a typed word may hold and still name a player: none under 4 letters, then 1, 2 from 6, 3 from 9. */
+function typoAllowance(length: number): number {
+  return length < 4 ? 0 : length < 6 ? 1 : length < 9 ? 2 : 3;
+}
+
+/** A search's way on when it finds nobody: what the button says and what it searches for. */
+export interface NameSuggestion {
+  label: string;
+  query: string;
+}
+
+/**
+ * The listed players a search that found nobody most likely meant (walk 14
+ * T4-N1: "jokci", "doncci", "lukka", "antetokounpo", "brunsen" and "shai ga"
+ * found nobody): every word typed is a part of his name, or its start, within
+ * a typo or two (typoAllowance), or a short word is his surname's initials
+ * ("shai ga"), and at least one word of 3 letters or more is spelled out.
+ * The closest wins; two names that tie are both offered, in the list's order;
+ * more that tie on the same word ("jalne": three Jalens) offer that word.
+ */
+export function nearestNames(query: string, names: readonly string[], max = 2): NameSuggestion[] {
+  if (!searchHasLetters(query)) return [];
+  const words = searchKey(query).split(/\s+/).map((word) => word.replace(/-/g, '')).filter((word) => /\p{L}/u.test(word));
+  if (!words.some((word) => word.length >= 3)) return [];
+  const scored: Array<{ name: string; cost: number; matched: string }> = [];
+  for (const name of names) {
+    const parts = searchKey(name).split(/[\s-]+/).filter(Boolean);
+    const targets = new Set<string>();
+    for (let from = 0; from < parts.length; from += 1) {
+      for (let to = from + 1; to <= parts.length; to += 1) targets.add(parts.slice(from, to).join(''));
+    }
+    const surnameInitials = parts.slice(1).map((part) => part[0]).join('');
+    let cost = 0;
+    let spelled = false;
+    const matched: string[] = [];
+    for (const word of words) {
+      let best = Infinity;
+      let bestTarget = '';
+      for (const target of targets) {
+        const whole = typoDistance(word, target);
+        const start = word.length >= 3 && target.length > word.length ? typoDistance(word, target.slice(0, word.length)) : Infinity;
+        const distance = Math.min(whole, start);
+        if (distance < best) {
+          best = distance;
+          bestTarget = target;
+        }
+      }
+      if (best <= typoAllowance(word.length)) {
+        cost += best;
+        spelled = spelled || word.length >= 3;
+        matched.push(bestTarget);
+      } else if (word.length >= 2 && word.length <= 4 && word === surnameInitials) {
+        cost += 1;
+        matched.push(word);
+      } else {
+        cost = Infinity;
+        break;
+      }
+    }
+    if (Number.isFinite(cost) && spelled) scored.push({ name, cost, matched: matched.join(' ') });
+  }
+  if (scored.length === 0) return [];
+  const best = Math.min(...scored.map((entry) => entry.cost));
+  const tied = scored.filter((entry) => entry.cost === best);
+  if (tied.length > max && tied.every((entry) => entry.matched === tied[0].matched)) {
+    const label = tied[0].matched.replace(/(^|\s)\p{L}/gu, (letter) => letter.toLocaleUpperCase());
+    return [{ label, query: label }];
+  }
+  return tied.slice(0, max).map((entry) => ({ label: entry.name, query: entry.name }));
+}
+
+/** "Did you mean Nikola Jokic?", "Did you mean Jalen Brunson or Jalen Duren?"; '' with none. */
+export function didYouMeanLine(suggestions: readonly NameSuggestion[]): string {
+  if (suggestions.length === 0) return '';
+  return `Did you mean ${suggestions.map((entry) => entry.label).join(' or ')}?`;
+}
+
 /**
  * Nicknames fans type for well-known players (walk 5 T4-N3), each to one
  * full name. Only whole nicknames count, so "ant" finds Anthony Edwards when
@@ -592,6 +681,33 @@ export function heldValueLine(
 }
 
 /**
+ * A held phone row's second line once he has played for you, fullest first;
+ * the row shows the first that fits on its one line (walk 14 T1-09: "+$310K
+ * over 4 games" above "Value -$59.5K at your price" read as a verdict against
+ * his result). Today's price leads, then last season as history, "last season
+ * -$59.5K a game at your price", in the row's neutral ink; a narrow row keeps
+ * today's price alone. Before his first game for you the row keeps "Value …
+ * at your price" (heldValueLine), a guide for the pick.
+ */
+export function heldPlayedWordings(
+  player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
+  side: PerGamePositionSide,
+  lockedGameCost: number,
+): string[] {
+  const now = `Price now ${money(player.currentGameCost)}`;
+  const edge = player.priorSeasonValuePerGame === null ? null : rowValueEdge(player, side, { lockedGameCost });
+  if (edge === null) return [now];
+  const yours = 'at your price';
+  if (netTone(edge) === 'even') return [`${now} · last season even ${yours}`, now];
+  const figure = signedMoneyCompact(edge);
+  return [
+    `${now} · last season ${figure} a game ${yours}`,
+    `${now} · last season ${figure} ${yours}`,
+    now,
+  ];
+}
+
+/**
  * What Value is, said once on a phone's Market, under the sort (walk 13
  * T1-01: "sorted by value" was a guess until a profile was opened; phones
  * have no hover tip). True to the side, as the table's header explains it.
@@ -685,7 +801,11 @@ export function surnameFontSize(surname: string, room: number, fullSize: number)
  * it alone at a line's end.
  */
 export function valueLineParts(first: string, second: string, oneLine: boolean): { first: string; joiner: string; second: string } {
-  return { first: first.replace(/\s*·\s*$/, ''), joiner: oneLine ? '·\u00A0' : '', second };
+  // A second part that starts its own line reads as a sentence, never a
+  // lowercase fragment (walk 14 T1-10: "No last season" over "nothing to
+  // compare with his price"; "even with his price" too).
+  const own = oneLine ? second : second.replace(/^\p{Ll}/u, (letter) => letter.toLocaleUpperCase());
+  return { first: first.replace(/\s*·\s*$/, ''), joiner: oneLine ? '·\u00A0' : '', second: own };
 }
 
 /**
@@ -1102,9 +1222,15 @@ export function heldValuePhrase(
   player: Pick<PerGameMarketPlayer, 'currentGameCost' | 'priorSeasonValuePerGame'>,
   side: PerGamePositionSide,
   lockedGameCost: number,
+  /** He has played for you: today's price first, last season as history (heldPlayedWordings). */
+  played = false,
 ): string {
   const now = `price now ${perGame(player.currentGameCost)}`;
   const edge = rowValueEdge(player, side, { lockedGameCost });
+  if (played) {
+    if (edge === null || player.priorSeasonValuePerGame === null) return now;
+    return `${now}, last season ${netTone(edge) === 'even' ? 'even' : `${signedMoneyCompact(edge)} a game`} at your price`;
+  }
   if (edge === null || player.priorSeasonValuePerGame === null) return `no last season, ${now}`;
   // Said as the row shows it: Value at your price (walk 9 T1-06, walk 13 T1-05).
   const value = netTone(edge) === 'even' ? 'value even at your price' : `value ${signedMoneyCompact(edge)} a game at your price`;
@@ -1658,27 +1784,22 @@ function gamesSince(previousNight: string, night: string): string {
   return first < night ? humanDaySpan(first, night) : humanDate(night);
 }
 
-/** Whole days from one ISO date to a later one ("2025-10-20" to "2025-10-27" is 7). */
-function daysBetween(fromIso: string, toIso: string): number {
-  const from = Date.parse(`${fromIso}T00:00:00Z`);
-  const to = Date.parse(`${toIso}T00:00:00Z`);
-  if (Number.isNaN(from) || Number.isNaN(to)) return 0;
-  return Math.round((to - from) / 86_400_000);
-}
-
-/** The longest run of games after which the list still keeps its order: a week. */
-export const HELD_ORDER_MAX_DAYS = 7;
-
 /**
- * The list keeps its order after a night or a week, so nothing moves under
- * the next tap (walk 7 T4-11). A longer run, or one that ends the season,
- * sorts afresh once it settles (walk 10 T2-03: after Play to the end the list
- * under "VALUE ↓" kept its Oct 20 order, "Same order as before the Oct
- * 21–Apr 12 games"). `sortedNight` is the night the order was sorted for.
+ * Whether the list the player is looking at sorts afresh by itself once the
+ * games settle. It keeps its order after every night, week or run of weeks
+ * pressed while it shows, however old that order gets, so nothing moves
+ * under the next tap (walk 7 T4-11; walk 14 T2-05: on day 8 a week re-sorted
+ * silently and another player's Add sat under the pointer); the kept line
+ * and Re-sort say what moved. It sorts afresh when the season ends (walk 10
+ * T2-03: after Play to the end the list kept its Oct 20 order; no row has a
+ * button then) and when a new season goes back to its start. Coming back to
+ * the Market sorts afresh too (the screen's own state). `sortedNight` is the
+ * night the order was sorted for.
  */
 export function resortsAfterRun(sortedNight: string, night: string, seasonOver: boolean): boolean {
-  if (!sortedNight || !night || sortedNight >= night) return false;
-  return seasonOver || daysBetween(sortedNight, night) > HELD_ORDER_MAX_DAYS;
+  if (!sortedNight || !night || sortedNight === night) return false;
+  if (night < sortedNight) return true;
+  return seasonOver;
 }
 
 /**
