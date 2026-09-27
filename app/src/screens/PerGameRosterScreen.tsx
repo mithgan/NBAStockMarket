@@ -88,7 +88,7 @@ import { usePerGame } from '../state/PerGameContext';
 import { practicePlaying, usePracticePlaying } from '../state/practicePlaying';
 import { openRules, openTab, takeRosterPick } from '../state/uiActions';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
-import { Button, ConfirmStrip, EmptyState, headingLevel, repeatSafe, Tag, tapsSettling, useAriaDisabled, visuallyHidden } from '../ui/kit';
+import { Button, ConfirmStrip, EmptyState, headingLevel, repeatSafe, settleTaps, Tag, tapsSettling, useAriaDisabled, visuallyHidden } from '../ui/kit';
 import { pastSeasonCount, restartPractice } from '../web/practiceSession';
 
 /** Desktop: score and chart beside the lists. */
@@ -100,7 +100,7 @@ const ACTION_WIDTH = 72;
 const TABLE_COLUMN_COUNT = 6;
 /** A second press on Drop this soon after it opened the confirm is a double tap: ignored. */
 const DOUBLE_TAP_MS = 400;
-/** A pinned section title lets go this far before its section ends: about one row (`stickyScope`). */
+/** A pinned section title lets go this far before its section ends until its last row is measured (`releaseOf`). */
 const STICKY_RELEASE = 60;
 /** Phone lists narrower than this leave out Profit a game (see `StackedFigures`). */
 const NARROW_LIST_MAX_WIDTH = 380;
@@ -193,6 +193,20 @@ function keepFocusClear(pinnedHeight: number): ViewStyle | null {
 type ConfirmOutcome = 'kept' | 'closed';
 
 /**
+ * The "Room made for …" banner folds once answered, and the rows under it
+ * slide up under the finger, as under the Drop question: taps below its top
+ * rest this long once it folds…
+ */
+const ERRAND_SETTLE_MS = 400;
+/**
+ * …and a repeat on the pressed spot is ignored this long, through the list's
+ * own scroll to the new row (walk 18 T4-07: the second tap of a double tap on
+ * "Add at $210K" opened the profile of the row that slid up, over the add's
+ * notice).
+ */
+const ERRAND_SPOT_MS = 1400;
+
+/**
  * Web, table rows: whether a name needs the next size down to fit its one
  * line, measured (a user's text spacing or a late font changes the answer),
  * and re-measured when the column's width changes.
@@ -237,6 +251,11 @@ function useTableNameFit(table: boolean, name: string) {
   return { ref, small };
 }
 
+/** A row's height as it lays out, when the list asks for it. */
+function rowLayoutReport(onHeight?: (height: number) => void) {
+  return onHeight ? (event: LayoutChangeEvent) => onHeight(Math.round(event.nativeEvent.layout.height)) : undefined;
+}
+
 function PositionRow({
   position,
   layout,
@@ -251,6 +270,7 @@ function PositionRow({
   profileRef,
   holdRef,
   marketPrice,
+  onHeight,
 }: {
   position: PerGamePosition;
   layout: RowLayout;
@@ -271,6 +291,8 @@ function PositionRow({
   marketPrice: number | null;
   /** The row's outer view, held in view while its question is open (walk 14 T4-05). */
   holdRef?: (node: unknown) => void;
+  /** How tall the row is: the list's last row's height is how early its pinned title lets go (walk 18 T4-02). */
+  onHeight?: (height: number) => void;
 }) {
   const { bootstrap, lockedPress, notify, pendingActions } = usePerGame();
   const nameFit = useTableNameFit(layout === 'table', position.playerName);
@@ -386,6 +408,7 @@ function PositionRow({
     net: view.summary.avgNet,
     total: position.cumulativePnl,
     now: marketPrice,
+    over: seasonOver,
   };
   const onActionPress = () => {
     if (tapsSettling()) return;
@@ -513,7 +536,7 @@ function PositionRow({
     // inside it (walk 13 T3-03).
     const headerName = `${position.playerName}, ${view.tag.label}`;
     return (
-      <View ref={holdRef as never} style={styles.tableItem}>
+      <View ref={holdRef as never} onLayout={rowLayoutReport(onHeight)} style={styles.tableItem}>
         <View role="row" style={styles.tableRow}>
           <Pressable
             accessible={false}
@@ -563,7 +586,7 @@ function PositionRow({
     // game, Profit a game and Total are one line (walk 16 T4-05).
     const beside = actionBeside && Boolean(action);
     return (
-      <View ref={holdRef as never} style={[styles.compactRow, beside && styles.compactRowBeside]}>
+      <View ref={holdRef as never} onLayout={rowLayoutReport(onHeight)} style={[styles.compactRow, beside && styles.compactRowBeside]}>
         <Pressable {...profileProps} style={({ pressed }) => [styles.compactProfile, pressed && styles.pressed]}>
           {beside ? <View style={styles.compactTop}>{identity}</View> : identity}
           <View style={styles.compactFigures}>
@@ -577,7 +600,7 @@ function PositionRow({
   }
 
   return (
-    <View ref={holdRef as never} style={styles.stackRow}>
+    <View ref={holdRef as never} onLayout={rowLayoutReport(onHeight)} style={styles.stackRow}>
       <Pressable {...profileProps} style={({ pressed }) => [styles.stackProfile, pressed && styles.pressed]}>
         <View style={[styles.stackTop, action ? null : styles.stackTopFull]}>
           <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
@@ -707,6 +730,12 @@ export function PerGameRosterScreen({
   const errandAddRef = useRef<View>(null);
   // The banner's sentence: where focus lands on arrival, so it is read once.
   const errandTextRef = useRef<Text>(null);
+  // The banner itself: where the rows under it start to slide up once it folds.
+  const errandRef = useRef<View>(null);
+  const errandTop = useCallback(() => {
+    const node = errandRef.current as unknown as HTMLElement | null;
+    return node?.getBoundingClientRect ? node.getBoundingClientRect().top : null;
+  }, []);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [listWidth, setListWidth] = useState<number | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -716,6 +745,16 @@ export function PerGameRosterScreen({
   // How tall each list's pinned title and legend are (0 when not pinned).
   const [pinnedLong, setPinnedLong] = useState(0);
   const [pinnedShort, setPinnedShort] = useState(0);
+  // How tall each row is: a list's pinned title lets go its last row's
+  // height before the section ends, so the title and legend leave with the
+  // last row and never sit over half of it (walk 18 T4-02: a phone row is
+  // 87px, the old fixed release 60px). Every row reports from the start (a
+  // view only reports sizes it was asked for when it appeared), so the row
+  // left last after a drop is already measured.
+  const [rowHeights, setRowHeights] = useState<Record<string, number>>({});
+  const rowHeightFor = useCallback((positionId: string) => (height: number) => {
+    setRowHeights((current) => (current[positionId] === height ? current : { ...current, [positionId]: height }));
+  }, []);
   const actionRefs = useRef(new Map<string, View>());
   // Each Closed row's "Add again" / "Short again": OK on a full-side note returns focus to it.
   const closedAgainRefs = useRef(new Map<string, View>());
@@ -1002,6 +1041,19 @@ export function PerGameRosterScreen({
   const sticky = layout === 'stacked' || layout === 'table';
   // One list is pinned at a time; the taller one's height clears both.
   const focusClear = keepFocusClear(Math.max(pinnedLong, pinnedShort));
+  // A pinned title's scope (walk 15 T2-10): CSS sticky keeps a title inside
+  // its parent's content box. The release spacer, the scope's last child,
+  // pulls that box's end up one row (a negative top margin), and the section
+  // pads the same back, so nothing moves: the title leaves with its last row
+  // instead of staying pinned over the next section when the list cannot
+  // scroll its section away. One row is the last row's own height once
+  // measured, so the title never sits over half of it (walk 18 T4-02).
+  const releaseOf = (list: readonly PerGamePosition[]) => {
+    const lastRow = list[list.length - 1];
+    const measured = lastRow ? rowHeights[lastRow.positionId] ?? 0 : 0;
+    const release = measured > 0 ? measured : STICKY_RELEASE;
+    return { section: { paddingBottom: release }, spacer: { height: 0, marginTop: -release } };
+  };
   const legend = (side: PerGamePosition['side']) => (
     layout === 'table' ? <TableHeader actionWidth={seasonOver ? 0 : ACTION_WIDTH} side={side} />
       : layout === 'stacked' ? <FigureLegend narrow={narrow} side={side} /> : null
@@ -1024,6 +1076,7 @@ export function PerGameRosterScreen({
   const rows = (positions: PerGamePosition[]) => positions.map((position) => (
     <PositionRow
       key={position.positionId}
+      onHeight={rowHeightFor(position.positionId)}
       actionRef={actionRef(position.positionId)}
       confirming={confirmingId === position.positionId}
       holdRef={questionHold.rowRef(position.positionId)}
@@ -1127,7 +1180,7 @@ export function PerGameRosterScreen({
     const verb = side === 'long' ? 'Add' : 'Short';
     const opening = pendingActions.has(`position:${side}:${makingFor.playerId}`);
     return (
-      <View style={styles.errand}>
+      <View ref={errandRef} style={styles.errand}>
         {/* The first line: why you are here, and the way out beside it
             (walk 4 T1-16). The sentence keeps its place when room is made,
             so the change is announced; only the sentence is announced, the
@@ -1144,7 +1197,17 @@ export function PerGameRosterScreen({
               {`Making room for ${makingFor.playerName}: ${side === 'long' ? 'drop a player' : 'close a short'} below.`}
             </Text>
           )}
-          {room ? null : <Button label="Cancel" onPress={() => setMaking(null)} style={styles.errandCancel} variant="quiet" />}
+          {room ? null : (
+            <Button
+              label="Cancel"
+              onPress={() => {
+                settleTaps(ERRAND_SETTLE_MS, ERRAND_SPOT_MS, 'list', false, errandTop());
+                setMaking(null);
+              }}
+              style={styles.errandCancel}
+              variant="quiet"
+            />
+          )}
         </View>
         {room ? (
           <View style={styles.errandActions}>
@@ -1156,6 +1219,7 @@ export function PerGameRosterScreen({
                 focusableWhenDisabled
                 label={opening ? 'Wait' : `${verb} at ${moneyCompact(listed.currentGameCost)}`}
                 onPress={() => {
+                  const pressedTop = errandTop();
                   void openPosition({
                     playerId: makingFor.playerId,
                     playerName: makingFor.playerName,
@@ -1163,9 +1227,16 @@ export function PerGameRosterScreen({
                     expectedQuoteVersion: listed.quoteVersion,
                   }).then((ok) => {
                     if (!ok) return;
+                    // The banner folds now (it may already have, as he
+                    // joined the list): the rows under it slide up.
+                    settleTaps(ERRAND_SETTLE_MS, 0, 'list', false, errandTop() ?? pressedTop);
                     setMaking(null);
                     focusNewRow(side, makingFor.playerId);
                   });
+                  // After the move's own guard, set as it was pressed: this
+                  // spot stays quiet through the list's scroll to his new row,
+                  // so a double tap adds once and opens nothing (walk 18 T4-07).
+                  settleTaps(0, ERRAND_SPOT_MS, 'list', true);
                 }}
                 variant="primary"
               />
@@ -1173,6 +1244,8 @@ export function PerGameRosterScreen({
             <Button
               label="Not now"
               onPress={() => {
+                // It folds at once, as an answered Drop question does.
+                settleTaps(ERRAND_SETTLE_MS, ERRAND_SPOT_MS, 'list', false, errandTop());
                 setMaking(null);
                 // The banner (and this button) goes: focus the list's heading, not the page.
                 focusElement(side === 'long' ? rosterHeading.current : shortsHeading.current, { preventScroll: true });
@@ -1317,7 +1390,7 @@ export function PerGameRosterScreen({
   );
   const lists = (
     <>
-      <View style={[styles.section, sticky && longs.length > 0 && styles.stickySection]}>
+      <View style={[styles.section, sticky && longs.length > 0 && releaseOf(longs).section]}>
         <View>
         <SectionHead
           count={`${longSlots.used} of ${longSlots.limit}`}
@@ -1367,7 +1440,7 @@ export function PerGameRosterScreen({
             title={hadLongs ? 'Your roster is empty' : seasonOver ? 'No players this season' : welcomeMarket ? 'No players yet' : 'Add your first player'}
           />
         )}
-        {sticky && longs.length > 0 ? <View style={styles.stickyRelease} /> : null}
+        {sticky && longs.length > 0 ? <View style={releaseOf(longs).spacer} /> : null}
         </View>
       </View>
       {quietShorts ? (
@@ -1378,7 +1451,7 @@ export function PerGameRosterScreen({
           <Text style={styles.shortsLater}>{SHORTS_LATER}</Text>
         </View>
       ) : (
-      <View style={[styles.section, sticky && shorts.length > 0 && styles.stickySection]}>
+      <View style={[styles.section, sticky && shorts.length > 0 && releaseOf(shorts).section]}>
         <View>
         <SectionHead
           caption={shorts.length > 0 ? SHORT_EXPLAINER : undefined}
@@ -1417,7 +1490,7 @@ export function PerGameRosterScreen({
             title={hadShorts ? 'No open shorts' : seasonOver ? 'No shorts this season' : 'No shorts yet'}
           />
         )}
-        {sticky && shorts.length > 0 ? <View style={styles.stickyRelease} /> : null}
+        {sticky && shorts.length > 0 ? <View style={releaseOf(shorts).spacer} /> : null}
         </View>
       </View>
       )}
@@ -1524,19 +1597,6 @@ const styles = StyleSheet.create({
   section: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
-  },
-  // A pinned title's scope (walk 15 T2-10): CSS sticky keeps a title inside
-  // its parent's content box. The release spacer, the scope's last child,
-  // pulls that box's end up one row (a negative top margin), and the section
-  // pads the same back, so nothing moves: the title leaves with its last row
-  // instead of staying pinned over the next section when the list cannot
-  // scroll its section away.
-  stickySection: {
-    paddingBottom: STICKY_RELEASE,
-  },
-  stickyRelease: {
-    height: 0,
-    marginTop: -STICKY_RELEASE,
   },
   // Score by night under the lists in a short window (walk 13 T2-04): ruled
   // off from the Fees line, as the lists are from each other.

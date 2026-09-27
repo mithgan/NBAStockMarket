@@ -31,15 +31,17 @@ test('walk 17 T1-06: "vs last season ›" is one line beside the score only wher
 
 test('walk 17 T1-07: the welcome small print is three short lines, money first, the formula left to the rules', () => {
   assert.deepEqual(welcomeDetails(40_000, 250), [
-    '$40K for each net point. A bad game can go below zero.',
+    // Walk 18 T1-02: the rate says in a few words what a net point is.
+    '$40K for each net point, his box score in one number: points, rebounds and assists for him, misses and turnovers against him. A bad game can go below zero.',
     '$250 for each add or drop.',
     'Practice starts over if you reload.',
   ]);
   // No fee, no fee line; no rate, the box score in plain words.
-  assert.deepEqual(welcomeDetails(40_000, 0), ['$40K for each net point. A bad game can go below zero.', 'Practice starts over if you reload.']);
+  assert.deepEqual(welcomeDetails(40_000, 0), [welcomeDetails(40_000, 250)[0], 'Practice starts over if you reload.']);
   assert.equal(welcomeDetails(null, 250)[0], 'Each game pays out his box score. A bad game can go below zero.');
-  // The net-point formula is not in the welcome.
-  assert.doesNotMatch(welcomeDetails(40_000, 250).join(' '), /rebounds|minutes|\(/);
+  // The net-point formula (minutes played, brackets) is not in the welcome;
+  // since walk 18 T1-02 a few words say what a net point counts.
+  assert.doesNotMatch(welcomeDetails(40_000, 250).join(' '), /minutes|\(/);
 });
 
 test('walk 17 T2-03: the chart says "Start" under its first point at every length, never a date', () => {

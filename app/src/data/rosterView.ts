@@ -1066,15 +1066,17 @@ export function shortsQuiet({ welcome, dayZero, seasonOver, openShorts, hadShort
 /**
  * The welcome's smaller second part (walk 10 T1-01): three short lines,
  * money first (walk 17 T1-07), so a first read catches the rate, the fee and
- * the reload: "$40K for each net point. A bad game can go below zero." /
- * "$250 for each add or drop." / "Practice starts over if you reload." How a
- * net point is counted is left to How scoring works, beside it (a six-line
- * paragraph with the formula in brackets was skipped on a phone). No fee, no
- * fee line.
+ * the reload: "$40K for each net point, his box score in one number: …" /
+ * "$250 for each add or drop." / "Practice starts over if you reload." The
+ * rate says in a few words what a net point is, the unit every screen after
+ * this one counts in (walk 18 T1-02: met four times before the Rules said
+ * it); the exact formula, steals, blocks and minutes included, stays in How
+ * scoring works, beside it (a six-line paragraph with the formula in
+ * brackets was skipped on a phone). No fee, no fee line.
  */
 export function welcomeDetails(dollarsPerNetPoint: number | null | undefined, feeDollars: number): string[] {
   const rate = dollarsPerNetPoint && dollarsPerNetPoint > 0
-    ? `${moneyCompact(dollarsPerNetPoint)} for each net point.`
+    ? `${moneyCompact(dollarsPerNetPoint)} for each net point, his box score in one number: points, rebounds and assists for him, misses and turnovers against him.`
     : 'Each game pays out his box score.';
   return [
     `${rate} A bad game can go below zero.`,
@@ -1417,6 +1419,37 @@ export function nearestIndex(xs: readonly number[], x: number): number | null {
     if (Math.abs(xs[index] - x) < Math.abs(xs[best] - x)) best = index;
   }
   return best;
+}
+
+/**
+ * The quiet line under a table row's locked price when his market price has
+ * moved: what re-adding him costs today ("now $113.5K"), or once the season
+ * is over, where his price ended, as his profile says it ("last $439.5K",
+ * heard as "his last price $439.5K a game"; walk 18 T2-02: "now" read as if
+ * the price still moved).
+ */
+export function marketPriceWords(now: string, over: boolean): { shown: string; spoken: string } {
+  return over
+    ? { shown: `last ${now}`, spoken: `his last price ${now} a game` }
+    : { shown: `now ${now}`, spoken: `market price now ${now} a game` };
+}
+
+/** How far past the first or last point a press still reads it (px), at least. */
+export const NIGHT_REACH_MIN = 12;
+
+/**
+ * Whether a press at x is on no night: in the value marks' gutter left of
+ * the first point, or past the last, by more than half a step between
+ * points (never less than `NIGHT_REACH_MIN`). A click or tap there lets a
+ * picked night go (walk 18 T2-04: a picked night could not be let go).
+ */
+export function outsideNights(xs: readonly number[], x: number): boolean {
+  if (xs.length === 0) return true;
+  const first = xs[0];
+  const last = xs[xs.length - 1];
+  const step = xs.length > 1 ? (last - first) / (xs.length - 1) : 0;
+  const reach = Math.max(NIGHT_REACH_MIN, step / 2);
+  return x < first - reach || x > last + reach;
 }
 
 /** One-sentence summary of the chart for screen readers. */

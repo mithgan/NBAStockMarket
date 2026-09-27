@@ -15,6 +15,7 @@ import {
   lowInsidePlace,
   nearestIndex,
   nightlySeries,
+  outsideNights,
   placeAxisLabels,
   plotXs,
   readingRevealTop,
@@ -114,6 +115,13 @@ export function PerGamePnlChart({
   }, [onPin, pinned]);
   const [hovered, setHovered] = useState<number | null>(null);
   const selected = hovered ?? pinned;
+  // Read inside the pointer handlers: the night pinned now.
+  const pinnedNow = useRef(pinned);
+  pinnedNow.current = pinned;
+  // The night a click just let go: pointing at it again does not read it
+  // until the mouse moves to another night or leaves (walk 18 T2-04: the
+  // second click let go, but the hover showed the same night again).
+  const letGo = useRef<number | null>(null);
   // Whether the longest reading needs two lines: the resting words then take
   // two as well, so the heading never changes height (walk 9 T1-03).
   const [tallReading, setTallReading] = useState(true);
@@ -224,12 +232,38 @@ export function PerGamePnlChart({
   const read = useCallback((x: number, intent: PlotIntent) => {
     const index = nearestIndex(xs, x);
     if (index === null) return;
-    if (intent !== 'point') revealWanted.current = true;
-    // Pointing reads a night; a click pins it, and a click on the pinned
-    // night lets it go, as a second tap does.
-    if (intent === 'point') setHovered(index);
-    else if (intent === 'slide') setPinned(index);
-    else setPinned((current) => (current === index ? null : index));
+    // Off the nights (the value marks' gutter): nothing to read there, and a
+    // click or tap lets the picked night go (walk 18 T2-04).
+    const off = intent !== 'slide' && outsideNights(xs, x);
+    if (intent === 'point') {
+      if (off) {
+        letGo.current = null;
+        setHovered(null);
+        return;
+      }
+      if (letGo.current === index) return;
+      letGo.current = null;
+      setHovered(index);
+      return;
+    }
+    if (intent === 'slide') {
+      revealWanted.current = true;
+      letGo.current = null;
+      setPinned(index);
+      return;
+    }
+    // A click pins a night; a click on the pinned night, or off the nights,
+    // lets it go, as a second tap does: the chart goes back to its latest
+    // reading at once, though the mouse still points there.
+    if (off || pinnedNow.current === index) {
+      letGo.current = off ? null : index;
+      setHovered(null);
+      setPinned(null);
+      return;
+    }
+    revealWanted.current = true;
+    letGo.current = null;
+    setPinned(index);
   }, [xs]);
   const onKey = useCallback((key: string) => {
     // The keys never move the page, even right after a slide asked to.
@@ -251,18 +285,26 @@ export function PerGamePnlChart({
                 : null;
     if (next === null) return false;
     // The keys own the reading until the mouse moves again.
+    letGo.current = null;
     setHovered(null);
     setPinned(next);
     return true;
   }, [last, selected, series]);
-  const { ref, responderProps } = usePlotPointer({ onRead: read, onLeave: () => setHovered(null), onKey });
+  const { ref, responderProps } = usePlotPointer({
+    onRead: read,
+    onLeave: () => {
+      letGo.current = null;
+      setHovered(null);
+    },
+    onKey,
+  });
   const onLayout = (event: LayoutChangeEvent) => setWidth(Math.round(event.nativeEvent.layout.width));
 
   if (!hasNights(series)) {
     return (
       <View style={styles.container}>
         <View style={styles.heading}>
-          <Text accessibilityLabel="Score by night" accessibilityRole="header" {...headingLevel(2)}><Label>Score by night</Label></Text>
+          <ChartName />
         </View>
         {/* Keyed apart from the plot: react-native-web only starts observing
             onLayout when a view mounts, so the plot must mount fresh when the
@@ -296,7 +338,7 @@ export function PerGamePnlChart({
   const widest = widestReading(series);
   const restWords = (
     <View style={tallReading ? styles.restStacked : styles.restLine}>
-      <Text accessibilityLabel="Score by night" accessibilityRole="header" {...headingLevel(2)}><Label>Score by night</Label></Text>
+      <ChartName />
       {/* Tap, click or arrow keys: one word for all of them. */}
       <Text style={styles.hint}>Select a night to read it</Text>
     </View>
@@ -534,9 +576,28 @@ function revealReading(node: unknown, reducedMotion: boolean) {
     .call(area, { top, behavior: reducedMotion ? 'auto' : 'smooth' });
 }
 
+/** The chart's name, its heading, on the resting words and on every reading. */
+function ChartName() {
+  return <Text accessibilityLabel="Score by night" accessibilityRole="header" {...headingLevel(2)}><Label>Score by night</Label></Text>;
+}
+
 /**
- * The heading while a night is being read: its date, then each figure after
- * its label. `stacked` puts the figures on the line under the date, where a
+ * A reading keeps the chart's name on its first line, before the date, so a
+ * picked night never takes the chart's name away and the heading keeps its
+ * height (walk 18 T2-04).
+ */
+function ReadingHead({ children }: { children: string }) {
+  return (
+    <View style={styles.readingHead}>
+      <ChartName />
+      <Text style={styles.readingDate}>{children}</Text>
+    </View>
+  );
+}
+
+/**
+ * The heading while a night is being read: the chart's name and its date,
+ * then each figure after its label. `stacked` puts the figures on the line under the date, where a
  * narrow chart would wrap the longest reading anyway, so every night reads in
  * the same two lines.
  */
@@ -544,7 +605,7 @@ function Reading({ point, previous, stacked = false }: { point: NightPoint; prev
   if (point.kind === 'start') {
     return (
       <View style={[styles.reading, stacked && styles.readingStacked]}>
-        <Text style={styles.readingDate}>Start</Text>
+        <ReadingHead>Start</ReadingHead>
         <Text style={styles.readingCaption}>Everyone starts at $0</Text>
       </View>
     );
@@ -558,7 +619,7 @@ function Reading({ point, previous, stacked = false }: { point: NightPoint; prev
   );
   return (
     <View style={[styles.reading, stacked && styles.readingStacked]}>
-      <Text style={styles.readingDate}>{when}</Text>
+      <ReadingHead>{when}</ReadingHead>
       <View style={styles.readingFigures}>
         {point.kind === 'night' ? figure('That night', point.change) : figure('Fees', point.change)}
         {fees !== 0 ? figure('Fees', fees) : null}
@@ -634,6 +695,15 @@ const styles = StyleSheet.create({
   readingStacked: {
     flexDirection: 'column',
     alignItems: 'flex-start',
+  },
+  // The chart's name, then the date: one line, wrapping only if it must.
+  readingHead: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    flexShrink: 1,
+    minWidth: 0,
+    alignItems: 'baseline',
+    columnGap: space.sm,
   },
   readingDate: {
     color: colors.text,

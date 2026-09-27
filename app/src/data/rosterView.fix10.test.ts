@@ -74,8 +74,9 @@ test('walk 10 T1-01: the welcome leads with three short steps, the details in a 
   assert.equal(welcomeSteps(null)[1], 'Press +1 night to play the first games');
   const details = welcomeDetails(40_000, 250).join(' ');
   // The $40K a net point, below zero, the fee and the reload, in that order
-  // (walk 17 T1-07: three short lines, money first).
-  assert.match(details, /^\$40K for each net point\./);
+  // (walk 17 T1-07: three short lines, money first; walk 18 T1-02: the rate
+  // goes on to say what a net point is).
+  assert.match(details, /^\$40K for each net point[.,]/);
   assert.match(details, /below zero\. \$250 for each add or drop\. Practice starts over if you reload\.$/);
   assert.doesNotMatch(welcomeDetails(40_000, 0).join(' '), /add or drop/);
 });

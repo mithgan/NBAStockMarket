@@ -85,9 +85,21 @@ export function SectionHead({
   useEffect(() => {
     onPinnedHeight?.(pinnedHeight);
   }, [onPinnedHeight, pinnedHeight]);
+  // The title and the legend leave together when the section scrolls off
+  // (walk 18 T4-02: the legend, lower, was pushed up first and slid under
+  // the pinned title, sliced through its letters). A pinned piece stops
+  // where its margin box meets its scope's end, so the title's bottom margin
+  // of the legend's height lets go of it at the same moment as the legend;
+  // the next piece takes the margin back, so nothing moves.
+  const together = sticky && legend && Platform.OS === 'web' ? legendHeight : 0;
+  const giveBack = together > 0 ? { marginTop: -together } : null;
+  const hasBody = Boolean(caption || note || exact);
   return (
     <>
-      <View onLayout={sticky ? onTitleLayout : undefined} style={[styles.head, sticky && pinned(0, 3)]}>
+      <View
+        onLayout={sticky ? onTitleLayout : undefined}
+        style={[styles.head, sticky && pinned(0, 3), together > 0 && { marginBottom: together }]}
+      >
         <View style={styles.titleRow}>
           <View style={styles.titleGroup}>
             <Text ref={headingRef} accessibilityRole="header" {...headingLevel(2)} style={styles.title}>{title}</Text>
@@ -107,8 +119,8 @@ export function SectionHead({
           )}
         </View>
       </View>
-      {caption || note || exact ? (
-        <View style={styles.body}>
+      {hasBody ? (
+        <View style={[styles.body, giveBack]}>
           {caption ? <Text style={styles.caption}>{caption}</Text> : null}
           {note ? <Text style={styles.note}>{note}</Text> : null}
           {exact ? <Text style={styles.exact}>{figuresKeptWithLabels(exact)}</Text> : null}
@@ -117,7 +129,7 @@ export function SectionHead({
       {legend ? (
         <View
           onLayout={sticky ? onLegendLayout : undefined}
-          style={[styles.legend, sticky && pinned(titleHeight, 2), sticky && styles.legendPinned]}
+          style={[styles.legend, sticky && pinned(titleHeight, 2), sticky && styles.legendPinned, hasBody ? null : giveBack]}
         >
           {legend}
         </View>

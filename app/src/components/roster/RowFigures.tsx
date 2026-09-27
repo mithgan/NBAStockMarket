@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { PerGamePositionSide } from '../../api/contracts';
 import { moneyCompact } from '../../copy/terms';
-import { figureCaptions, perGamePrecision } from '../../data/rosterView';
+import { figureCaptions, marketPriceWords, perGamePrecision } from '../../data/rosterView';
 import { colors, fonts, space, type, weight } from '../../theme';
 import { visuallyHidden } from '../../ui/kit';
 import { FineMoney } from './FineMoney';
@@ -20,6 +20,8 @@ export interface Figures {
   total: number;
   /** His price a game in the market today, shown under your locked price on wide lists. */
   now?: number | null;
+  /** The season is over: that price is his last (`marketPriceWords`). */
+  over?: boolean;
 }
 
 /**
@@ -139,17 +141,18 @@ export function TableHeader({ side, actionWidth }: { side: PerGamePositionSide; 
  * market price has moved since you locked yours, a quiet "now $113.5K" under
  * your price says what re-adding him would cost today.
  */
-export function TableFigures({ price, dividend, net, total, now = null }: Figures) {
+export function TableFigures({ price, dividend, net, total, now = null, over = false }: Figures) {
   // Each figure a cell of the Roster table, under its column header (walk 8 T3-09).
   const cell = (width: number, value: ReactNode) => <View role="cell" style={[styles.cell, { width }]}>{value}</View>;
   const moved = now !== null && moneyCompact(now) !== moneyCompact(price);
+  const nowWords = moved ? marketPriceWords(moneyCompact(now), over) : null;
   return (
     <>
       {cell(TABLE_COLUMNS.price, (
         <>
           <FineMoney precision={perGamePrecision(price, total)} signed={false} value={price} />
-          {moved ? <Text aria-hidden style={styles.now}>now {moneyCompact(now)}</Text> : null}
-          {moved ? <Text style={visuallyHidden}>{`market price now ${moneyCompact(now)} a game`}</Text> : null}
+          {nowWords ? <Text aria-hidden style={styles.now}>{nowWords.shown}</Text> : null}
+          {nowWords ? <Text style={visuallyHidden}>{nowWords.spoken}</Text> : null}
         </>
       ))}
       {cell(TABLE_COLUMNS.dividend, dividend === null ? <Missing /> : <FineMoney precision={perGamePrecision(dividend, total)} signed={false} value={dividend} />)}
