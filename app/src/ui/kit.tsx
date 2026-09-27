@@ -445,6 +445,11 @@ export function ConfirmStrip({
   const rest = firstBreak >= 0 ? message.slice(firstBreak + 1) : '';
   const stripRef = useRef<View>(null);
   const keepRef = useRef<View>(null);
+  // Where the list moves when this question folds: the rows under its top.
+  const stripTop = () => {
+    const node = stripRef.current as unknown as HTMLElement | null;
+    return node?.getBoundingClientRect ? node.getBoundingClientRect().top : null;
+  };
   const titleRef = useRef<Text>(null);
   // A question taller than the list's view (200% and 400% zoom) showed only
   // its answers: focus on Keep scrolled the question and the player's name
@@ -524,7 +529,7 @@ export function ConfirmStrip({
       describedBy={questionId}
       label={confirmLabel}
       onPress={aimed(() => {
-        settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list');
+        settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list', false, stripTop());
         onConfirm();
       })}
       variant={confirmVariant}
@@ -537,7 +542,7 @@ export function ConfirmStrip({
       describedBy={questionId}
       label={cancelLabel}
       onPress={guard(() => {
-        settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list');
+        settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list', false, stripTop());
         onCancel();
       })}
       variant="secondary"

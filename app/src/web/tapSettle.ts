@@ -27,6 +27,13 @@ let quietUntil = 0;
  * press there is meant (walk 5 T2-12: +1 week 0.1 s after an Add vanished).
  */
 let listQuietUntil = 0;
+/**
+ * Where the list moved: rows below this viewport y reflowed (an answered
+ * question folded above them); rows above stayed put, so a tap there is meant
+ * (walk 17 T4-04: an Add 366px above a just-confirmed Drop was lost). Null:
+ * the whole list.
+ */
+let listQuietFromY: number | null = null;
 /** A scroll position under a quieted spot (`el` null: the page itself). */
 type ScrollMark = { el: Element | null; top: number; left: number };
 let spot: {
@@ -177,10 +184,16 @@ function currentPointer(): { x: number; y: number } | null {
  * through the page's own scrolling (a screen switch), though a wheel, a drag
  * or typing still releases it.
  */
-export function settleTaps(ms = SETTLE_MS, sameSpotMs = 0, scope: 'all' | 'list' = 'all', holdThroughScroll = false): void {
+export function settleTaps(ms = SETTLE_MS, sameSpotMs = 0, scope: 'all' | 'list' = 'all', holdThroughScroll = false, fromY: number | null = null): void {
   const now = Date.now();
   if (scope === 'all') quietUntil = Math.max(quietUntil, now + ms);
-  else listQuietUntil = Math.max(listQuietUntil, now + ms);
+  else if (ms > 0) {
+    // A second quiet while one runs keeps the wider of the two.
+    const running = now < listQuietUntil;
+    listQuietFromY = !running ? fromY
+      : listQuietFromY === null || fromY === null ? null : Math.min(listQuietFromY, fromY);
+    listQuietUntil = Math.max(listQuietUntil, now + ms);
+  }
   const at = sameSpotMs > 0 ? currentPointer() : null;
   if (at) spot = { x: at.x, y: at.y, until: now + sameSpotMs, at: now, holdThroughScroll, marks: scrollMarks(at.x, at.y) };
 }
@@ -193,7 +206,14 @@ export function settleTaps(ms = SETTLE_MS, sameSpotMs = 0, scope: 'all' | 'list'
 export function tapsSettling(steady = false): boolean {
   const now = Date.now();
   if (now < quietUntil) return true;
-  if (!steady && now < listQuietUntil) return true;
+  // The list's quiet is for a finger or mouse aimed where a row was before
+  // the list moved under it: a key acts on exactly what it is on (walk 17
+  // T4-04: Enter on an Add 0.35 s after a Drop was lost, and a season of
+  // swaps shrank a roster from 10 to 2).
+  if (!steady && now < listQuietUntil) {
+    const at = currentPointer();
+    if (at && (listQuietFromY === null || at.y >= listQuietFromY)) return true;
+  }
   if (!spot || now >= spot.until) return false;
   // A list that moved a while after the tap was scrolled on purpose, even
   // if the browser has not said so yet: its scroll event comes a frame

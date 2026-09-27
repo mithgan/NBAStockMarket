@@ -192,3 +192,27 @@ test('a toggle wrapped by repeatSafe acts once for a double tap, twice for two t
     mock.timers.reset();
   }
 });
+
+test('after a question folds, only a finger or mouse below it waits; a key, or a tap above it, acts (walk 17 T4-04)', async () => {
+  mock.timers.enable({ apis: ['Date'], now: 5_000_000_000_000 });
+  try {
+    const { notePointer, settleTaps, tapsSettling } = await import('./tapSettle');
+    // "Drop for $250" answered at (330, 756); the question's top was at y 600.
+    notePointer(330, 756);
+    settleTaps(400, 1400, 'list', false, 600);
+    // 0.25 s later, Add on a row 366px above: it never moved.
+    mock.timers.tick(250);
+    notePointer(330, 390);
+    assert.equal(tapsSettling(), false);
+    // A tap on a row below the question's top: the list moved there.
+    notePointer(330, 700);
+    assert.equal(tapsSettling(), true);
+    // A key press (no fresh pointer) acts at once.
+    mock.timers.tick(400);
+    settleTaps(400, 1400, 'list', false, 600);
+    mock.timers.tick(100);
+    assert.equal(tapsSettling(), false);
+  } finally {
+    mock.timers.reset();
+  }
+});
