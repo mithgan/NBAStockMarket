@@ -44,8 +44,11 @@ export const ListEnd = forwardRef<View, { label: string }>(function ListEnd({ la
 });
 
 const styles = StyleSheet.create({
+  // 44px tall like the frame's other controls (it was 36px: walk 15 T3-10).
   shown: {
     alignSelf: 'flex-start',
+    minHeight: 44,
+    justifyContent: 'center',
     marginHorizontal: space.md,
     marginVertical: space.sm,
     paddingHorizontal: space.md,

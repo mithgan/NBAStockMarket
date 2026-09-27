@@ -165,7 +165,10 @@ function CenteredState({
     if (typeof document !== 'undefined') document.title = `${heading ?? title} · NBA Stock Market`;
   }, [heading, title]);
   return (
-    <View role={brand ? 'main' : undefined} accessibilityRole={brand ? undefined : 'alert'} style={styles.centeredState}>
+    // Loading is a polite status: as an alert it cut off whatever a screen
+    // reader was saying, as if something had gone wrong (walk 15 T3-08).
+    // Failures stay alerts.
+    <View role={brand ? 'main' : busy ? 'status' : 'alert'} style={styles.centeredState}>
       {brand ? (
         <View style={styles.stateBrand}>
           <View style={styles.mark}>
@@ -1519,6 +1522,9 @@ const styles = StyleSheet.create({
   // A 44px target on a one-line strip: it reaches into the space around it.
   noticeMoreButton: {
     minHeight: 44,
+    // "less ▴" measured 39px wide at 195x422 (walk 15 T3-10).
+    minWidth: 44,
+    alignItems: 'center',
     marginVertical: -13,
     justifyContent: 'center',
     paddingHorizontal: space.xs,
