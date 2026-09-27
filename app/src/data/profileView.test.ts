@@ -1110,7 +1110,7 @@ test('LOW sits just above its own bar like HIGH, never under the $0 axis (walk 9
   assert.ok(dipLow && dipLow.y > under.bars[1].y + under.bars[1].height, 'under the end of a bar below $0');
 });
 
-test('HIGH and LOW never sit on the price line or run into the next bar (walk 14 T2-08)', () => {
+test('HIGH and LOW never sit on the price line or run into the next bar (walk 14 T2-08, walk 15 T2-13)', () => {
   const insets = { top: 22, right: 6, bottom: 20, left: 52 };
   const bar = (date: string, dividend: number, price = 417_500): ProfileNight => ({ date, dividend, price, net: dividend - price, source: 'yours' });
   const days = Array.from({ length: 12 }, (_, index) => `2025-11-${String(index + 1).padStart(2, '0')}`);
@@ -1121,6 +1121,7 @@ test('HIGH and LOW never sit on the price line or run into the next bar (walk 14
     return model.bars.every((other, index) => index === label.index
       || box.right < other.x || box.left > other.x + other.width || box.bottom < other.y || box.top > other.y + other.height);
   };
+  // The sheet at 1280x800 and 1024x768 (566 wide), a 390x844 phone (356).
   for (const [width, height] of [[566, 200], [356, 176]] as const) {
     const model = profileChartModel(days.map((date, index) => bar(date, values[index])), 'dividends', width, height, insets);
     const labels = extremeLabels(model, values, width, height, (value) => money(value));
@@ -1129,31 +1130,33 @@ test('HIGH and LOW never sit on the price line or run into the next bar (walk 14
     assert.equal(low.text, 'LOW $372K');
     for (const label of labels) {
       assert.ok(clearOfBars(model, label), `${width}: ${label.text} runs into no other bar`);
-      // Words the dashed line passes through sit on a chip in the sheet's colour.
-      const box = extremeLabelBox(label);
-      if (labelOnLine(box, model.priceSteps)) {
-        assert.ok(label.chip && label.chip.x <= box.left && label.chip.x + label.chip.width >= box.right
-          && label.chip.y <= box.top && label.chip.y + label.chip.height >= box.bottom, `${width}: ${label.text} on a chip`);
-      }
+      // Off the dashed line altogether: no chip cuts a gap in it.
+      assert.equal(labelOnLine(extremeLabelBox(label), model.priceSteps), false, `${width}: ${label.text} is off the price line`);
+      assert.equal(label.chip, null, `${width}: ${label.text} needs no chip`);
     }
+    const lineY = model.priceSteps[low.index].y;
+    const box = extremeLabelBox(low);
+    // Above the line (the gap under it is too small), with a thin line down to its bar.
+    assert.ok(box.bottom < lineY - 1, `${width}: LOW's words (bottom ${box.bottom}) sit above the line (${lineY})`);
+    assert.ok(low.leader && low.leader.y1 > box.bottom && low.leader.y2 < model.bars[low.index].y && low.leader.y1 < lineY && low.leader.y2 > lineY,
+      `${width}: the leader runs from the words through the line to the bar`);
     if (width === 566) {
-      // The sheet at 1280 and 1024: the word over the figure, between its neighbours, at its bar.
+      // The word over the figure, between its neighbours, just above the line.
       assert.deepEqual(low.lines, ['LOW', '$372K']);
-      assert.ok(low.chip, 'the dashes stop at the chip');
-      assert.ok(low.y < model.bars[low.index].y && low.y > model.bars[low.index].y - 12, 'just above its bar');
-      assert.equal(low.leader, null);
+      assert.ok(lineY - box.bottom < 8, 'nearest its bar: just over the line');
     } else {
-      // A phone: one line, risen clear of the taller bars, with a line down to its bar.
+      // A phone: one line, risen clear of the taller bars.
       assert.deepEqual(low.lines, ['LOW $372K']);
-      assert.ok(low.leader && low.leader.y2 < model.bars[low.index].y && low.leader.y1 < low.leader.y2);
     }
   }
-  // Every game under his price: HIGH's words would sit on the line, so they get a chip.
+  // Every game under his price: HIGH rises over the line with a leader, no chip.
   const misses = [400_000, 380_000, 405_000, 390_000, 385_000, 395_000];
   const under = profileChartModel(misses.map((value, index) => bar(days[index], value, 432_000)), 'dividends', 566, 200, insets);
-  const high = extremeLabels(under, misses, 566, 200, (value) => money(value)).find((label) => label.kind === 'HIGH');
-  assert.ok(high && labelOnLine(extremeLabelBox(high), under.priceSteps) === Boolean(high.chip), 'HIGH on the line has a chip');
-  assert.ok(high?.chip, 'HIGH $405K sits on the $432K line');
+  const pair = extremeLabels(under, misses, 566, 200, (value) => money(value));
+  const high = pair.find((label) => label.kind === 'HIGH');
+  assert.ok(high && !labelOnLine(extremeLabelBox(high), under.priceSteps) && high.chip === null, 'HIGH $405K keeps off the $432K line');
+  assert.ok(high.leader && high.leader.y2 < under.bars[high.index].y, 'with a line down to its bar');
+  assert.ok(pair.every((label) => label.chip === null && label.y >= 12), 'both inside the chart, no chip');
 });
 
 test('the Price caption matches its plotted line, not today\'s price (walk 10 T1-09)', () => {

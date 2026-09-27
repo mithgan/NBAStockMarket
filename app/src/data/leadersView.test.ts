@@ -403,3 +403,22 @@ test('the Leaders intro never leaves "$0." alone on a line (walk 14 T1-05)', asy
   assert.equal(keepTailTogether('at $0.'), `at${nbsp}$0.`);
   assert.equal(keepTailTogether('one two three four', 2), `one two three${nbsp}four`);
 });
+
+test('the Leaders column holds one precision for every K figure (walk 15 T2-01)', async () => {
+  const { boardMoney, pastSeasonLines } = await import('./leadersView');
+  // The tester's board after three weeks: "+$8.34K" was the only figure read to ten dollars.
+  assert.deepEqual([423_900, 8_340, -243_200, -803_200].map(boardMoney), ['+$423.9K', '+$8.3K', '-$243.2K', '-$803.2K']);
+  assert.equal(boardMoney(0), '$0');
+  assert.equal(boardMoney(-750), '-$750');
+  assert.equal(boardMoney(-1_250), '-$1.3K', 'a half rounds up, as money does');
+  assert.equal(boardMoney(12_000), '+$12K');
+  assert.equal(boardMoney(1_604_000), '+$1.60M', 'millions keep their two places');
+  // Standalone fees and gaps keep their digits.
+  assert.equal(money(1_250), '$1.25K');
+  // Two scores that now read alike get the close-call note, with the dollars between them.
+  const entries = boardList(board([['Ava', 8_340], ['You', 8_310, true]]));
+  assert.deepEqual(entries.map((entry) => boardMoney(entry.score)), ['+$8.3K', '+$8.3K']);
+  assert.deepEqual(entries.map((entry) => entry.closeCalls), [['$30 ahead of #2'], ['$30 behind #1']]);
+  // "Your seasons this visit" is said as it is written.
+  assert.equal(pastSeasonLines([{ score: 8_340, rank: '#2 of 5', finishedOn: '2026-04-12' }])[0].spoken, 'Season 1: +$8.3K, second of 5');
+});

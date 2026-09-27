@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +15,7 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useWatchlist } from '../state/watchlist';
 import { colors, radius } from '../theme';
 import { useSheetHistory } from '../web/appHistory';
+import { measuredSheetTop } from './chrome/sheetTop';
 import { PerGamePlayerProfile } from './PerGamePlayerProfile';
 import { unlessSettling } from '../web/tapSettle';
 
@@ -22,7 +23,10 @@ import { unlessSettling } from '../web/tapSettle';
 const PANEL_MIN_WIDTH = 1024;
 const PANEL_WIDTH = 600;
 const SHEET_MAX_WIDTH = 640;
-/** Dimmed screen left above the phone sheet: a real target for closing by tap. */
+/**
+ * Dimmed screen left above the phone sheet, at least: a real target for
+ * closing by tap. Where the frame is drawn the sheet starts at its status row.
+ */
 const SHEET_TOP_GAP = 44;
 
 /**
@@ -116,6 +120,15 @@ export function PlayerProfileSheet({
   useEffect(() => {
     if (!visible) setFitted(null);
   }, [visible]);
+  // A tall sheet starts where Rules and Settings do, at the status row under
+  // the brand bar (walk 15 T1-09: at 44px its rounded edge sliced the bottom
+  // of the dimmed Settings button). Read as it opens (the frame is drawn
+  // behind it) and kept while it is open, so a notice that grows the bar
+  // never moves the sheet under your finger; a new player or size reads again.
+  const openKey = `${player?.playerId ?? ''}|${width}|${height}`;
+  const frameTop = useRef<{ key: string; top: number | null } | null>(null);
+  if (!visible || !player) frameTop.current = null;
+  else if (frameTop.current?.key !== openKey) frameTop.current = { key: openKey, top: measuredSheetTop() };
   if (!player) return null;
   const panel = width >= PANEL_MIN_WIDTH;
   // Docked to the app column's right edge, not the window's (walk 8 T2-03).
@@ -129,7 +142,7 @@ export function PlayerProfileSheet({
   const coverFrame = !panel && width > sheetWidth && chromeFolded(height, width);
   const playerId = player.playerId;
   const fits = !panel && !coverFrame;
-  const topGap = insets.top + SHEET_TOP_GAP;
+  const topGap = Math.max(insets.top + SHEET_TOP_GAP, frameTop.current?.top ?? 0);
   const fitKey = `${playerId}|${width}|${height}|${topGap}`;
   const fittedTop = fitted && fitted.key === fitKey ? fitted.top : null;
   const onSheetLayout = (event: LayoutChangeEvent) => {

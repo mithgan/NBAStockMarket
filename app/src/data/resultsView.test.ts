@@ -25,6 +25,7 @@ import {
   mathGroupName,
   mathTitle,
   stickyNightIndices,
+  rowNightPrefix,
   pinnedNightClips,
   newestPlace,
   NEWEST_CORNER_RESERVE,
@@ -1002,4 +1003,18 @@ test('the wide side column sums up the season from the first night (walk 14 T2-0
     best: { date: '2025-10-24', total: 299_500 },
     worst: { date: '2025-10-26', total: -367_000 },
   });
+});
+
+test('where night headers are not pinned, each row starts with its night (walk 15 T3-07)', () => {
+  // 400% zoom (320x200) and any window under 500px tall: "Oct 21 · Luka Doncic".
+  assert.equal(rowNightPrefix('2025-10-21', 200), 'Oct 21 · ');
+  assert.equal(rowNightPrefix('2025-11-03', 499), 'Nov 3 · ');
+  // Pinned headers say it already.
+  assert.equal(rowNightPrefix('2025-10-21', 500), '');
+  assert.equal(rowNightPrefix('2025-10-21', 844), '');
+  // An undated line has no night to say.
+  assert.equal(rowNightPrefix('', 200), '');
+  assert.equal(rowNightPrefix(null, 200), '');
+  // The same height rule as the pinned headers.
+  assert.equal(stickyNightIndices([{ type: 'night', key: 'night:2025-10-21', night: { date: '2025-10-21' } } as never], 499), undefined);
 });

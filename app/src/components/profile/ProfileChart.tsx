@@ -338,8 +338,9 @@ export function ProfileChart({
               <Circle cx={anchor.x} cy={anchor.y} fill={colors.goldInk} r={active === null ? 3.5 : 5} />
             ) : null}
             {/* HIGH and LOW never sit on the price line or run into a bar
-                (walk 14 T2-08): on the line they get a chip in the sheet's
-                colour; in a narrow gap the word stacks over the figure. */}
+                (walk 14 T2-08, walk 15 T2-13): in a narrow gap the word
+                stacks over the figure; with no room under the line a label
+                rises over it with a thin line down to its bar. */}
             {labels.map((label) => (
               <G key={label.kind}>
                 {label.leader ? (

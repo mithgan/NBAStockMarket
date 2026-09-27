@@ -60,6 +60,7 @@ import {
   resultRowModel,
   resumeNight,
   revealScroll,
+  rowNightPrefix,
   closeScroll,
   clearOfBottom,
   mathTitle,
@@ -210,6 +211,8 @@ function ResultRow({
   equation,
   expanded,
   layout,
+  night,
+  nightPrefix = '',
   onOpened,
   onToggle,
   playerName,
@@ -227,6 +230,20 @@ function ResultRow({
    * the line beside his result.
    */
   his?: boolean;
+  /**
+   * One player's games on desktop: his night shares this row's line, the
+   * date and how he did on the left, the figures in the feed's columns
+   * (walk 15 T2-04: two lines a game, the figures 500px from their date).
+   * The night's heading lies over the line, for jumps and screen readers;
+   * a press anywhere on it opens the math.
+   */
+  night?: NightSummary;
+  /**
+   * The night's header is not pinned (a window under 500px tall, 400% zoom):
+   * the row's first line starts with its night, "Oct 21 · Luka Doncic", so a
+   * row alone in the view still says which night it is (walk 15 T3-07).
+   */
+  nightPrefix?: string;
   layout: Layout;
   /** Called with the row's node once it has opened or closed, so the feed can bring its math (or its headline) into view. */
   onOpened?: (node: unknown, open: boolean) => void;
@@ -276,7 +293,13 @@ function ResultRow({
       <View style={styles.rowBody}>
         <View style={[styles.rowHeader, columns && styles.rowHeaderColumns, compact && styles.rowHeaderCompact]}>
           <View style={[styles.identity, compact && styles.identityCompact]}>
-            {his ? null : <Text style={styles.playerName}>{unbrokenName(playerName)}</Text>}
+            {his ? null : (
+              <Text style={styles.playerName}>
+                {nightPrefix ? <Text style={styles.rowNight}>{nightPrefix}</Text> : null}
+                {unbrokenName(playerName)}
+              </Text>
+            )}
+            {night ? <HisNightTitle night={night} /> : null}
             {/* Desktop keeps the tag beside the name; narrower rows lead their
                 second line with it, so a long name never pushes it onto a line
                 of its own. */}
@@ -341,23 +364,42 @@ function ResultRow({
   }
   // The row is the button; the math it opens sits below it as its own
   // readable block, so a screen reader reaches it after the row.
+  const button = (
+    <Pressable
+      ref={buttonRef}
+      accessibilityHint={expanded ? 'Hides the math.' : 'Shows how this result was worked out.'}
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      accessibilityState={{ expanded }}
+      aria-expanded={expanded}
+      onPress={onToggle}
+      // A full-width row: its focus ring is drawn inside (the next row
+      // painted over an outside ring, leaving a line on top; walk 4 T3-04).
+      {...({ dataSet: { row: 'full' } } as object)}
+      style={({ pressed }) => [styles.row, rowEdges, columns && styles.rowColumns, his && !night && styles.rowHis, pressed && styles.rowOpen]}
+    >
+      {body}
+    </Pressable>
+  );
   return (
     <View ref={wrapRef} style={[styles.rowLine, expanded && styles.rowOpen]}>
-      <Pressable
-        ref={buttonRef}
-        accessibilityHint={expanded ? 'Hides the math.' : 'Shows how this result was worked out.'}
-        accessibilityLabel={label}
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        aria-expanded={expanded}
-        onPress={onToggle}
-        // A full-width row: its focus ring is drawn inside (the next row
-        // painted over an outside ring, leaving a line on top; walk 4 T3-04).
-        {...({ dataSet: { row: 'full' } } as object)}
-        style={({ pressed }) => [styles.row, rowEdges, columns && styles.rowColumns, his && styles.rowHis, pressed && styles.rowOpen]}
-      >
-        {body}
-      </Pressable>
+      {night ? (
+        <View>
+          {/* His night's heading, first for a screen reader, over the whole
+              line: a jump lands focus here (its ring drawn inside); a press
+              goes through to the row under it. */}
+          <View
+            accessibilityLabel={hisNightWords(night).spoken}
+            accessibilityRole="header"
+            accessible
+            nativeID={nightAnchorId(night.date)}
+            {...headingLevel(2)}
+            {...({ tabIndex: -1, dataSet: { ring: 'inset' } } as object)}
+            style={styles.lineHeading}
+          />
+          {button}
+        </View>
+      ) : button}
       {expanded ? (
         <View
           style={[styles.breakdown, { paddingLeft: his ? edge.left : edge.text, paddingRight: edge.right }]}
@@ -577,6 +619,25 @@ function clipPinnedNights(scroller: HTMLElement, clipped: Set<HTMLElement>): voi
   }
 }
 
+/** One player's night as its heading says it: "Mon, Nov 3", "Beat his price", and the spoken line. */
+function hisNightWords(night: NightSummary): { title: string; summary: string; spoken: string } {
+  const summary = nightSummaryWrapped(night);
+  const spokenSummary = nightSummaryLine(night).replace(/ · /g, ', ');
+  const title = night.date ? humanDay(night.date) : 'Undated fees';
+  return { title, summary, spoken: spokenSummary ? `${title}: ${spokenSummary}.` : title };
+}
+
+/** The date and how he did, as one player's night reads on screen. */
+function HisNightTitle({ night }: { night: NightSummary }) {
+  const { title, summary } = hisNightWords(night);
+  return (
+    <Text style={styles.groupTitle}>
+      {title}
+      {summary ? <Text style={styles.groupSummaryHis}>{`  ·  ${summary}`}</Text> : null}
+    </Text>
+  );
+}
+
 /**
  * A day's header: its date and what your players made that night (games
  * only, the same figure as "Last night", labelled "Games" so nobody reads it
@@ -596,10 +657,11 @@ function NightHeader({ night, layout, his = false }: { night: NightSummary; layo
   if (his) {
     // One player's games (from his profile): the date and how he did, on one
     // line over his row, which carries the figures. The night's figure is his
-    // row's, so it is said once, there (walk 13 T1-08, T2-06).
+    // row's, so it is said once, there (walk 13 T1-08, T2-06). On desktop the
+    // line is his row's own (walk 15 T2-04; ResultRow `night`).
     return (
       <View
-        accessibilityLabel={spokenSummary ? `${title}: ${spokenSummary}.` : title}
+        accessibilityLabel={hisNightWords(night).spoken}
         accessibilityRole="header"
         accessible
         nativeID={nightAnchorId(night.date)}
@@ -607,10 +669,7 @@ function NightHeader({ night, layout, his = false }: { night: NightSummary; layo
         {...({ tabIndex: -1, dataSet: { ring: 'inset' } } as object)}
         style={[styles.groupHeader, styles.groupHeaderHis, { paddingLeft: edge.left, paddingRight: edge.right }]}
       >
-        <Text style={styles.groupTitle}>
-          {title}
-          {summary ? <Text style={styles.groupSummaryHis}>{`  ·  ${summary}`}</Text> : null}
-        </Text>
+        <HisNightTitle night={night} />
       </View>
     );
   }
@@ -658,6 +717,7 @@ function NightHeader({ night, layout, his = false }: { night: NightSummary; layo
 function FeesFold({
   count,
   layout,
+  nightPrefix = '',
   moves,
   onOpened,
   onToggle,
@@ -668,6 +728,8 @@ function FeesFold({
 }: {
   count: number;
   layout: Layout;
+  /** The night's header is not pinned (a short window): the line starts with its day (walk 15 T3-07). */
+  nightPrefix?: string;
   moves: boolean;
   /** Called with the fold's node once it has opened or closed, so the feed can bring its list (or its line) into view. */
   onOpened?: (node: unknown, open: boolean) => void;
@@ -705,7 +767,10 @@ function FeesFold({
         (pressed || open) && styles.rowOpen,
       ]}
     >
-      <Text style={styles.feesTitle}>{name} · {count}</Text>
+      <Text style={styles.feesTitle}>
+        {nightPrefix ? <Text style={styles.rowNight}>{nightPrefix}</Text> : null}
+        {name} · {count}
+      </Text>
       <NetMoney size="body" value={total} />
       <Disclosure height={20} open={open} />
     </Pressable>
@@ -1634,14 +1699,27 @@ export function PerGameResultsScreen() {
     ? practiceProgress(mockSeasonStart(), lastSettled).day > 0
     : Boolean(lastSettled));
 
-  const renderItem: ListRenderItem<ResultsFeedItem> = ({ item }) => {
-    if (item.type === 'night') return <NightHeader his={only !== null} layout={layout} night={item.night} />;
+  // One player's games on desktop take one line each (walk 15 T2-04): a
+  // settled game's row carries its night (date and how he did), and the
+  // night's own cell stays empty. Phones keep the night's line over the row.
+  const lineNight = (index: number): NightSummary | undefined => {
+    const head = visible[index - 1];
+    const item = visible[index];
+    if (!only || !layout.columns || head?.type !== 'night' || item?.type !== 'result' || head.night.date !== item.date) return undefined;
+    const equation = settlementEquation(item.result, bootstrap.ledger.items, bootstrap.settledResults, { ledgerComplete });
+    return resultRowModel(item.result, equation).math ? head.night : undefined;
+  };
+  const renderItem: ListRenderItem<ResultsFeedItem> = ({ item, index }) => {
+    if (item.type === 'night') {
+      return lineNight(index + 1) ? null : <NightHeader his={only !== null} layout={layout} night={item.night} />;
+    }
     if (item.type === 'fees') {
       const open = openFees.has(item.date);
       return (
         <FeesFold
           count={item.count}
           layout={layout}
+          nightPrefix={rowNightPrefix(item.date, height)}
           moves={item.moves}
           onOpened={(node, open) => revealOpened(`fold:${item.date}`, node, open)}
           onToggle={() => toggleFees(item.date)}
@@ -1686,6 +1764,8 @@ export function PerGameResultsScreen() {
         onOpened={(node, open) => revealOpened(item.key, node, open)}
         onToggle={() => toggle(item.key)}
         his={only !== null}
+        night={lineNight(index)}
+        nightPrefix={only === null ? rowNightPrefix(item.result.gameDate, height) : ''}
         playerName={perGamePlayerName(bootstrap, item.result.playerId, item.result.positionId)}
         result={item.result}
         rule={rule}
@@ -1983,14 +2063,17 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: space.xs,
   },
+  // A month is a button: its edge is the controls' 3:1 ink in every
+  // Appearance (walk 15 T3-02: the other month's hairline was 1.2-1.3:1 and
+  // read as plain text beside the current one).
   chip: {
     minWidth: 44,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderWidth: 1,
+    borderColor: colors.controlBorder,
     borderRadius: 4,
     backgroundColor: colors.background,
   },
@@ -1999,7 +2082,7 @@ const styles = StyleSheet.create({
   // in every theme (High contrast's grey tint read like its neighbour; walk 6
   // T2-17, T3-08). The chip keeps its size: the rule sits inside its height.
   chipHere: {
-    borderColor: colors.goldLine,
+    borderColor: colors.goldInk,
     borderBottomWidth: 3,
     borderBottomColor: colors.goldInk,
     backgroundColor: colors.goldSoft,
@@ -2234,6 +2317,17 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingTop: space.xs,
   },
+  // One player's night heading over his row's line (desktop): no box of its
+  // own, above the row so its focus ring shows, taps pass to the row.
+  lineHeading: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 1,
+    pointerEvents: 'none',
+  },
   rowOpen: {
     backgroundColor: colors.surface,
   },
@@ -2283,6 +2377,10 @@ const styles = StyleSheet.create({
     fontSize: type.value,
     fontWeight: weight.bold,
     lineHeight: 20,
+  },
+  // The row's night before the name, in a short window (walk 15 T3-07).
+  rowNight: {
+    color: colors.muted,
   },
   cell: {
     width: CELL,

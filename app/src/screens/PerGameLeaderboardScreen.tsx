@@ -7,6 +7,7 @@ import { NetMoney } from '../components/results/NetMoney';
 import { practiceProgress } from '../data/chromeView';
 import {
   boardList,
+  boardMoney,
   lagLine as boardLagLine,
   keepTailTogether,
   leaderStanding,
@@ -49,7 +50,7 @@ const RANK_WIDTH = 52;
 
 /** Screen-reader money, read the way the screen writes it: "$0" for nothing. */
 function scoreWords(value: number): string {
-  return Math.round(value) === 0 ? '$0' : signedMoney(value);
+  return boardMoney(value);
 }
 
 /** One label for screen readers where the eye sees several pieces. */
@@ -94,7 +95,8 @@ function SmallCapsHeading({ children }: { children: string }) {
 
 /**
  * Your rank, your score and how far you are from the next place up and from
- * #1. The score is your account's, shown exactly as the Roster shows it, and
+ * #1. The score is your account's, the Roster's number, written as the board
+ * writes it (one precision, `boardMoney`: your row below reads the same), and
  * the rank, ties and gaps are all worked out from that same score against the
  * other rows; a caption says when the board's own row for you has not caught
  * up. Before the first games nobody has a place: everyone is level at $0, and
@@ -161,7 +163,7 @@ function StandingBlock({
             <Text style={styles.of}>of {standing.of}</Text>
           </View>
           <View style={[styles.scoreBlock, compact && styles.scoreBlockCompact]}>
-            <NetMoney size="title" value={standing.score} />
+            <NetMoney format={boardMoney} size="title" value={standing.score} />
             <Text style={styles.scoreLabel}>{final ? 'final score' : 'your score'}</Text>
           </View>
         </View>
@@ -195,7 +197,7 @@ function PastSeasons({ lines }: { lines: readonly PastSeasonLine[] }) {
             <Seen style={styles.pastRow}>
               <Text style={styles.pastLabel}>{line.label}</Text>
               <View style={styles.pastFigures}>
-                <NetMoney size="body" value={line.score} />
+                <NetMoney format={boardMoney} size="body" value={line.score} />
                 {line.place ? <Text style={styles.pastPlace}>{line.place}</Text> : null}
               </View>
               {line.note ? <Text style={styles.pastNote}>{line.note}</Text> : null}
@@ -212,7 +214,7 @@ function PastSeasons({ lines }: { lines: readonly PastSeasonLine[] }) {
  * with their column (walk 8 T3-09): "2", "Deep Threes", "+$245K". The column
  * says "Rank", so the cell says the place once (walk 13 T3-05: "Rank, Rank
  * 2"). On a level board (before the first games) no one has a rank yet. Every score
- * keeps the app's one format; when two different scores read alike, each
+ * keeps the board's one precision (boardMoney: "+$8.3K" beside "+$423.9K"); when two different scores read alike, each
  * says how far apart they are ("$191 ahead of #2").
  */
 function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEntry; level: boolean }) {
@@ -246,12 +248,12 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
       <View role="cell" style={[styles.scoreCell, compact && styles.scoreCompact]}>
         <Spoken>{scoreSpoken}</Spoken>
         <Seen style={[styles.scoreSeen, compact && styles.scoreSeenCompact]}>
-          <NetMoney value={score} />
+          <NetMoney format={boardMoney} value={score} />
           {level ? null : closeCalls.map((note) => (
             <Text key={note} style={[styles.boardNote, styles.closeCall, compact && styles.boardNoteCompact]}>{note}</Text>
           ))}
           {boardScore === null ? null : (
-            <Text style={[styles.boardNote, compact && styles.boardNoteCompact]}>board {signedMoney(boardScore)}</Text>
+            <Text style={[styles.boardNote, compact && styles.boardNoteCompact]}>board {boardMoney(boardScore)}</Text>
           )}
         </Seen>
       </View>

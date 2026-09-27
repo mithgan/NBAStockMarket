@@ -744,6 +744,18 @@ export function stickyNightIndices(items: readonly ResultsFeedItem[], height: nu
 }
 
 /**
+ * A row's first words where the night headers are not pinned (a window under
+ * STICKY_NIGHTS_MIN_HEIGHT, 400% zoom), so a row alone in the view says which
+ * night it is: "Oct 21 · " before "Luka Doncic" (walk 15 T3-07: an 81px row
+ * filled the view and the only date on screen was the status row's). Empty
+ * where the headers stay pinned over their rows.
+ */
+export function rowNightPrefix(date: string | null | undefined, windowHeight: number): string {
+  if (!date || windowHeight >= STICKY_NIGHTS_MIN_HEIGHT) return '';
+  return `${humanDate(date)} · `;
+}
+
+/**
  * Pinned night headers pile up on the web: react-native-web pins each with
  * CSS sticky inside the one list, so every header already passed stays stuck
  * at the top under the one you are reading. A taller one (its summary wrapped,

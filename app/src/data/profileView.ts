@@ -1170,9 +1170,10 @@ export interface ExtremeLabel {
   y: number;
   anchor: 'start' | 'middle' | 'end';
   /**
-   * A patch in the sheet's colour under words that sit on the dashed price
-   * line, so the dashes stop at its edge instead of striking the figure
-   * (walk 14 T2-08). Null when the words are clear of the line.
+   * A patch in the sheet's colour under words left on the dashed price line,
+   * so the dashes stop at its edge instead of striking the figure (walk 14
+   * T2-08). Labels keep off the line (walk 15 T2-13), so this is only for
+   * words with no clear place in the chart; null otherwise.
    */
   chip: { x: number; y: number; width: number; height: number } | null;
   /**
@@ -1216,11 +1217,71 @@ function labelBox(lines: readonly string[], x: number, y: number, anchor: Extrem
   return { left, right: left + size, top: y - (lines.length - 1) * LABEL_LINE - INK_UP, bottom: y + INK_DOWN };
 }
 
-/** Bars (other than its own) that a label's words would run into. */
-function barsUnder(box: LabelBox, bars: readonly ChartBar[], own: number): ChartBar[] {
-  return bars.filter((bar, index) => index !== own
-    && box.right + LABEL_CLEAR > bar.x && box.left - LABEL_CLEAR < bar.x + bar.width
-    && box.bottom + LABEL_CLEAR > bar.y && box.top - LABEL_CLEAR < bar.y + bar.height);
+interface Span { top: number; bottom: number }
+type PriceStep = { x0: number; x1: number; y: number };
+
+/**
+ * The heights a label's words must stay out of across their width: other
+ * bars, the dashed price line (a flat step per game and the risers between),
+ * and another label, each with a little room kept (walk 15 T2-13).
+ */
+function spansAcross(
+  left: number,
+  right: number,
+  bars: readonly ChartBar[],
+  own: number,
+  steps: readonly PriceStep[],
+  others: readonly LabelBox[],
+): Span[] {
+  const spans: Span[] = [];
+  bars.forEach((bar, index) => {
+    if (index !== own && right + LABEL_CLEAR > bar.x && left - LABEL_CLEAR < bar.x + bar.width) {
+      spans.push({ top: bar.y - LABEL_CLEAR, bottom: bar.y + bar.height + LABEL_CLEAR });
+    }
+  });
+  steps.forEach((step, index) => {
+    if (step.x1 > left && step.x0 < right) {
+      spans.push({ top: step.y - LINE_HALF - LABEL_CLEAR, bottom: step.y + LINE_HALF + LABEL_CLEAR });
+    }
+    const next = steps[index + 1];
+    if (next && next.y !== step.y && step.x1 > left - LINE_HALF - LABEL_CLEAR && step.x1 < right + LINE_HALF + LABEL_CLEAR) {
+      spans.push({ top: Math.min(step.y, next.y) - LABEL_CLEAR, bottom: Math.max(step.y, next.y) + LABEL_CLEAR });
+    }
+  });
+  for (const box of others) {
+    if (right + LABEL_CLEAR > box.left && left - LABEL_CLEAR < box.right) {
+      spans.push({ top: box.top - LABEL_CLEAR, bottom: box.bottom + LABEL_CLEAR });
+    }
+  }
+  return spans;
+}
+
+/** True when words at this box keep out of every span. */
+function clearOfSpans(box: LabelBox, spans: readonly Span[]): boolean {
+  return spans.every((span) => box.bottom <= span.top || box.top >= span.bottom);
+}
+
+/**
+ * The lowest baseline, from `from` upward, where the words clear every span;
+ * null when that is above the chart's top (`top`, the least baseline).
+ */
+function riseClear(
+  lines: readonly string[],
+  x: number,
+  anchor: ExtremeLabel['anchor'],
+  from: number,
+  spans: readonly Span[],
+  top: number,
+): number | null {
+  let y = from;
+  // Each turn clears at least one span for good (the words only move up).
+  for (let turn = 0; turn <= spans.length; turn += 1) {
+    const box = labelBox(lines, x, y, anchor);
+    const hit = spans.filter((span) => box.bottom > span.top && box.top < span.bottom);
+    if (hit.length === 0) return y >= top ? y : null;
+    y = Math.min(...hit.map((span) => span.top)) - INK_DOWN;
+  }
+  return null;
 }
 
 /** True when the dashed price line (a flat step per game, risers between) passes through the words. */
@@ -1244,12 +1305,17 @@ export function labelOnLine(box: LabelBox, steps: readonly { x0: number; x1: num
  * end of a bar below $0; never under the $0 axis, where LOW read like an axis
  * mark. Two labels that would touch step apart, the higher value's on top.
  *
- * Never into a neighbouring bar or struck by the price line (walk 14 T2-08:
- * "LOW $372K" on the hollow bar just under his price ran into the next bar and
- * had the dashes through it): a label too wide for the gap between its taller
- * neighbours stacks its word over its figure; where even that runs into a bar
- * (many games on a phone) it rises clear of them on one line, with a thin line
- * down to its bar. Words on the price line sit on a chip in the sheet's colour.
+ * Never into a neighbouring bar (walk 14 T2-08: "LOW $372K" on the hollow bar
+ * just under his price ran into the next bar): a label too wide for the gap
+ * between its taller neighbours stacks its word over its figure.
+ *
+ * Never on the dashed price line either (walk 15 T2-13: a chip in the sheet's
+ * colour cut a gap in the line right where you compare that game with your
+ * price). Where the room between its bar and the line is too small, or even
+ * the stacked words run into a bar (many games on a phone), the label rises
+ * clear of the line and of every bar it spans, in whichever form stays nearer
+ * its bar (one line on a tie), with a thin line down to its bar. A chip is
+ * left only for words with no clear place in the chart.
  */
 export function extremeLabels(
   model: Pick<ProfileChartModel, 'bars' | 'high' | 'low'> & Partial<Pick<ProfileChartModel, 'priceSteps'>>,
@@ -1260,8 +1326,18 @@ export function extremeLabels(
 ): ExtremeLabel[] {
   const steps = model.priceSteps ?? [];
   const anchorAt = (x: number): ExtremeLabel['anchor'] => (x < 60 ? 'start' : x > width - 60 ? 'end' : 'middle');
-  const clampY = (y: number, lines = 1) => Math.max(LABEL_MIN_Y + (lines - 1) * LABEL_LINE, Math.min(height - 3, y));
-  const place = (kind: 'HIGH' | 'LOW', index: number): ExtremeLabel => {
+  const minY = (lines: number) => LABEL_MIN_Y + (lines - 1) * LABEL_LINE;
+  const clampY = (y: number, lines = 1) => Math.max(minY(lines), Math.min(height - 3, y));
+  /**
+   * A label's place. With `from`, it rises from there over `others` (the
+   * other label) and returns null when the chart has no room above.
+   */
+  const place = (
+    kind: 'HIGH' | 'LOW',
+    index: number,
+    others: readonly LabelBox[] = [],
+    from?: number,
+  ): ExtremeLabel | null => {
     const bar = model.bars[index];
     const x = bar.x + bar.width / 2;
     const below = dividends[index] < 0;
@@ -1275,33 +1351,56 @@ export function extremeLabels(
     );
     const base = { kind, index, text, x, anchor, chip: null, leader: null };
     const one = [text];
-    const clear = (lines: string[]) => barsUnder(labelBox(lines, x, at(lines), anchor), model.bars, index).length === 0;
-    if (clear(one)) return { ...base, lines: one, y: at(one) };
     const two = [kind, figure];
-    if (clear(two)) return { ...base, lines: two, y: at(two) };
-    // Rise (or, under $0, sink) clear of every bar the words span.
+    const spans = (lines: string[]) => {
+      const box = labelBox(lines, x, 0, anchor);
+      return spansAcross(box.left, box.right, model.bars, index, steps, others);
+    };
+    const clear = (lines: string[]) => clearOfSpans(labelBox(lines, x, at(lines), anchor), spans(lines));
+    if (from === undefined && clear(one)) return { ...base, lines: one, y: at(one) };
+    if (from === undefined && clear(two)) return { ...base, lines: two, y: at(two) };
+    if (!below) {
+      // Rise clear of the line and the bars, nearest its bar; one line on a tie.
+      let best: { lines: string[]; y: number } | null = null;
+      for (const lines of [one, two]) {
+        const y = riseClear(lines, x, anchor, from ?? at(lines), spans(lines), minY(lines.length));
+        if (y !== null && (best === null || y > best.y)) best = { lines, y };
+      }
+      if (best) {
+        const leaderFrom = best.y + INK_DOWN + LABEL_CLEAR;
+        const leaderTo = bar.y - LABEL_CLEAR;
+        return { ...base, lines: best.lines, y: best.y, leader: leaderTo - leaderFrom > 4 ? { x, y1: leaderFrom, y2: leaderTo } : null };
+      }
+    }
+    if (from !== undefined) return null;
+    // No clear place: rise (or, under $0, sink) clear of every bar the words span.
     const box = labelBox(one, x, at(one), anchor);
     const spanned = model.bars.filter((other) => box.right + LABEL_CLEAR > other.x && box.left - LABEL_CLEAR < other.x + other.width);
     const y = below
       ? clampY(Math.max(...spanned.map((other) => other.y + other.height)) + LABEL_BELOW)
       : clampY(Math.min(...spanned.map((other) => other.y)) - LABEL_ABOVE);
     const end = below ? bar.y + bar.height : bar.y;
-    const from = below ? y - INK_UP - LABEL_CLEAR : y + INK_DOWN + LABEL_CLEAR;
+    const start = below ? y - INK_UP - LABEL_CLEAR : y + INK_DOWN + LABEL_CLEAR;
     const to = below ? end + LABEL_CLEAR : end - LABEL_CLEAR;
-    return { ...base, lines: one, y, leader: Math.abs(to - from) > 4 ? { x, y1: from, y2: to } : null };
+    return { ...base, lines: one, y, leader: Math.abs(to - start) > 4 ? { x, y1: start, y2: to } : null };
   };
   let labels = ([['HIGH', model.high], ['LOW', model.low]] as const)
     .filter((entry): entry is readonly ['HIGH' | 'LOW', number] => entry[1] !== null && model.bars[entry[1]] !== undefined)
-    .map(([kind, index]) => place(kind, index));
+    .map(([kind, index]) => place(kind, index))
+    .filter((label): label is ExtremeLabel => label !== null);
   if (labels.length === 2) {
     const [first, second] = labels;
     const a = labelBox(first.lines, first.x, first.y, first.anchor);
     const b = labelBox(second.lines, second.x, second.y, second.anchor);
     const apart = a.right + LABEL_CLEAR < b.left || b.right + LABEL_CLEAR < a.left || a.bottom + LABEL_CLEAR < b.top || b.bottom + LABEL_CLEAR < a.top;
-    if (!apart) {
-      // Too close: HIGH (the higher value) goes on top, LOW under it.
-      const high = first.kind === 'HIGH' ? first : second;
-      const low = high === first ? second : first;
+    // Too close: HIGH (the higher value) rises over LOW, clear of the bars
+    // and the price line; with no room above, LOW steps down under it.
+    const high = first.kind === 'HIGH' ? first : second;
+    const low = high === first ? second : first;
+    const over = apart ? null : place(high.kind, high.index, [labelBox(low.lines, low.x, low.y, low.anchor)], high.y);
+    if (over) {
+      labels = [over, low];
+    } else if (!apart) {
       const step = LABEL_STEP + (low.lines.length - 1) * LABEL_LINE;
       const upper = Math.max(LABEL_MIN_Y + (high.lines.length - 1) * LABEL_LINE, Math.min(high.y, low.y - step));
       labels = [
@@ -1310,8 +1409,9 @@ export function extremeLabels(
       ];
     }
   }
-  // Words on the dashed price line sit on a chip in the sheet's colour; a
-  // leader starts at its words wherever the pair stepped them to.
+  // A leader starts at its words wherever the pair stepped them to. Words
+  // left on the dashed line (no clear place at all) keep a chip in the
+  // sheet's colour, so the dashes never strike the figure.
   return labels.map((label) => {
     const box = labelBox(label.lines, label.x, label.y, label.anchor);
     let leader = label.leader;

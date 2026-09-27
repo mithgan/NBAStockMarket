@@ -15,9 +15,20 @@
  * next score down takes the place after everyone above it ("1, 2, 2, 4").
  */
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { money, ordinalWords, signedMoney, spokenRanks } from '../copy/terms';
+import { money, ordinalWords, signedMoneyCompact, spokenRanks } from '../copy/terms';
 
 export { ordinalWords, spokenRanks };
+
+/**
+ * A score on the Leaders screen (the board's Score column, your standing,
+ * "Your seasons this visit"): one precision for every K figure, "+$8.3K"
+ * beside "+$423.9K" (walk 15 T2-01: "+$8.34K" was the only figure read to
+ * ten dollars and looked like another unit). "$0" for nothing. Gaps and fees
+ * standing alone keep `money` ("$1.25K behind #2", "today's $250 fee").
+ */
+export function boardMoney(value: number): string {
+  return Math.round(value) === 0 ? '$0' : signedMoneyCompact(value);
+}
 
 export interface BoardGap {
   rank: number;
@@ -145,8 +156,8 @@ export interface BoardEntry {
 }
 
 /**
- * Every row keeps the app's one money format ("+$4.5M"), even when two
- * different scores round to the same text. Such a pair gets a small note on
+ * Every row keeps the board's one money format (`boardMoney`: "+$8.3K",
+ * "+$4.50M"), even when two different scores round to the same text. Such a pair gets a small note on
  * each row instead, with the dollars between them: "$191 ahead of #2" on the
  * higher one and "$191 behind #1" on the lower. An exact tie gets no note:
  * the shared place already says it.
@@ -155,17 +166,17 @@ export function closeCallNotes(
   entries: ReadonlyArray<{ score: number; place: number }>,
 ): string[][] {
   return entries.map(({ score }) => {
-    const text = signedMoney(score);
+    const text = boardMoney(score);
     const higher = entries.filter((other) => Math.round(other.score) > Math.round(score));
     const lower = entries.filter((other) => Math.round(other.score) < Math.round(score));
     const notes: string[] = [];
     if (higher.length > 0) {
       const next = higher.reduce((best, other) => (other.score < best.score ? other : best));
-      if (signedMoney(next.score) === text) notes.push(`${money(next.score - score)} behind #${next.place}`);
+      if (boardMoney(next.score) === text) notes.push(`${money(next.score - score)} behind #${next.place}`);
     }
     if (lower.length > 0) {
       const next = lower.reduce((best, other) => (other.score > best.score ? other : best));
-      if (signedMoney(next.score) === text) notes.push(`${money(score - next.score)} ahead of #${next.place}`);
+      if (boardMoney(next.score) === text) notes.push(`${money(score - next.score)} ahead of #${next.place}`);
     }
     return notes;
   });
@@ -199,7 +210,7 @@ export function boardList(
       place: 1 + scores.filter((other) => other > score).length,
       tied: scores.filter((other) => other === score).length > 1,
       // A board figure that reads the same as the score shown says nothing new.
-      boardScore: row.isCurrentUser && signedMoney(score) !== signedMoney(row.cumulativePnl)
+      boardScore: row.isCurrentUser && boardMoney(score) !== boardMoney(row.cumulativePnl)
         && feesOnly(score - row.cumulativePnl, feeDollars) === null
         ? row.cumulativePnl
         : null,
@@ -321,8 +332,8 @@ export function feesOnly(lag: number, feeDollars?: number): number | null {
 export function lagLine(standing: Standing, feeDollars?: number): string | null {
   const lag = boardLag(standing);
   if (lag === null || standing.kind !== 'ranked') return null;
-  const board = signedMoney(standing.boardScore);
-  const yours = signedMoney(standing.score);
+  const board = boardMoney(standing.boardScore);
+  const yours = boardMoney(standing.score);
   // Two figures that read alike: a note between them would only confuse.
   if (board === yours) return null;
   const fees = feesOnly(lag, feeDollars);
@@ -411,7 +422,7 @@ export function pastSeasonLines(seasons: readonly PastSeason[], finishedNow: Pas
     .map((season, index) => ({ season, number: index + 1, now: season === finishedNow }))
     .sort((left, right) => right.season.finishedOn.localeCompare(left.season.finishedOn) || right.number - left.number)
     .map(({ season, number, now }) => {
-      const score = Math.round(season.score) === 0 ? '$0' : signedMoney(season.score);
+      const score = boardMoney(season.score);
       const place = season.rank && season.rank.trim() ? season.rank.trim() : null;
       return {
         key: `season-${number}`,
