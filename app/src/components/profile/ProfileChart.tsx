@@ -39,6 +39,7 @@ import {
   nightIndexAt,
   nightReadout,
   priceChartHeight,
+  nowLabel,
   profileChartModel,
   readoutCaption,
   sideWords,
@@ -87,11 +88,14 @@ export function ProfileChart({
   metric,
   side,
   height = 180,
+  now,
 }: {
   nights: ProfileNight[];
   metric: ProfileMetric;
   side: PerGamePositionSide;
   height?: number;
+  /** His price today: the Price view ends at it, a hollow point named "Now" (walk 16 T2-N3). */
+  now?: number;
 }) {
   const [width, setWidth] = useState(0);
   // A tap, click or key pins a game; a moving mouse previews one. Showing:
@@ -107,10 +111,13 @@ export function ProfileChart({
   // A small price drift draws on a shorter chart at the same scale, centred
   // on your locked line (walk 9 T2-03).
   const plotHeight = metric === 'price' ? priceChartHeight(nights, height, insets) : height;
+  const nowPrice = metric === 'price' ? now : undefined;
   const model = useMemo(
-    () => profileChartModel(nights, metric, width, plotHeight, insets, height),
-    [height, insets, metric, nights, plotHeight, width],
+    () => profileChartModel(nights, metric, width, plotHeight, insets, height, nowPrice),
+    [height, insets, metric, nights, nowPrice, plotHeight, width],
   );
+  const nowWords = nowLabel(model, width, plotHeight);
+  const lastAnchor = model.anchors[model.anchors.length - 1];
   const words = sideWords(side);
   const legend = chartLegend(nights, metric, side);
   // The "Missed his price" swatch is drawn the way the bars are (walk 6 T1-09).
@@ -334,8 +341,38 @@ export function ProfileChart({
             {metric === 'price' && model.yourPricePath ? (
               <Path d={model.yourPricePath} fill="none" stroke={colors.text} strokeDasharray="5 4" strokeWidth={1.5} />
             ) : null}
+            {/* Today's price after his last game: a dotted step to a hollow
+                point, named "Now $424.8K", the figure the header quotes
+                (walk 16 T2-N3). */}
+            {model.nowPoint && lastAnchor ? (
+              <Line
+                stroke={colors.goldInk}
+                strokeDasharray="2 3"
+                strokeWidth={1.5}
+                x1={lastAnchor.x}
+                x2={model.nowPoint.x}
+                y1={lastAnchor.y}
+                y2={model.nowPoint.y}
+              />
+            ) : null}
             {metric === 'price' && anchor ? (
               <Circle cx={anchor.x} cy={anchor.y} fill={colors.goldInk} r={active === null ? 3.5 : 5} />
+            ) : null}
+            {model.nowPoint ? (
+              <Circle cx={model.nowPoint.x} cy={model.nowPoint.y} fill={colors.background} r={4} stroke={colors.goldInk} strokeWidth={2} />
+            ) : null}
+            {nowWords ? (
+              <SvgText
+                fill={colors.goldInk}
+                fontFamily={fonts.display}
+                fontSize={11}
+                fontWeight="700"
+                textAnchor="end"
+                x={nowWords.x}
+                y={nowWords.y}
+              >
+                {nowWords.text}
+              </SvgText>
             ) : null}
             {/* HIGH and LOW never sit on the price line or run into a bar
                 (walk 14 T2-08, walk 15 T2-13): in a narrow gap the word

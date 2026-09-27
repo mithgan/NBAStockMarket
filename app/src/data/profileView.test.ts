@@ -54,7 +54,11 @@ import {
   sideNet,
   shortEndsOn,
   sideWords,
+  breakEvenLine,
+  nowLabel,
   pastStintLead,
+  pastStints,
+  type PastStint,
   positionOpenedDay,
   stakeLine,
   statusNights,
@@ -292,7 +296,7 @@ test('labels follow the side, so a short never reads as a roster spot', () => {
   assert.equal(roster.beat, 'Beat his price');
   assert.equal(short.beat, 'Under his price');
   assert.equal(roster.missedCaption(3), 'missed 3');
-  assert.equal(short.missedCaption(1), 'over 1');
+  assert.equal(short.missedCaption(1), '1 went over his price');
   assert.equal(roster.missedCaption(0), 'no misses');
   assert.equal(short.missedCaption(0), 'never over');
   assert.equal(roster.legendBad, 'Missed his price');
@@ -507,11 +511,11 @@ test('holding status and stake line say where you stand, from the same numbers a
 
 test('a past stint is named by side and dates (walk-2 T2-20)', () => {
   const row = (positionId: string, side: 'long' | 'short', gameDate: string) => ({ positionId, side, gameDate });
-  assert.equal(pastStintLead([row('s1', 'short', '2025-10-27'), row('s1', 'short', '2025-10-21'), row('s1', 'short', '2025-10-24')]), 'Your short, Oct 21 to 27:');
-  assert.equal(pastStintLead([row('l1', 'long', '2025-10-30'), row('l1', 'long', '2025-11-03')]), 'On your roster, Oct 30 to Nov 3:');
+  assert.equal(pastStintLead([row('s1', 'short', '2025-10-27'), row('s1', 'short', '2025-10-21'), row('s1', 'short', '2025-10-24')]), 'Your short, Oct 21–27:');
+  assert.equal(pastStintLead([row('l1', 'long', '2025-10-30'), row('l1', 'long', '2025-11-03')]), 'On your roster, Oct 30–Nov 3:');
   assert.equal(pastStintLead([row('l1', 'long', '2025-10-22')]), 'On your roster, Oct 22:');
-  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22'), row('l2', 'long', '2025-11-02')]), 'On your roster twice, Oct 22 to Nov 2:');
-  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22'), row('s1', 'short', '2025-11-02')]), 'With you, Oct 22 to Nov 2:');
+  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22'), row('l2', 'long', '2025-11-02')]), 'On your roster twice, Oct 22–Nov 2:');
+  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22'), row('s1', 'short', '2025-11-02')]), 'With you, Oct 22–Nov 2:');
   assert.equal(pastStintLead([]), null);
   assert.deepEqual(stakeLine({ games: 3, total: -37_500 }, false, 'long', { past: 'Your short, Oct 21 to 27:' }), { lead: 'Your short, Oct 21 to 27:', total: '-$37.5K over 3 games', tone: 'loss' });
 });
@@ -1181,7 +1185,7 @@ test('the profile says "On your roster" and "Your result", never "roster spot" (
   const row = (positionId: string, side: 'long' | 'short', gameDate: string) => ({ positionId, side, gameDate });
   assert.equal(stakeLine({ games: 6, total: -658_000 }, true)?.lead, 'Your result:');
   assert.equal(stakeLine({ games: 6, total: -658_000 }, true, 'short')?.lead, 'Your short:');
-  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22'), row('l2', 'long', '2025-11-02'), row('l3', 'long', '2025-11-09')]), 'On your roster 3 times, Oct 22 to Nov 9:');
+  assert.equal(pastStintLead([row('l1', 'long', '2025-10-22'), row('l2', 'long', '2025-11-02'), row('l3', 'long', '2025-11-09')]), 'On your roster 3 times, Oct 22–Nov 9:');
   for (const line of [
     stakeLine({ games: 6, total: -658_000 }, true)?.lead,
     pastStintLead([row('l1', 'long', '2025-10-22')]),
@@ -1263,4 +1267,86 @@ test('a small drift\'s Price chart has no blank half, and its two marks keep a l
   const [high, low] = model.priceMarks;
   assert.ok(low.labelY - high.labelY >= 28, `marks ${high.labelY} and ${low.labelY}: a line of space between 14px words`);
   assert.ok(high.labelY >= 7 && low.labelY <= height - 7, 'inside the chart');
+});
+
+test('the profile words: "both" for two games, "went over his price", stints counted as the Roster counts them (walk 16 T2-03, T4-10)', () => {
+  const night = (date: string, net: number): ProfileNight => ({ date, dividend: 200_000 + net, price: 200_000, net, source: 'yours', market: 200_000 });
+  const two = [night('2025-10-21', 120_000), night('2025-10-22', 87_400)];
+  assert.equal(formVerdict(summarizeNights(two)), 'Beat his price in both of his games this season, $103.7K a game ahead on average.');
+  assert.match(formVerdict(summarizeNights(two), { scope: 'yours' }), /^Beat his price in both of your games with him,/);
+  assert.match(formVerdict(summarizeNights(two), { recent: true }), /^Beat his price in both of his last 2 games,/);
+  // From three up, "all N".
+  assert.match(formVerdict(summarizeNights([...two, night('2025-10-24', 5_000)])), /^Beat his price in all 3 of his games this season,/);
+  // The short side's caption says what "over" means.
+  assert.equal(sideWords('short').missedCaption(2), '2 went over his price');
+  assert.equal(sideWords('short').missedCaption(0), 'never over');
+  // T4-10: three stints (one dropped before he played), two games; Oct 20 add to Oct 23 drop.
+  const row = (positionId: string, gameDate: string) => ({ positionId, side: 'long' as const, gameDate });
+  const games = [row('l1', '2025-10-21'), row('l2', '2025-10-22')];
+  const stints: PastStint[] = [
+    { positionId: 'l1', side: 'long', from: '2025-10-20', to: '2025-10-21' },
+    { positionId: 'l2', side: 'long', from: '2025-10-21', to: '2025-10-22' },
+    { positionId: 'l3', side: 'long', from: '2025-10-22', to: '2025-10-23' },
+  ];
+  assert.equal(pastStintLead(games, stints), 'On your roster 3 times, Oct 20–23:');
+  // A stint on the other side, with no games, does not join the count.
+  assert.equal(pastStintLead(games, [...stints, { positionId: 's1', side: 'short', from: '2025-10-25', to: '2025-10-26' }]), 'On your roster 3 times, Oct 20–23:');
+  // pastStints reads the stints from the positions and the ledger's fees.
+  const fee = (positionId: string, kind: 'open_fee' | 'drop_fee', gameDate: string, eventCursor: number) => ({ positionId, kind, gameDate, createdAt: `${gameDate}T12:00:00Z`, eventCursor });
+  const read = pastStints(
+    [
+      { positionId: 'l1', playerId: 'p', side: 'long', status: 'closed' },
+      { positionId: 'l3', playerId: 'p', side: 'long', status: 'closed' },
+      { positionId: 'x', playerId: 'q', side: 'long', status: 'closed' },
+      { positionId: 'l4', playerId: 'p', side: 'long', status: 'active' },
+    ],
+    [fee('l1', 'open_fee', '2025-10-20', 1), fee('l1', 'drop_fee', '2025-10-21', 2), fee('l3', 'open_fee', '2025-10-22', 3), fee('l3', 'drop_fee', '2025-10-23', 4)],
+    'p',
+  );
+  assert.deepEqual(read.map((stint) => [stint.positionId, stint.from, stint.to]), [['l1', '2025-10-20', '2025-10-21'], ['l3', '2025-10-22', '2025-10-23']]);
+});
+
+test('the Price chart ends at his price today, a hollow point named "Now" clear of his lines (walk 16 T2-N3)', () => {
+  const insets = { top: 12, right: 6, bottom: 12, left: 52 };
+  const markets = [417_900, 416_200, 416_900, 414_100, 418_000, 419_900, 421_600, 422_900, 420_400];
+  const nights: ProfileNight[] = markets.map((market, index) => ({
+    date: `2025-10-${String(21 + index).padStart(2, '0')}`, dividend: 450_000, price: 417_500, net: 32_500, source: 'yours', market,
+  }));
+  const width = 356;
+  const height = 64;
+  const model = profileChartModel(nights, 'price', width, height, insets, 176, 424_800);
+  assert.ok(model.nowPoint);
+  // At the plot's right end, after his last game, inside the plot although above his every game.
+  assert.equal(model.nowPoint.x, width - insets.right);
+  assert.ok(model.nowPoint.x > model.anchors[model.anchors.length - 1].x);
+  assert.ok(model.nowPoint.y >= insets.top - 0.01 && model.nowPoint.y <= height - insets.bottom + 0.01);
+  assert.ok(model.nowPoint.y < Math.min(...model.anchors.map((anchor) => anchor.y)), 'today is above his games');
+  const label = nowLabel(model, width, height);
+  assert.ok(label);
+  assert.equal(label.text, 'Now $424.8K');
+  assert.equal(label.x, model.nowPoint.x);
+  // The words keep off his market line and your dashed price under them.
+  const top = label.y - 11;
+  const bottom = label.y + 3;
+  assert.ok(top >= 0 && bottom <= height);
+  const left = label.x - label.text.length * 6.6;
+  for (const anchor of model.anchors.filter((point) => point.x >= left)) assert.ok(anchor.y < top || anchor.y > bottom, `his game at ${anchor.y} is under the words`);
+  for (const step of model.priceSteps.filter((one) => one.x1 >= left)) assert.ok(step.y < top || step.y > bottom, 'your price line is under the words');
+  // Not in the dividends view, nor without a price today; too narrow a chart keeps the point, not the words.
+  assert.equal(profileChartModel(nights, 'dividends', width, 176, insets, 176, 424_800).nowPoint, null);
+  assert.equal(profileChartModel(nights, 'price', width, height, insets, 176).nowPoint, null);
+  assert.equal(nowLabel(profileChartModel(nights, 'price', 140, height, { ...insets, left: 6 }, 176, 424_800), 140, height), null);
+});
+
+test('the profile says the net points that beat his price, on raw net points only (walk 16 T1-N2)', () => {
+  // $417.5K at $40K a net point: 10.4 pays $416K (under), 10.5 pays $420K (beats).
+  assert.equal(breakEvenLine(417_500, 40_000, 'raw_net_points', 'long'), 'Beats his price at 10.5+ net points a game');
+  assert.equal(breakEvenLine(417_500, 40_000, 'raw_net_points', 'short'), 'Stays under his price at 10.4 or fewer net points a game');
+  // A price a tenth pays exactly neither beats nor stays under at that tenth.
+  assert.equal(breakEvenLine(416_000, 40_000, 'raw_net_points', 'long'), 'Beats his price at 10.5+ net points a game');
+  assert.equal(breakEvenLine(416_000, 40_000, 'raw_net_points', 'short'), 'Stays under his price at 10.3 or fewer net points a game');
+  assert.equal(breakEvenLine(396_000, 40_000, 'raw_net_points', 'long'), 'Beats his price at 10+ net points a game');
+  // Nothing when the dividend is not his raw net points, or without a rate.
+  assert.equal(breakEvenLine(417_500, 40_000, 'surprise_vs_projection', 'long'), null);
+  assert.equal(breakEvenLine(417_500, 0, 'raw_net_points', 'long'), null);
 });

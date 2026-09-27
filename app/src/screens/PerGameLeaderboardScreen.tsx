@@ -8,6 +8,7 @@ import { practiceProgress } from '../data/chromeView';
 import {
   boardList,
   boardMoney,
+  columnMoney,
   lagLine as boardLagLine,
   keepTailTogether,
   leaderStanding,
@@ -214,7 +215,7 @@ function PastSeasons({ lines }: { lines: readonly PastSeasonLine[] }) {
  * with their column (walk 8 T3-09): "2", "Deep Threes", "+$245K". The column
  * says "Rank", so the cell says the place once (walk 13 T3-05: "Rank, Rank
  * 2"). On a level board (before the first games) no one has a rank yet. Every score
- * keeps the board's one precision (boardMoney: "+$8.3K" beside "+$423.9K"); when two different scores read alike, each
+ * keeps the board's one precision (columnMoney: "+$8.3K" beside "+$423.9K", a round "+$265.0K"); when two different scores read alike, each
  * says how far apart they are ("$191 ahead of #2").
  */
 function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEntry; level: boolean }) {
@@ -248,12 +249,12 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
       <View role="cell" style={[styles.scoreCell, compact && styles.scoreCompact]}>
         <Spoken>{scoreSpoken}</Spoken>
         <Seen style={[styles.scoreSeen, compact && styles.scoreSeenCompact]}>
-          <NetMoney format={boardMoney} value={score} />
+          <NetMoney format={columnMoney} value={score} />
           {level ? null : closeCalls.map((note) => (
             <Text key={note} style={[styles.boardNote, styles.closeCall, compact && styles.boardNoteCompact]}>{note}</Text>
           ))}
           {boardScore === null ? null : (
-            <Text style={[styles.boardNote, compact && styles.boardNoteCompact]}>board {boardMoney(boardScore)}</Text>
+            <Text style={[styles.boardNote, compact && styles.boardNoteCompact]}>board {columnMoney(boardScore)}</Text>
           )}
         </Seen>
       </View>

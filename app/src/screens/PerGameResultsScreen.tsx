@@ -33,7 +33,7 @@ import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
 import { Disclosure, DisclosureSpace, DISCLOSURE_WIDTH } from '../components/results/Disclosure';
 import { NetMoney } from '../components/results/NetMoney';
-import { onPlayerGames, setProfileReopen, takePlayerGames, type PlayerGames } from '../components/results/playerGames';
+import { onPlayerGames, returnToProfile, setProfileReopen, takePlayerGames, type PlayerGames } from '../components/results/playerGames';
 import { SettlementBreakdown } from '../components/results/SettlementBreakdown';
 import { practiceProgress } from '../data/chromeView';
 import { isSeasonOver } from '../data/marketView';
@@ -1261,15 +1261,27 @@ export function PerGameResultsScreen() {
   // (`reopenGamesProfile`). Closing it leaves his games as they were.
   const [profileOpen, setProfileOpen] = useState(false);
   const from = only?.from ?? null;
+  const fromTab = only?.fromTab;
+  const onlyPlayer = only?.playerId ?? null;
   useEffect(() => {
     if (!from) return undefined;
     const reopenHere = () => {
+      // Opened over another screen (the Market, the Roster): "See his games"
+      // was one step, so Back returns there, with its scroll, side and sort,
+      // and his profile open again in the view it was in; the next Back
+      // closes it there (walk 16 T2-05). The switch waits for the frame's
+      // own history step for this Back to land first.
+      if (fromTab && fromTab !== 'plays' && onlyPlayer) {
+        returnToProfile({ playerId: onlyPlayer, view: from, tab: fromTab });
+        setTimeout(() => openTab(fromTab, { focusScreen: false }), 0);
+        return true;
+      }
       setProfileOpen(true);
       return true;
     };
     setProfileReopen(reopenHere);
     return () => setProfileReopen(null);
-  }, [from]);
+  }, [from, fromTab, onlyPlayer]);
   const backToProfile = useMemo(() => repeatSafe(() => setProfileOpen(true)), []);
   // A day's moves render inside their fold, as one list (walk 3 T3-32).
   const visible = useMemo(() => (onlyId ? hisFeed(feed) : foldedFeed(feed)), [feed, onlyId]);

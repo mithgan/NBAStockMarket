@@ -422,3 +422,20 @@ test('the Leaders column holds one precision for every K figure (walk 15 T2-01)'
   // "Your seasons this visit" is said as it is written.
   assert.equal(pastSeasonLines([{ score: 8_340, rank: '#2 of 5', finishedOn: '2026-04-12' }])[0].spoken, 'Season 1: +$8.3K, second of 5');
 });
+
+test('the Leaders Score column reads one decimal for every K figure, You included (walk 16 T2-10, T1-12, T4-13)', async () => {
+  const { boardMoney, columnMoney } = await import('./leadersView');
+  // The testers' boards: a round score dropped its decimal ("+$265K", "+$45K", your "-$622K").
+  assert.deepEqual(
+    [333_400, 265_000, 45_000, -83_400, -622_000].map(columnMoney),
+    ['+$333.4K', '+$265.0K', '+$45.0K', '-$83.4K', '-$622.0K'],
+  );
+  assert.equal(columnMoney(8_340), '+$8.3K');
+  assert.equal(columnMoney(-1_250), '-$1.3K', 'rounded as boardMoney rounds');
+  assert.equal(columnMoney(999_960), '+$1.00M', 'millions keep their two places');
+  assert.equal(columnMoney(1_604_000), '+$1.60M');
+  assert.equal(columnMoney(-750), '-$750');
+  assert.equal(columnMoney(0), '$0');
+  // The standing block keeps the app's usual format.
+  assert.equal(boardMoney(-622_000), '-$622K');
+});

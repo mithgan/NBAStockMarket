@@ -1,22 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type {
+  PerGameBootstrap,
   PerGameMarketPlayer,
   PerGamePosition,
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
+import { isMockActive, mockPlayerTrends } from '../api/mockPerGameClient';
 import { chromeFolded } from '../data/chromeView';
 import { panelDockRight, type ProfileMetric, type ProfileRange } from '../data/profileView';
 import type { TrendPoint } from '../data/trendPresentation';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { usePerGame } from '../state/PerGameContext';
 import { useWatchlist } from '../state/watchlist';
 import { colors, radius } from '../theme';
 import { useSheetHistory } from '../web/appHistory';
 import { measuredSheetTop } from './chrome/sheetTop';
 import { PerGamePlayerProfile } from './PerGamePlayerProfile';
+import { peekProfileReturn, takeProfileReturn, type ProfileReturn } from './results/playerGames';
 import { unlessSettling } from '../web/tapSettle';
 
 /** Desktop opens the profile as a panel on the right; below this it is a sheet. */
@@ -62,6 +66,66 @@ function useReturnFocus(open: boolean) {
 }
 
 /**
+ * Back from his games in Results (walk 16 T2-05): the screen his profile was
+ * open over draws again and its sheet opens him again, once the screen's
+ * history step has landed (a replaced entry at once; the Roster's step back
+ * with its popstate), so the sheet's own entry sits on top of the screen's
+ * and the next Back closes him there.
+ */
+function useProfileReturn(): [ProfileReturn | null, () => void] {
+  const [back, setBack] = useState<ProfileReturn | null>(null);
+  useEffect(() => {
+    const request = peekProfileReturn();
+    if (!request || typeof window === 'undefined') return undefined;
+    let done = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const open = () => {
+      if (done) return;
+      done = true;
+      window.removeEventListener('popstate', open);
+      if (timer !== null) clearTimeout(timer);
+      if (takeProfileReturn(request)) setBack(request);
+    };
+    const landed = (window.history.state as { tab?: string } | null)?.tab === request.tab;
+    if (landed) open();
+    else {
+      window.addEventListener('popstate', open);
+      timer = setTimeout(open, 400);
+    }
+    return () => {
+      done = true;
+      window.removeEventListener('popstate', open);
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, []);
+  const close = useCallback(() => setBack(null), []);
+  return [back, close];
+}
+
+/** The player a return reopens, read as Results reads him (one no longer listed keeps his last stint's name and price). */
+function returnedProfile(bootstrap: PerGameBootstrap, playerId: string) {
+  const position = bootstrap.positions.find((row) => row.playerId === playerId && row.status === 'active') ?? null;
+  const stint = position ?? [...bootstrap.positions].reverse().find((row) => row.playerId === playerId) ?? null;
+  const player: PerGameMarketPlayer | null = bootstrap.market.find((row) => row.playerId === playerId)
+    ?? (stint
+      ? {
+          playerId: stint.playerId,
+          name: stint.playerName,
+          tier: '',
+          quoteVersion: 0,
+          currentGameCost: stint.lockedGameCost,
+          priorSeasonValuePerGame: null,
+        }
+      : null);
+  if (!player) return null;
+  return {
+    player,
+    position,
+    results: bootstrap.settledResults.filter((result) => result.playerId === playerId),
+  };
+}
+
+/**
  * The per-game player profile, over whichever screen opened it. A sheet on a
  * phone, as tall as its content up to a band of dimmed screen above it that
  * closes it; a panel down the right-hand side on desktop, so the list behind
@@ -74,7 +138,51 @@ function useReturnFocus(open: boolean) {
  *   (the market, whose Watching filter must update the moment you star
  *   someone) shares its state; without them the sheet keeps its own.
  */
-export function PlayerProfileSheet({
+export function PlayerProfileSheet(props: Parameters<typeof ProfileSheet>[0]) {
+  const { bootstrap } = usePerGame();
+  const [back, closeBack] = useProfileReturn();
+  const hostOpen = props.visible && props.player !== null;
+  const returned = useMemo(
+    () => (!hostOpen && back && bootstrap ? returnedProfile(bootstrap, back.playerId) : null),
+    [back, bootstrap, hostOpen],
+  );
+  // The screen opened a profile of its own: that one shows.
+  useEffect(() => {
+    if (hostOpen && back) closeBack();
+  }, [back, closeBack, hostOpen]);
+  const returnedName = returned?.player.name ?? null;
+  // Closed, focus goes to his row on the screen, as it does for a profile
+  // opened from the row (the sheet's own return runs first, at 60 ms).
+  const closeReturned = useCallback(() => {
+    closeBack();
+    if (typeof document === 'undefined' || !returnedName) return;
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body && document.getElementById('app-screen')?.contains(active) === false) return;
+      const row = Array.from(document.querySelectorAll<HTMLElement>('#app-screen [role="button"]'))
+        .find((node) => (node.getAttribute('aria-label') ?? '').startsWith(`${returnedName},`));
+      row?.focus({ preventScroll: true });
+    }, 120);
+  }, [closeBack, returnedName]);
+  if (!back || !returned) return <ProfileSheet {...props} />;
+  return (
+    <ProfileSheet
+      {...props}
+      initialView={back.view}
+      onClose={closeReturned}
+      onToggleWatch={undefined}
+      player={returned.player}
+      position={returned.position}
+      results={returned.results}
+      side={back.view.side ?? props.side}
+      trends={isMockActive() ? mockPlayerTrends(back.playerId) : undefined}
+      visible
+      watching={undefined}
+    />
+  );
+}
+
+function ProfileSheet({
   visible,
   onClose,
   player,

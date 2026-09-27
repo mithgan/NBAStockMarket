@@ -9,7 +9,7 @@
  * the verdict, the stat grid and the chart together, so the three always
  * describe the same games, and the sheet has one "net a game".
  */
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -58,7 +58,9 @@ import {
   logRows,
   logStatusNights,
   mixNote,
+  breakEvenLine,
   pastStintLead,
+  pastStints,
   positionOpenedDay,
   priceCompare,
   priceDriftCaption,
@@ -84,11 +86,11 @@ import { usePerGame } from '../state/PerGameContext';
 import { openTab } from '../state/uiActions';
 import { sheetIsOpen } from '../web/appHistory';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
-import { Button, headingLevel, Label, Money, moneyColor, repeatSafe, SectionHeader, Segmented, Tag } from '../ui/kit';
+import { Button, headingLevel, Label, Money, moneyColor, repeatSafe, SectionHeader, Segmented, Tag, visuallyHidden } from '../ui/kit';
 import { CloseIcon, StarIcon } from './market/icons';
 import { PlayerAvatar } from './PlayerAvatar';
 import { ProfileActionBar } from './profile/ProfileActionBar';
-import { showPlayerGames } from './results/playerGames';
+import { showPlayerGames, tabUnderSheet } from './results/playerGames';
 import { ProfileChart } from './profile/ProfileChart';
 import { ProfileGameLog } from './profile/ProfileGameLog';
 import { unlessSettling } from '../web/tapSettle';
@@ -238,6 +240,14 @@ export function PerGamePlayerProfile({
   const yourNights = useMemo(() => nights.filter((night) => night.source === 'yours').length, [nights]);
   const ranges = rangeOptions({ total: nights.length, yours: yourNights, room: wide ? 'wide' : windowWidth < 240 ? 'narrow' : 'phone' });
   const range = picked && ranges.some((option) => option.key === picked) ? picked : defaultRange(ranges, held);
+  // A range the player picks: the verdict for it is heard once it is drawn.
+  const rangeNow = useRef(range);
+  rangeNow.current = range;
+  const rangePicked = useRef(false);
+  const pickRange = useCallback((next: ProfileRange) => {
+    if (next !== rangeNow.current) rangePicked.current = true;
+    setPicked(next);
+  }, []);
   const shown = useMemo(() => rangeNights(nights, range), [nights, range]);
   const summary = useMemo(() => summarizeNights(shown), [shown]);
   const recent = isRecentRange(range, shown.length, nights.length);
@@ -262,15 +272,25 @@ export function PerGamePlayerProfile({
     nextGameDate: bootstrap.game.nextGameDate,
   }) : false;
   const status = holdingStatus(position, viewSide, false, player.currentGameCost, seasonOver);
+  // His price in net points, the box-score figure that beats it (walk 16
+  // T1-N2), while games are still to come: your price when you hold him,
+  // today's otherwise.
+  const breakEven = seasonOver || !bootstrap
+    ? null
+    : breakEvenLine(position ? position.lockedGameCost : player.currentGameCost, dividendRate, bootstrap.ruleset.dividendBasis, viewSide);
   const ledger = bootstrap?.ledger.items;
+  const positions = bootstrap?.positions;
   const opened = useMemo(() => (position ? {
     since: positionOpenedDay(ledger ?? [], position.positionId),
     readd: results.some((row) => row.playerId === player.playerId && row.side === position.side
       && row.positionId !== position.positionId && row.status === 'settled'),
   } : {
-    // Not held: name the side and dates of your past games with him.
-    past: pastStintLead(currentResults(results).filter((row) => row.playerId === player.playerId)),
-  }), [ledger, player.playerId, position, results]);
+    // Not held: name the side and dates of your past stints with him, counted as the Roster counts them.
+    past: pastStintLead(
+      currentResults(results).filter((row) => row.playerId === player.playerId),
+      pastStints(positions ?? [], ledger ?? [], player.playerId),
+    ),
+  }), [ledger, player.playerId, position, positions, results]);
   const stake = stakeLine(stakeSummary, held, viewSide, opened, seasonOver);
   // One game shown, and it was yours with the header saying its result: the
   // verdict says how it went without the figure, and the averages and the
@@ -295,10 +315,30 @@ export function PerGamePlayerProfile({
   // Results lists your games with him (any side): offer them there, his alone.
   const inResults = results.some((row) => row.playerId === player.playerId);
   const seeGames = () => {
-    showPlayerGames({ playerId: player.playerId, playerName: player.name, from: { metric, range: picked, side: viewSide } });
+    // Read before the sheet closes: the screen under it, for Back (walk 16 T2-05).
+    const fromTab = tabUnderSheet();
+    showPlayerGames({ playerId: player.playerId, playerName: player.name, from: { metric, range: picked, side: viewSide }, fromTab });
     closeThen(onClose, () => openTab('plays'));
   };
   const preview = firstGamePreview(viewSide, live ? 'yours' : 'season');
+  const verdict = formVerdict(summary, {
+    recent,
+    side: viewSide,
+    // "for your short" only when every game shown was yours.
+    held: held && summary.yours === summary.games,
+    scope: live || range === 'Yours' ? 'yours' : 'season',
+    figure: !headerSaysIt,
+  });
+  // What the verdict region says: only a verdict the player asked for by
+  // picking a range, never one that games landing changed (walk 16 T4-14).
+  const [verdictSaid, setVerdictSaid] = useState('');
+  useEffect(() => {
+    if (!rangePicked.current) return;
+    rangePicked.current = false;
+    setVerdictSaid(verdict);
+    // Keyed on the range: the verdict drawn for the range just picked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range]);
   // The Price view (walk 9 T1-08, T2-03): held, one comparison leads and the
   // move since his first game shown is the chart's caption, with a word on a
   // flat-looking chart.
@@ -436,6 +476,7 @@ export function PerGamePlayerProfile({
             </View>
           ) : null}
           {quietNote ? <Text maxFontSizeMultiplier={1.4} style={styles.stakeLead}>{quietNote}</Text> : null}
+          {breakEven ? <Text maxFontSizeMultiplier={1.4} style={styles.stakeLead}>{breakEven}</Text> : null}
         </View>
         </View>
         <ProfileActionBar
@@ -460,24 +501,20 @@ export function PerGamePlayerProfile({
               {ranges.length > 1 ? (
                 <Segmented
                   accessibilityLabel="Games shown"
-                  onChange={setPicked}
+                  onChange={pickRange}
                   options={ranges}
                   style={wide ? styles.rangeWide : undefined}
                   value={range}
                 />
               ) : null}
-              {/* Spoken politely when a range tab changes it, not only the
-                  tab's name (walk-2 T3-N5). */}
-              <Text accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.4} style={styles.verdict}>
-                {formVerdict(summary, {
-                  recent,
-                  side: viewSide,
-                  // "for your short" only when every game shown was yours.
-                  held: held && summary.yours === summary.games,
-                  scope: live || range === 'Yours' ? 'yours' : 'season',
-                  figure: !headerSaysIt,
-                })}
-              </Text>
+              {/* Drawn, not a live region: games landing change it silently
+                  (walk 16 T4-14: it spoke after every week of a run, which
+                  the run's notice says once). A range the player picks is
+                  heard (walk-2 T3-N5), through the region below. */}
+              <Text maxFontSizeMultiplier={1.4} style={styles.verdict}>{verdict}</Text>
+              <View style={visuallyHidden}>
+                <Text accessibilityLiveRegion="polite">{verdictSaid}</Text>
+              </View>
               {mix ? <Text maxFontSizeMultiplier={1.4} style={styles.note}>{mix}</Text> : null}
               {oneGame ? null : (
               <>
@@ -571,7 +608,7 @@ export function PerGamePlayerProfile({
                   {priceStory(shown, viewSide, player.currentGameCost, firstWithYou, position?.lockedGameCost ?? null)}
                 </Text>
               ) : null}
-              <ProfileChart height={wide ? 200 : 176} metric={metric} nights={shown} side={viewSide} />
+              <ProfileChart height={wide ? 200 : 176} metric={metric} nights={shown} now={player.currentGameCost} side={viewSide} />
               {metric === 'price' && priceCaption ? (
                 <Text maxFontSizeMultiplier={1.4} style={styles.chartCaption}>{priceCaption}</Text>
               ) : null}

@@ -30,6 +30,19 @@ export function boardMoney(value: number): string {
   return Math.round(value) === 0 ? '$0' : signedMoneyCompact(value);
 }
 
+/**
+ * The board's Score column: every K figure to one decimal, a round one too,
+ * so the digits line up down the column ("+$265.0K" beside "+$333.4K",
+ * "-$622.0K" on your row; walk 16 T2-10, T1-12, T4-13). Millions keep their
+ * two places, dollars under $1K none. Only the column: your standing and the
+ * seasons list keep `boardMoney` ("-$622K your score"), as the app writes a
+ * score elsewhere. The figure is `boardMoney`'s, rounded the same way; only a
+ * dropped ".0" comes back.
+ */
+export function columnMoney(value: number): string {
+  return boardMoney(value).replace(/^([+-]?\$\d+)K$/, '$1.0K');
+}
+
 export interface BoardGap {
   rank: number;
   name: string;

@@ -17,13 +17,14 @@
  *    price that night, and is labelled as such.
  */
 import type {
+  DividendBasis,
   PerGameLedgerEntry,
   PerGameMarketPlayer,
   PerGamePosition,
   PerGamePositionSide,
   PerGameSettledResult,
 } from '../api/contracts';
-import { gamesCount, humanDate, money, moneyFine, perGame, signedMoneyFine } from '../copy/terms';
+import { gamesCount, humanDate, humanDaySpan, money, moneyFine, perGame, signedMoneyFine } from '../copy/terms';
 import { shownEdge } from './marketView';
 import { PRICE_EXPLAINER } from './perGameRules';
 import { currentResults, entryDay, lastYearEdge, type ValueSummary } from './perGameMetrics';
@@ -261,8 +262,11 @@ export function formVerdict(summary: NightsSummary, options: VerdictOptions = {}
   // "in 4 of his 4 games" (walk 13 T1-10).
   const whose = scope === 'yours' ? 'your' : 'his';
   const after = scope === 'yours' ? ' with him' : recent ? '' : ' this season';
+  // Two games are "both" (walk 16 T2-03, T4-10: "all 2 of his games").
   const span = beat === games
-    ? recent ? `all of ${whose} last ${games} games${after}` : `all ${games} of ${whose} games${after}`
+    ? games === 2
+      ? recent ? `both of ${whose} last 2 games${after}` : `both of ${whose} games${after}`
+      : recent ? `all of ${whose} last ${games} games${after}` : `all ${games} of ${whose} games${after}`
     : beat === 0 ? `none of ${count}` : `${beat} of ${count}`;
   const lead = `${side === 'long' ? 'Beat' : 'Stayed under'} his price in ${span}`;
   if (even) return `${lead}, about even on average${forWho}.`;
@@ -301,7 +305,8 @@ export function sideWords(side: PerGamePositionSide): {
         priceShort: 'price',
         netCaption: 'price − dividend',
         beat: 'Under his price',
-        missedCaption: (count) => (count === 0 ? 'never over' : `over ${count}`),
+        // Says what "over" means (walk 16 T2-03: "over 2" under "Under his price").
+        missedCaption: (count) => (count === 0 ? 'never over' : `${count} went over his price`),
         legendGood: 'Under his price',
         legendBad: 'Over his price',
         legendLine: 'Price a game',
@@ -724,6 +729,28 @@ export function headerPrice(position: Pick<PerGamePosition, 'lockedGameCost'> | 
 }
 
 /**
+ * His price in basketball terms (walk 16 T1-N2: "$417.5K a game" and "$40K a
+ * net point" left a fan to divide): the net points a game that beat it, when
+ * his dividend is his raw net points × the rate ("Beats his price at 10.5+
+ * net points a game"; from the short side, "Stays under his price at 10.4 or
+ * fewer net points a game"). Net points are written to a tenth, so the figure
+ * is the first tenth that beats his price (10.4 × $40K is $416K, under
+ * $417.5K). Null on any other dividend basis, or without a rate or price.
+ */
+export function breakEvenLine(price: number, rate: number, basis: DividendBasis, side: PerGamePositionSide): string | null {
+  if (basis !== 'raw_net_points' || !(rate > 0) || !(price > 0)) return null;
+  const tenths = (price / rate) * 10;
+  const nearest = Math.round(tenths);
+  const exact = Math.abs(tenths - nearest) < 1e-6;
+  // A dividend equal to his price neither beats it nor stays under it.
+  const beats = exact ? nearest + 1 : Math.ceil(tenths);
+  const under = exact ? nearest - 1 : Math.floor(tenths);
+  const points = (count: number) => (count / 10).toFixed(1).replace(/\.0$/, '');
+  if (side === 'long') return `Beats his price at ${points(beats)}+ net points a game`;
+  return under < 0 ? null : `Stays under his price at ${points(under)} or fewer net points a game`;
+}
+
+/**
  * The Price view's lead for a player you hold (walk 9 T1-08): one comparison
  * in two cells, then one plain line; the move since his first game is the
  * chart's caption (`priceMoveLine`).
@@ -819,33 +846,65 @@ export function positionOpenedDay(
   return first ? entryDay(first as PerGameLedgerEntry) : null;
 }
 
-/** "Oct 21", "Oct 21 to 27", "Oct 21 to Nov 3". */
-function dateSpan(from: string, to: string): string {
-  if (from === to) return humanDate(from);
-  const end = humanDate(to);
-  return `${humanDate(from)} to ${from.slice(0, 7) === to.slice(0, 7) ? end.split(' ').pop() : end}`;
+/** One of his stints with you, played or not: the days it opened and closed, when on record. */
+export interface PastStint {
+  positionId: string;
+  side: PerGamePositionSide;
+  from: string | null;
+  to: string | null;
+}
+
+/**
+ * His closed stints with you this season, as the Roster counts them (a stint
+ * dropped before he played counts too), each with the day its fee opened it
+ * and the day its drop fee closed it.
+ */
+export function pastStints(
+  positions: readonly Pick<PerGamePosition, 'positionId' | 'playerId' | 'side' | 'status'>[],
+  entries: readonly Pick<PerGameLedgerEntry, 'positionId' | 'kind' | 'gameDate' | 'createdAt' | 'eventCursor'>[],
+  playerId: string,
+): PastStint[] {
+  return positions
+    .filter((position) => position.playerId === playerId && position.status === 'closed')
+    .map((position) => {
+      const drop = entries.find((entry) => entry.positionId === position.positionId && entry.kind === 'drop_fee');
+      return {
+        positionId: position.positionId,
+        side: position.side,
+        from: positionOpenedDay(entries, position.positionId),
+        to: drop ? entryDay(drop as PerGameLedgerEntry) : null,
+      };
+    });
 }
 
 /**
  * Who he was to you before, for a player you no longer hold (walk-2 T2-20):
- * the side, how many stints, and the game dates they spanned, as in "Your
- * short, Oct 21 to 27:". Null with no games with you.
+ * the side, how many stints, and the days they spanned, as in "Your short,
+ * Oct 21–27:". Stints are counted as the Roster counts them, one that never
+ * played too, and the span runs from the first stint's first day to the last
+ * one's last (walk 16 T4-10: "twice, Oct 21 to 22" beside the Roster's "3
+ * stints", held Oct 20–23). Null with no games with you.
  */
 export function pastStintLead(
   results: readonly Pick<PerGameSettledResult, 'positionId' | 'side' | 'gameDate'>[],
+  stints: readonly PastStint[] = [],
 ): string | null {
   if (results.length === 0) return null;
   const sides = new Set(results.map((row) => row.side));
-  const stints = new Set(results.map((row) => row.positionId)).size;
-  const dates = results.map((row) => row.gameDate).sort();
+  const onSide = stints.filter((stint) => sides.has(stint.side));
+  const count = new Set([...results.map((row) => row.positionId), ...onSide.map((stint) => stint.positionId)]).size;
+  const days = [
+    ...results.map((row) => row.gameDate),
+    ...onSide.flatMap((stint) => [stint.from, stint.to]).filter((day): day is string => Boolean(day)),
+  ].sort();
   // The app's own words for holding him (walk 12 T1-01: "roster spot" was a
   // third term for it, found only here and in the Results math).
   const who = sides.size > 1
     ? 'With you'
     : sides.has('long')
-      ? stints > 2 ? `On your roster ${stints} times` : stints > 1 ? 'On your roster twice' : 'On your roster'
-      : stints > 1 ? `Your ${stints} shorts` : 'Your short';
-  return `${who}, ${dateSpan(dates[0], dates[dates.length - 1])}:`;
+      ? count > 2 ? `On your roster ${count} times` : count > 1 ? 'On your roster twice' : 'On your roster'
+      : count > 1 ? `Your ${count} shorts` : 'Your short';
+  return `${who}, ${humanDaySpan(days[0], days[days.length - 1])}:`;
 }
 
 /**
@@ -1018,6 +1077,12 @@ export interface ProfileChartModel {
    * same; none in the dividends view.
    */
   priceMarks: PriceMark[];
+  /**
+   * Price view: today's price, a hollow point at the plot's right end, after
+   * his last game shown (walk 16 T2-N3: the header's "market now" figure was
+   * not on the chart). Null without one, or in the dividends view.
+   */
+  nowPoint: { x: number; y: number; value: number } | null;
 }
 
 export interface PriceMark {
@@ -1447,9 +1512,11 @@ export function profileChartModel(
   insets: ChartInsets,
   /** Price view: the chart's full height, when `height` is shrunk to a small drift (`priceChartHeight`). */
   fullHeight: number = height,
+  /** Price view: his price today, drawn after his last game shown (`nowPoint`). */
+  now?: number,
 ): ProfileChartModel {
   const empty: ProfileChartModel = {
-    slot: 0, bars: [], anchors: [], priceStepPath: '', priceSteps: [], priceLinePath: '', yourPricePath: '', zeroY: null, high: null, low: null, priceMarks: [],
+    slot: 0, bars: [], anchors: [], priceStepPath: '', priceSteps: [], priceLinePath: '', yourPricePath: '', zeroY: null, high: null, low: null, priceMarks: [], nowPoint: null,
   };
   const count = nights.length;
   const plotWidth = width - insets.left - insets.right;
@@ -1492,6 +1559,12 @@ export function profileChartModel(
     } else if (high - low < span) {
       low = mid - span / 2;
       high = mid + span / 2;
+    }
+    // Today's price stays inside the plot, with a little room at the edge.
+    if (now !== undefined && Number.isFinite(now) && now > 0) {
+      const room = (high - low) * 0.06;
+      if (now > high - room) high = now + room;
+      if (now < low + room) low = now - room;
     }
   } else {
     low = Math.min(0, ...values, ...prices);
@@ -1568,7 +1641,80 @@ export function profileChartModel(
     high: labelled ? extrema.high?.index ?? null : null,
     low: labelled ? extrema.low?.index ?? null : null,
     priceMarks,
+    nowPoint: metric === 'price' && now !== undefined && Number.isFinite(now) && now > 0
+      ? { x: insets.left + plotWidth, y: y(now), value: now }
+      : null,
   };
+}
+
+/** The "Now $424.8K" label: its words and where they sit. */
+export interface NowLabel {
+  text: string;
+  /** Right end of the words (they end at the point), and their baseline. */
+  x: number;
+  y: number;
+}
+
+const NOW_LABEL_SIZE = 11;
+const NOW_CHAR_WIDTH = 6.6;
+
+/**
+ * Where the Price chart's "Now" label goes (walk 16 T2-N3): ending at the
+ * hollow point, above it or below it, whichever keeps the words off his line
+ * (the points of his last games under the words' width, and the dotted step
+ * from his last game to today), inside the plot. None where the chart is too
+ * narrow for the words beside the scale.
+ */
+export function nowLabel(
+  model: Pick<ProfileChartModel, 'nowPoint' | 'anchors' | 'priceSteps' | 'priceMarks'>,
+  width: number,
+  plotHeight: number,
+): NowLabel | null {
+  const point = model.nowPoint;
+  if (!point) return null;
+  const text = `Now ${moneyFine(point.value)}`;
+  const textWidth = text.length * NOW_CHAR_WIDTH;
+  if (width < textWidth * 2) return null;
+  const left = point.x - textWidth;
+  // Every line under the words: his market line through his games and the
+  // dotted step on to today, sampled across the words' width, and your
+  // locked price's steps there. The scale's faint guide lines count less.
+  const path = [...model.anchors, { x: point.x, y: point.y }];
+  const lines: number[] = [];
+  for (let x = left; x <= point.x; x += 3) {
+    for (let index = 0; index < path.length - 1; index += 1) {
+      const from = path[index];
+      const to = path[index + 1];
+      if (x < from.x || x > to.x) continue;
+      const share = to.x === from.x ? 1 : (x - from.x) / (to.x - from.x);
+      lines.push(from.y + (to.y - from.y) * share);
+    }
+  }
+  for (const anchor of model.anchors) if (anchor.x >= left - 5) lines.push(anchor.y);
+  for (const step of model.priceSteps) if (step.x1 >= left && step.x0 <= point.x) lines.push(step.y);
+  const guides = model.priceMarks.map((mark) => mark.y);
+  const box = (baseline: number) => ({ top: baseline - NOW_LABEL_SIZE, bottom: baseline + 3 });
+  const cost = (baseline: number) => {
+    const { top, bottom } = box(baseline);
+    const on = (height: number) => height >= top - 3 && height <= bottom + 3;
+    return lines.filter(on).length * 10 + guides.filter(on).length;
+  };
+  // Nearest the point first, stepping away above and below; at each step
+  // the side away from where his line comes from goes first.
+  const last = model.anchors[model.anchors.length - 1];
+  const lineBelow = last ? last.y >= point.y : true;
+  const candidates: number[] = [];
+  for (let step = 0; step < 24; step += 1) {
+    const above = point.y - 8 - step * 3;
+    const below = point.y + 8 + NOW_LABEL_SIZE + step * 3;
+    for (const baseline of lineBelow ? [above, below] : [below, above]) {
+      const { top, bottom } = box(baseline);
+      if (top >= 0 && bottom <= plotHeight) candidates.push(baseline);
+    }
+  }
+  if (candidates.length === 0) return { text, x: point.x, y: Math.max(NOW_LABEL_SIZE, Math.min(plotHeight - 3, point.y - 8)) };
+  const best = candidates.reduce((chosen, baseline) => (cost(baseline) < cost(chosen) ? baseline : chosen));
+  return { text, x: point.x, y: best };
 }
 
 export interface ChartDateLabel {

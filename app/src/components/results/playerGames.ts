@@ -5,6 +5,7 @@
  */
 import type { PerGamePositionSide } from '../../api/contracts';
 import type { ProfileMetric, ProfileRange } from '../../data/profileView';
+import type { AppTab } from '../../state/uiActions';
 
 /**
  * The profile as it was when "See his games" was pressed (walk 9 T1-17), so
@@ -13,7 +14,11 @@ import type { ProfileMetric, ProfileRange } from '../../data/profileView';
  */
 export type ProfileView = { metric: ProfileMetric; range: ProfileRange | null; side: PerGamePositionSide | null };
 
-export type PlayerGames = { playerId: string; playerName: string; from?: ProfileView };
+/**
+ * `fromTab`: the screen his profile was open over when "See his games" was
+ * pressed, so the browser's Back undoes the trip there (walk 16 T2-05).
+ */
+export type PlayerGames = { playerId: string; playerName: string; from?: ProfileView; fromTab?: AppTab };
 
 let pending: PlayerGames | null = null;
 const listeners = new Set<(request: PlayerGames) => void>();
@@ -53,4 +58,41 @@ export function setProfileReopen(next: (() => boolean) | null): void {
 /** Reopen the profile "See his games" came from; false when Results has none to return to. */
 export function reopenGamesProfile(): boolean {
   return reopen ? reopen() : false;
+}
+
+/**
+ * Back from his games to the screen his profile was open over (walk 16
+ * T2-05: Back reopened him over Results, then left Results for the Roster, so
+ * the Market the trip started on was never reached). Results switches to that
+ * screen, and the first profile sheet drawn there opens him again, in the view
+ * he was in, once the screen's history step has landed; the next Back closes
+ * him there. A request left untaken expires, so it never opens a profile later.
+ */
+export type ProfileReturn = { playerId: string; view: ProfileView; tab: AppTab; at: number };
+
+const RETURN_EXPIRES_MS = 2500;
+let profileReturn: ProfileReturn | null = null;
+
+export function returnToProfile(request: Omit<ProfileReturn, 'at'>): void {
+  profileReturn = { ...request, at: Date.now() };
+}
+
+/** The return waiting for a sheet, if still fresh (not taken). */
+export function peekProfileReturn(now = Date.now()): ProfileReturn | null {
+  if (profileReturn && now - profileReturn.at > RETURN_EXPIRES_MS) profileReturn = null;
+  return profileReturn;
+}
+
+/** Take this return (once): false when another sheet took it or it expired. */
+export function takeProfileReturn(request: ProfileReturn, now = Date.now()): boolean {
+  if (peekProfileReturn(now) !== request) return false;
+  profileReturn = null;
+  return true;
+}
+
+/** The screen under the sheet the press came from (its history entry names the tab). */
+export function tabUnderSheet(): AppTab | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const tab = (window.history?.state as { tab?: unknown } | null)?.tab;
+  return tab === 'portfolio' || tab === 'market' || tab === 'plays' || tab === 'leaderboard' ? tab : undefined;
 }
