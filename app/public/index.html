@@ -15,6 +15,10 @@
       /* These styles disable body scrolling if you are using <ScrollView> */
       body {
         overflow: hidden;
+        /* The app's own reset clears the browser's 8px margin only once it
+           runs; clearing it here keeps the loading lockup from moving up
+           8px when the app takes over. */
+        margin: 0;
       }
       /* These styles make the root element full-height */
       #root {

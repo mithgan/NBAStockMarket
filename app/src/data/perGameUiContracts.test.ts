@@ -289,6 +289,13 @@ test('loading is one look: the app draws the page shell\'s lockup, value for val
   assert.match(app, /const LOADING_MARK_SIZE = 32;/);
   assert.equal(cssValue('#shell-loading .shell-note', 'font-size'), '14px');
   assert.match(app, /loadingNote: \{[\s\S]*?fontSize: 14,/);
+  // Centred in the same box: the shell clears the browser's 8px body margin
+  // itself (the app's reset only runs once the app does), with the same gap
+  // and padding, so the lockup never moves when the app takes over.
+  assert.match(shell, /body \{\s+overflow: hidden;[^}]*margin: 0;/);
+  assert.equal(cssValue('#shell-loading {', 'gap'), '14px');
+  assert.equal(cssValue('#shell-loading {', 'padding'), '24px');
+  assert.match(app, /loadingLook: \{\s+flex: 1,\s+alignItems: 'center',\s+justifyContent: 'center',\s+gap: 14,\s+padding: 24,/);
 });
 
 test('two clamped notice lines end on "…" before "more ▾", and still know the rest is there (walk 17 T4-02)', () => {
