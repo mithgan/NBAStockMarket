@@ -391,3 +391,15 @@ test('walk 11 T4-01: the gap adds up with the two figures shown beside it', () =
   assert.equal(shownGap(-395_250, -395_500), 250);
   assert.equal(shownGap(453_760, 453_779), 19);
 });
+
+test('the Leaders intro never leaves "$0." alone on a line (walk 14 T1-05)', async () => {
+  const { keepTailTogether } = await import('./leadersView');
+  const nbsp = ' ';
+  const final = keepTailTogether('The season is over. Ranked by total score; everyone started at $0.');
+  assert.equal(final, `The season is over. Ranked by total score; everyone started${nbsp}at${nbsp}$0.`);
+  assert.equal(keepTailTogether('Ranked by total score. Everyone started the season at $0.'), `Ranked by total score. Everyone started the season${nbsp}at${nbsp}$0.`);
+  // Read the same: only the last three words are bound.
+  assert.equal(final.replace(/ /g, ' '), 'The season is over. Ranked by total score; everyone started at $0.');
+  assert.equal(keepTailTogether('at $0.'), `at${nbsp}$0.`);
+  assert.equal(keepTailTogether('one two three four', 2), `one two three${nbsp}four`);
+});

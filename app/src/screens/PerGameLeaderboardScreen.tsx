@@ -8,6 +8,7 @@ import { practiceProgress } from '../data/chromeView';
 import {
   boardList,
   lagLine as boardLagLine,
+  keepTailTogether,
   leaderStanding,
   pastSeasonLines,
   readPastSeasons,
@@ -306,10 +307,11 @@ export function PerGameLeaderboardScreen() {
       <Text accessibilityRole="header" {...headingLevel(1)} style={styles.title}>
         {final ? 'Final standings' : 'Leaders'}
       </Text>
+      {/* "started at $0." never leaves "$0." alone on a line (walk 14 T1-05). */}
       <Text style={styles.subtitle}>
-        {final
+        {keepTailTogether(final
           ? 'The season is over. Ranked by total score; everyone started at $0.'
-          : 'Ranked by total score. Everyone started the season at $0.'}
+          : 'Ranked by total score. Everyone started the season at $0.')}
       </Text>
       {practiceRivals ? <Text style={styles.subtitle}>Practice rivals are computer players.</Text> : null}
     </View>

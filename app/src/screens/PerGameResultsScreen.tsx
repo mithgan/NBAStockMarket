@@ -44,6 +44,10 @@ import {
   feesLineName,
   focusAnchor,
   foldedFeed,
+  hisFeed,
+  seasonSoFar,
+  type SeasonSoFar,
+  hisMoveLine,
   mathGroupName,
   monthAnchors,
   movesByDay,
@@ -455,6 +459,50 @@ function FeeActivityRow({
   );
 }
 
+/**
+ * One of his moves in his own Results (walk 14 T1-07): in line with his games,
+ * at their gutter (this view draws no headshots), named for what it was,
+ * "Added Luka Doncic · $250 fee", with its amount where his results sit.
+ * Heard with its day first, as his game rows are: "Oct 20, Luka Doncic, added
+ * to your roster, fee $250".
+ */
+function HisMoveRow({
+  date,
+  entry,
+  layout,
+  playerName,
+  side,
+}: {
+  date: string;
+  entry: PerGameLedgerEntry;
+  layout: Layout;
+  playerName: string;
+  side: PerGamePositionSide | null;
+}) {
+  const { columns, compact } = layout;
+  const spoken = `${date ? `${humanDate(date)}, ` : ''}${moveWords(playerName, feeExplanation(entry, side), entry.amountDollars, entry.kind === 'penalty' ? 'penalty' : 'fee')}`;
+  return (
+    <View
+      accessibilityLabel={spoken}
+      accessible
+      style={[styles.row, { paddingLeft: edges(layout).left, paddingRight: ROW_END }, styles.rowLine, columns && styles.rowColumns, styles.rowHis]}
+    >
+      <View style={styles.rowBody}>
+        <View style={[styles.rowHeader, columns && styles.rowHeaderColumns, compact && styles.rowHeaderCompact]}>
+          <View style={[styles.identity, compact && styles.identityCompact]}>
+            <Text style={[styles.detail, styles.detailInline]}>{hisMoveLine(entry, side, playerName)}</Text>
+          </View>
+          <View style={[styles.netCell, columns && styles.netCellColumns, compact && styles.netCellCompact]}>
+            <NetMoney value={entry.amountDollars} />
+            {compact ? <DisclosureSpace /> : null}
+          </View>
+        </View>
+      </View>
+      {compact ? null : <DisclosureSpace />}
+    </View>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Group headers
 
@@ -836,6 +884,53 @@ function toggled(previous: ReadonlySet<string>, key: string): ReadonlySet<string
   return next;
 }
 
+/**
+ * The wide side column from the first night (walk 14 T2-06: it held only the
+ * title until "Jump to" appeared): how many nights your players have played,
+ * and the best and worst so far, each a button that brings its night to the
+ * top of the feed as a month in "Jump to" does. In one player's Results it
+ * counts his games.
+ */
+function SeasonSoFarBlock({
+  his,
+  onJump,
+  over,
+  summary,
+}: {
+  his: boolean;
+  onJump: (date: string) => void;
+  /** The season is over: the whole season, not "so far". */
+  over: boolean;
+  summary: SeasonSoFar;
+}) {
+  const noun = his ? 'game' : 'night';
+  const title = his ? (over ? 'His games' : 'His games so far') : over ? 'Your season' : 'Season so far';
+  const extreme = (kind: 'Best' | 'Worst', entry: { date: string; total: number }) => (
+    <Pressable
+      accessibilityHint={`Shows that ${noun} in the feed.`}
+      accessibilityLabel={`${kind} ${noun}, ${humanDay(entry.date)}, ${netWords(entry.total)}`}
+      accessibilityRole="button"
+      key={kind}
+      onPress={() => onJump(entry.date)}
+      style={({ pressed }) => [styles.soFarRow, pressed && styles.rowOpen]}
+    >
+      <Text style={styles.soFarLabel}>{kind} {noun}</Text>
+      <Text style={styles.soFarDate}>{humanDay(entry.date)}</Text>
+      <NetMoney size="body" value={entry.total} />
+    </Pressable>
+  );
+  return (
+    <View accessibilityLabel={title} role="group" style={styles.jump}>
+      <Text style={styles.jumpLabel}>{title}</Text>
+      <Text style={styles.soFarCount}>
+        {summary.count} {noun}{summary.count === 1 ? '' : 's'} played, {summary.span}
+      </Text>
+      {summary.best ? extreme('Best', summary.best) : null}
+      {summary.worst ? extreme('Worst', summary.worst) : null}
+    </View>
+  );
+}
+
 /** "Jump to" and one button per month, newest first like the feed. */
 function MonthJump({
   anchors,
@@ -1112,7 +1207,7 @@ export function PerGameResultsScreen() {
   }, [from]);
   const backToProfile = useMemo(() => repeatSafe(() => setProfileOpen(true)), []);
   // A day's moves render inside their fold, as one list (walk 3 T3-32).
-  const visible = useMemo(() => foldedFeed(feed), [feed]);
+  const visible = useMemo(() => (onlyId ? hisFeed(feed) : foldedFeed(feed)), [feed, onlyId]);
   // Which row the keyboard is on, for the list's drawing (FeedCell).
   const feedFocus = useRef<FeedFocus>({
     cells: new Map(),
@@ -1291,6 +1386,12 @@ export function PerGameResultsScreen() {
     // Coming back to your place by tab (T2-N6) leaves focus with the screen.
     if (options.focus !== false) focusWhenReady(id, current);
   }, []);
+  // The side column's best and worst night (walk 14 T2-06): its night at the
+  // top; a double-click lands once.
+  const jumpToNight = useMemo(() => repeatSafe((date: string) => {
+    const index = placeNow.current.visible.findIndex((item) => item.type === 'night' && item.night.date === date);
+    if (index >= 0) jumpTo({ index, date });
+  }), [jumpTo]);
   // Back by tab: the night you were reading, once (walk 9 T2-N6).
   useEffect(() => {
     const date = resumeNight(resumeAt, {
@@ -1515,6 +1616,7 @@ export function PerGameResultsScreen() {
   const layout: Layout = { columns: wide && !compact, compact, tight };
   const nights = feedNights(feed);
   const played = nights.filter((night) => night.results > 0);
+  const soFar = wide ? seasonSoFar(nights) : null;
   const lastSettled = bootstrap.game.lastSettledDate;
   const ledgerComplete = bootstrap.ledger.nextCursor === null;
   const rule: DividendRule = {
@@ -1559,7 +1661,18 @@ export function PerGameResultsScreen() {
         </FeesFold>
       );
     }
-    if (item.type === 'fee') return null;
+    // One player's Results lists his moves in line with his games (walk 14 T1-07).
+    if (item.type === 'fee') {
+      return only ? (
+        <HisMoveRow
+          date={item.date}
+          entry={item.entry}
+          layout={layout}
+          playerName={perGamePlayerName(bootstrap, item.entry.playerId, item.entry.positionId)}
+          side={item.side}
+        />
+      ) : null;
+    }
     return (
       <ResultRow
         equation={settlementEquation(
@@ -1588,6 +1701,13 @@ export function PerGameResultsScreen() {
       onPress={backToNewest}
     />
   );
+  // One rule with the Roster and Market: practice ends on its last day, a live
+  // season when games have settled and none are left.
+  const seasonOver = isSeasonOver({
+    practiceComplete: isMockActive() && practiceProgress(mockSeasonStart(), lastSettled).complete,
+    lastSettledDate: lastSettled,
+    nextGameDate: bootstrap.game.nextGameDate,
+  });
   const header = (
     <View
       // Above the rows on a phone: a change in its height moves every row.
@@ -1640,6 +1760,7 @@ export function PerGameResultsScreen() {
       {quietLastNight && lastSettled && !only ? (
         <Text style={styles.note}>None of your players had a game on {humanDay(lastSettled)}.</Text>
       ) : null}
+      {wide && soFar ? <SeasonSoFarBlock his={only !== null} onJump={jumpToNight} over={seasonOver} summary={soFar} /> : null}
       {anchors.length > 1 ? (
         // Marked on phones too, where the row sits at the top of the feed
         // (walk 7 T1-07): the newest month there, the jumped-to one after a jump.
@@ -1648,13 +1769,6 @@ export function PerGameResultsScreen() {
       {wide && far ? <View nativeID={BACK_ID} style={styles.sideBack}>{back}</View> : null}
     </View>
   );
-  // One rule with the Roster and Market: practice ends on its last day, a live
-  // season when games have settled and none are left.
-  const seasonOver = isSeasonOver({
-    practiceComplete: isMockActive() && practiceProgress(mockSeasonStart(), lastSettled).complete,
-    lastSettledDate: lastSettled,
-    nextGameDate: bootstrap.game.nextGameDate,
-  });
   const empty = (
     <EmptyState
       // Nothing to show until you pick players: the way there, in one tap
@@ -1899,6 +2013,33 @@ const styles = StyleSheet.create({
   chipTextHere: {
     color: colors.goldInk,
     fontWeight: weight.black,
+  },
+  soFarCount: {
+    color: colors.muted,
+    fontSize: type.body,
+    lineHeight: 19,
+    marginBottom: space.xs,
+  },
+  // A best or worst night: a quiet row that brings its night up.
+  soFarRow: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginHorizontal: -space.xs,
+    paddingHorizontal: space.xs,
+    borderRadius: 4,
+  },
+  soFarLabel: {
+    color: colors.muted,
+    fontSize: type.body,
+  },
+  soFarDate: {
+    flex: 1,
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.body,
+    fontWeight: weight.bold,
   },
   sideBack: {
     marginTop: space.lg,

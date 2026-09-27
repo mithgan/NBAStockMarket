@@ -26,7 +26,7 @@ import type {
   PerGameSettledResult,
   DividendBasis,
 } from '../api/contracts';
-import { exactMoney, humanDate, signedMoney } from '../copy/terms';
+import { exactMoney, humanDate, humanDaySpan, money, signedMoney } from '../copy/terms';
 import type { SettlementEquation } from '../state/perGameState';
 import { currentResults, entryDay, nightTotals, summarizeValue } from './perGameMetrics';
 
@@ -263,6 +263,41 @@ export function foldedFeed(items: readonly ResultsFeedItem[]): ResultsFeedItem[]
   return items.filter((item) => item.type !== 'fee');
 }
 
+/**
+ * One player's Results (from his profile): his moves sit in line with his
+ * games, one row each, instead of under a "Roster moves · 1" fold indented for
+ * a headshot the view does not draw (walk 14 T1-07).
+ */
+export function hisFeed(items: readonly ResultsFeedItem[]): ResultsFeedItem[] {
+  return items.filter((item) => item.type !== 'fees');
+}
+
+/**
+ * What one of his moves was, in a line (walk 14 T1-07): "Added Luka Doncic ·
+ * $250 fee", "Dropped Luka Doncic · $250 fee", "Shorted Luka Doncic · $250
+ * fee", "Closed your short on Luka Doncic · $250 fee". A refund says so.
+ */
+export function hisMoveLine(
+  entry: Pick<PerGameLedgerEntry, 'kind' | 'amountDollars'>,
+  side: PerGamePositionSide | null,
+  playerName: string,
+): string {
+  const amount = Math.round(entry.amountDollars);
+  const penalty = entry.kind === 'penalty';
+  const noun = penalty ? 'penalty' : 'fee';
+  const figure = amount < 0 ? `${money(-amount)} ${noun}` : amount > 0 ? `${money(amount)} ${noun} refunded` : `no ${noun}`;
+  let what: string;
+  if (entry.kind === 'open_fee') {
+    what = side === 'short' ? `Shorted ${playerName}` : side === 'long' ? `Added ${playerName}` : `Opened a position on ${playerName}`;
+  } else if (entry.kind === 'drop_fee') {
+    what = side === 'short' ? `Closed your short on ${playerName}` : side === 'long' ? `Dropped ${playerName}` : `Closed a position on ${playerName}`;
+  } else {
+    what = penalty ? 'Rules penalty' : 'Account fee';
+    return amount === 0 ? what : `${what} · ${money(Math.abs(amount))}${amount > 0 ? ' refunded' : ''}`;
+  }
+  return `${what} · ${figure}`;
+}
+
 /** Each day's moves, in feed order (newest first), for the list under its fold. */
 export function movesByDay(items: readonly ResultsFeedItem[]): Map<string, FeeFeedItem[]> {
   const days = new Map<string, FeeFeedItem[]>();
@@ -359,6 +394,42 @@ export function readingMonth(anchors: readonly MonthAnchor[], onScreen: string |
 /** Days in the feed, newest first. */
 export function feedNights(items: readonly ResultsFeedItem[]): NightSummary[] {
   return items.flatMap((item) => (item.type === 'night' ? [item.night] : []));
+}
+
+export interface SeasonSoFar {
+  /** Nights with a settled game (his games, in one player's view). */
+  count: number;
+  /** The days they cover: "Oct 21–28", or one day, "Oct 21". */
+  span: string;
+  /** The best and the worst of them; null with a single night. */
+  best: { date: string; total: number } | null;
+  worst: { date: string; total: number } | null;
+}
+
+/**
+ * The wide Results side column from the first night (walk 14 T2-06: 280px of
+ * blank cream beside the feed until Jump to appeared): how many nights your
+ * players have played and over which days, and the best and worst night so
+ * far. Null before the first settled game. A tie goes to the earlier night.
+ */
+export function seasonSoFar(nights: readonly NightSummary[]): SeasonSoFar | null {
+  const settled = nights.filter((night) => night.games > 0).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  if (settled.length === 0) return null;
+  const first = settled[0];
+  const last = settled[settled.length - 1];
+  let best = first;
+  let worst = first;
+  for (const night of settled) {
+    if (night.total > best.total) best = night;
+    if (night.total < worst.total) worst = night;
+  }
+  const two = settled.length > 1;
+  return {
+    count: settled.length,
+    span: humanDaySpan(first.date, last.date),
+    best: two ? { date: best.date, total: best.total } : null,
+    worst: two && worst !== best ? { date: worst.date, total: worst.total } : null,
+  };
 }
 
 /**

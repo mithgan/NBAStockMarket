@@ -56,6 +56,17 @@ export type Standing =
       runnerUp: BoardGap | null;
     };
 
+/**
+ * Binds a sentence's last words with no-break spaces, so its closing figure
+ * never ends alone on a line (walk 14 T1-05: "$0." by itself under the
+ * Leaders heading at 390 and 360px). Screen readers hear plain spaces.
+ */
+export function keepTailTogether(text: string, words = 3): string {
+  const parts = text.split(' ');
+  if (parts.length <= words) return parts.join('\u00a0');
+  return `${parts.slice(0, -words).join(' ')} ${parts.slice(-words).join('\u00a0')}`;
+}
+
 /** The board in rank order; equal ranks fall back to score, then a stable id. */
 export function sortBoard(rows: readonly PerGameLeaderboardRow[]): PerGameLeaderboardRow[] {
   return [...rows].sort((left, right) => (

@@ -34,6 +34,7 @@ import {
   settlementLines,
   valuePair,
   visibleFeed,
+  type NightSummary,
   type ResultsFeedItem,
   type ResultsFeedSource,
 } from './resultsView';
@@ -798,6 +799,22 @@ test('a day\'s moves live inside their fold as one list, each read with the play
   assert.equal(moveWords('OG Anunoby', 'Account fee', 250), 'OG Anunoby, account fee, fee refunded, $250');
 });
 
+test('one player\'s Results lists his moves in line with his games, named for what they were (walk 14 T1-07)', async () => {
+  const { hisFeed, hisMoveLine } = await import('./resultsView');
+  cursor = 950;
+  const game = result({ positionId: 'pos-1', gameId: 'g1', gameDate: '2025-11-02' });
+  const fees = [fee({ entryId: 'a', createdAt: '2025-11-01T23:45:00.000Z' })];
+  const feed = buildResultsFeed(source([game], fees));
+  // No "Roster moves · 1" fold: the move is a row of its own under its day.
+  assert.deepEqual(shape(hisFeed(feed)), ['night:2025-11-02', 'result:pos-1:g1', 'night:2025-11-01', 'fee:a']);
+  assert.equal(hisMoveLine({ kind: 'open_fee', amountDollars: -250 }, 'long', 'Luka Doncic'), 'Added Luka Doncic · $250 fee');
+  assert.equal(hisMoveLine({ kind: 'drop_fee', amountDollars: -250 }, 'long', 'Luka Doncic'), 'Dropped Luka Doncic · $250 fee');
+  assert.equal(hisMoveLine({ kind: 'open_fee', amountDollars: -250 }, 'short', 'Dyson Daniels'), 'Shorted Dyson Daniels · $250 fee');
+  assert.equal(hisMoveLine({ kind: 'drop_fee', amountDollars: -250 }, 'short', 'Dyson Daniels'), 'Closed your short on Dyson Daniels · $250 fee');
+  assert.equal(hisMoveLine({ kind: 'open_fee', amountDollars: 250 }, 'long', 'Luka Doncic'), 'Added Luka Doncic · $250 fee refunded');
+  assert.equal(hisMoveLine({ kind: 'penalty', amountDollars: -1_000 }, null, 'Luka Doncic'), 'Rules penalty · $1K');
+});
+
 test('an opened row near the bottom scrolls just enough to show its whole math (walk 6 T2-07)', () => {
   const view = { viewTop: 100, viewBottom: 900 };
   // Already fits: no scroll.
@@ -964,4 +981,25 @@ test('an opened row\'s math is named from its title, not the row\'s sentence aga
   assert.equal(mathGroupName({ name: 'Luka Doncic', side: 'long', date: null, net: null }), 'The math for Luka Doncic');
   assert.equal(mathGroupName({ name: 'Luka Doncic', side: 'long', date: '2025-10-24', net: 0.4 }), 'The math for Luka Doncic, Oct 24, $0');
   assert.doesNotMatch(mathGroupName({ name: 'Luka Doncic', side: 'long', date: '2025-10-24', net: 194_500 }), /\.:|: the math/);
+});
+
+test('the wide side column sums up the season from the first night (walk 14 T2-06)', async () => {
+  const { seasonSoFar } = await import('./resultsView');
+  const night = (date: string, total: number, games = 2): NightSummary => ({
+    date, total, scoreChange: total, results: games, games, wins: 0, rosterGames: games, rosterWins: 0,
+    shortGames: 0, shortWins: 0, dnp: 0, pending: 0, fees: 0, feeCount: 0, moves: 0, corrections: 0,
+    upcoming: false, beforeGames: games === 0,
+  });
+  // Nothing settled yet (moves only): no summary.
+  assert.equal(seasonSoFar([night('2025-10-20', 0, 0)]), null);
+  // One night: counted, no best or worst.
+  assert.deepEqual(seasonSoFar([night('2025-10-21', -52_500), night('2025-10-20', 0, 0)]), { count: 1, span: 'Oct 21', best: null, worst: null });
+  // Newest first, as the feed lists them; a tie goes to the earlier night.
+  const week = [night('2025-10-28', 114_500), night('2025-10-27', 299_500), night('2025-10-26', -367_000), night('2025-10-24', 299_500), night('2025-10-21', -52_500)];
+  assert.deepEqual(seasonSoFar(week), {
+    count: 5,
+    span: 'Oct 21–28',
+    best: { date: '2025-10-24', total: 299_500 },
+    worst: { date: '2025-10-26', total: -367_000 },
+  });
 });

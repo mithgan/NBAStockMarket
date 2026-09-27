@@ -1000,6 +1000,8 @@ export interface ProfileChartModel {
   anchors: { x: number; y: number }[];
   /** His price as a step line across each night's slot (dividends view). */
   priceStepPath: string;
+  /** The same step line as one flat step per night, for keeping labels off it. */
+  priceSteps: { x0: number; x1: number; y: number }[];
   /** His market price as a line through each night (price view; his price when the market is unknown). */
   priceLinePath: string;
   /** Your locked price across the nights you held him (price view), or ''. */
@@ -1156,10 +1158,28 @@ export function priceDriftCaption(nights: readonly ProfileNight[]): string | nul
 export interface ExtremeLabel {
   kind: 'HIGH' | 'LOW';
   index: number;
+  /** The label on one line ("LOW $372K"). */
   text: string;
+  /**
+   * What is drawn: the label on one line, or its word over its figure
+   * ("LOW" / "$372K") where one line would run into the next bar (walk 14
+   * T2-08). `y` is the last line's baseline.
+   */
+  lines: string[];
   x: number;
   y: number;
   anchor: 'start' | 'middle' | 'end';
+  /**
+   * A patch in the sheet's colour under words that sit on the dashed price
+   * line, so the dashes stop at its edge instead of striking the figure
+   * (walk 14 T2-08). Null when the words are clear of the line.
+   */
+  chip: { x: number; y: number; width: number; height: number } | null;
+  /**
+   * A label lifted clear of taller bars (a dense chart on a phone) keeps a
+   * thin line down to its own bar. Null when it sits at its bar.
+   */
+  leader: { x: number; y1: number; y2: number } | null;
 }
 
 /** A label's baseline sits this far above a bar's top; 13px apart, two labels never touch. */
@@ -1167,49 +1187,151 @@ const LABEL_ABOVE = 7;
 const LABEL_BELOW = 15;
 const LABEL_STEP = 13;
 const LABEL_MIN_Y = 12;
+/** A two-line label's baselines, 11px words. */
+export const EXTREME_LABEL_LINE = 12;
+const LABEL_LINE = EXTREME_LABEL_LINE;
+/** The words' ink above and below a baseline (11px bold capitals, "$" dips a little). */
+const INK_UP = 9;
+const INK_DOWN = 2;
+/** Room kept between a label's words and a bar, or the price line. */
+const LABEL_CLEAR = 2;
+/** Half the dashed price line's width. */
+const LINE_HALF = 1;
+/** A chip reaches no nearer a bar than the words may. */
+const CHIP_PAD_X = LABEL_CLEAR;
+const CHIP_PAD_Y = 2;
+/** An 11px bold character, a little generous. */
+const CHAR_WIDTH = 6.6;
+
+export interface LabelBox { left: number; right: number; top: number; bottom: number }
+
+/** Where a label's words are drawn (their ink), for keeping them off bars and the price line. */
+export function extremeLabelBox(label: Pick<ExtremeLabel, 'lines' | 'x' | 'y' | 'anchor'>): LabelBox {
+  return labelBox(label.lines, label.x, label.y, label.anchor);
+}
+
+function labelBox(lines: readonly string[], x: number, y: number, anchor: ExtremeLabel['anchor']): LabelBox {
+  const size = Math.max(...lines.map((line) => line.length)) * CHAR_WIDTH;
+  const left = anchor === 'start' ? x : anchor === 'end' ? x - size : x - size / 2;
+  return { left, right: left + size, top: y - (lines.length - 1) * LABEL_LINE - INK_UP, bottom: y + INK_DOWN };
+}
+
+/** Bars (other than its own) that a label's words would run into. */
+function barsUnder(box: LabelBox, bars: readonly ChartBar[], own: number): ChartBar[] {
+  return bars.filter((bar, index) => index !== own
+    && box.right + LABEL_CLEAR > bar.x && box.left - LABEL_CLEAR < bar.x + bar.width
+    && box.bottom + LABEL_CLEAR > bar.y && box.top - LABEL_CLEAR < bar.y + bar.height);
+}
+
+/** True when the dashed price line (a flat step per game, risers between) passes through the words. */
+export function labelOnLine(box: LabelBox, steps: readonly { x0: number; x1: number; y: number }[]): boolean {
+  const top = box.top - LINE_HALF;
+  const bottom = box.bottom + LINE_HALF;
+  return steps.some((step, index) => {
+    const across = step.x1 > box.left && step.x0 < box.right && step.y > top && step.y < bottom;
+    const next = steps[index + 1];
+    if (across || !next || next.y === step.y) return across;
+    // The riser where his price changes between two games.
+    const riserTop = Math.min(step.y, next.y);
+    const riserBottom = Math.max(step.y, next.y);
+    return step.x1 > box.left - LINE_HALF && step.x1 < box.right + LINE_HALF && riserBottom > top && riserTop < bottom;
+  });
+}
 
 /**
  * Where the Dividends chart's HIGH and LOW labels sit (walk 9 T2-02, T1-07):
  * each just above its own bar's top, as HIGH always was, and just under the
  * end of a bar below $0; never under the $0 axis, where LOW read like an axis
  * mark. Two labels that would touch step apart, the higher value's on top.
+ *
+ * Never into a neighbouring bar or struck by the price line (walk 14 T2-08:
+ * "LOW $372K" on the hollow bar just under his price ran into the next bar and
+ * had the dashes through it): a label too wide for the gap between its taller
+ * neighbours stacks its word over its figure; where even that runs into a bar
+ * (many games on a phone) it rises clear of them on one line, with a thin line
+ * down to its bar. Words on the price line sit on a chip in the sheet's colour.
  */
 export function extremeLabels(
-  model: Pick<ProfileChartModel, 'bars' | 'high' | 'low'>,
+  model: Pick<ProfileChartModel, 'bars' | 'high' | 'low'> & Partial<Pick<ProfileChartModel, 'priceSteps'>>,
   dividends: readonly number[],
   width: number,
   height: number,
   format: (value: number) => string,
 ): ExtremeLabel[] {
+  const steps = model.priceSteps ?? [];
   const anchorAt = (x: number): ExtremeLabel['anchor'] => (x < 60 ? 'start' : x > width - 60 ? 'end' : 'middle');
-  const clampY = (y: number) => Math.max(LABEL_MIN_Y, Math.min(height - 3, y));
-  const labels = ([['HIGH', model.high], ['LOW', model.low]] as const)
-    .filter((entry): entry is readonly ['HIGH' | 'LOW', number] => entry[1] !== null && model.bars[entry[1]] !== undefined)
-    .map(([kind, index]) => {
-      const bar = model.bars[index];
-      const x = bar.x + bar.width / 2;
-      const below = dividends[index] < 0;
-      const y = below ? bar.y + bar.height + LABEL_BELOW : bar.y - LABEL_ABOVE;
-      return { kind, index, text: `${kind} ${format(dividends[index])}`, x, y: clampY(y), anchor: anchorAt(x) };
-    });
-  if (labels.length < 2) return labels;
-  const extent = (label: ExtremeLabel) => {
-    const size = label.text.length * 6.6;
-    const left = label.anchor === 'start' ? label.x : label.anchor === 'end' ? label.x - size : label.x - size / 2;
-    return [left - 2, left + size + 2];
+  const clampY = (y: number, lines = 1) => Math.max(LABEL_MIN_Y + (lines - 1) * LABEL_LINE, Math.min(height - 3, y));
+  const place = (kind: 'HIGH' | 'LOW', index: number): ExtremeLabel => {
+    const bar = model.bars[index];
+    const x = bar.x + bar.width / 2;
+    const below = dividends[index] < 0;
+    const figure = format(dividends[index]);
+    const text = `${kind} ${figure}`;
+    const anchor = anchorAt(x);
+    // Under a bar below $0 a second line goes further down, clear of its end.
+    const at = (lines: string[]) => clampY(
+      below ? bar.y + bar.height + LABEL_BELOW + (lines.length - 1) * LABEL_LINE : bar.y - LABEL_ABOVE,
+      lines.length,
+    );
+    const base = { kind, index, text, x, anchor, chip: null, leader: null };
+    const one = [text];
+    const clear = (lines: string[]) => barsUnder(labelBox(lines, x, at(lines), anchor), model.bars, index).length === 0;
+    if (clear(one)) return { ...base, lines: one, y: at(one) };
+    const two = [kind, figure];
+    if (clear(two)) return { ...base, lines: two, y: at(two) };
+    // Rise (or, under $0, sink) clear of every bar the words span.
+    const box = labelBox(one, x, at(one), anchor);
+    const spanned = model.bars.filter((other) => box.right + LABEL_CLEAR > other.x && box.left - LABEL_CLEAR < other.x + other.width);
+    const y = below
+      ? clampY(Math.max(...spanned.map((other) => other.y + other.height)) + LABEL_BELOW)
+      : clampY(Math.min(...spanned.map((other) => other.y)) - LABEL_ABOVE);
+    const end = below ? bar.y + bar.height : bar.y;
+    const from = below ? y - INK_UP - LABEL_CLEAR : y + INK_DOWN + LABEL_CLEAR;
+    const to = below ? end + LABEL_CLEAR : end - LABEL_CLEAR;
+    return { ...base, lines: one, y, leader: Math.abs(to - from) > 4 ? { x, y1: from, y2: to } : null };
   };
-  const [first, second] = labels;
-  const [a0, a1] = extent(first);
-  const [b0, b1] = extent(second);
-  if (a1 < b0 || b1 < a0 || Math.abs(first.y - second.y) >= LABEL_STEP) return labels;
-  // Too close: HIGH (the higher value) goes on top, LOW under it.
-  const high = first.kind === 'HIGH' ? first : second;
-  const low = high === first ? second : first;
-  const upper = Math.max(LABEL_MIN_Y, Math.min(high.y, low.y - LABEL_STEP));
-  return [
-    { ...high, y: upper },
-    { ...low, y: clampY(Math.max(low.y, upper + LABEL_STEP)) },
-  ];
+  let labels = ([['HIGH', model.high], ['LOW', model.low]] as const)
+    .filter((entry): entry is readonly ['HIGH' | 'LOW', number] => entry[1] !== null && model.bars[entry[1]] !== undefined)
+    .map(([kind, index]) => place(kind, index));
+  if (labels.length === 2) {
+    const [first, second] = labels;
+    const a = labelBox(first.lines, first.x, first.y, first.anchor);
+    const b = labelBox(second.lines, second.x, second.y, second.anchor);
+    const apart = a.right + LABEL_CLEAR < b.left || b.right + LABEL_CLEAR < a.left || a.bottom + LABEL_CLEAR < b.top || b.bottom + LABEL_CLEAR < a.top;
+    if (!apart) {
+      // Too close: HIGH (the higher value) goes on top, LOW under it.
+      const high = first.kind === 'HIGH' ? first : second;
+      const low = high === first ? second : first;
+      const step = LABEL_STEP + (low.lines.length - 1) * LABEL_LINE;
+      const upper = Math.max(LABEL_MIN_Y + (high.lines.length - 1) * LABEL_LINE, Math.min(high.y, low.y - step));
+      labels = [
+        { ...high, y: upper },
+        { ...low, y: clampY(Math.max(low.y, upper + step), low.lines.length) },
+      ];
+    }
+  }
+  // Words on the dashed price line sit on a chip in the sheet's colour; a
+  // leader starts at its words wherever the pair stepped them to.
+  return labels.map((label) => {
+    const box = labelBox(label.lines, label.x, label.y, label.anchor);
+    let leader = label.leader;
+    if (leader) {
+      const down = leader.y2 > label.y;
+      const y1 = down ? box.bottom + LABEL_CLEAR : box.top - LABEL_CLEAR;
+      leader = Math.abs(leader.y2 - y1) > 4 ? { ...leader, y1 } : null;
+    }
+    if (!labelOnLine(box, steps)) return { ...label, leader };
+    return {
+      ...label,
+      leader,
+      chip: {
+        x: box.left - CHIP_PAD_X,
+        y: box.top - CHIP_PAD_Y,
+        width: box.right - box.left + CHIP_PAD_X * 2,
+        height: box.bottom - box.top + CHIP_PAD_Y * 2,
+      },
+    };
+  });
 }
 
 /**
@@ -1227,7 +1349,7 @@ export function profileChartModel(
   fullHeight: number = height,
 ): ProfileChartModel {
   const empty: ProfileChartModel = {
-    slot: 0, bars: [], anchors: [], priceStepPath: '', priceLinePath: '', yourPricePath: '', zeroY: null, high: null, low: null, priceMarks: [],
+    slot: 0, bars: [], anchors: [], priceStepPath: '', priceSteps: [], priceLinePath: '', yourPricePath: '', zeroY: null, high: null, low: null, priceMarks: [],
   };
   const count = nights.length;
   const plotWidth = width - insets.left - insets.right;
@@ -1300,11 +1422,12 @@ export function profileChartModel(
     values.forEach((value, index) => anchors.push({ x: centre(index), y: y(value) }));
   }
 
-  const priceStepPath = prices
-    .map((price, index) => {
-      const start = insets.left + index * slot;
-      return `${index === 0 ? 'M' : 'L'} ${start} ${y(price)} L ${start + slot} ${y(price)}`;
-    })
+  const priceSteps = prices.map((price, index) => {
+    const start = insets.left + index * slot;
+    return { x0: start, x1: start + slot, y: y(price) };
+  });
+  const priceStepPath = priceSteps
+    .map((step, index) => `${index === 0 ? 'M' : 'L'} ${step.x0} ${step.y} L ${step.x1} ${step.y}`)
     .join(' ');
   const priceLinePath = (metric === 'price' ? values : prices)
     .map((price, index) => `${index === 0 ? 'M' : 'L'} ${centre(index)} ${y(price)}`)
@@ -1338,6 +1461,7 @@ export function profileChartModel(
     bars,
     anchors,
     priceStepPath,
+    priceSteps,
     priceLinePath,
     yourPricePath,
     zeroY,

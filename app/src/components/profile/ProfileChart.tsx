@@ -32,6 +32,7 @@ import {
   chartLegend,
   chartSummary,
   drawsHollow,
+  EXTREME_LABEL_LINE,
   extremeLabels,
   missStroke,
   missSwatchHollow,
@@ -336,19 +337,38 @@ export function ProfileChart({
             {metric === 'price' && anchor ? (
               <Circle cx={anchor.x} cy={anchor.y} fill={colors.goldInk} r={active === null ? 3.5 : 5} />
             ) : null}
+            {/* HIGH and LOW never sit on the price line or run into a bar
+                (walk 14 T2-08): on the line they get a chip in the sheet's
+                colour; in a narrow gap the word stacks over the figure. */}
             {labels.map((label) => (
               <G key={label.kind}>
-                <SvgText
-                  fill={colors.muted}
-                  fontFamily={fonts.display}
-                  fontSize={11}
-                  fontWeight="700"
-                  textAnchor={label.anchor}
-                  x={label.x}
-                  y={label.y}
-                >
-                  {label.text}
-                </SvgText>
+                {label.leader ? (
+                  <Line stroke={colors.faint} strokeWidth={1} x1={label.leader.x} x2={label.leader.x} y1={label.leader.y1} y2={label.leader.y2} />
+                ) : null}
+                {label.chip ? (
+                  <Rect
+                    fill={colors.background}
+                    height={label.chip.height}
+                    rx={3}
+                    width={label.chip.width}
+                    x={label.chip.x}
+                    y={label.chip.y}
+                  />
+                ) : null}
+                {label.lines.map((line, row) => (
+                  <SvgText
+                    fill={colors.muted}
+                    fontFamily={fonts.display}
+                    fontSize={11}
+                    fontWeight="700"
+                    key={line}
+                    textAnchor={label.anchor}
+                    x={label.x}
+                    y={label.y - (label.lines.length - 1 - row) * EXTREME_LABEL_LINE}
+                  >
+                    {line}
+                  </SvgText>
+                ))}
               </G>
             ))}
           </Svg>

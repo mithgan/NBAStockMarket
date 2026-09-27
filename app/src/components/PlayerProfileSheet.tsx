@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Modal, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Modal, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type {
@@ -58,10 +58,10 @@ function useReturnFocus(open: boolean) {
 }
 
 /**
- * The per-game player profile, over whichever screen opened it. A full-height
- * sheet on a phone (with a band of dimmed screen above it that closes it); a
- * panel down the right-hand side on desktop, so the list behind it keeps its
- * place. Closes from its own control, the scrim, Escape or the back gesture.
+ * The per-game player profile, over whichever screen opened it. A sheet on a
+ * phone, as tall as its content up to a band of dimmed screen above it that
+ * closes it; a panel down the right-hand side on desktop, so the list behind
+ * it keeps its place. Closes from its own control, the scrim, Escape or the back gesture.
  *
  * Optional props (the Roster screen passes none of them):
  * - `side`: the side to read him from when you do not hold him, i.e. the
@@ -106,6 +106,16 @@ export function PlayerProfileSheet({
   // not the app; the screen behind it is inert while it is open.
   useSheetHistory(visible && player !== null, onClose);
   useReturnFocus(visible && player !== null);
+  // A phone sheet is as tall as what it holds (walk 14 T1-03: before his
+  // first game the full-height sheet was 40% blank cream, which read as
+  // something failed to load): it opens sized to its content, up to the
+  // band of dimmed screen, and its top then stays put while it is open, so a
+  // move that changes a line never shifts the buttons under your finger;
+  // more content scrolls inside it. A new player or window size fits again.
+  const [fitted, setFitted] = useState<{ key: string; top: number } | null>(null);
+  useEffect(() => {
+    if (!visible) setFitted(null);
+  }, [visible]);
   if (!player) return null;
   const panel = width >= PANEL_MIN_WIDTH;
   // Docked to the app column's right edge, not the window's (walk 8 T2-03).
@@ -118,6 +128,15 @@ export function PlayerProfileSheet({
   // covers that row, from the top: the dimmed sides still close it on a tap.
   const coverFrame = !panel && width > sheetWidth && chromeFolded(height, width);
   const playerId = player.playerId;
+  const fits = !panel && !coverFrame;
+  const topGap = insets.top + SHEET_TOP_GAP;
+  const fitKey = `${playerId}|${width}|${height}|${topGap}`;
+  const fittedTop = fitted && fitted.key === fitKey ? fitted.top : null;
+  const onSheetLayout = (event: LayoutChangeEvent) => {
+    if (!fits || fittedTop !== null) return;
+    const sheetHeight = event.nativeEvent.layout.height;
+    if (sheetHeight > 0) setFitted({ key: fitKey, top: Math.max(topGap, Math.floor(height - sheetHeight)) });
+  };
 
   return (
     <Modal
@@ -134,15 +153,17 @@ export function PlayerProfileSheet({
           the profile's own "Close player profile" button or Escape. */}
       <View onResponderRelease={unlessSettling(onClose)} onStartShouldSetResponder={() => true} style={styles.scrim} />
       <View
+        onLayout={fits ? onSheetLayout : undefined}
         style={[
           styles.sheet,
           panel
             ? [styles.panel, dockRight > 0 && { right: dockRight, borderRightWidth: 1 }]
             : [styles.phoneSheet, {
-                top: insets.top + (coverFrame ? 0 : SHEET_TOP_GAP),
                 width: sheetWidth,
                 left: (width - sheetWidth) / 2,
-              }, coverFrame && styles.fullHeight],
+              }, coverFrame
+                ? [{ top: insets.top }, styles.fullHeight]
+                : fittedTop === null ? { maxHeight: height - topGap } : { top: fittedTop }],
         ]}
       >
         <PerGamePlayerProfile

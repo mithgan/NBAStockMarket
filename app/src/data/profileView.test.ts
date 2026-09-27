@@ -2,13 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameSettledResult } from '../api/contracts';
-import { moneyFine } from '../copy/terms';
+import { money, moneyFine } from '../copy/terms';
 import { shownEdge } from './marketView';
 import { positionValue } from './perGameMetrics';
 import {
   buildProfileNights,
+  extremeLabelBox,
   extremeLabels,
   headerPrice,
+  labelOnLine,
   priceChartHeight,
   priceCompare,
   priceDriftCaption,
@@ -1106,6 +1108,52 @@ test('LOW sits just above its own bar like HIGH, never under the $0 axis (walk 9
   const under = profileChartModel(dip.map((value, index) => bar(days[index], value)), 'dividends', 300, 176, insets);
   const dipLow = extremeLabels(under, dip, 300, 176, (value) => moneyFine(value)).find((label) => label.kind === 'LOW');
   assert.ok(dipLow && dipLow.y > under.bars[1].y + under.bars[1].height, 'under the end of a bar below $0');
+});
+
+test('HIGH and LOW never sit on the price line or run into the next bar (walk 14 T2-08)', () => {
+  const insets = { top: 22, right: 6, bottom: 20, left: 52 };
+  const bar = (date: string, dividend: number, price = 417_500): ProfileNight => ({ date, dividend, price, net: dividend - price, source: 'yours' });
+  const days = Array.from({ length: 12 }, (_, index) => `2025-11-${String(index + 1).padStart(2, '0')}`);
+  // The tester's Luka: LOW $372K on the hollow Nov 5 bar, just under his $417.5K price.
+  const values = [612_000, 430_000, 612_000, 480_000, 530_000, 430_000, 560_000, 440_000, 565_000, 372_000, 445_000, 460_000];
+  const clearOfBars = (model: ReturnType<typeof profileChartModel>, label: ReturnType<typeof extremeLabels>[number]) => {
+    const box = extremeLabelBox(label);
+    return model.bars.every((other, index) => index === label.index
+      || box.right < other.x || box.left > other.x + other.width || box.bottom < other.y || box.top > other.y + other.height);
+  };
+  for (const [width, height] of [[566, 200], [356, 176]] as const) {
+    const model = profileChartModel(days.map((date, index) => bar(date, values[index])), 'dividends', width, height, insets);
+    const labels = extremeLabels(model, values, width, height, (value) => money(value));
+    const low = labels.find((label) => label.kind === 'LOW');
+    assert.ok(low, `${width}: LOW is labelled`);
+    assert.equal(low.text, 'LOW $372K');
+    for (const label of labels) {
+      assert.ok(clearOfBars(model, label), `${width}: ${label.text} runs into no other bar`);
+      // Words the dashed line passes through sit on a chip in the sheet's colour.
+      const box = extremeLabelBox(label);
+      if (labelOnLine(box, model.priceSteps)) {
+        assert.ok(label.chip && label.chip.x <= box.left && label.chip.x + label.chip.width >= box.right
+          && label.chip.y <= box.top && label.chip.y + label.chip.height >= box.bottom, `${width}: ${label.text} on a chip`);
+      }
+    }
+    if (width === 566) {
+      // The sheet at 1280 and 1024: the word over the figure, between its neighbours, at its bar.
+      assert.deepEqual(low.lines, ['LOW', '$372K']);
+      assert.ok(low.chip, 'the dashes stop at the chip');
+      assert.ok(low.y < model.bars[low.index].y && low.y > model.bars[low.index].y - 12, 'just above its bar');
+      assert.equal(low.leader, null);
+    } else {
+      // A phone: one line, risen clear of the taller bars, with a line down to its bar.
+      assert.deepEqual(low.lines, ['LOW $372K']);
+      assert.ok(low.leader && low.leader.y2 < model.bars[low.index].y && low.leader.y1 < low.leader.y2);
+    }
+  }
+  // Every game under his price: HIGH's words would sit on the line, so they get a chip.
+  const misses = [400_000, 380_000, 405_000, 390_000, 385_000, 395_000];
+  const under = profileChartModel(misses.map((value, index) => bar(days[index], value, 432_000)), 'dividends', 566, 200, insets);
+  const high = extremeLabels(under, misses, 566, 200, (value) => money(value)).find((label) => label.kind === 'HIGH');
+  assert.ok(high && labelOnLine(extremeLabelBox(high), under.priceSteps) === Boolean(high.chip), 'HIGH on the line has a chip');
+  assert.ok(high?.chip, 'HIGH $405K sits on the $432K line');
 });
 
 test('the Price caption matches its plotted line, not today\'s price (walk 10 T1-09)', () => {
