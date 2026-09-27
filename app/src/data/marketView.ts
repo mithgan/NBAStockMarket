@@ -1645,8 +1645,13 @@ export function waitingForLine(playing: string): string {
  * waits for them (walk 9 T4-04: it used to say "Added" before the games
  * decided whether it could be).
  */
-export function waitingActionName(side: PerGamePositionSide, playerName: string, playing: string): string {
-  return `Waiting for the ${playing} games to ${side === 'long' ? 'add' : 'short'} ${playerName}`;
+export function waitingActionName(side: PerGamePositionSide, playerName: string, playing: string, move: 'open' | 'close' = 'open'): string {
+  // A Drop or Close confirmed while games play waits for them too: he plays
+  // them, then goes (walk 15 T4-06: "Dropped ✓" showed while he played on).
+  const does = move === 'close'
+    ? side === 'long' ? `drop ${playerName}` : `close your short on ${playerName}`
+    : `${side === 'long' ? 'add' : 'short'} ${playerName}`;
+  return `Waiting for the ${playing} games to ${does}`;
 }
 
 /**

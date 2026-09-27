@@ -102,3 +102,16 @@ test('the phone rows\' tier place is remembered per window size, so a Market vis
   assert.equal(tierAfterSurnameKnown(tierAfterSurnameKey(430, 1)), false, 'another width measures for itself');
   assert.equal(tierAfterSurnameKnown(tierAfterSurnameKey(390, 1.3)), false, 'larger text measures for itself');
 });
+
+test('a Drop or Close confirmed while games play waits for them, named as such (walk 15 T4-06)', async () => {
+  const { waitingActionName } = await import('./marketView');
+  assert.equal(waitingActionName('long', 'Luka Doncic', 'Oct 21–27', 'close'), 'Waiting for the Oct 21–27 games to drop Luka Doncic');
+  assert.equal(waitingActionName('short', 'Cade Cunningham', 'Oct 21–27', 'close'), 'Waiting for the Oct 21–27 games to close your short on Cade Cunningham');
+  assert.equal(waitingActionName('long', 'Scottie Barnes', 'Oct 21'), 'Waiting for the Oct 21 games to add Scottie Barnes');
+  const { readFileSync } = await import('node:fs');
+  const { resolve } = await import('node:path');
+  const screen = readFileSync(resolve(__dirname, '../screens/PerGameMarketScreen.tsx'), 'utf8');
+  // The confirm records the games it waits for, and the row stays held (no "Dropped ✓") meanwhile.
+  assert.match(screen, /setOptimistic\('close'\);\s*setWaitingFor\(practicePlaying\(\)\);/);
+  assert.match(screen, /const waiting = waitingFor !== null && \(opening \|\| optimistic === 'close'\);/);
+});

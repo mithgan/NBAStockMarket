@@ -486,7 +486,10 @@ function MarketRow({
   // Rows are keyed by side, so the tick stays on the side it was pressed on
   // (walk 8 T4-07); coming back to that side while it saves shows it again.
   const opening = optimistic === 'open' || (optimistic === null && ownSaving && !position);
-  const shownHeld = opening ? true : optimistic === 'close' ? false : position !== null;
+  // A Drop confirmed while games play waits for them: he stays held (he
+  // plays them) and the button says "Waiting", never "Dropped ✓" (walk 15 T4-06).
+  const closingWaits = optimistic === 'close' && waitingFor !== null;
+  const shownHeld = opening ? true : optimistic === 'close' && !closingWaits ? false : position !== null;
   // Held for as long as the move is on its way (a queued move can outlast the
   // cooldown), then for the cooldown once it lands.
   const justOpened = opening || (cooling && lastAction.current === 'open' && position !== null);
@@ -554,7 +557,7 @@ function MarketRow({
     refocus.current = false;
     (actionRef.current as unknown as { focus?: () => void } | null)?.focus?.();
   }, [confirming, noting]);
-  const waiting = waitingFor !== null && opening;
+  const waiting = waitingFor !== null && (opening || optimistic === 'close');
   // Add or Short him: painted at once, then saved (or queued behind games).
   const openNow = () => {
     // A press in the same moment as another Add into the last slot:
@@ -866,7 +869,7 @@ function MarketRow({
           {...((waiting ? { accessibilityHint: undefined } : {}) as object)}
           // FULL says why, with its own word in the name for voice control.
           accessibilityLabel={waiting && waitingFor
-            ? waitingActionName(side, player.name, waitingFor)
+            ? waitingActionName(side, player.name, waitingFor, optimistic === 'close' ? 'close' : 'open')
             : justOpened
             ? justOpenedName(side, player.name)
             : justClosed
@@ -897,7 +900,7 @@ function MarketRow({
               verb: position ? (side === 'long' ? 'dropped' : 'closed') : side === 'long' ? 'added' : 'shorted',
             })
             : waiting && waitingFor
-              ? () => notify(`${waitingActionName(side, player.name, waitingFor)}.`)
+              ? () => notify(`${waitingActionName(side, player.name, waitingFor, optimistic === 'close' ? 'close' : 'open')}.`)
               : justOpened || justClosed
                 ? () => notify(tickPressNotice(side, player.name, justClosed, fee, optimistic !== null || opening))
                 : undefined}
@@ -965,15 +968,20 @@ function MarketRow({
         closeStrip();
         lastAction.current = 'close';
         setOptimistic('close');
+        setWaitingFor(practicePlaying());
         startCooling();
         afterPaint(() => {
           void closePosition(position).then((closed) => {
             setOptimistic(null);
+            setWaitingFor(null);
             if (closed) {
               startCooling();
               closedAt.current = Date.now();
             }
-          }, () => setOptimistic(null));
+          }, () => {
+            setOptimistic(null);
+            setWaitingFor(null);
+          });
         });
       }}
       style={table ? styles.stripTable : undefined}
