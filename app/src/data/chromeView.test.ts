@@ -807,3 +807,61 @@ test('walk 10: the queue reaches the season end, the Cancel hint only when there
   assert.deepEqual(seasonEndControl(true), { label: 'New season', name: 'New season: restart practice', primary: false });
   assert.deepEqual(seasonEndControl(false), { label: 'Play another season', name: 'Play another season: restart practice', primary: true });
 });
+
+test('walk 11: Play to the end on a lock eve offers the night, one order for every question', async () => {
+  const { playToEndLockedLine, playToEndOffersMarket, playToEndOffersNight, questionAnswerOrder } = await import('./chromeView');
+  // T4-03: nobody on the roster and the next games locked: +1 night instead, with the reason.
+  assert.equal(playToEndOffersNight(0, true), true);
+  assert.equal(playToEndOffersNight(0, false), false);
+  assert.equal(playToEndOffersNight(2, true), false);
+  assert.equal(playToEndOffersMarket(0, true), false);
+  assert.equal(
+    playToEndLockedLine('2025-10-28'),
+    'Moves are locked for the Oct 28 games. +1 night plays just that night, then you can add players.',
+  );
+  // T2-06: the way out first, the risky action next, a recommended move last; focus on the way out.
+  assert.deepEqual(questionAnswerOrder(true), { order: ['safe', 'risky', 'recommended'], focus: 'safe' });
+  assert.deepEqual(questionAnswerOrder(false), { order: ['safe', 'risky'], focus: 'safe' });
+  // T3-04: with a reader's text spacing at 320 the slot says the date alone, never "Locked · …".
+  const { lockSlotText } = await import('./chromeView');
+  assert.equal(lockSlotText('2025-10-28', 320, true), 'Oct 28');
+  assert.equal(lockSlotText('2025-10-28', 320, false), 'Locked · Oct\u00a028');
+  assert.equal(lockSlotText('2025-10-28', 390, false), 'Moves reopen after Oct 28');
+  assert.equal(lockSlotText('2025-10-28', 390, true), 'Moves reopen after Oct 28');
+  // T4-06: once nothing waits, the queue-full line says what is playing, without "Cancel drops it".
+  const { queueLastLine, queueFullLine, NOTHING_TO_CANCEL, QUEUE_LINE_PAUSE_MS } = await import('./chromeView');
+  assert.equal(queueLastLine('week', '2026-04-12'), 'The last week is playing now: the season ends after the Apr 12 games.');
+  assert.doesNotMatch(queueLastLine('night', '2026-04-12'), /Cancel/);
+  assert.match(queueFullLine('2026-04-12'), /Cancel drops it\.$/);
+  // T1-14: Cancel answers on itself; T3-15: the count waits for a pause.
+  assert.equal(NOTHING_TO_CANCEL, 'Nothing to cancel');
+  assert.equal(QUEUE_LINE_PAUSE_MS, 700);
+  // T4-02: the question's figures hold; one line says the playing week finishes first, then what it left.
+  const { questionPlayingLine } = await import('./chromeView');
+  assert.equal(questionPlayingLine('Oct 28–Nov 3', 'Oct 28–Nov 3', 'x'), 'Oct 28–Nov 3 is still playing: it finishes first.');
+  assert.equal(questionPlayingLine('Oct 28–Nov 3', null, 'Day 14 of 174, 1 player, score +$890.3K'), 'Oct 28–Nov 3 is in: Day 14 of 174, 1 player, score +$890.3K.');
+  assert.equal(questionPlayingLine(null, null, 'x'), null);
+  // T1-08: the hint follows a playing night; T4-04: "+1 night" never splits.
+  const { keepControlNames, playingHint } = await import('./chromeView');
+  assert.equal(playingHint('Oct 21', false), 'Playing the Oct 21 games…');
+  assert.equal(playingHint('Oct 21', true), 'Playing Oct 21…');
+  assert.equal(playingHint("rest of the season's", true), 'Playing the rest…');
+  assert.equal(keepControlNames('Ready for +1 night'), 'Ready for +1\u00a0night');
+  assert.equal(keepControlNames('Ready. +1 week plays the Oct 21–27 games.'), 'Ready. +1\u00a0week plays the Oct 21–27 games.');
+  // T4-N2: a queued run of weeks says where it ends.
+  const { queuedThrough, queuedLineThrough, queuedLine } = await import('./chromeView');
+  assert.equal(queuedThrough('2025-10-20', 'week', ['week', 'week', 'week', 'week'], '2026-04-12'), '2025-11-24');
+  assert.equal(queuedThrough('2026-03-16', 'week', ['week', 'week', 'week', 'week'], '2026-04-12'), '2026-04-12');
+  assert.equal(queuedThrough('2025-10-20', 'night', ['week'], '2026-04-12'), null);
+  assert.equal(queuedThrough('2025-10-20', 'week', [], '2026-04-12'), null);
+  assert.equal(
+    queuedLineThrough(queuedLine('week', 'Nov 4–10', 2), '2025-11-24'),
+    '2 weeks queued, through Nov 24. They play once Nov 4–10 is in.',
+  );
+  // T2-09: at short laptop heights the lock sits beside the day, not on a line of its own.
+  const { lockBesideDay } = await import('./chromeView');
+  assert.equal(lockBesideDay(600, true), true);
+  assert.equal(lockBesideDay(533, true), true);
+  assert.equal(lockBesideDay(900, true), false);
+  assert.equal(lockBesideDay(600, false), false);
+});

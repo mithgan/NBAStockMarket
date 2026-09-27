@@ -614,6 +614,18 @@ export function dividendText(basis: DividendBasis, dollarsPerNetPoint: number): 
  */
 export const CHROME_SHORT_MAX_HEIGHT = 500;
 
+/**
+ * Below this height a wide status row (a laptop at 960x600, 1280x610; a
+ * tablet at 853x533) draws the lock as its short padlock words beside the
+ * day, not as a line of its own, so the frame is a line shorter and the
+ * rows under it keep more of the window (walk 11 T2-09).
+ */
+export const CHROME_SHORT_LAPTOP_MAX_HEIGHT = 640;
+
+export function lockBesideDay(height: number, wideRow: boolean): boolean {
+  return wideRow && height < CHROME_SHORT_LAPTOP_MAX_HEIGHT;
+}
+
 export function chromeFolded(height: number): boolean {
   return height < CHROME_SHORT_MAX_HEIGHT;
 }
@@ -757,6 +769,20 @@ export function lockShortText(lockGameDate: string | null | undefined): string {
   return lockGameDate ? `Locked · ${keepTogether(humanDate(lockGameDate))}` : 'Locked';
 }
 
+/** Below this width the phone slot beside +1 week says "Locked · Oct 28", not the reopen line. */
+export const LOCK_SLOT_LINE_MIN_WIDTH = 360;
+
+/**
+ * The lock's words in the phone slot beside +1 week: the reopen line where
+ * it fits, "Locked · Oct 28" on narrow phones, and with a reader's own text
+ * spacing just the date beside the padlock, so the date is never cut to
+ * "Locked · …" (walk 11 T3-04; the padlock already says locked).
+ */
+export function lockSlotText(lockGameDate: string | null | undefined, width: number, readerSpacing: boolean): string {
+  if (readerSpacing && width < LOCK_SLOT_LINE_MIN_WIDTH) return lockGameDate ? humanDate(lockGameDate) : 'Locked';
+  return width < LOCK_SLOT_LINE_MIN_WIDTH ? lockShortText(lockGameDate) : rosterReopensLine(lockGameDate);
+}
+
 /**
  * The padlock's name wherever it stands for the sentence (the short lock
  * words, the padlock alone at 400% zoom): "Roster locked until after Nov 1".
@@ -887,6 +913,25 @@ function isLockedEmptyHint(hint: string): boolean {
  * buttons looked disabled for no reason (walk 4 T1-09, T3-11). Each fits the
  * 129px a 195px row leaves beside Settings.
  */
+/**
+ * "+1 night" and "+1 week" kept on one line wherever a hint or question
+ * names them: at 320px "Ready for +1 / night" split the control's name
+ * (walk 11 T4-04).
+ */
+export function keepControlNames(text: string): string {
+  return text.replace(/\+1 (night|week)/g, '+1\u00a0$1');
+}
+
+/**
+ * The hint while a night or week plays (walk 11 T1-08): it said "Ready for
+ * +1 night" beside a button reading PLAYING. `playing` reads before "games"
+ * ("Oct 21", "Oct 21–27", "rest of the season's"; state/practicePlaying).
+ */
+export function playingHint(playing: string, short: boolean): string {
+  if (!short) return `Playing the ${playing} games…`;
+  return playing.endsWith("'s") ? 'Playing the rest…' : `Playing ${playing}…`;
+}
+
 export const EMPTY_ROSTER_HINT_SHORT = 'Add a player first';
 export const NOBODY_HELD_HINT_SHORT = 'Add or short someone';
 export const EMPTY_ROSTER_PLAYING_HINT_SHORT = 'No players yet';
@@ -988,6 +1033,30 @@ export function queuedLine(pressed: 'night' | 'week', playing: string | null, co
 
 type QueuedStep = 'night' | 'week';
 
+/**
+ * Where a queued run of weeks ends (walk 11 T4-N2: "+1 WEEK ×12 QUEUED" left
+ * the date maths to the player): the last night the week playing and the
+ * weeks queued behind it cover, from the last night in, capped at the
+ * season's end. null while nights are part of it (a night plays the next
+ * game night, not a fixed day) or nothing waits.
+ */
+export function queuedThrough(
+  lastSettled: string | null | undefined,
+  playing: QueuedStep | null,
+  queued: readonly QueuedStep[],
+  seasonEnd: string | null | undefined,
+): string | null {
+  if (!lastSettled || queued.length === 0 || playing === 'night' || queued.some((step) => step === 'night')) return null;
+  const days = 7 * (queued.length + (playing === 'week' ? 1 : 0));
+  const end = shiftDay(lastSettled, days);
+  return seasonEnd && end > seasonEnd ? seasonEnd : end;
+}
+
+/** "12 weeks queued, through Feb 9. They play once Nov 4–10 is in." */
+export function queuedLineThrough(line: string, through: string | null): string {
+  return through ? line.replace(/^([^.]*)\./, `$1, through ${humanDate(through)}.`) : line;
+}
+
 /** "2 weeks", "1 night and 2 weeks" (`queued`: "2 queued weeks"). */
 function queuedPhrase(steps: readonly QueuedStep[], queued = false): string {
   const nights = steps.filter((step) => step === 'night').length;
@@ -1012,6 +1081,17 @@ export function queuedWaitLine(queued: readonly QueuedStep[], playing: string | 
   if (queued.length === 0) return now;
   const wait = `${queuedPhrase(queued)} still queued: ${queued.length === 1 ? 'it waits' : 'they wait'} until you choose.`;
   return now ? `${now} ${wait}` : wait;
+}
+
+/**
+ * The one line of a practice question that moves (walk 11 T4-02): its
+ * figures hold what they were when it opened, and this line says the step
+ * playing then finishes first, then what the season holds once it is in.
+ * null when nothing was playing.
+ */
+export function questionPlayingLine(playingAtOpen: string | null, playingNow: string | null, stakesNow: string): string | null {
+  if (!playingAtOpen) return null;
+  return playingNow ? `${playingAtOpen} is still playing: it finishes first.` : `${playingAtOpen} is in: ${stakesNow}.`;
 }
 
 /** The control that drops what is queued and has not started (walk 8 T4-N1). */
@@ -1088,6 +1168,25 @@ export function queueHasRoom(queued: readonly QueuedStep[], daysLeft: number): b
 export function queueFullLine(seasonEnd: string | null | undefined): string {
   return `The rest of the season is already queued${seasonEnd ? `, to the ${humanDate(seasonEnd)} games` : ''}. Cancel drops it.`;
 }
+
+/**
+ * The queue-full line, reworded in place once nothing waits: Cancel has
+ * nothing left to drop (walk 11 T4-06).
+ */
+export function queueLastLine(step: 'night' | 'week', seasonEnd: string | null | undefined): string {
+  return `The last ${step} is playing now: the season ends after the ${seasonEnd ? humanDate(seasonEnd) : 'last'} games.`;
+}
+
+/** Cancel's own answer to a press with nothing queued, on the button (walk 11 T1-14). */
+export const NOTHING_TO_CANCEL = 'Nothing to cancel';
+/** How long Cancel shows it. */
+export const NOTHING_TO_CANCEL_MS = 2000;
+
+/**
+ * The spoken queue line waits for the presses to pause this long, then says
+ * the count once (walk 11 T3-15: a burst said it per press, 25 times in 3 s).
+ */
+export const QUEUE_LINE_PAUSE_MS = 700;
 
 /**
  * +1 night's name, its visible words first so a voice command matches what
@@ -1255,6 +1354,34 @@ export function lockedWeekQuestion(lockGameDate: string | null | undefined): {
  */
 export function playToEndOffersMarket(rosterPlayers: number, locked: boolean): boolean {
   return rosterPlayers === 0 && !locked;
+}
+
+/**
+ * Play to the end on a lock eve with nobody on the roster: Open market went
+ * without a word (every Add was LOCKED), so it says why and offers the one
+ * night the lock covers, as +1 week does there (walk 11 T4-03).
+ */
+export function playToEndOffersNight(rosterPlayers: number, locked: boolean): boolean {
+  return rosterPlayers === 0 && locked;
+}
+
+export function playToEndLockedLine(lockGameDate: string | null | undefined): string {
+  return lockGameDate
+    ? `Moves are locked for the ${humanDate(lockGameDate)} games. +1 night plays just that night, then you can add players.`
+    : 'Moves are locked for the next games. +1 night plays just those games, then you can add players.';
+}
+
+/**
+ * The answers of every practice question, in one order (walk 11 T2-06):
+ * the way out first ("Not now", "Keep playing"), the action that plays or
+ * throws the season away next, and a recommended move (Open market, "+1
+ * night instead") last, in gold. Left to right in a row, top to bottom when
+ * stacked; focus starts on the way out, which changes nothing.
+ */
+export type QuestionAnswer = 'safe' | 'risky' | 'recommended';
+
+export function questionAnswerOrder(recommended: boolean): { order: QuestionAnswer[]; focus: QuestionAnswer } {
+  return { order: recommended ? ['safe', 'risky', 'recommended'] : ['safe', 'risky'], focus: 'safe' };
 }
 
 /**

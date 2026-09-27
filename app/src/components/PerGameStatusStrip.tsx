@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PerGameRuleset } from '../api/contracts';
 import { isMockActive, mockSeasonStart } from '../api/mockPerGameClient';
 import { exactMoney, humanDate, PRACTICE_LABEL, rosterReopensLine } from '../copy/terms';
+import { pastSeasonCount } from '../web/practiceSession';
 import {
   CHROME_FOLDED_FACTS_MIN_WIDTH,
   CHROME_FOLDED_ONE_LINE_MIN_WIDTH,
@@ -24,6 +25,7 @@ import {
   keepTogether,
   lastNightFigure,
   LOCK_REASON,
+  lockBesideDay,
   lockIconName,
   lockLine,
   lockShortText,
@@ -57,7 +59,7 @@ import { useSheetHistory, useSheetShown } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
 import { measuredFloatTop, measuredSheetTop } from './chrome/sheetTop';
-import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, usePracticeRulesContext, useReaderSpacing, useRecentAdvances, useSpacingFold } from './SimBar';
+import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, useQueuedThrough, usePracticeRulesContext, useReaderSpacing, useRecentAdvances, useSpacingFold } from './SimBar';
 import { unlessSettling } from '../web/tapSettle';
 
 /**
@@ -116,6 +118,9 @@ export function PerGameStatusStrip() {
   // a player first…", then "Ready…") rides at the end of the facts; a folded
   // row (landscape, 200% zoom) carries its short form (walk 4 T1-09, T3-11).
   const practiceHint = usePracticeHint();
+  const queuedThrough = useQueuedThrough();
+  // This visit's season number: the finished ones before it, plus this one.
+  const seasonNumber = pastSeasonCount() + 1;
   const practiceHintShort = usePracticeHint(true);
   // A reader's text spacing can fold a tall window's frame too (walk 8
   // T3-08); the brand bar then stays, and Settings with it.
@@ -236,6 +241,11 @@ export function PerGameStatusStrip() {
   const lead = practice ? (
     <Text key="lead" maxFontSizeMultiplier={1.5} style={[styles.lead, tight && styles.tight]}>
       <Text style={styles.practiceWord}>{PRACTICE_LABEL}</Text>
+      {/* From the second season of a visit the row names it, as Leaders'
+          "Your seasons this visit" does ("Practice · Season 2 · Oct 20"):
+          always on a wide row, and on a phone while no night's figure shares
+          the line (a week's span and figure beside it would wrap it). */}
+      {seasonNumber >= 2 && (arrangement === 'wide' || !named) ? `${dot}${keepTogether(`Season ${seasonNumber}`)}` : null}
       {settledDate && (!named || arrangement === 'pair') ? `${dot}${named ? resultDate : settledDate}` : null}
       {/* A wide row has room to say where the season is today, not only which
           nights the figure beside it covers (walk 5 T2-07). */}
@@ -272,9 +282,19 @@ export function PerGameStatusStrip() {
       </Text>
       <View style={styles.dayTinyMarks}>
         {meter}
-        {/* No room for words here: the padlock is named, and More opens on
-            the lock's short words (walk 3 T3-29). */}
-        {locked ? <LockIcon color={colors.goldInk} label={lockIconName(lockDate)} size={12} /> : null}
+        {/* The padlock with the date moves reopen after ("🔒 Oct 28"): a
+            lone padlock sent a low-vision player to press LOCKED to learn
+            it (walk 11 T3-08); More opens on the lock's words (walk 3 T3-29). */}
+        {locked ? (
+          <View aria-label={lockIconName(lockDate)} role="img" style={[styles.lock, styles.lockChip]}>
+            <LockIcon color={colors.goldInk} size={12} />
+            {lockDate ? (
+              <Text maxFontSizeMultiplier={1.2} style={[styles.fact, styles.lockLine, styles.tight]}>
+                {keepTogether(humanDate(lockDate))}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </View>
   ) : dayText && arrangement !== 'wide' ? (
@@ -288,7 +308,9 @@ export function PerGameStatusStrip() {
   // A locked night keeps the day and the next games; the lock adds its own
   // line: the sentence Roster and Market use (terms.rosterReopensLine) plus
   // why moves pause. Wide rows lead it with the ROSTER LOCKED tag.
-  const lockTag = arrangement === 'wide' && !folded;
+  // A short laptop window: the lock's short words beside the day (walk 11 T2-09).
+  const lockCompact = locked && arrangement === 'wide' && !folded && lockBesideDay(height, true);
+  const lockTag = arrangement === 'wide' && !folded && !lockCompact;
   // Nobody held: no "your players still play" (walk 10 T2-13). The line
   // says what to do instead, and the hint beside it, which said the same,
   // gives way to it.
@@ -296,7 +318,7 @@ export function PerGameStatusStrip() {
   // A portrait phone's practice row carries the lock beside +1 week, so a
   // week landing on a lock adds no line here (walk 9 T4-08).
   const lockInControls = practice && !layout.wide && !folded && width >= PHONE_SLOT_MIN_WIDTH && !progress?.complete;
-  const lock = tiny || lockInControls ? null : locked && folded && !foldedFacts ? (
+  const lock = tiny || lockInControls ? null : locked && ((folded && !foldedFacts) || lockCompact) ? (
     // The narrowest folded rows: "Locked · Nov 1" under the day count, so
     // the row still says it in words and Settings keeps the first line (the
     // padlock alone pushed it down a line, walk 3 T3-29). One image to a
@@ -344,10 +366,19 @@ export function PerGameStatusStrip() {
       <LastNightMoney tight={tight} value={bootstrap.account.cumulativePnl} />
     </Text>
   ) : (
-    <Text key="next" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
-      <Text style={styles.factLabel}>{progress?.day === 0 ? 'Season opens ' : 'Next '}</Text>
-      {next ? keepTogether(next) : 'not scheduled yet'}
-    </Text>
+    queuedThrough ? (
+      // A queued run of weeks says where it ends, where the next games were
+      // (walk 11 T4-N2: "+1 WEEK ×12 QUEUED" left the date maths to you).
+      <Text key="next" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
+        <Text style={styles.factLabel}>Queued through </Text>
+        {keepTogether(humanDate(queuedThrough))}
+      </Text>
+    ) : (
+      <Text key="next" maxFontSizeMultiplier={1.5} style={[styles.fact, tight && styles.tight]}>
+        <Text style={styles.factLabel}>{progress?.day === 0 ? 'Season opens ' : 'Next '}</Text>
+        {next ? keepTogether(next) : 'not scheduled yet'}
+      </Text>
+    )
   );
 
   let facts;
@@ -375,9 +406,10 @@ export function PerGameStatusStrip() {
           {lead}
           {meter}
         </View>
+        {lockCompact ? lock : null}
         {night}
         {upcoming}
-        {lock}
+        {lockCompact ? null : lock}
         {practiceHint && (layout.merged || foldedFacts) && !lockSaysNobody ? (
           <Text key="hint" maxFontSizeMultiplier={1.5} nativeID={PRACTICE_HINT_ID} style={[styles.fact, styles.factLabel]}>
             {layout.merged ? practiceHint : practiceHintShort}
@@ -445,7 +477,12 @@ export function PerGameStatusStrip() {
   );
 
   // A short window has no brand bar, so Settings lives in this row (icon only
-  // when folded, where the row is tight; its name stays "Settings").
+  // when folded where the row is tight; its name stays "Settings"). A folded
+  // row with room for the facts keeps its word under the icon, as More beside
+  // it does: a bare sliders icon was a guess in landscape (walk 11 T1-06).
+  const settingsPlacement: ChromeButtonPlacement = folded
+    ? (foldedFacts ? 'stacked' : 'icon')
+    : placement;
   const settingsControl = short && !tiny ? (
     <ChromeButton
       accessibilityLabel="Settings"
@@ -455,7 +492,7 @@ export function PerGameStatusStrip() {
       onPress={() => {
         openSettings();
       }}
-      placement={folded ? 'icon' : placement}
+      placement={settingsPlacement}
     />
   ) : null;
   // Folded below ~340px the row takes two lines: the day beside Settings,
