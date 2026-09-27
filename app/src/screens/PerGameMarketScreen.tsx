@@ -16,12 +16,14 @@ import { isMockActive, mockPlayerTrends, mockSeasonStart } from '../api/mockPerG
 import { FullNote } from '../components/market/FullNote';
 import { LockIcon, StarIcon } from '../components/market/icons';
 import { ListEnd, SkipLink } from '../components/market/SkipLink';
+import { ExplainerTip } from '../components/market/ExplainerTip';
+import { peekProfileReturn, takeProfileReturn, type ProfileReturn, type ProfileView } from '../components/results/playerGames';
 import { OrderLine } from '../components/market/OrderLine';
 import { listenForActivations, pressedInScreen } from '../components/market/lastActivation';
 import { spaceToggles } from '../components/market/switchKeys';
 import { useAriaDisabled } from '../components/market/useAriaDisabled';
 import { lastPointerType } from '../components/market/pointerKind';
-import { pressedByPointer } from '../web/tapSettle';
+import { pressedByPointer, unlessSettling } from '../web/tapSettle';
 import { revealFocused } from '../web/focusInView';
 import { ControlsToggle, MarketColumnHeader, MarketSearch, SortControl, WatchingToggle } from '../components/market/MarketControls';
 import { PlayerAvatar } from '../components/PlayerAvatar';
@@ -176,6 +178,8 @@ import {
 import {
   MARKET_DEFAULT_SORT,
   marketMemory,
+  explainerDone,
+  markExplained,
   openingSide,
   rememberMarket,
   restoresPlace,
@@ -1413,6 +1417,28 @@ export function PerGameMarketScreen({
   useEffect(() => () => {
     if (valueTipShown.current) rememberMarket({ valueTipSeen: true });
   }, []);
+  // A side's explainer under the sort is for a first move (walk 16 T1-01).
+  // It is drawn from what was known when the side was shown, so a move never
+  // takes it from under a thumb: after a move on that side it goes the next
+  // time the Market or that side is drawn, or once the list has scrolled it
+  // out of view (rows kept in place); its × lets it go at once.
+  const heldOn = (which: PerGamePositionSide): number => (which === 'long' ? bootstrap?.account.longSlots.used : bootstrap?.account.shortSlots.used) ?? 0;
+  const [explainerGone, setExplainerGone] = useState(() => ({
+    long: explainerDone(marketMemory().explained.long, heldOn('long')),
+    short: explainerDone(marketMemory().explained.short, heldOn('short')),
+  }));
+  const explainerGoneRef = useRef(explainerGone);
+  explainerGoneRef.current = explainerGone;
+  const longUsed = bootstrap?.account.longSlots.used ?? 0;
+  const shortUsed = bootstrap?.account.shortSlots.used ?? 0;
+  const usedBefore = useRef({ long: longUsed, short: shortUsed });
+  useEffect(() => {
+    if (longUsed > usedBefore.current.long) markExplained('long');
+    if (shortUsed > usedBefore.current.short) markExplained('short');
+    usedBefore.current = { long: longUsed, short: shortUsed };
+  }, [longUsed, shortUsed]);
+  const explainerRef = useRef<View>(null);
+  const explainerAnchor = useRef<{ id: string; dy: number } | null>(null);
   const [query, setQuery] = useState(remembered.query);
   const [side, setSide] = useState<PerGamePositionSide>(remembered.side);
   const [sort, setSort] = useState<MarketSort>(remembered.sort);
@@ -1684,13 +1710,65 @@ export function PerGameMarketScreen({
   const openProfile = useCallback((playerId: string) => setProfileId(playerId), []);
   const profileIdRef = useRef(profileId);
   profileIdRef.current = profileId;
+  // Back from his games in Results reopens his profile over the Market (walk
+  // 16 T2-05) through the Market's own state, so a Watch press there moves his
+  // row's star at once (E16's note: the sheet's own copy of the watchlist
+  // moved it only on the next redraw). Claimed before the sheet looks (a
+  // layout effect runs before its effect), and opened once the Market's
+  // history step has landed, as the sheet would, so the next Back closes him.
+  const [returnView, setReturnView] = useState<ProfileView | null>(null);
+  const returnedRef = useRef<string | null>(null);
+  const pendingReturn = useRef<ProfileReturn | null>(null);
+  useLayoutEffect(() => {
+    const fresh = peekProfileReturn();
+    if (fresh && fresh.tab === 'market' && takeProfileReturn(fresh)) pendingReturn.current = fresh;
+    const request = pendingReturn.current;
+    if (!request || typeof window === 'undefined') return undefined;
+    let done = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const open = () => {
+      if (done) return;
+      done = true;
+      window.removeEventListener('popstate', open);
+      if (timer !== null) clearTimeout(timer);
+      pendingReturn.current = null;
+      returnedRef.current = request.playerId;
+      setReturnView(request.view);
+      setProfileId(request.playerId);
+    };
+    const landed = (window.history.state as { tab?: string } | null)?.tab === request.tab;
+    if (landed) open();
+    else {
+      window.addEventListener('popstate', open);
+      timer = setTimeout(open, 400);
+    }
+    return () => {
+      done = true;
+      window.removeEventListener('popstate', open);
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, []);
   // A tap on the dimmed row of the player already open is that row's own
   // press again (a slightly slow double tap on a tablet, walk 10 T4-10: the
   // panel flashed open and shut): what it opens is open, so it stays. The
   // profile's own close, Escape, Back and the rest of the dimmed screen close.
   const closeProfile = useCallback((event?: unknown) => {
     if (scrimTapOnPlayer(event, profileIdRef.current)) return;
+    const returned = returnedRef.current;
+    returnedRef.current = null;
     setProfileId(null);
+    setReturnView(null);
+    // A profile Back reopened hands focus to his row once closed, as one
+    // opened from the row does (the sheet's own return runs first).
+    const name = returned ? latestPerGame.current.bootstrap?.market.find((row) => row.playerId === returned)?.name : null;
+    if (!name || typeof document === 'undefined') return;
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body && document.getElementById('app-screen')?.contains(active) === false) return;
+      const row = Array.from(document.querySelectorAll<HTMLElement>('#app-screen [role="button"]'))
+        .find((node) => (node.getAttribute('aria-label') ?? '').startsWith(`${name},`));
+      row?.focus({ preventScroll: true });
+    }, 120);
   }, []);
   const clearFilters = useCallback(() => {
     setQuery('');
@@ -1837,10 +1915,36 @@ export function PerGameMarketScreen({
     place.current.anchorId = found.id;
   }, []);
   const aligning = useRef(false);
+  // After a move on this side, the explainer goes once the list has scrolled
+  // it out of view: the first row in view is kept where it is (below).
+  const dropScrolledExplainer = useCallback(() => {
+    const which = sideRef.current;
+    if (explainerGoneRef.current[which] || !marketMemory().explained[which]) return;
+    const node = scrollNode();
+    const tip = explainerRef.current as unknown as HTMLElement | null;
+    if (!node || !tip?.getBoundingClientRect) return;
+    if (tip.getBoundingClientRect().bottom > node.getBoundingClientRect().top) return;
+    explainerAnchor.current = readAnchor(node as unknown as AnchorNode);
+    setExplainerGone((gone) => ({ ...gone, [which]: true }));
+  }, []);
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     place.current.offset = event.nativeEvent.contentOffset.y;
     if (!aligning.current) recordAnchor();
-  }, [recordAnchor]);
+    dropScrolledExplainer();
+  }, [recordAnchor, dropScrolledExplainer]);
+  useLayoutEffect(() => {
+    const kept = explainerAnchor.current;
+    explainerAnchor.current = null;
+    if (!kept) return;
+    const node = scrollNode();
+    const rows = node?.querySelectorAll?.('[data-player]');
+    for (let index = 0; rows && index < rows.length; index += 1) {
+      if (rows[index].getAttribute('data-player') !== kept.id) continue;
+      const delta = rows[index].getBoundingClientRect().top - node!.getBoundingClientRect().top - kept.dy;
+      if (Math.abs(delta) > 0.5) node!.scrollTop += delta;
+      break;
+    }
+  }, [explainerGone]);
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     const first = viewableItems.find((token) => token.isViewable);
     if (first) place.current.anchorId = (first.item as PerGameMarketRow).player.playerId;
@@ -1987,6 +2091,9 @@ export function PerGameMarketScreen({
   useLayoutEffect(() => {
     if (shownSide.current === side) return;
     shownSide.current = side;
+    // The side drawn afresh draws its explainer from what is known now.
+    const done = explainerDone(marketMemory().explained[side], heldOn(side));
+    if (explainerGoneRef.current[side] !== done) setExplainerGone((gone) => ({ ...gone, [side]: done }));
     place.current = { anchorId: null, offset: 0 };
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
     recordAnchor(true);
@@ -2242,8 +2349,43 @@ export function PerGameMarketScreen({
   );
   // The Short side says how long a short runs before anyone pays for one.
   const shortWords = `${SHORT_EXPLAINER} ${shortTermLine(bootstrap.ruleset.shortTermDays)}`;
-  const shortExplainer = side === 'short' && roomy ? (
-    <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{seasonOver ? seasonEndExplainer('short') : shortWords}</Text>
+  // The × on a portrait phone's explainer: its room goes back to the list at
+  // once, and a keyboard's focus goes on to the next stop (walk 16 T1-01).
+  // Wrapped in unlessSettling: the × goes on the lift, and that tap's click
+  // must not press the row it uncovers.
+  const closeExplainer = unlessSettling(() => {
+    const which = side;
+    let next: HTMLElement | null = null;
+    if (typeof document !== 'undefined') {
+      const focused = document.activeElement as HTMLElement | null;
+      const tips = Array.from(document.querySelectorAll('[data-explainer]'));
+      // A key press moves focus on; a finger's tap leaves it (the skip link
+      // after the tip would show, and push the rows down).
+      if (!pressedByPointer() && focused && tips.some((tip) => tip.contains(focused))) {
+        const stops = Array.from(document.querySelectorAll<HTMLElement>('a[href], button, input, [role="button"], [role="link"], [tabindex="0"]'))
+          .filter((node) => !tips.some((tip) => tip.contains(node)));
+        next = stops.find((node) => focused.compareDocumentPosition(node) & 4) ?? null;
+      }
+    }
+    markExplained(which);
+    setExplainerGone((gone) => ({ ...gone, [which]: true }));
+    if (next) setTimeout(() => next?.focus(), 0);
+  });
+  const stackedPhone = !rowToolbar && !folded;
+  const phoneTipShown = stackedPhone && !explainerGone[side];
+  const shortExplainer = side === 'short' && roomy && (!stackedPhone || phoneTipShown) ? (
+    stackedPhone ? (
+      <ExplainerTip
+        closeLabel="Hide how shorts work"
+        inline
+        onClose={closeExplainer}
+        ref={valueTip ? undefined : explainerRef}
+        text={seasonOver ? seasonEndExplainer('short') : shortWords}
+        textStyle={styles.explainer}
+      />
+    ) : (
+      <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{seasonOver ? seasonEndExplainer('short') : shortWords}</Text>
+    )
   ) : null;
   // On a tablet or desktop each side explains itself in the same reserved
   // line, so switching sides never moves the table.
@@ -2322,7 +2464,7 @@ export function PerGameMarketScreen({
   ) : null;
   // The phone toolbar (not a row toolbar, not folded) says what Value is on
   // a session's first visit (walk 13 T1-01).
-  const phoneValueTip = valueTip && !rowToolbar && !folded;
+  const phoneValueTip = valueTip && phoneTipShown;
   if (phoneValueTip) valueTipShown.current = true;
   // Folded for want of room, a pinned table lets this slot (the sentence,
   // or the "Same order as before…" line with Re-sort) scroll away with the
@@ -2404,7 +2546,24 @@ export function PerGameMarketScreen({
           </View>
           {sortToggle}
           {orderStrip}
-          {phoneValueTip ? <Text maxFontSizeMultiplier={1.4} style={[styles.explainer, styles.valueTip]}>{valueDefinition(side, width < SEARCH_WIDENS_BELOW)}</Text> : null}
+          {phoneValueTip ? (
+            side === 'long' ? (
+              <ExplainerTip
+                closeLabel="Hide what Value means"
+                onClose={closeExplainer}
+                ref={explainerRef}
+                style={styles.valueTip}
+                // The rows' own words, so it keeps one line beside its ×.
+                text={valueDefinition(side, true)}
+                textStyle={styles.explainer}
+                      />
+            ) : (
+              // The Short side's × is on its explainer above; this line goes with it.
+              <View ref={explainerRef} style={styles.valueTip}>
+                <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{valueDefinition(side, width < SEARCH_WIDENS_BELOW)}</Text>
+              </View>
+            )
+          ) : null}
         </View>
       )}
       {/* On a tall desktop the unusual-order note takes the explainer's own
@@ -2671,7 +2830,8 @@ export function PerGameMarketScreen({
         player={profilePlayer}
         position={profilePosition}
         results={profileResults}
-        side={side}
+        initialView={profileId !== null && returnView ? returnView : undefined}
+        side={profileId !== null && returnView?.side ? returnView.side : side}
         trends={profileId !== null && isMockActive() ? mockPlayerTrends(profileId) : undefined}
         visible={profileId !== null && profilePlayer !== null}
         watching={profileId ? watchlist.isWatched(profileId) : undefined}
@@ -2924,9 +3084,9 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   valueTip: {
-    // Close under the order line it explains (whose Re-sort room is empty
-    // before the first games).
-    marginTop: -6,
+    // Under the order line it explains, at the toolbar's own gap: the line is
+    // one text line now, with no empty Re-sort room to tuck into (walk 16 T1-02).
+    marginTop: -2,
   },
   explainerWide: {
     // Two lines' room: the longer (short) sentence wraps once on a tablet.

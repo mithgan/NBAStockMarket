@@ -29,6 +29,11 @@ export interface MarketMemory {
   valueTipSeen: boolean;
   /** The season was over when the Market was left (walk 16 T1-07). */
   seasonOver: boolean;
+  /**
+   * A side whose explainer has done its job this visit: the player made a
+   * move on that side or closed it with its × (walk 16 T1-01).
+   */
+  explained: Readonly<Record<PerGamePositionSide, boolean>>;
 }
 
 /**
@@ -50,6 +55,7 @@ const FRESH: MarketMemory = {
   lastInitialSide: null,
   valueTipSeen: false,
   seasonOver: false,
+  explained: { long: false, short: false },
 };
 
 let memory: MarketMemory = { ...FRESH };
@@ -83,6 +89,21 @@ export function rememberTierAfterSurname(key: string): void {
  */
 export function restoresPlace(offset: number, seasonOverNow: boolean, seasonOverWhenLeft: boolean): boolean {
   return offset > 0 && !(seasonOverNow && !seasonOverWhenLeft);
+}
+
+/**
+ * A portrait phone's explainer under the sort ("Value: …" on the Roster side,
+ * how a short works on the Short side) is for a first move: it gives its room
+ * back once the player has made a move on that side, holds someone there, or
+ * closed it with its × (walk 16 T1-01: the first row started at y=380).
+ */
+export function explainerDone(explained: boolean, heldOnSide: number): boolean {
+  return explained || heldOnSide > 0;
+}
+
+export function markExplained(side: PerGamePositionSide): void {
+  if (memory.explained[side]) return;
+  memory = { ...memory, explained: { ...memory.explained, [side]: true } };
 }
 
 export function marketMemory(): MarketMemory {

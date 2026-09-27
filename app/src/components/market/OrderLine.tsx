@@ -38,6 +38,10 @@ export function OrderLine({
   centred?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  // A phone's line is one text line either way (walk 16 T1-02): Re-sort's
+  // 44px target reaches 8px up into the gap over it (never the sort buttons)
+  // and down under the line, so it takes the line's own 17px.
+  const actionStyle = centred ? [styles.action, styles.actionFlat] : styles.action;
   const words = (shown: string, action: boolean, ghost: boolean) => (
     <View style={styles.line}>
       <Text maxFontSizeMultiplier={1.4} style={[styles.text, !ghost && tone === 'flipped' && styles.flipped, !ghost && tone === 'stale' && styles.stale]}>
@@ -45,7 +49,7 @@ export function OrderLine({
       </Text>
       {action ? (
         ghost ? (
-          <View style={styles.action}>
+          <View style={actionStyle}>
             <Text maxFontSizeMultiplier={1.4} style={styles.actionText}>Re-sort</Text>
           </View>
         ) : (
@@ -53,7 +57,7 @@ export function OrderLine({
             accessibilityLabel={resort?.name}
             accessibilityRole="button"
             onPress={resort?.onPress}
-            style={(state) => [styles.action, (state as { hovered?: boolean }).hovered === true && styles.actionHover, state.pressed && styles.pressed]}
+            style={(state) => [actionStyle, (state as { hovered?: boolean }).hovered === true && styles.actionHover, state.pressed && styles.pressed]}
           >
             <Text maxFontSizeMultiplier={1.4} style={styles.actionText}>Re-sort</Text>
           </Pressable>
@@ -132,6 +136,10 @@ const styles = StyleSheet.create({
     marginVertical: -8,
     justifyContent: 'center',
     paddingHorizontal: space.sm,
+  },
+  actionFlat: {
+    marginTop: -8,
+    marginBottom: -19,
   },
   actionHover: {
     backgroundColor: colors.surfaceHigh,

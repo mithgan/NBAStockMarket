@@ -10,7 +10,7 @@ test('the market keeps side, sort, search and place for the session (T2-50, T4-1
   rememberMarket({ side: 'short', sort: 'value', query: 'an', watchedOnly: true, anchorId: 'p9', offset: 640, width: 390 });
   assert.deepEqual(
     { ...marketMemory() },
-    { side: 'short', sort: 'value', reversed: false, query: 'an', watchedOnly: true, anchorId: 'p9', offset: 640, width: 390, lastInitialSide: null, valueTipSeen: false, seasonOver: false },
+    { side: 'short', sort: 'value', reversed: false, query: 'an', watchedOnly: true, anchorId: 'p9', offset: 640, width: 390, lastInitialSide: null, valueTipSeen: false, seasonOver: false, explained: { long: false, short: false } },
   );
   forgetMarket();
   assert.equal(marketMemory().query, '');
