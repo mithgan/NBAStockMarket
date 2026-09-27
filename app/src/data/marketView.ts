@@ -531,6 +531,41 @@ export function heldDetail(summary: ValueSummary | undefined, lockedGameCost: nu
   return { text: 'no games yet', total: 'no games yet', tone: 'none', why: null };
 }
 
+/** A phrase kept on one line: its spaces made no-break ("over 82 games"). */
+function unbroken(phrase: string): string {
+  return phrase.replace(/ /g, ' ');
+}
+
+/**
+ * The wordings a held row's first value line tries after its tag, fullest
+ * first: with the average, the why, the short why, the total alone, then the
+ * figure alone (the tag already says whose, and at season end when). The row
+ * shows the first that fits on its one line; each phrase keeps its words
+ * together, so a line that must still wrap never leaves one word alone (walk
+ * 12 T1-05 at 360px: "(a below-zero" / "night)", "+$5.50M over 82" / "games").
+ * `shortWhy` starts from the short why (below 360px).
+ */
+export function heldLineWordings(
+  held: { text: string; total: string; why: string | null },
+  shortWhy = false,
+): Array<{ text: string; why: string | null }> {
+  const why = held.why && shortWhy ? 'below zero' : held.why;
+  const figure = held.total.replace(/ (?:in|over) \d+ games?$/, '');
+  const steps = [
+    { text: held.text, why },
+    { text: held.total, why },
+    { text: held.total, why: why ? 'below zero' : null },
+    { text: held.total, why: null },
+    { text: figure, why: null },
+  ];
+  const out: Array<{ text: string; why: string | null }> = [];
+  for (const step of steps) {
+    const shown = { text: step.text.split(', ').map(unbroken).join(', '), why: step.why ? unbroken(step.why) : null };
+    if (!out.some((seen) => seen.text === shown.text && seen.why === shown.why)) out.push(shown);
+  }
+  return out;
+}
+
 /**
  * A held phone row's second value line: last season's dividend against the
  * price you locked, then today's price ("Last season +$71K at your price ·
@@ -682,6 +717,33 @@ export function actionWord({
 }
 
 
+/**
+ * What a press on "Added ✓" / "Dropped ✓" says while the tick holds (walk 12
+ * T4-02: a click on "Dropped ✓" a second after the drop did nothing, and the
+ * player took it for a re-add): what the move did, then what the button does
+ * once it is back, with its fee; while the move still saves, that it is on
+ * its way. The tick itself never becomes a move: a held key or a fast third
+ * tap must not buy him back.
+ */
+export function tickPressNotice(
+  side: PerGamePositionSide,
+  playerName: string,
+  closed: boolean,
+  feeDollars: number,
+  saving = false,
+): string {
+  if (saving) {
+    if (closed) return side === 'long' ? `Dropping ${playerName} now.` : `Closing your short on ${playerName} now.`;
+    return side === 'long' ? `Adding ${playerName} now.` : `Shorting ${playerName} now.`;
+  }
+  const done = closed
+    ? side === 'long' ? `${playerName} dropped.` : `Short on ${playerName} closed.`
+    : side === 'long' ? `${playerName} added.` : `Shorted ${playerName}.`;
+  const next = closed ? openVerb(side) : closeVerb(side);
+  const fee = feeDollars > 0 ? `: ${exactMoney(feeDollars)} fee` : '';
+  return `${done} Changed your mind? Press ${next} when it shows${fee}.`;
+}
+
 /** What the live region says when a player backs out of a Drop or Close. */
 export function keptAnnouncement(side: PerGamePositionSide, playerName: string): string {
   return side === 'long' ? `Kept ${playerName} on your roster.` : `Kept your short on ${playerName}.`;
@@ -808,8 +870,17 @@ export function slotLineBeside(width: number): boolean {
  */
 export const PINNED_ROWS_MIN_SHARE = 0.55;
 
+/**
+ * The fold is for short windows only: from this height (a portrait iPad,
+ * 768x1024) search, sort and Watching stay out, as at 820x1180, and the rows
+ * still keep about half the window, nine players or more (walk 12 T2-03: at
+ * 768-800x1024 searching took an extra press).
+ */
+export const PINNED_FOLD_BELOW_HEIGHT = 900;
+
 export function pinnedChromeTooTall(rowsHeight: number, windowHeight: number): boolean {
   if (!(rowsHeight > 0) || !(windowHeight > 0)) return false;
+  if (windowHeight >= PINNED_FOLD_BELOW_HEIGHT) return false;
   return rowsHeight < windowHeight * PINNED_ROWS_MIN_SHARE;
 }
 
@@ -1517,9 +1588,51 @@ export function resortsAfterRun(sortedNight: string, night: string, seasonOver: 
  * the list (walk 5 T2-19): how to take one of them, or, once the season is
  * over and nothing can be dropped or closed, only who they are (walk 10 T2-04).
  */
-export function otherSideGroupLine(side: PerGamePositionSide, seasonOver: boolean): string {
-  if (side === 'short') return seasonOver ? 'On your roster this season' : 'On your roster: to short one of them, drop him there first';
-  return seasonOver ? 'Shorted this season' : 'Shorted: to add one of them, close his short first';
+export function otherSideGroupLine(side: PerGamePositionSide, seasonOver: boolean, count = 2): string {
+  const one = count === 1;
+  if (side === 'short') {
+    if (seasonOver) return 'On your roster this season';
+    return one ? 'On your roster: to short him, drop him there first' : 'On your roster: to short one of them, drop him there first';
+  }
+  if (seasonOver) return 'Shorted this season';
+  return one ? 'Shorted: to add him, close his short first' : 'Shorted: to add one of them, close his short first';
+}
+
+/**
+ * How far to scroll a list so an open Drop or Close question (its row and
+ * strip, `region`) sits inside the list's visible box `view`, with `air` to
+ * spare: the least scroll that shows it whole, or, when it is taller than the
+ * box, its end at the bottom (the question and its buttons, where focus is).
+ * Walk 12 T4-06: turned to landscape, the list kept its first player and the
+ * question with its focused Keep sat below the fold.
+ */
+export function questionScrollDelta(
+  view: { top: number; bottom: number },
+  region: { top: number; bottom: number },
+  air = 8,
+): number {
+  const room = view.bottom - view.top - 2 * air;
+  if (region.bottom - region.top > room) return region.bottom + air - view.bottom;
+  if (region.top < view.top + air) return region.top - air - view.top;
+  if (region.bottom > view.bottom - air) return region.bottom + air - view.bottom;
+  return 0;
+}
+
+/**
+ * The group the line above goes over: the run of rows held on the other side
+ * that ends the list, as its first player and its size. While the list keeps
+ * its order, a player moved to the other side from his profile keeps his
+ * place with his tag and his reason, and no line (walk 12 T2-04: "Shorted: to
+ * add one of them…" sat over Towns, Cunningham and Knueppel, who had live ADD
+ * buttons); he joins the group when the list sorts again.
+ */
+export function otherSideGroup<T extends { player: { playerId: string }; blockedByOpposingPosition: boolean }>(
+  rows: readonly T[],
+): { firstId: string; count: number } | null {
+  let start = rows.length;
+  while (start > 0 && rows[start - 1].blockedByOpposingPosition) start -= 1;
+  if (start === rows.length) return null;
+  return { firstId: rows[start].player.playerId, count: rows.length - start };
 }
 
 /**
@@ -1541,12 +1654,14 @@ export function seasonEndSlotLine(side: PerGamePositionSide, used: number): stri
 /**
  * The side's sentence once the season is over (walk 11 T2-03, T1-13): what
  * the figures show now, and on the Short side that shorts come back with a
- * new season, never how to open one.
+ * new season, never how to open one. Value is still last season's dividend
+ * against his price, not how he did this season (walk 12 T2-05); with players
+ * held, their season is in Your profit a game.
  */
-export function seasonEndExplainer(side: PerGamePositionSide): string {
-  return side === 'short'
-    ? 'The season is over. Shorts open again in a new season.'
-    : 'The season is over. Values show how each player did against his price.';
+export function seasonEndExplainer(side: PerGamePositionSide, held = 0): string {
+  if (side === 'short') return 'The season is over. Shorts open again in a new season.';
+  const value = "The season is over. Value still compares last season's dividend with his price.";
+  return held > 0 ? `${value} Your profit a game shows how your players did.` : value;
 }
 
 /**

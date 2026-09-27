@@ -63,7 +63,8 @@ test('a finished season is said in the past tense on the Market', async () => {
   assert.equal(seasonEndSlotLine('long', 0), 'None held at season end');
   assert.equal(seasonEndSlotLine('short', 0), 'No shorts at season end');
   assert.equal(seasonEndExplainer('short'), 'The season is over. Shorts open again in a new season.');
-  assert.equal(seasonEndExplainer('long'), 'The season is over. Values show how each player did against his price.');
+  // walk 12 T2-05: Value is still last season's dividend against his price, not this season's result.
+  assert.equal(seasonEndExplainer('long'), "The season is over. Value still compares last season's dividend with his price.");
 });
 
 // walk 11 check: at 320px with text spacing, "on your roster" never spills over the side toggle.

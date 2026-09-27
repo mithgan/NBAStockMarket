@@ -21,6 +21,7 @@ import { listenForActivations, pressedInScreen } from '../components/market/last
 import { spaceToggles } from '../components/market/switchKeys';
 import { useAriaDisabled } from '../components/market/useAriaDisabled';
 import { pressedByPointer } from '../web/tapSettle';
+import { revealFocused } from '../web/focusInView';
 import { ControlsToggle, MarketColumnHeader, MarketSearch, SortControl, WatchingToggle } from '../components/market/MarketControls';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { PlayerProfileSheet } from '../components/PlayerProfileSheet';
@@ -32,7 +33,6 @@ import {
   money,
   perGameShort,
   confirmCloseName,
-  lockNotice,
   rosterReopensLine,
   signedMoney,
   unbrokenName,
@@ -64,6 +64,7 @@ import {
   isSeasonOver,
   JUST_OPENED_MS,
   keptAnnouncement,
+  tickPressNotice,
   justClosedName,
   justOpenedName,
   keepNamesWhole,
@@ -78,7 +79,9 @@ import {
   orderLineNarrow,
   lockLineShort,
   slotLineNarrow,
+  otherSideGroup,
   otherSideGroupLine,
+  questionScrollDelta,
   otherSideReason,
   otherSideSaving,
   phoneRowPhoto,
@@ -92,6 +95,7 @@ import {
   rowProfileLabel,
   rowTier,
   pinnedChromeTooTall,
+  heldLineWordings,
   heldTag,
   seasonEndSlotLine,
   seasonEndExplainer,
@@ -193,6 +197,12 @@ let openFullNote: (() => void) | null = null;
  * Market in the same layout starts without it.
  */
 let openQuestion: { key: string; layout: MarketLayout } | null = null;
+
+/** The player whose Drop or Close question is open on `side`, if any. */
+function askingOn(side: PerGamePositionSide): string | null {
+  const prefix = `${side}:`;
+  return openQuestion?.key.startsWith(prefix) ? openQuestion.key.slice(prefix.length) : null;
+}
 
 
 /** Keep the last two words together ("Oct 31", "to add"), so no line ends in a lone word. */
@@ -298,7 +308,7 @@ function SameHeight({ children, ghosts }: { children: ReactNode; ghosts: ReactNo
 }
 
 /** The context's moves, behind one stable object so a row's props do not change with every snapshot. */
-type MarketMoves = Pick<ReturnType<typeof usePerGame>, 'closePosition' | 'dismissNotice' | 'notify' | 'openPosition'>;
+type MarketMoves = Pick<ReturnType<typeof usePerGame>, 'closePosition' | 'dismissNotice' | 'lockedPress' | 'notify' | 'openPosition'>;
 
 const TONE_COLOR: Record<SignalTone, string> = {
   gain: colors.green,
@@ -386,7 +396,7 @@ function MarketRow({
   slotLimit: number;
   moves: MarketMoves;
 }) {
-  const { closePosition, dismissNotice, notify, openPosition } = moves;
+  const { closePosition, dismissNotice, lockedPress, notify, openPosition } = moves;
   const { player, position, side } = row;
   const rosterLockHint = rosterLockMessage(rosterLockGameDate);
   // Another move saving does not rest this row: a press joins the queue and
@@ -564,16 +574,23 @@ function MarketRow({
   // A held phone row's first value line leads with the total and adds the
   // average while both fit on its one line (walk 10 T1-05); measured before
   // paint, so a line that would wrap never shows (every row keeps one height).
+  // It tries shorter wordings until one fits (the why short, the total
+  // alone, the figure alone), so no line ends with one word left over (walk
+  // 12 T1-05: "(a below-zero" / "night)" at 360px).
   const heldFirstRef = useRef<Text>(null);
-  const averageKey = `${width}|${held?.text ?? ''}`;
-  const [averageTooLong, setAverageTooLong] = useState<string | null>(null);
-  const showAverage = averageTooLong !== averageKey;
+  const wordings = held ? heldLineWordings(held, width < HELD_NOW_MIN_WIDTH) : null;
+  const fitKey = `${width}|${layout}|${heldTag(side, seasonOver)}|${held?.text ?? ''}|${held?.why ?? ''}`;
+  const [fit, setFit] = useState<{ key: string; step: number } | null>(null);
+  const fitStep = wordings ? Math.min(fit && fit.key === fitKey ? fit.step : 0, wordings.length - 1) : 0;
+  const heldShown = wordings ? wordings[fitStep] : null;
   useLayoutEffect(() => {
-    if (!showAverage || !held || held.text === held.total) return;
-    const node = heldFirstRef.current as unknown as { getBoundingClientRect?: () => { height: number } } | null;
+    if (!wordings || fitStep >= wordings.length - 1) return;
+    const node = heldFirstRef.current as unknown as HTMLElement | null;
     const box = node?.getBoundingClientRect?.();
+    if (!node || !box || !(box.height > 0)) return;
     // detailText is one 17px line; two lines are 34.
-    if (box && box.height > 26) setAverageTooLong(averageKey);
+    const line = typeof getComputedStyle === 'function' ? parseFloat(getComputedStyle(node).lineHeight) : NaN;
+    if (box.height > (line > 0 ? line * 1.5 : 26)) setFit({ key: fitKey, step: fitStep + 1 });
   });
   // His move on the other side still saving: shown as he will be once it
   // saves (no button here), in place, saying it is on its way.
@@ -647,7 +664,7 @@ function MarketRow({
     // Below 360px the why is said short, and a line too narrow for the
     // average too keeps the total, so it stays one line (walk 10 T1-03, T1-05).
     <SameHeight ghosts={[unheldGhost]}>
-      {heldLine(showAverage ? held.text : held.total, held.tone, heldValue, held.why && width < HELD_NOW_MIN_WIDTH ? 'below zero' : held.why, heldFirstRef)}
+      {heldLine(heldShown ? heldShown.text : held.total, held.tone, heldValue, heldShown ? heldShown.why : held.why, heldFirstRef)}
     </SameHeight>
   ) : blocked ? (
     <SameHeight ghosts={[unheldLine]}>
@@ -787,8 +804,21 @@ function MarketRow({
           // colour, never the dashed "unavailable" look (walk 4 T2-03).
           done={(justOpened || justClosed) && !waiting}
           focusableWhenDisabled
-          // LOCKED answers a tap with why and when, as on the Roster.
-          onDisabledPress={rosterLocked ? () => notify(lockNotice(rosterLockGameDate)) : undefined}
+          // LOCKED answers a tap with why and when, as on the Roster; a tap on
+          // "Waiting", "Added ✓" or "Dropped ✓" says what the move did and what
+          // the button will do once it is back (walk 12 T4-02: it was silent).
+          // A press that raced the lock the games just brought is a refused
+          // move, named with the games' notice (walk 12 T4-07).
+          onDisabledPress={rosterLocked
+            ? () => lockedPress({
+              name: player.name,
+              verb: position ? (side === 'long' ? 'dropped' : 'closed') : side === 'long' ? 'added' : 'shorted',
+            })
+            : waiting && waitingFor
+              ? () => notify(`${waitingActionName(side, player.name, waitingFor)}.`)
+              : justOpened || justClosed
+                ? () => notify(tickPressNotice(side, player.name, justClosed, fee, optimistic !== null || opening))
+                : undefined}
           label={fullButton ? FULL_BUTTON_WORDS : word}
           onPress={() => {
             // FULL opens a note under the row: why, and "Choose who to drop".
@@ -1025,8 +1055,8 @@ function MarketRow({
                 keeps the total alone, so every row keeps one height. */}
             {columns.yours === 0 && position && held && currentValue && currentValue.games > 0 ? (
               <Text ref={heldFirstRef} maxFontSizeMultiplier={1.4} style={[styles.detailText, { color: TONE_COLOR[held.tone] }]}>
-                {showAverage ? held.text : held.total}
-                {held.why ? <Text style={styles.leadText}>{` (${held.why})`}</Text> : null}
+                {heldShown ? heldShown.text : held.total}
+                {heldShown?.why ? <Text style={styles.leadText}>{` (${heldShown.why})`}</Text> : null}
               </Text>
             ) : null}
           </View>
@@ -1185,6 +1215,7 @@ export function PerGameMarketScreen({
   const moves = useMemo<MarketMoves>(() => ({
     closePosition: (position) => latestPerGame.current.closePosition(position),
     dismissNotice: () => latestPerGame.current.dismissNotice(),
+    lockedPress: (move) => latestPerGame.current.lockedPress(move),
     notify: (text) => latestPerGame.current.notify(text),
     openPosition: (intent) => latestPerGame.current.openPosition(intent),
   }), []);
@@ -1384,7 +1415,12 @@ export function PerGameMarketScreen({
     // Whether a fresh sort would put anyone somewhere else now.
     return { rows: ordered, orderMoved: !sameOrder(fresh.map((row) => row.player.playerId), ids) };
   }, [allRows, query, side, sort, reversed, watchedOnly, watchlist.watched, kept, orderKey]);
-  const firstBlockedId = rows.find((row) => row.blockedByOpposingPosition)?.player.playerId ?? null;
+  // The line over players held on the other side goes over their group at
+  // the end only; one moved there from his profile keeps his place and tag
+  // until the list sorts again (walk 12 T2-04).
+  const blockedGroup = useMemo(() => otherSideGroup(rows), [rows]);
+  const firstBlockedId = blockedGroup?.firstId ?? null;
+  const blockedCount = blockedGroup?.count ?? 0;
   // Measured before the first paint, so a list that needs it never shows the
   // other place first; a style sheet added later is checked a frame after.
   useLayoutEffect(() => {
@@ -1580,14 +1616,19 @@ export function PerGameMarketScreen({
   // A rotation or a resized window reflows every row: bring the same player
   // back to the same spot, re-aligning for a moment while rows settle, unless
   // the player scrolls meanwhile.
+  // An open Drop or Close question wins over the first player: its row and
+  // question come back into the list's view, with focus still on Keep (walk
+  // 12 T4-06: turned to landscape, Keep sat at y=429 in a 390px window).
   const sizeRef = useRef({ width, height });
+  const sideRef = useRef(side);
+  sideRef.current = side;
   useEffect(() => {
     const before = sizeRef.current;
     if (before.width === width && before.height === height) return undefined;
     sizeRef.current = { width, height };
     widthRef.current = width;
     const saved = anchor.current;
-    if (!saved || place.current.offset <= 0) {
+    if (!askingOn(sideRef.current) && (!saved || place.current.offset <= 0)) {
       recordAnchor(true);
       return undefined;
     }
@@ -1600,9 +1641,14 @@ export function PerGameMarketScreen({
     };
     const events = ['wheel', 'touchmove', 'keydown'] as const;
     if (typeof window !== 'undefined') events.forEach((name) => window.addEventListener(name, stop, { capture: true, passive: true }));
+    let questionCell: HTMLElement | null = null;
     const finish = () => {
       aligning.current = false;
       if (typeof window !== 'undefined') events.forEach((name) => window.removeEventListener(name, stop, { capture: true }));
+      // Focus on the question's Keep stays clear of anything drawn over it.
+      const focused = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+      if (!userMoved && questionCell && focused && questionCell.contains(focused)) revealFocused(focused);
+      questionCell = null;
       recordAnchor(true);
     };
     const align = () => {
@@ -1611,17 +1657,31 @@ export function PerGameMarketScreen({
         return;
       }
       const node = scrollNode();
+      const asking = askingOn(sideRef.current);
+      const targetId = asking ?? saved?.id ?? null;
+      if (!targetId) {
+        finish();
+        return;
+      }
       const rows = node?.querySelectorAll?.('[data-player]');
       let row: AnchorNode | null = null;
       for (let index = 0; rows && index < rows.length; index += 1) {
-        if (rows[index].getAttribute('data-player') === saved.id) row = rows[index];
+        if (rows[index].getAttribute('data-player') === targetId) row = rows[index];
       }
-      if (node && row) {
+      if (node && row && asking) {
+        // The row, then its question under it in the same list item.
+        const cell = (row as unknown as HTMLElement).parentElement ?? (row as unknown as HTMLElement);
+        questionCell = cell;
+        const box = node.getBoundingClientRect();
+        const view = { top: Math.max(0, box.top), bottom: Math.min(window.innerHeight, box.bottom) };
+        const delta = questionScrollDelta(view, { top: row.getBoundingClientRect().top, bottom: cell.getBoundingClientRect().bottom });
+        if (Math.abs(delta) > 1) node.scrollTop += delta;
+      } else if (node && row && saved) {
         const delta = row.getBoundingClientRect().top - node.getBoundingClientRect().top - saved.dy;
         if (Math.abs(delta) > 1) node.scrollTop += delta;
       } else {
         // Laid out further down than the list has drawn: jump near, then refine.
-        scrollToPlayer(saved.id);
+        scrollToPlayer(targetId);
       }
       tries += 1;
       if (tries < 10) timer = setTimeout(align, tries < 4 ? 40 : 100);
@@ -1856,7 +1916,7 @@ export function PerGameMarketScreen({
   // On a tablet or desktop each side explains itself in the same reserved
   // line, so switching sides never moves the table.
   const sideExplainer = (
-    <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{seasonOver ? seasonEndExplainer(side) : side === 'short' ? shortWords : ROSTER_EXPLAINER}</Text>
+    <Text maxFontSizeMultiplier={1.4} style={styles.explainer}>{seasonOver ? seasonEndExplainer(side, slots.used) : side === 'short' ? shortWords : ROSTER_EXPLAINER}</Text>
   );
   // The order in one quiet line (walk 9 T4-10, T1-16, T2-12): on phones
   // under the sort, on a laptop-height table in the sentence's place once the
@@ -2113,7 +2173,7 @@ export function PerGameMarketScreen({
       <FlatList
         contentContainerStyle={styles.content}
         data={rows}
-        extraData={[layout, columns, positionValues, pastValues, fee, width, priceReserve, seasonOver, watchlist.watched, kept, watchedOnly]}
+        extraData={[layout, columns, positionValues, pastValues, fee, width, priceReserve, seasonOver, watchlist.watched, kept, watchedOnly, firstBlockedId, blockedCount]}
         initialNumToRender={Math.min(Math.max(rows.length, 18), WHOLE_LIST_MAX)}
         keyboardShouldPersistTaps="handled"
         // One row per side: a press's "Added ✓" never follows him to the
@@ -2152,7 +2212,7 @@ export function PerGameMarketScreen({
           const divider = item.player.playerId === firstBlockedId ? (
             <View style={[styles.blockedDivider, { paddingLeft: layout === 'table' ? space.lg : space.md }]}>
               <Text maxFontSizeMultiplier={1.4} style={styles.blockedDividerText}>
-                {otherSideGroupLine(side, seasonOver)}
+                {otherSideGroupLine(side, seasonOver, blockedCount)}
               </Text>
             </View>
           ) : null;
