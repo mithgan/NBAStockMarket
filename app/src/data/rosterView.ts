@@ -70,6 +70,27 @@ export function rowLayout(listWidth: number, windowWidth: number, fontScale: num
   return listWidth >= TABLE_MIN_LIST_WIDTH ? 'table' : 'stacked';
 }
 
+/**
+ * Below this window height a one-column Roster cannot show the tip, the
+ * score, the Score by night chart and a player together: at 960x600 "Your
+ * roster" started at y 564 of 600, and at 853x533 (a laptop at 150%) below
+ * the notice strip and the tab bar (walk 13 T2-04). A 375x667 phone and a
+ * phone on its side met the same wall; 360x780 and taller still show a row.
+ */
+export const CHART_FIRST_MIN_HEIGHT = 720;
+
+/**
+ * Whether the Score by night chart follows the lists instead of sitting
+ * between the score and them (walk 13 T2-04): in a short one-column window
+ * while the season runs, so the score and your players share the first view.
+ * The desktop columns (`wide`) keep the chart beside the table, and a
+ * finished season keeps its chart under the result card, the season's story
+ * (walk 8 T1-09).
+ */
+export function chartAfterLists({ height, wide, seasonOver }: { height: number; wide: boolean; seasonOver: boolean }): boolean {
+  return !wide && !seasonOver && height < CHART_FIRST_MIN_HEIGHT;
+}
+
 // ---------------------------------------------------------------------------
 // Rows
 
@@ -174,7 +195,7 @@ export function belowZeroNote(
 }
 
 /** The welcome's word on a bad game, right after it says what a dividend is (walk 8 T1-01). */
-export const BELOW_ZERO_WELCOME = 'A bad game can push his dividend below zero, and you pay that too.';
+export const BELOW_ZERO_WELCOME = 'A bad game can push his dividend below zero; you pay that too.';
 
 /**
  * Which side the first-night tip speaks to (walk 8 T4-10): a player who has
@@ -891,6 +912,26 @@ export function exactFinalLine(parts: readonly BreakdownPart[], score: number): 
   return `Exactly ${exactSignedMoney(score)}, ${named.join(' and ')} included.`;
 }
 
+/**
+ * The season card's split, once the season is over (walk 13 T4-02): each part
+ * at its own rounding, never nudged to add up, so "Roster +$7.69M", "Roster
+ * total +$7.69M" and "They made +$7.69M before fees" name one figure for the
+ * same money. When the rounded parts do not add up to the rounded final score,
+ * the exact line says how they do, every part in dollars: "Exactly
+ * +$7,684,000: roster +$7,686,500, fees -$2,500." Otherwise it is
+ * `exactFinalLine` (a part rounding hides, or none). In-season the score
+ * block keeps `shownParts`.
+ */
+export function finalParts(raw: readonly BreakdownPart[], score: number): { parts: BreakdownPart[]; exact: string | null } {
+  const parts = raw.map((part) => ({ ...part, value: fineValue(part.value) }));
+  const sum = parts.reduce((total, part) => total + part.value, 0);
+  if (Math.abs(fineValue(score) - sum) <= fineStep(score) / 2) return { parts, exact: exactFinalLine(parts, score) };
+  const named = raw
+    .filter((part) => Math.round(part.value) !== 0)
+    .map((part) => `${part.label.toLowerCase()} ${exactSignedMoney(part.value)}`);
+  return { parts, exact: `Exactly ${exactSignedMoney(score)}: ${named.join(', ')}.` };
+}
+
 // ---------------------------------------------------------------------------
 // Season card, welcome and first-night tip
 
@@ -919,14 +960,14 @@ export function finalSummary(
 /**
  * What a player earns, in one plain line for the welcome (walk 6 T1-02), each
  * word said before it is used (walk 7 T1-03): "Each game a player plays, you
- * pay his price and collect his dividend: $40K for every net point, his box
- * score in one number."
+ * pay his price and collect his dividend: $40K a net point (…)". "A net
+ * point" keeps the line short enough for the minutes' reason (walk 13 T1-02).
  */
 export function earnLine(dollarsPerNetPoint: number | null | undefined): string {
   // What a net point is, in a few words (walk 11 T1-02): the full rule,
   // with the example, is Rules > Scoring.
   const rate = dollarsPerNetPoint && dollarsPerNetPoint > 0
-    ? `: ${moneyCompact(dollarsPerNetPoint)} for every net point (${NET_POINT_WORDS})`
+    ? `: ${moneyCompact(dollarsPerNetPoint)} a net point (${NET_POINT_WORDS})`
     : ', his box score in money';
   return `Each game a player plays, you pay his price and collect his dividend${rate}.`;
 }
@@ -934,36 +975,61 @@ export function earnLine(dollarsPerNetPoint: number | null | undefined): string 
 /**
  * A net point in a few words, his box score as one number (walk 11 T1-02):
  * everything Rules > Scoring counts, short enough that a 320px phone still
- * shows the roster under the welcome (walk 10 T1-01).
+ * shows the roster under the welcome (walk 10 T1-01). Minutes count against
+ * him for the reason the Rules give (walk 13 T1-02): to a fan more minutes
+ * is good, so without it "minus … minutes played" read like a typo.
  */
 export const NET_POINT_WORDS =
-  'points, rebounds, assists, steals and blocks, minus misses, turnovers and minutes played';
+  'points, rebounds, assists, steals and blocks, minus misses, turnovers and minutes played, so he has to produce for his minutes';
 
 /**
  * The welcome's first part (walk 10 T1-01): what to do, as three short
  * numbered steps a new fan can take in at a glance, the call to action
  * first. "Press +1 night to play Oct 21". On a locked night (moves paused
  * for those games) the step you can take comes first (walk 11 T1-10): "Press
- * +1 night to play Oct 28 (moves are paused)", then adding players.
+ * +1 night to play Oct 28 (moves are paused)", then adding players. Adding
+ * says there is no budget (walk 13 T1-04), in the Rules' words: a "stock
+ * market" sent new fans looking for a cash balance before a $417.5K star, and
+ * towards cheap players "to save money"; with "Beat each player's price" it
+ * says what counts is whether each one beats his price.
  */
 export function welcomeSteps(nextGameDate: string | null | undefined, locked = false): string[] {
   const play = `Press +1 night to play ${nextGameDate ? humanDate(nextGameDate) : 'the first games'}`;
-  const add = 'Add players from the Market';
+  const add = 'Add any players you like: no budget';
   const beat = "Beat each player's price to score";
   return locked ? [`${play} (moves are paused)`, add, beat] : [add, play, beat];
 }
 
-/** The quiet line that stands in for the empty shorts card while the welcome is up (walk 11 T1-01). */
-export const SHORTS_LATER = 'Shorts: bet against a player. Try after your first games.';
+/**
+ * The welcome from a visit's second season on (walk 13 T1-09): you have just
+ * played a whole season, so one line says what to do, not the first visit's
+ * three steps and how a game scores ("How scoring works" stays beside it).
+ * "Pick your players, then press +1 night to play Oct 21."
+ */
+export function welcomeAgainLine(nextGameDate: string | null | undefined, locked = false): string {
+  const games = nextGameDate ? humanDate(nextGameDate) : 'the first games';
+  return locked
+    ? `Press +1 night to play ${games}; moves are paused until then.`
+    : `Pick your players, then press +1 night to play ${games}.`;
+}
+
+/**
+ * The quiet line that stands in for the empty shorts card while the welcome
+ * is up (walk 11 T1-01). Advice, not a gate (walk 13 T4-07, T2-05): "Try
+ * after your first games" read as "not yet", yet the Short side takes a short
+ * on day 0; it says where shorts are and what many fans do.
+ */
+export const SHORTS_LATER = "Shorts: bet against a player on the Market's Short side. Many fans wait a few games first.";
 
 /**
  * The welcome's smaller second part (walk 10 T1-01): how a game scores
  * (`earnLine`), that a bad game can go below zero, the fee, and that
- * practice starts over on a reload.
+ * practice starts over on a reload. Kept to its 320px height (seven lines)
+ * when the minutes' reason joined it (walk 13 T1-02).
  */
 export function welcomeDetails(earn: string, feeDollars: number): string {
   const fee = feeDollars > 0 ? ` Each add or drop costs ${exactMoney(feeDollars)}.` : '';
-  return `${earn} ${BELOW_ZERO_WELCOME}${fee} Practice isn't saved: reloading starts over.`;
+  return `${earn} ${BELOW_ZERO_WELCOME}${fee} Reloading starts over.`;
 }
 
 /**
@@ -1011,6 +1077,7 @@ export { priceAfterClose } from '../copy/terms';
  * Market and the profile ask the same way).
  */
 export function closeQuestion({ dropImpactBps = 0, ...question }: Parameters<typeof confirmCloseMessage>[0]): string {
+  // A short's close is the shared two-sentence question (walk 13 T1-13).
   return confirmCloseMessage({ ...question, dropImpactBps: dropImpactBps ?? 0 });
 }
 

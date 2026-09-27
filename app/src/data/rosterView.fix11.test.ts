@@ -94,20 +94,21 @@ test('walk 11 T1-11: a merged row is heard as one sentence with the total, each 
 test('walk 11 T1-10: on a locked night the welcome leads with the step you can take', () => {
   assert.deepEqual(welcomeSteps('2025-10-28', true), [
     'Press +1 night to play Oct 28 (moves are paused)',
-    'Add players from the Market',
+    'Add any players you like: no budget',
     "Beat each player's price to score",
   ]);
   // An open night keeps walk 10's order.
-  assert.equal(welcomeSteps('2025-10-21')[0], 'Add players from the Market');
+  assert.equal(welcomeSteps('2025-10-21')[0], 'Add any players you like: no budget');
 });
 
 test('walk 11 T1-01: before your first games the short side is one quiet line', () => {
-  assert.equal(SHORTS_LATER, 'Shorts: bet against a player. Try after your first games.');
+  // Walk 13 T4-07, T2-05: advice, not a gate.
+  assert.equal(SHORTS_LATER, "Shorts: bet against a player on the Market's Short side. Many fans wait a few games first.");
 });
 
 test('walk 11 T1-02: the welcome says what a net point is, in the terms Rules uses', () => {
   const line = earnLine(40_000);
-  assert.match(line, /\$40K for every net point \(points, rebounds, assists, steals and blocks, minus misses, turnovers and minutes played\)\.$/);
+  assert.match(line, /\$40K a net point \(points, rebounds, assists, steals and blocks, minus misses, turnovers and minutes played, so he has to produce for his minutes\)\.$/);
   // Everything Rules > Scoring counts is named.
   for (const word of ['points', 'rebounds', 'assists', 'steals', 'blocks', 'misses', 'turnovers', 'minutes']) assert.match(line, new RegExp(word));
 });
@@ -132,7 +133,8 @@ test('walk 11 T1-05: the drop and close questions quote the comeback price the C
   );
   assert.match(
     closeQuestion({ side: 'short', playerName: 'Bam Adebayo', feeDollars: 250, total: -12_500, endsFreeAfter: '2025-10-27', priceNow: 390_200, dropImpactBps: 25 }),
-    /ends by itself after Oct 27, at no cost\. Shorting him again later sets a new price, plus another \$250 fee\. His price right after this close: about \$391\.2K a game\.$/,
+    // Walk 13 T1-13: the Roster asks it in two sentences; the price is the same.
+    /end by itself after Oct 27 at no cost\? Its -\$12\.5K stays in your score; shorting him again: about \$391\.2K a game, plus another \$250 fee\.$/,
   );
   // No impact in the ruleset: today's price; no quote: the question as before.
   assert.match(closeQuestion({ side: 'long', playerName: 'X', feeDollars: 0, total: 0, priceNow: 98_800 }), /His price today: about \$98\.8K a game\.$/);

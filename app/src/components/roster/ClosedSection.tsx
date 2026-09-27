@@ -63,11 +63,16 @@ export function DotLine({ parts, style }: { parts: readonly string[]; style?: St
  * words, and in the wide table it reads on one line just before the figure
  * (walk 9 T2-07), in the room the price columns leave free on a closed row.
  */
-export function ClosedSection({ rows: allRows, total, totalInset = 0, precision = 'fine', actionFor, noteFor, backFor }: {
+export function ClosedSection({ rows: allRows, total, totalInset = 0, table: tableLayout, precision = 'fine', actionFor, noteFor, backFor }: {
   /** Every closed stint, most recent first; the section shows one row per player and side. */
   rows: readonly ClosedRow[];
   total: number;
   totalInset?: number;
+  /**
+   * The wide table's grid; defaults to `totalInset > 0`. At season end the
+   * table has no action column (inset 0) and is still a table (walk 13 T4-03).
+   */
+  table?: boolean;
   precision?: PartPrecision;
   /** A follow-up move for a row, such as "Short again" on a closed short. */
   actionFor?: (row: ClosedRow) => ReactNode;
@@ -104,7 +109,7 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
   }, [heldKey, hold, open, release]);
   // The roster table (a wide list) keeps a Total column and an action column
   // at the right; `totalInset` is the action column plus its gap.
-  const table = totalInset > 0;
+  const table = tableLayout ?? totalInset > 0;
   // One row per player and side, his stints folded in (walk 11 T1-11). A
   // player dropped before his first game every time moved nothing but fees;
   // the Fees line counts him instead of a row of zeros.
@@ -222,7 +227,7 @@ export function ClosedSection({ rows: allRows, total, totalInset = 0, precision 
  * including the players dropped before they played (whose only effect on the
  * score was their fees).
  */
-export function FeesLine({ fees, moves, feeEach = 0, unplayed = [], unplayedShorts = [], totalInset = 0, precision = 'fine' }: {
+export function FeesLine({ fees, moves, feeEach = 0, unplayed = [], unplayedShorts = [], totalInset = 0, table = totalInset > 0, precision = 'fine' }: {
   fees: number;
   moves: number;
   /** Shorts closed before he played, by name. */
@@ -232,6 +237,8 @@ export function FeesLine({ fees, moves, feeEach = 0, unplayed = [], unplayedShor
   /** Players dropped before they played a game for you, by name (walk 7 T2-18). */
   unplayed?: readonly string[];
   totalInset?: number;
+  /** The wide table's alignment; defaults to `totalInset > 0` (see ClosedSection). */
+  table?: boolean;
   precision?: PartPrecision;
 }) {
   if (moves === 0) return null;
@@ -241,7 +248,7 @@ export function FeesLine({ fees, moves, feeEach = 0, unplayed = [], unplayedShor
     <View
       accessible
       accessibilityLabel={`Fees, ${spokenRepeats(detail).replace(/ \u00b7 /g, ', ')}, ${formatAt(fees, precision, true)}`}
-      style={[styles.row, totalInset > 0 ? null : styles.rowBaseline]}
+      style={[styles.row, table ? null : styles.rowBaseline]}
     >
       <View style={styles.copy}>
         <Text style={styles.name}>Fees</Text>

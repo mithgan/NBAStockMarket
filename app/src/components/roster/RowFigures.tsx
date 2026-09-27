@@ -115,7 +115,8 @@ export function TableHeader({ side, actionWidth }: { side: PerGamePositionSide; 
       <Text style={[styles.caption, { width: TABLE_COLUMNS.dividend }]}>{captions.dividend}</Text>
       <Text style={[styles.caption, { width: TABLE_COLUMNS.net }]}>{captions.net}</Text>
       <Text style={[styles.caption, { width: TABLE_COLUMNS.total }]}>{captions.total}</Text>
-      <View style={{ width: actionWidth }} />
+      {/* No action column at season end (walk 13 T4-03): Total ends the table. */}
+      {actionWidth > 0 ? <View style={{ width: actionWidth }} /> : null}
     </View>
   );
 }
@@ -141,6 +142,37 @@ export function TableFigures({ price, dividend, net, total, now = null }: Figure
       {cell(TABLE_COLUMNS.net, net === null ? <Missing /> : <FineMoney precision="compact" value={net} />)}
       {cell(TABLE_COLUMNS.total, <FineMoney value={total} />)}
     </>
+  );
+}
+
+/**
+ * The first visit's empty roster on a wide screen (walk 13 T2-02): under the
+ * table's drawn columns, one ghost row says what will fill the room ("No
+ * players yet. Your first player appears here after you add him."), each
+ * column holding a dash. Its words are read as text; the dashes and the
+ * empty photo are drawn only.
+ */
+export function TableGhostRow({ actionWidth }: { actionWidth: number }) {
+  const dash = (width: number) => (
+    <View style={[styles.cell, { width }]}>
+      <Text style={styles.missing}>—</Text>
+    </View>
+  );
+  return (
+    <View style={styles.ghostRow}>
+      <View aria-hidden style={styles.ghostPhoto} />
+      <View style={styles.ghostWords}>
+        <Text style={styles.ghostName}>No players yet</Text>
+        <Text style={styles.ghostMeta}>Your first player appears here after you add him.</Text>
+      </View>
+      <View aria-hidden style={styles.ghostFigures}>
+        {dash(TABLE_COLUMNS.price)}
+        {dash(TABLE_COLUMNS.dividend)}
+        {dash(TABLE_COLUMNS.net)}
+        {dash(TABLE_COLUMNS.total)}
+        {actionWidth > 0 ? <View style={{ width: actionWidth }} /> : null}
+      </View>
+    </View>
   );
 }
 
@@ -179,6 +211,48 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: 2,
+  },
+  // The ghost row sits on the table rows' grid: same insets, gaps and height.
+  ghostRow: {
+    minHeight: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  ghostPhoto: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.controlBorder,
+  },
+  ghostWords: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 4,
+  },
+  ghostName: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: type.value,
+    fontWeight: weight.heavy,
+  },
+  ghostMeta: {
+    marginTop: 3,
+    color: colors.muted,
+    fontFamily: fonts.display,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
+  },
+  ghostFigures: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
   },
   listLine: {
     flexDirection: 'row',

@@ -24,6 +24,7 @@ import {
   ListFigures,
   StackedFigures,
   TableFigures,
+  TableGhostRow,
   TableHeader,
 } from '../components/roster/RowFigures';
 import { ScoreHeader } from '../components/roster/ScoreHeader';
@@ -54,12 +55,14 @@ import { earningsBetween, scoreBreakdown, seasonSummary } from '../data/perGameM
 import {
   againRows,
   breakdownParts,
+  chartAfterLists,
   closedRows,
   closeQuestion,
   earnLine,
   exactFinalLine,
   feeMoves,
   figureCaptions,
+  finalParts,
   movesLine,
   pickValue,
   pressLine,
@@ -81,13 +84,15 @@ import { usePerGame } from '../state/PerGameContext';
 import { openRules, openTab, takeRosterPick } from '../state/uiActions';
 import { colors, control, fonts, radius, space, type, weight } from '../theme';
 import { Button, ConfirmStrip, EmptyState, headingLevel, repeatSafe, Tag, tapsSettling, useAriaDisabled, visuallyHidden } from '../ui/kit';
-import { restartPractice } from '../web/practiceSession';
+import { pastSeasonCount, restartPractice } from '../web/practiceSession';
 
 /** Desktop: score and chart beside the lists. */
 const WIDE_MIN_WIDTH = 1024;
 /** The score column; narrower on small laptops so the table keeps room for names. */
 const summaryWidth = (width: number) => (width >= 1200 ? 360 : 320);
 const ACTION_WIDTH = 72;
+/** The table's columns while the season runs: Player, the four figures, Drop or Close. */
+const TABLE_COLUMN_COUNT = 6;
 /** A second press on Drop this soon after it opened the confirm is a double tap: ignored. */
 const DOUBLE_TAP_MS = 400;
 /** Phone lists narrower than this leave out Profit a game (see `StackedFigures`). */
@@ -447,6 +452,11 @@ function PositionRow({
       belowZero ? belowZero.replace(/\.$/, '') : null,
       'View profile',
     ].filter(Boolean).join(', ');
+    // The row header's own short name, the player and how he is doing, which
+    // a screen reader repeats before each figure as you move along the row
+    // or down a column; "View profile" and the rest stay on the name button
+    // inside it (walk 13 T3-03).
+    const headerName = `${position.playerName}, ${view.tag.label}`;
     return (
       <View style={styles.tableItem}>
         <View role="row" style={styles.tableRow}>
@@ -460,7 +470,7 @@ function PositionRow({
           >
             {/* The row's header (walk 9 T3-02): moving down a column, a
                 screen reader names the player before each figure. */}
-            <View role="rowheader" style={styles.tablePlayerCell}>
+            <View aria-label={headerName} role="rowheader" style={styles.tablePlayerCell}>
               <PlayerAvatar player={{ id: position.playerId, name: position.playerName }} size={36} />
               <Pressable
                 ref={profileRef}
@@ -474,10 +484,18 @@ function PositionRow({
             </View>
             <TableFigures {...figures} />
           </Pressable>
-          {/* The header reserves the action column; keep the totals under it. */}
-          {action ? <View role="cell" style={styles.tableActionCell}>{action}</View> : <View style={{ width: ACTION_WIDTH }} />}
+          {/* At season end there is no action column: Total ends the row,
+              on the table's right edge (walk 13 T4-03, T2-03). */}
+          {action ? <View role="cell" style={styles.tableActionCell}>{action}</View> : null}
         </View>
-        {strip}
+        {/* The Drop / Close question is a row of the table, one cell across
+            its columns, right under his row: a reader walking the table by
+            rows or cells meets it in place (walk 13 T3-07). */}
+        {strip ? (
+          <View role="row">
+            <View role="cell" {...({ 'aria-colspan': TABLE_COLUMN_COUNT } as object)}>{strip}</View>
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -858,12 +876,17 @@ export function PerGameRosterScreen({
   const narrow = layout === 'stacked' && (listWidth ?? width) < NARROW_LIST_MAX_WIDTH;
   // The score's split: a statement in the desktop column, one a line when narrow, else two a line.
   const scoreVariant = wide ? 'panel' : layout === 'compact' ? 'narrow' : 'compact';
-  const totalInset = layout === 'table' ? ACTION_WIDTH + space.sm : 0;
+  // The table's action column (Drop, Close) and its gap, which the totals
+  // sit clear of; none once the season is over (walk 13 T4-03, T2-03).
+  const totalInset = layout === 'table' && !seasonOver ? ACTION_WIDTH + space.sm : 0;
   const hadLongs = bootstrap.positions.some((position) => position.side === 'long' && position.status === 'closed');
   const hadShorts = bootstrap.positions.some((position) => position.side === 'short' && position.status === 'closed');
   // The welcome carries the way to the Market while nobody is held: the
   // empty roster card does not repeat it (walk 11 T1-01, T3-01).
   const welcomeMarket = showWelcome && active.length === 0;
+  // The first visit on a wide screen: the empty table shows its columns and
+  // one ghost row, so the room says what will fill it (walk 13 T2-02).
+  const ghostTable = welcomeMarket && layout === 'table';
   // Before any short and while the welcome is up, shorts are one quiet line.
   const quietShorts = showWelcome && !seasonOver && shorts.length === 0 && !hadShorts;
   const { longSlots, shortSlots } = bootstrap.account;
@@ -877,8 +900,11 @@ export function PerGameRosterScreen({
   // (walk 6 T2-08, T4-09, T3-12): never exact dollars or a third decimal; the
   // parts nearest a rounding edge round the other way when needed, so the
   // parts as shown add up to the score as shown. Each list's total repeats
-  // its part exactly.
-  const parts = bootstrap.ledger.items.length > 0 ? shownParts(breakdownParts(breakdown), score) : null;
+  // its part exactly. Once the season is over each part keeps its own
+  // rounding and the card's exact line reconciles them, so the split, the
+  // lists' totals and "They made … before fees" name one figure (walk 13 T4-02).
+  const final = seasonOver && bootstrap.ledger.items.length > 0 ? finalParts(breakdownParts(breakdown), score) : null;
+  const parts = final ? final.parts : bootstrap.ledger.items.length > 0 ? shownParts(breakdownParts(breakdown), score) : null;
   const shownPart = (key: 'roster' | 'shorts' | 'closed' | 'fees', fallback: number) => (
     parts?.find((part) => part.key === key)?.value ?? fallback
   );
@@ -894,7 +920,7 @@ export function PerGameRosterScreen({
   // One list is pinned at a time; the taller one's height clears both.
   const focusClear = keepFocusClear(Math.max(pinnedLong, pinnedShort));
   const legend = (side: PerGamePosition['side']) => (
-    layout === 'table' ? <TableHeader actionWidth={ACTION_WIDTH} side={side} />
+    layout === 'table' ? <TableHeader actionWidth={seasonOver ? 0 : ACTION_WIDTH} side={side} />
       : layout === 'stacked' ? <FigureLegend narrow={narrow} side={side} /> : null
   );
   // The desktop table, as a table to screen readers (walk 8 T3-09): its
@@ -1081,6 +1107,8 @@ export function PerGameRosterScreen({
       locked={rosterLocked}
       nextGameDate={bootstrap.game.nextGameDate}
       onHide={hideWelcome}
+      // A visit's second season opens with one line (walk 13 T1-09).
+      season={pastSeasonCount() + 1}
       onOpenMarket={() => onOpenMarket('long')}
       onOpenRules={() => {
         openRules();
@@ -1117,16 +1145,36 @@ export function PerGameRosterScreen({
       onPlayAgain={practice
         ? () => restartPractice(seasonResultLine(bootstrap.account.cumulativePnl, rankLine(bootstrap.leaderboard)))
         : undefined}
-      exactLine={parts ? exactFinalLine(parts, score) : null}
+      exactLine={final ? final.exact : parts ? exactFinalLine(parts, score) : null}
       movesText={movesText}
       parts={parts}
       precision={precision}
       summary={season}
+      // A short window: the way on sits under the final score, in the first
+      // view, never half under the notice strip (walk 13 T2-09).
+      actionFirst={shortWindow}
       valueLine={started ? picks?.text ?? null : null}
       variant={scoreVariant}
     />
   ) : null;
 
+  // On the opening eve the welcome says what the empty chart would.
+  const chart = showWelcome ? null : (
+    <PerGamePnlChart
+      entries={bootstrap.ledger.items}
+      // A phone's plot is tall enough from the first night to read a
+      // week of swings and to pick a night with a finger (walk 9 T1-11):
+      // it scrolls with the page. Desktop is capped so nightly swings stay
+      // readable. At season end the chart is the season's story, and a
+      // finger picks one of 174 nights: it gets more room (walk 8 T1-09).
+      plotHeight={wide ? 208 : seasonOver ? 140 : 120}
+      seasonOver={seasonOver}
+    />
+  );
+  // A short one-column window (a laptop at 960x600, a phone on its side)
+  // shows the score and your players first; the chart follows the lists
+  // (walk 13 T2-04).
+  const chartLast = chartAfterLists({ height, wide, seasonOver });
   // The welcome and the season's result lead the screen: on a phone above the
   // score, on a desktop at the top of the score column, which is otherwise
   // mostly empty before the first games. Once the season is over the result
@@ -1154,19 +1202,7 @@ export function PerGameRosterScreen({
           weekWords={lastPress}
         />
       )}
-      {/* On the opening eve the welcome says what the empty chart would. */}
-      {showWelcome ? null : (
-        <PerGamePnlChart
-          entries={bootstrap.ledger.items}
-          // A phone's plot is tall enough from the first night to read a
-          // week of swings and to pick a night with a finger (walk 9 T1-11):
-          // it scrolls with the page. Desktop is capped so nightly swings stay
-          // readable. At season end the chart is the season's story, and a
-          // finger picks one of 174 nights: it gets more room (walk 8 T1-09).
-          plotHeight={wide ? 208 : seasonOver ? 140 : 120}
-          seasonOver={seasonOver}
-        />
-      )}
+      {chartLast ? null : chart}
       {wide && started && !seasonOver ? <SeasonSoFar fees={breakdown.fees} movesText={movesText} summary={season} /> : null}
     </>
   );
@@ -1176,7 +1212,7 @@ export function PerGameRosterScreen({
         <SectionHead
           count={`${longSlots.used} of ${longSlots.limit}`}
           headingRef={rosterHeading}
-          legend={longs.length > 0 ? legend('long') : undefined}
+          legend={longs.length > 0 || ghostTable ? legend('long') : undefined}
           note={actionNote}
           onPinnedHeight={setPinnedLong}
           precision={precision}
@@ -1187,7 +1223,7 @@ export function PerGameRosterScreen({
           totalLabel="Roster total"
         />
         {errand('long')}
-        {longs.length > 0 ? tableOf('long', rows(longs)) : (
+        {longs.length > 0 ? tableOf('long', rows(longs)) : ghostTable ? <TableGhostRow actionWidth={ACTION_WIDTH} /> : (
           <EmptyState
             // Always a way to the Market (walk 8 T1-02), but one at a time:
             // while the welcome carries its own (nobody held), the first
@@ -1269,6 +1305,7 @@ export function PerGameRosterScreen({
         noteFor={fullNoteFor}
         precision={precision}
         rows={closed}
+        table={layout === 'table'}
         total={shownPart('closed', breakdown.closed)}
         totalInset={totalInset}
       />
@@ -1277,10 +1314,12 @@ export function PerGameRosterScreen({
         fees={shownPart('fees', breakdown.fees)}
         moves={feeMoves(bootstrap.ledger.items)}
         precision={precision}
+        table={layout === 'table'}
         totalInset={totalInset}
         unplayed={unplayed}
         unplayedShorts={closed.filter((row) => row.unplayed && row.side === 'short').map((row) => row.name)}
       />
+      {chartLast && chart ? <View style={styles.chartLast}>{chart}</View> : null}
     </>
   );
 
@@ -1352,6 +1391,13 @@ const styles = StyleSheet.create({
   section: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderStrong,
+  },
+  // Score by night under the lists in a short window (walk 13 T2-04): ruled
+  // off from the Fees line, as the lists are from each other.
+  chartLast: {
+    marginTop: space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderStrong,
   },
   empty: {
     paddingVertical: space.lg,

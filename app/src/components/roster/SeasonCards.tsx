@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp,
 import { humanDate } from '../../copy/terms';
 import { keepTogether } from '../../data/chromeView';
 import type { SeasonSummary } from '../../data/perGameMetrics';
-import { finalSummary, formatAt, tipTag, tipWords, welcomeDetails, welcomeSteps, type BreakdownPart, type PartPrecision, type TipVerdict } from '../../data/rosterView';
+import { finalSummary, formatAt, tipTag, tipWords, welcomeAgainLine, welcomeDetails, welcomeSteps, type BreakdownPart, type PartPrecision, type TipVerdict } from '../../data/rosterView';
 import { colors, control, fonts, headingStyle, radius, space, type, weight } from '../../theme';
 import { Button, headingLevel, Label, tapsSettling, visuallyHidden } from '../../ui/kit';
 import { SEASON_RESULT_HEADING_ID } from '../../ui/domMarkers';
@@ -27,11 +27,17 @@ export function WelcomeCard({
   feeDollars,
   earn,
   locked = false,
+  season = 1,
   onOpenMarket,
   onOpenRules,
   onHide,
 }: {
   hasPlayers: boolean;
+  /**
+   * Which season of this visit it opens (practice): from the second on it is
+   * one line, since you have just played one (walk 13 T1-09).
+   */
+  season?: number;
   /**
    * Moves are paused for the next games (walk 11 T1-10): the steps lead with
    * +1 night, and the Market is there to look around (the outlined "Browse
@@ -48,7 +54,8 @@ export function WelcomeCard({
   onHide: () => void;
 }) {
   const games = nextGameDate ? `the ${humanDate(nextGameDate)} games` : 'the first games';
-  const title = hasPlayers ? 'Ready for the first games' : 'Your practice season';
+  const again = season > 1;
+  const title = hasPlayers ? 'Ready for the first games' : again ? `Season ${season}` : 'Your practice season';
   // At 400% zoom (about 100px wide) the × takes its own line and the buttons
   // run full width, so the words keep the whole card (walk 3 T3-05).
   const windowWidth = useWindowDimensions().width;
@@ -60,8 +67,9 @@ export function WelcomeCard({
     <View style={[styles.band, tiny && styles.bandTiny]}>
       <View style={[styles.headRow, tiny && styles.headRowTiny]}>
         <View style={styles.headText}>
-          {/* The steps' title says "practice" itself; the next step's does not. */}
-          {hasPlayers ? <Label tone="gold">Practice</Label> : null}
+          {/* The steps' title says "practice" itself; the next step's and a
+              later season's do not. */}
+          {hasPlayers || again ? <Label tone="gold">Practice</Label> : null}
           <Text
             accessibilityRole="header"
             nativeID={PRACTICE_WELCOME_TITLE_ID}
@@ -88,6 +96,9 @@ export function WelcomeCard({
             ? `Press +1 night to play ${games}. Moves are paused until they have played.`
             : `Press +1 night to play ${games}. You can keep adding players until then.`}
         </Text>
+      ) : again ? (
+        // A later season: what to do in one line; the scoring is in the rules.
+        <Text style={styles.copy}>{welcomeAgainLine(nextGameDate, locked)}</Text>
       ) : (
         <>
           {/* What to do, as three short steps the eye takes in at once; how
@@ -206,8 +217,15 @@ export function SeasonCompleteCard({
   movesText,
   onPlayAgain,
   onOpenPlayer,
+  actionFirst = false,
 }: {
   summary: SeasonSummary;
+  /**
+   * A short window (the folded frame): "Play another season" sits beside the
+   * final score, at the top of the card, instead of under Moves, where the
+   * card ran past the view and the notice strip cut it in half (walk 13 T2-09).
+   */
+  actionFirst?: boolean;
   /**
    * The final score exactly, when rounding hides a part ("Exactly
    * +$4,129,750, fees -$750 included."; `exactFinalLine`); null otherwise.
@@ -252,6 +270,7 @@ export function SeasonCompleteCard({
   const spoken = finalSummary(summary.finalScore, place, split);
   // Drawn as a label and its figures; heard as one sentence (a name on a
   // role-less box is skipped by screen readers in reading mode, walk 7 T3-10).
+  const playAgain = onPlayAgain ? <Button label="Play another season" onPress={onPlayAgain} variant="primary" /> : null;
   const movesLine = (
     <SpokenAs style={[styles.finalLine, onOpenPlayer && styles.movesLine]} text={onOpenPlayer ? spokenMoves : null}>
       <Text style={styles.finalLabel}>Moves</Text>
@@ -272,6 +291,7 @@ export function SeasonCompleteCard({
           {place ? <Text style={styles.place}>{keepTogether(place)}</Text> : null}
         </View>
       </SpokenAs>
+      {actionFirst && playAgain ? <View style={[styles.actions, styles.actionsFirst]}>{playAgain}</View> : null}
       {split || valueLine ? (
         <View style={styles.split}>
           {split ? <ScoreParts hidden parts={split} precision={precision} title="Final score" variant={variant} /> : null}
@@ -322,11 +342,7 @@ export function SeasonCompleteCard({
           {movesLine}
         </>
       ) : null}
-      {onPlayAgain ? (
-        <View style={styles.actions}>
-          <Button label="Play another season" onPress={onPlayAgain} variant="primary" />
-        </View>
-      ) : null}
+      {playAgain && !actionFirst ? <View style={styles.actions}>{playAgain}</View> : null}
     </View>
   );
 }
@@ -509,6 +525,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: space.sm,
+  },
+  // Right under the final score in a short window (walk 13 T2-09).
+  actionsFirst: {
+    marginTop: space.sm,
+    marginBottom: space.xs,
   },
   finalFacts: {
     marginTop: space.xs,

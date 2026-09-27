@@ -322,6 +322,23 @@ export function confirmCloseMessage({
 }): string {
   const fee = feeDollars > 0 ? exactMoney(feeDollars) : null;
   const forFee = fee ? ` for a ${fee} fee` : '';
+  // Closing a short early is asked in two sentences, not five, on every
+  // screen that quotes the price after the move (walk 13 T1-13): the choice
+  // first, the free way in it, then one line for the rest. The first
+  // sentence names the strip for screen readers, so it stays the question.
+  if (side === 'short' && dropImpactBps !== null) {
+    const choice = endsFreeAfter
+      ? `Close your short on ${playerName} now${forFee}, or let it end by itself after ${humanDate(endsFreeAfter)} at no cost?`
+      : `Close your short on ${playerName}${forFee}?`;
+    const kept = Math.round(total) !== 0
+      ? `Its ${signedMoneyFine(total)} stays in your score`
+      : fee ? `Only its ${fee} fee is in your score so far` : 'Its games have not moved your score yet';
+    const more = fee ? `, plus another ${fee} fee` : '';
+    const again = priceNow !== null && priceNow > 0
+      ? `shorting him again: about ${moneyCompact(priceAfterClose('short', priceNow, dropImpactBps))} a game${more}`
+      : `shorting him again sets a new price${more}`;
+    return `${choice} ${kept}; ${again}.`;
+  }
   const ask = side === 'long' ? `Drop ${playerName}${forFee}?` : `Close your short on ${playerName}${forFee}?`;
   const sentences = [ask];
   if (Math.round(total) !== 0) {
