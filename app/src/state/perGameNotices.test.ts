@@ -219,7 +219,10 @@ test('a run\'s notice covers the notice of its own first week, and nothing else 
   const run = 'Oct 21–Nov 10 games (3 weeks): your score fell $529K. Jalen Duren was not added: moves paused for the Oct 28 games. Moves pause for the Nov 11 games.';
   assert.equal(coversGames(run, week), true);
   assert.equal(coversGames('Oct 21–23 games (3 nights): your score rose $205K.', 'Oct 21 games: your score rose $84K.'), true);
-  // Later weeks start elsewhere; a new season's first night ends before the old week did.
+  // A later week inside the run is covered too (walk 17 T4-07); a week outside it is not.
+  assert.equal(coversGames(run, 'Nov 4–10 games: your score fell $8.5K. Moves pause for the Nov 11 games, so Jalen Duren was not added.'), true);
+  assert.equal(coversGames(run, 'Nov 11–17 games: your score rose $9K.'), false);
+  // A later week never covers an earlier one; a new season's first night ends before the old week did.
   assert.equal(coversGames('Oct 28–Nov 3 games: your score rose $9K.', week), false);
   assert.equal(coversGames('Oct 21 games: your score rose $84K.', week), false);
   // Across the new year: Dec 30–Jan 5 covers Dec 30.

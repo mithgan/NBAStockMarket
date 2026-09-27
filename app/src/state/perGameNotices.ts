@@ -159,15 +159,16 @@ function gamesSpan(text: string): { start: number; end: number } | null {
 
 /**
  * Whether a games notice reports a run that includes the earlier one's games
- * (same first night, reaching as far or further): "Oct 21–Nov 10 games (3
- * weeks)" covers "Oct 21–27 games". Recent notices keeps the run, not both
- * (walk 16 T4-11: a refusal in a run's first week left that week's notice
- * beside the run's, the refusal said twice).
+ * (its nights lie inside the run's): "Oct 21–Nov 10 games (3 weeks)" covers
+ * "Oct 21–27 games" and "Nov 4–10 games". Recent notices keeps the run, not
+ * both (walk 16 T4-11: a refusal in a run's first week left that week's
+ * notice beside the run's, the refusal said twice; walk 17 T4-07: so did one
+ * in its last week).
  */
 export function coversGames(later: string, earlier: string): boolean {
   const next = gamesSpan(later);
   const before = gamesSpan(earlier);
-  return Boolean(next && before && next.start === before.start && next.end >= before.end && later !== earlier);
+  return Boolean(next && before && next.start <= before.start && next.end >= before.end && later !== earlier);
 }
 
 /** How the season's last games are announced; the Roster's result card says the same. */
