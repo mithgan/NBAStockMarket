@@ -230,6 +230,12 @@ type NoticePlacement = 'bar' | 'barWide' | 'dock';
 const NOTICE_BAR_WIDE_MIN_WIDTH = 720;
 /** Below this height the docked notice keeps to one line (400% zoom). */
 const TINY_DOCK_MAX_HEIGHT = 260;
+/**
+ * Below this height the docked notice keeps to two lines, with "more ▾" for
+ * the rest (200% zoom, a phone on its side): three lines left half a 195x422
+ * screen for the game (walk 12 T3-09).
+ */
+const SHORT_DOCK_MAX_HEIGHT = 480;
 /** Below this width (400% zoom) × goes under the words, which keep the width. */
 const NOTICE_STACKED_MAX_WIDTH = 200;
 
@@ -270,6 +276,8 @@ function NoticeToast({
   // Under about 260px of height (400% zoom) the strip keeps to one line, so a
   // player row still fits above it; the rest scrolls inside (walk 7 T3-05).
   const tinyDock = placement === 'dock' && height < TINY_DOCK_MAX_HEIGHT;
+  // How many lines the strip shows before "more ▾" (0: all of it).
+  const clampLines = tinyDock ? 1 : placement === 'dock' && height < SHORT_DOCK_MAX_HEIGHT ? 2 : 0;
   // A one-line strip whose words run on says so ("more ▾") and waits to be
   // read, closed or replaced: at 400% a keyboard user could not reach it
   // before it cleared (walk 9 T3-06, T3-N5). Settings keeps it in Recent
@@ -280,6 +288,7 @@ function NoticeToast({
   const [expanded, setExpanded] = useState(false);
   useEffect(() => setExpanded(false), [message, seq]);
   useEffect(() => {
+    // Held only at 400%, where a keyboard user could not reach it in time.
     if (tone !== 'success' || held || keep || (tinyDock && overflowing)) return undefined;
     const timer = setTimeout(onDismiss, successNoticeMs(message));
     return () => clearTimeout(timer);
@@ -364,8 +373,8 @@ function NoticeToast({
   // At 400% zoom a notice can be taller than the room the dock may take (it
   // leaves the screen more than half of what is left under the frame): its
   // first words stay at the top and the rest scrolls inside it (walk 5 T3-06).
-  const dockText = tinyDock
-    ? (expanded ? Math.max(TINY_NOTICE_LINE, Math.round(height * 0.6)) : TINY_NOTICE_LINE)
+  const dockText = clampLines > 0
+    ? (expanded ? Math.max(TINY_NOTICE_LINE * clampLines, Math.round(height * 0.6)) : TINY_NOTICE_LINE * clampLines)
     : Math.max(36, Math.round(Math.min(height * 0.3, (height - 150) * 0.45)));
   // At 400% zoom the one-line strip is a stop on the Tab path: the rest of
   // the notice scrolls with the arrow keys, and it waits while focused
@@ -381,13 +390,13 @@ function NoticeToast({
   const words = placement === 'dock' ? (
     <View style={styles.noticeWords}>
       <ScrollView
-        onContentSizeChange={(_contentWidth, contentHeight) => setOverflowing(tinyDock && contentHeight > TINY_NOTICE_LINE + 2)}
+        onContentSizeChange={(_contentWidth, contentHeight) => setOverflowing(clampLines > 0 && contentHeight > TINY_NOTICE_LINE * clampLines + 2)}
         style={[styles.noticeScroll, { maxHeight: dockText }]}
         {...readable}
       >
         <Text style={styles.noticeText}>{message}</Text>
       </ScrollView>
-      {tinyDock && overflowing ? (
+      {clampLines > 0 && overflowing ? (
         <Pressable
           // One name, and its state said as expanded or collapsed (walk 12 T3-05).
           accessibilityLabel="Whole notice"
@@ -1345,10 +1354,12 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingVertical: 1,
   },
+  // Wide enough on a desktop for a week's notice to keep to two lines (walk 12
+  // T2-06: three lines in 640px made the bar 14px taller).
   noticeBarWide: {
     flex: 1,
     width: 'auto',
-    maxWidth: 640,
+    maxWidth: 880,
     minWidth: 0,
     minHeight: 44,
     paddingVertical: 1,

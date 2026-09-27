@@ -22,6 +22,58 @@
         height: 100%;
         flex: 1;
       }
+      /* Until the app draws its first frame (a first visit, a restart, a new
+         season): the brand and a quiet line, not a blank page (walk 12 T2-01).
+         The app replaces it. */
+      #shell-loading {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 24px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: var(--shell-ink, #fafafa);
+      }
+      #shell-loading .shell-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #shell-loading .shell-mark {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--shell-gold, #d9a227);
+        color: #1a1408;
+        font-size: 19px;
+        font-weight: 800;
+        line-height: 32px;
+        text-align: center;
+      }
+      #shell-loading .shell-word {
+        color: var(--shell-word, #d9a227);
+        font-size: 22px;
+        font-weight: 800;
+      }
+      #shell-loading .shell-rule {
+        width: 1px;
+        height: 20px;
+        background: var(--shell-muted, #b0b5bf);
+        opacity: 0.5;
+      }
+      #shell-loading .shell-product {
+        color: var(--shell-muted, #b0b5bf);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+      }
+      #shell-loading .shell-note {
+        margin: 0;
+        color: var(--shell-muted, #b0b5bf);
+        font-size: 14px;
+      }
     </style>
     <!-- The page paints in the player's look before the app loads, so a
          restart (a reload) never flashes white on a dark screen (walk 8
@@ -42,7 +94,16 @@
           : matches('(prefers-contrast: more)') ? 'contrast'
             : matches('(prefers-color-scheme: light)') ? 'light'
               : 'grain';
-        document.documentElement.style.backgroundColor = backgrounds[id];
+        var style = document.documentElement.style;
+        style.backgroundColor = backgrounds[id];
+        // The loading words under it, in the same look (walk 12 T2-01).
+        if (style.setProperty) {
+          var light = id === 'light';
+          style.setProperty('--shell-ink', light ? '#231f1a' : '#fafafa');
+          style.setProperty('--shell-muted', light ? '#4c4339' : '#b0b5bf');
+          style.setProperty('--shell-word', id === 'contrast' ? '#ffd21f' : light ? '#6a4e0d' : '#d9a227');
+          style.setProperty('--shell-gold', id === 'contrast' ? '#ffd21f' : '#d9a227');
+        }
       })();
     </script>
   </head>
@@ -53,6 +114,6 @@
       You need to enable JavaScript to run this app.
     </noscript>
     <!-- The root element for your Expo app. -->
-    <div id="root"></div>
+    <div id="root"><div id="shell-loading"><div class="shell-brand" aria-hidden="true"><span class="shell-mark">d</span><span class="shell-word">databallr</span><span class="shell-rule"></span><span class="shell-product">STOCK MARKET</span></div><p class="shell-note">Loading…</p></div></div>
   </body>
 </html>
