@@ -28,6 +28,11 @@ type ChromeButtonProps = {
   tone?: 'plain' | 'gold';
   /** For a control that shows and hides more controls (More). */
   expanded?: boolean;
+  /**
+   * What it opens, said before it is pressed (More opens a dialog: a reader
+   * only learned it was a panel after pressing it; walk 14 T3-06).
+   */
+  hasPopup?: 'dialog' | 'menu';
 };
 
 /** Forwards its ref so a menu can hand focus back to the control that opened it. */
@@ -41,6 +46,7 @@ export const ChromeButton = forwardRef<View, ChromeButtonProps>(function ChromeB
   placement,
   tone = 'plain',
   expanded,
+  hasPopup,
 }, ref) {
   const gold = tone === 'gold';
   const color = disabled ? colors.faint : gold || expanded ? colors.goldInk : colors.muted;
@@ -54,6 +60,7 @@ export const ChromeButton = forwardRef<View, ChromeButtonProps>(function ChromeB
       accessibilityState={{ disabled, busy, expanded }}
       aria-busy={busy || undefined}
       aria-expanded={expanded}
+      aria-haspopup={hasPopup}
       disabled={disabled}
       onPress={() => {
         // The second tap of a double tap on a sheet's Done, landing where

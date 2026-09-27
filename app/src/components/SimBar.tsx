@@ -13,6 +13,7 @@ import {
   ADVANCE_DOUBLE_TAP_MS,
   advanceTap,
   type AdvanceTapState,
+  advanceQuiet,
   asksBeforeEmptyNight,
   asksBeforeEmptyWeek,
   cancelHintFits,
@@ -24,6 +25,7 @@ import {
   questionAnswerOrder,
   questionTight,
   playToEndShortsOnlyLines,
+  playToEndSpanLine,
   queuedCancelControlName,
   queuedCancelHint,
   queuedCancelLabel,
@@ -33,6 +35,10 @@ import {
   withCancelledNote,
   CHROME_FOLDED_ONE_LINE_MIN_WIDTH,
   chromeFolded,
+  isGamesNotice,
+  seasonEndRowShows,
+  seasonEndStanding,
+  tinyRowHoldsNight,
   chromeLayout,
   continuesRun,
   RUN_CONTINUE_MS,
@@ -89,7 +95,7 @@ import {
   weekSpanLabel,
 } from '../data/chromeView';
 import type { PracticeRulesContext } from '../data/perGameRules';
-import { humanDate, rosterReopensLine, seasonResultLine } from '../copy/terms';
+import { humanDate, rosterReopensLine, seasonResultLine, spokenRanks } from '../copy/terms';
 import { rankLine } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
 import { refreshNotice } from '../state/perGameNotices';
@@ -940,12 +946,12 @@ function PracticeQuestionView({ asked, bootstrap, close, playingLine, queued, sa
   const shortEnds = open.filter((position) => position.side === 'short').map((position) => position.expiresOn);
   const lockedNow = bootstrap.ruleset.rosterMutationsLocked;
   const endPrompt = asked.kind === 'play-to-end'
-    ? playToEndQuestion(SEASON_TOTAL_DAYS - progress.day, open.length + savingAdds + savingShorts === 0, shortEnds)
+    ? playToEndQuestion(SEASON_TOTAL_DAYS - progress.day, open.length + savingAdds + savingShorts === 0, shortEnds, practiceSeasonEnd(mockSeasonStart()))
     : null;
   // Only shorts: after the last one ends nobody plays for you (walk 9 T4-12).
   const shortsOnly = endPrompt && rosterPlayers === 0 && shortEnds.length > 0 ? playToEndShortsOnlyLines(shortEnds) : null;
   const prompt = endPrompt
-    ? (shortsOnly ? { ...endPrompt, lines: shortsOnly } : endPrompt)
+    ? (shortsOnly ? { ...endPrompt, lines: [playToEndSpanLine(SEASON_TOTAL_DAYS - progress.day), ...shortsOnly] } : endPrompt)
     : practiceQuestion(
       asked.kind === 'play-to-end' ? 'restart' : asked.kind,
       stakes,
@@ -964,7 +970,8 @@ function PracticeQuestionView({ asked, bootstrap, close, playingLine, queued, sa
       return;
     }
     if (kind === 'empty-night' || kind === 'empty-week') {
-      // Asked once a season: from now on the hint line says it (walk 3 T1-19).
+      // +1 night asks once a season: from now on the hint line says it (walk
+      // 3 T1-19). +1 week asks every time nobody is held (walk 14 T1-06).
       setPlayedWithoutRoster();
       focusAsker({ kind, fromMenu: false });
       advanceFromQuestion?.(kind === 'empty-night' ? 'night' : 'week');
@@ -1069,6 +1076,11 @@ function PracticeQuestionView({ asked, bootstrap, close, playingLine, queued, sa
 
 /** The More menu's panel (its DOM id on the web). */
 const MORE_PANEL_ID = 'practice-more';
+/** The window gutter the panel keeps when it runs past More (walk 14 T1-01). */
+const MORE_PANEL_GUTTER = 8;
+/** The caret under More: its size, and the gap it spans. */
+const MORE_CARET_SIZE = 10;
+const MORE_CARET_GAP = 7;
 
 function focusLater(ref: { current: unknown }, delay = 60): void {
   setTimeout(() => (ref.current as { focus?: () => void } | null)?.focus?.(), delay);
@@ -1095,7 +1107,7 @@ function MoreMenu({ open, setOpen, buttonRef, children, footer = null }: {
   footer?: ReactNode;
 }) {
   const { width, height } = useWindowDimensions();
-  const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
+  const [anchor, setAnchor] = useState<{ top: number; right: number; caret: number } | null>(null);
   // The scroll area is never a stop of its own: at 400% zoom Tab landed on
   // it, unnamed and with the browser's thin ring, between Settings and +1
   // night (walk 8 T3-02). It leaves the Tab order, and when the modal's
@@ -1133,7 +1145,15 @@ function MoreMenu({ open, setOpen, buttonRef, children, footer = null }: {
     if (!open) return;
     const node = buttonRef.current as unknown as { getBoundingClientRect?: () => DOMRect } | null;
     const box = node?.getBoundingClientRect?.();
-    if (box) setAnchor({ top: box.bottom + 2, right: Math.max(width - box.right, 2) });
+    if (!box) return;
+    // With a control right of More (Settings, a phone on its side) the
+    // panel runs to the window's gutter: what sits there is right-aligned
+    // (a tip's button, a figure), so it is covered whole, not cut, and a
+    // caret keeps the panel on More (walk 14 T1-01: a sliver of the tip's
+    // button showed beside it, and the "$" of a figure was cut).
+    const fromRight = width - box.right;
+    const right = fromRight > MORE_PANEL_GUTTER * 3 ? MORE_PANEL_GUTTER : Math.max(fromRight, 2);
+    setAnchor({ top: box.bottom + MORE_CARET_GAP, right, caret: width - (box.left + box.width / 2) - right });
   }, [open, width, buttonRef]);
   // It looks and acts like a menu, so the arrows move through it too:
   // ArrowDown / ArrowUp step (and wrap), Home and End jump to the ends. Tab
@@ -1178,6 +1198,7 @@ function MoreMenu({ open, setOpen, buttonRef, children, footer = null }: {
         // Restart button by name can land on More instead.
         accessibilityLabel="More practice controls"
         expanded={open}
+        hasPopup="dialog"
         icon={(color) => <MoreIcon color={color} />}
         label="More"
         onPress={unlessSettling(() => setOpen(!open))}
@@ -1214,6 +1235,7 @@ function MoreMenu({ open, setOpen, buttonRef, children, footer = null }: {
               },
             ]}
           >
+            {anchor ? <View aria-hidden style={[styles.moreCaret, { right: anchor.caret - MORE_CARET_SIZE / 2 - 1 }]} /> : null}
             <ScrollView ref={scrollRef} contentContainerStyle={styles.moreItems} style={styles.moreScroll}>
               {children}
             </ScrollView>
@@ -1383,6 +1405,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       notify(runNotice(run.steps, refreshNotice(run.start, bootstrap, false, { seasonComplete: seasonOver })), { spoken: '' });
       return;
     }
+    // Play to the end waits behind this step: the step's result is heard
+    // with the season's end, without its lock (walk 14 T4-02).
+    if (endQueuedRef.current && isGamesNotice(message)) notify(message as string, { spoken: '' });
     dismissNotice();
   }, [noticeSeq, dismissNotice]);
   // In the render that shows the run's last nights, before it paints, so the
@@ -1800,8 +1825,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   const open = bootstrap.positions.filter((position) => position.status === 'active');
   // Nothing to play for yet: +1 night / +1 week stay quiet (the first move is
   // adding a player), ask before playing, and a line under them says what
-  // they do. Once the player has said "Play anyway" this season they just
-  // play, and look it (walk 3 T1-19, T2-14).
+  // they do. Once the player has said "Play anyway" this season +1 night
+  // just plays (walk 3 T1-19, T2-14); +1 week asks every time and both stay
+  // quiet while nobody is held (walk 14 T1-06).
   // Adds still saving count: the buttons light at once and a press waits
   // for the saves, as moves wait for nights (walk 12 T2-08).
   const emptyRoster = open.length === 0 && savingHolds(pendingActions, bootstrap).length === 0 && !progress.complete;
@@ -1810,6 +1836,11 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   const lockedNight = bootstrap.ruleset.rosterMutationsLocked && !progress.complete;
   const asksFirst = asksBeforeEmptyWeek(emptyRoster, playedAnyway, lockedNight);
   const asksNight = asksBeforeEmptyNight(emptyRoster, playedAnyway, lockedNight);
+  // Quiet while nobody is held, whatever was answered before: "Play anyway"
+  // answers one press, and the welcome's Open market stays the one gold
+  // call (walk 14 T1-06).
+  const quietNight = advanceQuiet('night', emptyRoster, lockedNight);
+  const quietWeek = advanceQuiet('week', emptyRoster, lockedNight);
   // Near the end something else takes the buttons' spot (Play another
   // season), so a double tap's second click is kept off it there.
   const nearEnd = SEASON_TOTAL_DAYS - progress.day <= 7;
@@ -1978,6 +2009,13 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     }
     const end = practiceSeasonEnd(mockSeasonStart());
     const from = bootstrap.game.lastSettledDate ?? null;
+    // The last step's result not heard yet goes with the season's end, as
+    // drawn: without "Moves pause for the Oct 28 games", which the rest of
+    // the season is about to play (walk 14 T4-02).
+    if (speakRun.current) {
+      stopSpeakRun();
+      if (isGamesNotice(message)) notify(message as string, { spoken: '' });
+    }
     // Presses that waited for its question are part of the rest of the season.
     setQueue([]);
     endRunSlot();
@@ -2032,6 +2070,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     : null;
   // Folded and narrow: the controls get their own line and share it evenly.
   const foldFill = folded && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
+  // At 400% zoom on a desktop (320x200) +1 night stays in the row beside
+  // More, the step the welcome names (walk 14 T3-02); the rest is in More.
+  const nightInRow = folded && tiny && tinyRowHoldsNight(width, progress.complete, lockedNight);
   // While a night (or week) plays, the pressed button says so and keeps its
   // full ink (walk 2 T4-07); the other one dims. A press queued behind it
   // shows on the button it was made on, in full ink: "+1 week" over
@@ -2059,10 +2100,12 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // While weeks play or wait, +1 night plays after them: no date the queue
   // will already play (walk 12 T4-08).
   const afterQueue = nightsQueued > 0 || playingNight ? null
-    : nightAfterQueue(lastSettledNow, playing?.step === 'week' ? 'week' : null, queued, practiceSeasonEnd(mockSeasonStart()));
+    : nightAfterQueue(lastSettledNow, playing?.step === 'week' ? 'week' : null, queued, practiceSeasonEnd(mockSeasonStart()), playing?.step === 'week' ? playing.date : null);
   const nightLabel = nightsQueued > 0 ? queuedLabel('night', stackLabels, nightsQueued)
     : playingNight ? busyLabel(true)
-      : afterQueue ? (stackLabels ? '+1\nnight' : '+1 night')
+      // Its date dropped while weeks play or wait: "+1 NIGHT" stays on one
+      // line where the dated label had it so (195px; walk 14 T4-06).
+      : afterQueue ? (stackedDate ? '+1\u00a0night' : stackLabels ? '+1\nnight' : '+1 night')
         : stackedDate ? `+1 night\n${nightDate}` : stackLabels ? '+1\nnight' : nightDate ? `+1 night\n${nightDate}` : '+1 night';
   // Its visible words first ("+1 night Oct 21: play the Oct 21 games"), so a
   // voice command matches what it shows (walk 10 T3-05).
@@ -2070,8 +2113,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     : pressQueues ? queueingAdvanceName('night', queueingPlaying, nightsQueued)
       : playingNight ? `+1 night: advance one night. ${playingText}`
         : nightButtonName(nightDate, stackedDate || (!stackLabels && nightDate !== null)));
-  const advanceButtons = (
-    <>
+  const nightButton = (
       <Button
         ref={nightRef}
         accessibilityLabel={nightName}
@@ -2085,10 +2127,12 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         // In a folded row (a phone on its side) +1 night keeps +1 week's
         // width, so the two read as a pair: it was 64px on two lines beside
         // a 104px +1 week (walk 12 T1-03).
-        style={[styles.advance, narrow && styles.advanceNarrow, compact && !slotRow && styles.advanceCompact, slotRow && styles.advancePhone, folded && styles.advanceFolded, folded && !stackLabels && !foldFill && styles.advanceWeekReserve, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, stackedDate && styles.advanceDated, asksNight && styles.advanceQuiet, inkNight && styles.advancePlaying]}
-        textStyle={[asksNight ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkNight && styles.advanceTextBusyStacked]}
+        style={[styles.advance, narrow && styles.advanceNarrow, compact && !slotRow && styles.advanceCompact, slotRow && styles.advancePhone, folded && styles.advanceFolded, folded && !stackLabels && !foldFill && styles.advanceWeekReserve, foldFill && !nightInRow && styles.advanceFill, nightInRow && styles.advanceTinyRow, stackLabels && styles.advanceStacked, stackedDate && styles.advanceDated, quietNight && styles.advanceQuiet, inkNight && styles.advancePlaying]}
+        textStyle={[quietNight ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkNight && styles.advanceTextBusyStacked]}
         variant="secondary"
       />
+  );
+  const weekButton = (
       <Button
         ref={weekRef}
         // The span it plays is in the name; the label keeps the button's width.
@@ -2101,10 +2145,15 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         steady
         onPress={advanceBusy ? pressAdvance('week', () => pressWhileBusy('week'), nearEnd)
           : pressAdvance('week', () => pressRef.current?.('week'), nearEnd || asksFirst)}
-        style={[styles.advance, narrow && styles.advanceNarrow, compact && !slotRow && styles.advanceCompact, slotRow && styles.advancePhone, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, stackLabels && width >= WEEK_ONE_LINE_STACKED_MIN_WIDTH && styles.advanceWeekOneLine, !stackLabels && !slotRow && !foldFill && styles.advanceWeekReserve, asksFirst && styles.advanceQuiet, inkWeek && styles.advancePlaying]}
-        textStyle={[asksFirst ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkWeek && styles.advanceTextBusyStacked]}
+        style={[styles.advance, narrow && styles.advanceNarrow, compact && !slotRow && styles.advanceCompact, slotRow && styles.advancePhone, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, stackLabels && width >= WEEK_ONE_LINE_STACKED_MIN_WIDTH && styles.advanceWeekOneLine, !stackLabels && !slotRow && !foldFill && styles.advanceWeekReserve, quietWeek && styles.advanceQuiet, inkWeek && styles.advancePlaying]}
+        textStyle={[quietWeek ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkWeek && styles.advanceTextBusyStacked]}
         variant="secondary"
       />
+  );
+  const advanceButtons = (
+    <>
+      {nightButton}
+      {weekButton}
     </>
   );
   // "Play to the end": beside Restart where the row has room (on a phone as
@@ -2177,8 +2226,21 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // row says "Season complete"), so Restart and Exit take the row themselves.
   // Not in a folded row: there they sat where +1 night was (walk 13 T4-10).
   if ((compact || phoneRow) && progress.complete && !folded) {
+    const onRoster = screenName === 'Roster';
+    // The Roster's result card holds the gold Play another season, so the
+    // row goes there: it held only "New season", pushed right (walk 14 T1-04).
+    if (!seasonEndRowShows(onRoster, liveMarketToExitTo())) return null;
+    // Elsewhere the row leads with the final place, in words where +1 night
+    // was, and the way on keeps the row's end (walk 13 T4-10).
+    const standing = onRoster ? null : seasonEndStanding(rankLine(bootstrap.leaderboard));
     return (
-      <View style={[styles.controls, styles.controlsNarrow]}>
+      <View style={[styles.controls, styles.controlsNarrow, styles.seasonEndRow]}>
+        {standing ? (
+          <View style={styles.seasonEndStanding}>
+            <Text aria-hidden maxFontSizeMultiplier={1.3} numberOfLines={2} style={styles.seasonEndStandingText}>{standing}</Text>
+            <Text style={visuallyHidden}>{spokenRanks(standing)}</Text>
+          </View>
+        ) : null}
         <View style={[styles.group, styles.moreRow]}>
           {secondaryButtons()}
         </View>
@@ -2247,7 +2309,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     // above the buttons it explains (walk 4 T3-11). Not a menu item.
     const menuHint = hintShort ?? menuOpenHint;
     const hintNote = menuHint && !lockNote ? (
-      <Text maxFontSizeMultiplier={1.5} nativeID={PRACTICE_HINT_ID} style={[styles.moreNote, styles.moreHint]}>{menuHint}</Text>
+      <Text maxFontSizeMultiplier={1.5} nativeID={nightInRow ? undefined : PRACTICE_HINT_ID} style={[styles.moreNote, styles.moreHint]}>{menuHint}</Text>
     ) : null;
     // How the night (or week) pressed here went, under the buttons, while
     // the menu stays open for the next press (walk 6 T3-04). Not an item.
@@ -2256,6 +2318,11 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     ) : null;
     return (
       <View style={styles.foldedControls}>
+        {nightInRow ? nightButton : null}
+        {/* +1 night's whole hint, for its description (aria-describedby),
+            and the busy line, which a press in the row speaks. */}
+        {nightInRow && hintText ? <Text nativeID={PRACTICE_HINT_ID} style={visuallyHidden}>{hintText}</Text> : null}
+        {nightInRow ? busyAnnouncer : null}
         <MoreMenu buttonRef={moreRef} footer={resultNote} open={moreOpen} setOpen={setMoreOpen}>
           {/* The notes above the buttons never get shorter while the menu is
               open (a lock that lifts, say), so the buttons stay put. */}
@@ -2269,9 +2336,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
             {lockNote}
             {hintNote}
           </View>
-          {progress.complete ? null : advanceButtons}
+          {progress.complete ? null : nightInRow ? weekButton : advanceButtons}
           {cancelButton('menu')}
-          {busyAnnouncer}
+          {nightInRow ? null : busyAnnouncer}
           {rulesItem}
           {playToEndButton(false, true)}
           {secondaryButtons(true)}
@@ -2401,7 +2468,9 @@ function focusPracticeControls(): void {
   const buttons = Array.from(document.querySelectorAll('[role="button"], button')) as HTMLElement[];
   const shown = (node: HTMLElement) => node.getClientRects().length > 0;
   const named = (pattern: RegExp) => buttons.find((node) => pattern.test(node.getAttribute('aria-label') ?? node.textContent ?? '') && shown(node));
-  const target = named(/^\+1\s*night/i) ?? named(/^More\b/);
+  // At season end the way on: the frame's Play another season, or on a
+  // phone's Roster, whose frame row goes, the result card's (walk 14 T1-04).
+  const target = named(/^\+1\s*night/i) ?? named(/^More\b/) ?? named(/^Play another season/i) ?? named(/^New season/i);
   target?.focus();
   target?.scrollIntoView?.({ block: 'nearest' });
 }
@@ -2547,6 +2616,23 @@ const styles = StyleSheet.create({
     flexBasis: '100%',
     gap: 6,
   },
+  // Season end on a phone: the final place, then the way on at the row's end.
+  seasonEndRow: {
+    flexWrap: 'nowrap',
+  },
+  // In line with the status row's words above it.
+  seasonEndStanding: {
+    flexShrink: 1,
+    minWidth: 0,
+    marginLeft: 4,
+  },
+  seasonEndStandingText: {
+    color: colors.text,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
+    lineHeight: 16,
+  },
   // Outlined buttons never touch (Exit beside Play another season).
   moreRow: {
     marginLeft: 'auto',
@@ -2567,9 +2653,23 @@ const styles = StyleSheet.create({
     gap: 2,
     alignItems: 'stretch',
     backgroundColor: colors.background,
-    borderColor: colors.borderStrong,
+    // A clear 3:1 edge over whatever it covers (walk 14 T1-01).
+    borderColor: colors.controlBorder,
     borderWidth: 1,
     borderRadius: radius.md,
+  },
+  // Points at More from the panel's top edge (walk 14 T1-01).
+  moreCaret: {
+    position: 'absolute',
+    top: -(MORE_CARET_SIZE / 2) - 1,
+    width: MORE_CARET_SIZE,
+    height: MORE_CARET_SIZE,
+    backgroundColor: colors.background,
+    borderColor: colors.controlBorder,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    transform: [{ rotate: '45deg' }],
+    pointerEvents: 'none',
   },
   moreScroll: {
     flexGrow: 0,
@@ -2688,6 +2788,12 @@ const styles = StyleSheet.create({
   advanceWeekReserve: {
     minWidth: 104,
   },
+  // +1 night beside More in a tiny row (400% zoom, 320x200): its own width,
+  // "+1 NIGHT" over "OCT 21" (walk 14 T3-02).
+  advanceTinyRow: {
+    flexShrink: 0,
+    minWidth: 84,
+  },
   // "+1 WEEK" on one line in a stacked row (50px of words, 2px padding).
   advanceWeekOneLine: {
     minWidth: 58,
@@ -2772,8 +2878,8 @@ const styles = StyleSheet.create({
     color: colors.goldInk,
     textAlign: 'center',
   },
-  // Empty roster, until the player adds someone or says "Play anyway": no
-  // gold, and a muted solid 3:1 edge beside the line that says what to do
+  // Nobody on the roster or shorts, whatever was answered before (walk 14
+  // T1-06): no gold, and a muted solid 3:1 edge beside the line that says what to do
   // first (the plain border was 1.2-1.3:1, walk 3 T3-26). Not dashed: dashed
   // means "not available now, press to learn why" (LOCKED, FULL, a night
   // still playing), and these still play, after one question (walk 4 T2-03).
@@ -2799,20 +2905,23 @@ const styles = StyleSheet.create({
     flexBasis: '100%',
     height: 4,
   },
+  // The Cancel line's height: a queued press never makes the frame taller.
   hintReserve: {
     flexBasis: '100%',
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
-    minHeight: 32,
+    minHeight: 44,
   },
   hintRow: {
     flexBasis: '100%',
     flexDirection: 'row',
     alignItems: 'center',
   },
+  // 44px like the frame's other controls: on a touch tablet it is the one
+  // control needed quickly, and it was the smallest at 32px (walk 14 T2-10).
   cancelLine: {
-    minHeight: 32,
+    minHeight: 44,
     paddingHorizontal: space.sm,
   },
   // Desktop: Cancel fills the place of Play to the end and Restart.

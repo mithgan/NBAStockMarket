@@ -574,16 +574,18 @@ test('a tiny row keeps "Day 1 of 174" on one line where it has room, and capital
 
 test('Play to the end asks what it plays and what stays, in days (walk 6 T2-N1, T4-N3)', async () => {
   const { PLAY_TO_END_LABEL, playToEndQuestion } = await import('./chromeView');
-  assert.deepEqual(playToEndQuestion(158, false), {
-    title: 'Play the remaining 158 days now?',
-    lines: ['Your roster and shorts stay as they are; no moves between nights.'],
+  // Walk 14 T2-07: the season to its last date, its span in weeks.
+  assert.deepEqual(playToEndQuestion(158, false, [], '2026-04-12'), {
+    title: 'Play the rest of the season, to Apr 12?',
+    lines: ["That's about 23 weeks (158 days), played in one go.", 'Your roster and shorts stay as they are; no moves between nights.'],
     confirmLabel: 'Play to the end',
     cancelLabel: 'Not now',
   });
-  assert.equal(playToEndQuestion(1, false).title, 'Play the remaining 1 day now?');
-  // Nobody to play for: it says the score won't move.
+  assert.equal(playToEndQuestion(1, false).title, 'Play the rest of the season?');
+  assert.equal(playToEndQuestion(1, false).lines[0], "That's 1 day, played in one go.");
+  // Nobody to play for: it says the score won't move, and never that the roster "stays as it is" (walk 14 T4-03).
   assert.deepEqual(playToEndQuestion(174, true).lines, [
-    'Your roster and shorts stay as they are; no moves between nights.',
+    "That's about 25 weeks (174 days), played in one go.",
     "Nobody is on your roster, so your score won't move.",
   ]);
   assert.equal(PLAY_TO_END_LABEL, 'Play to the end');
@@ -628,18 +630,18 @@ test('+1 week describes the week; Play to the end says when shorts end; a finish
   assert.equal(practiceWeekHint(null, 'Oct 21–27'), null);
   assert.ok(!/\+1 night/.test(practiceWeekHint(EMPTY_ROSTER_HINT, 'Oct 21–27') ?? ''));
   // Five shorts opened on the opening eve all end after Oct 27.
-  assert.deepEqual(playToEndQuestion(174, false, Array(5).fill('2025-10-27')).lines, [
+  assert.deepEqual(playToEndQuestion(174, false, Array(5).fill('2025-10-27')).lines.slice(1), [
     'Your roster stays as it is; no moves between nights.',
     'Your 5 shorts end by themselves after Oct 27; their slots stay empty.',
   ]);
-  assert.deepEqual(playToEndQuestion(170, false, ['2025-10-31']).lines, [
+  assert.deepEqual(playToEndQuestion(170, false, ['2025-10-31']).lines.slice(1), [
     'Your roster stays as it is; no moves between nights.',
     'Your short ends by itself after Oct 31; its slot stays empty.',
   ]);
-  assert.equal(playToEndQuestion(170, false, ['2025-10-27', '2025-10-31']).lines[1],
+  assert.equal(playToEndQuestion(170, false, ['2025-10-27', '2025-10-31']).lines[2],
     'Your 2 shorts end by themselves by the Oct 31 games; their slots stay empty.');
   // No shorts: today's line.
-  assert.deepEqual(playToEndQuestion(158, false, []).lines, ['Your roster and shorts stay as they are; no moves between nights.']);
+  assert.deepEqual(playToEndQuestion(158, false, []).lines.slice(1), ['Your roster and shorts stay as they are; no moves between nights.']);
   // The row's figure: none on the opening eve or once the season is complete.
   assert.equal(statusRowResult(practiceProgress(OPENING_EVE, '2025-11-05'), 7_890_000), 7_890_000);
   assert.equal(statusRowResult(practiceProgress(OPENING_EVE, '2026-04-12'), 7_890_000), null);
@@ -797,7 +799,8 @@ test('walk 10: the queue reaches the season end, the Cancel hint only when there
   assert.equal(lockLine('2025-10-28'), 'Moves reopen after Oct 28 · your players still play');
   // T2-14: +1 week on a locked night with nobody held always asks, even after Play anyway.
   assert.equal(asksBeforeEmptyWeek(true, true, true), true);
-  assert.equal(asksBeforeEmptyWeek(true, true, false), false);
+  // Walk 14 T1-06: and on any night (Play anyway answers one press).
+  assert.equal(asksBeforeEmptyWeek(true, true, false), true);
   assert.equal(asksBeforeEmptyWeek(true, false, false), true);
   assert.equal(asksBeforeEmptyWeek(false, false, true), false);
   // T3-05: the name starts with the visible words.
@@ -1000,7 +1003,8 @@ test('while weeks play or wait, +1 night never names a night the queue will play
     name: '+1 night: plays the next night after Nov 24, once the queued weeks are in',
     seasonQueued: false,
   });
-  assert.equal(nightAfterQueue('2025-11-03', 'week', [], '2026-04-12')?.name, '+1 night: plays the next night after Nov 10, once the queued weeks are in');
+  // Walk 14 T4-08: only the playing week left, none queued: it names that week.
+  assert.equal(nightAfterQueue('2025-11-03', 'week', [], '2026-04-12')?.name, '+1 night: plays the next night after Nov 10, once this week is in');
   assert.equal(nightAfterQueue('2025-11-03', 'night', ['week'], '2026-04-12')?.name, '+1 night: plays the next night once the queued weeks are in');
   assert.deepEqual(nightAfterQueue('2026-03-30', 'week', ['week', 'week'], '2026-04-12'), {
     name: '+1 night: the rest of the season is already queued, to the Apr 12 games',

@@ -341,32 +341,56 @@ export function frameLocked(locked: boolean, progress: Pick<PracticeProgress, 'c
 export const PLAY_TO_END_LABEL = 'Play to the end';
 
 /**
- * The question "Play to the end" asks: what it plays and what stays as it
- * is. Practice makes its schedule night by night, so the rest of the season
- * is counted in days ("Day 16 of 174" leaves 158). With nobody on the roster
- * it says the score won't move. Escape or "Not now" keeps the season.
+ * The question "Play to the end" asks, in a player's terms: the season to its
+ * last date, its span in weeks ("Play the rest of the season, to Apr 12?"
+ * "That's about 25 weeks (174 days), played in one go."), then what stays as
+ * it is. It counted days alone ("Play the remaining 174 days now?"), a
+ * number nothing else plans with (walk 14 T2-07). With nobody held it says
+ * only that the score won't move: "Your roster and shorts stay as they are"
+ * described a roster that did not exist (walk 14 T4-03). Escape or "Not now"
+ * keeps the season.
  */
 export function playToEndQuestion(
   remainingDays: number,
   emptyRoster: boolean,
   /** Each open short's last covered date (PerGamePosition.expiresOn). */
   shortEnds: readonly (string | null)[] = [],
+  /** The season's last day (practiceSeasonEnd). */
+  seasonEnd: string | null = null,
 ): {
   title: string;
   lines: string[];
   confirmLabel: string;
   cancelLabel: string;
 } {
-  const days = Math.max(1, remainingDays);
+  const stays = shortEnds.length > 0 ? playToEndShortLines(shortEnds)
+    : emptyRoster ? [] : ['Your roster and shorts stay as they are; no moves between nights.'];
   return {
-    title: `Play the remaining ${days} ${days === 1 ? 'day' : 'days'} now?`,
+    title: seasonEnd ? `Play the rest of the season, to ${humanDate(seasonEnd)}?` : 'Play the rest of the season?',
     lines: [
-      ...(shortEnds.length > 0 ? playToEndShortLines(shortEnds) : ['Your roster and shorts stay as they are; no moves between nights.']),
+      playToEndSpanLine(remainingDays),
+      ...stays,
       ...(emptyRoster ? ["Nobody is on your roster, so your score won't move."] : []),
     ],
     confirmLabel: PLAY_TO_END_LABEL,
     cancelLabel: 'Not now',
   };
+}
+
+/**
+ * The rest of the season in weeks, days beside: "about 25 weeks (174 days)",
+ * "3 weeks (21 days)", "5 days".
+ */
+export function seasonSpanWords(remainingDays: number): string {
+  const days = Math.max(1, Math.round(remainingDays));
+  if (days < 7) return `${days} ${days === 1 ? 'day' : 'days'}`;
+  const weeks = Math.round(days / 7);
+  return `${days % 7 === 0 ? '' : 'about '}${weeks} ${weeks === 1 ? 'week' : 'weeks'} (${days} days)`;
+}
+
+/** Play to the end's span line: "That's about 25 weeks (174 days), played in one go." */
+export function playToEndSpanLine(remainingDays: number): string {
+  return `That's ${seasonSpanWords(remainingDays)}, played in one go.`;
 }
 
 /**
@@ -810,6 +834,25 @@ export const CHROME_TINY_MAX_HEIGHT = 300;
 
 export function chromeTiny(width: number, height: number): boolean {
   return chromeFolded(height) && height < CHROME_TINY_MAX_HEIGHT && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
+}
+
+/**
+ * From this width a tiny row (a window at 400% zoom) keeps +1 night on screen
+ * beside More: the welcome says "Press +1 night to play Oct 21", and at
+ * 320x200 the row showed only the day and More, with every control inside
+ * (walk 14 T3-02). +1 week and the rest stay in More. Narrower (a phone at
+ * 400%, 98px) the day and More fill the row.
+ */
+export const CHROME_TINY_NIGHT_MIN_WIDTH = 240;
+/**
+ * On a locked night the day's line carries the padlock and its date ("🔒 Oct
+ * 28"): below this width that date ran under +1 night, so the row keeps the
+ * day, the padlock and More, and +1 night is in More that night.
+ */
+export const CHROME_TINY_NIGHT_LOCKED_MIN_WIDTH = 320;
+
+export function tinyRowHoldsNight(width: number, complete = false, locked = false): boolean {
+  return !complete && width >= (locked ? CHROME_TINY_NIGHT_LOCKED_MIN_WIDTH : CHROME_TINY_NIGHT_MIN_WIDTH);
 }
 
 /**
@@ -1272,6 +1315,8 @@ export function nightAfterQueue(
   playing: QueuedStep | null,
   queued: readonly QueuedStep[],
   seasonEnd: string | null | undefined,
+  /** The days the week playing now covers ("Oct 28–Nov 3"). */
+  playingSpan: string | null = null,
 ): { name: string; seasonQueued: boolean } | null {
   const weeks = queued.filter((step) => step === 'week').length + (playing === 'week' ? 1 : 0);
   if (weeks === 0) return null;
@@ -1282,8 +1327,14 @@ export function nightAfterQueue(
   if (end && seasonEnd && end >= seasonEnd) {
     return { name: `+1 night: the rest of the season is already queued, to the ${humanDate(seasonEnd)} games`, seasonQueued: true };
   }
+  // Only the week playing is left (after Cancel, say): it names that week,
+  // not "the queued weeks" with none queued (walk 14 T4-08).
+  const waitFor = queued.length === 0 && playing === 'week'
+    ? (playingSpan ? keepTogether(playingSpan) : 'this week')
+    : null;
+  const once = waitFor ? `once ${waitFor} is in` : 'once the queued weeks are in';
   return {
-    name: end ? `+1 night: plays the next night after ${humanDate(end)}, once the queued weeks are in` : '+1 night: plays the next night once the queued weeks are in',
+    name: end ? `+1 night: plays the next night after ${humanDate(end)}, ${once}` : `+1 night: plays the next night ${once}`,
     seasonQueued: false,
   };
 }
@@ -1463,6 +1514,40 @@ export function nightButtonName(nightDate: string | null, showsDate: boolean): s
 }
 
 /**
+ * A games notice as the status row draws it ("Oct 21–27 games: your score
+ * rose $540.5K. …", "Oct 21–Nov 3 games (2 weeks): …"): the step's result
+ * that Play to the end's season notice may be heard with. Its drawn words
+ * already leave a new lock to the status row, so said again silently they
+ * replace the heard text that still had "Moves pause for the Oct 28 games."
+ * once Play to the end had played them (walk 14 T4-02).
+ */
+export function isGamesNotice(text: string | null | undefined): boolean {
+  return Boolean(text && /^\S.*? games(?: \([^)]*\))?: /.test(text));
+}
+
+/**
+ * The words beside Play another season in a phone's frame at season end:
+ * "Finished #2 of 5" (`rank`: rosterView.rankLine), or null without a
+ * board. The button sat alone at the row's right end with the rest of the
+ * row blank (walk 14 T1-04); the place is the one fact the status row above
+ * leaves out, and words, not a button, keep +1 night's old spot (walk 13
+ * T4-10).
+ */
+export function seasonEndStanding(rank: string | null): string | null {
+  return rank ? `Finished ${keepTogether(rank)}` : null;
+}
+
+/**
+ * Whether a phone's frame keeps its control row at season end: not on the
+ * Roster, whose result card holds the gold Play another season (the row
+ * held only "New season", pushed right; walk 14 T1-04), unless Exit is
+ * offered there too.
+ */
+export function seasonEndRowShows(onRoster: boolean, exitOffered: boolean): boolean {
+  return !onRoster || exitOffered;
+}
+
+/**
  * The frame's way on at season end. On the Roster, where the result card
  * carries the gold "Play another season", the frame's is a quiet "New
  * season", so the screen shows one primary action, not two identical ones
@@ -1577,15 +1662,28 @@ export function asksBeforeEmptyNight(emptyRoster: boolean, playedWithoutRoster: 
 }
 
 /**
- * Whether +1 week asks first. With nobody held and the next night locked it
- * always asks, with "+1 night instead" first, even after the once-a-season
- * "Play anyway": nothing can be added before those games, and a week played
- * straight through cost six nights that could have had a roster (walk 10
- * T2-14). Otherwise as +1 night asks.
+ * Whether +1 week asks first: with nobody on the roster or shorts, every
+ * time, whatever was answered before. "Play anyway" answers one press:
+ * seven nights is a big jump, and after one allowed night the next +1 week
+ * spent a week and a lock night in silence (walk 14 T1-06). On a locked
+ * night the question offers "+1 night instead" first (walk 10 T2-14).
+ * +1 night keeps asking once a season (asksBeforeEmptyNight).
  */
-export function asksBeforeEmptyWeek(emptyRoster: boolean, playedWithoutRoster: boolean, lockedNight = false): boolean {
-  if (lockedNight && emptyRoster) return true;
-  return asksBeforeEmptyNight(emptyRoster, playedWithoutRoster);
+export function asksBeforeEmptyWeek(emptyRoster: boolean, _playedWithoutRoster = false, _lockedNight = false): boolean {
+  return emptyRoster;
+}
+
+/**
+ * Whether +1 night / +1 week are drawn quiet (outlined, no gold): whenever
+ * nobody is on the roster or shorts, whatever was answered before, so the
+ * welcome's Open market stays the one gold call (after one "Play anyway"
+ * both turned gold beside "No players yet"; walk 14 T1-06). On a locked
+ * night +1 night keeps its full style: nothing can be added before those
+ * games, so playing that night is the way on (walk 9 T4-03).
+ */
+export function advanceQuiet(step: 'night' | 'week', emptyRoster: boolean, lockedNight = false): boolean {
+  if (!emptyRoster) return false;
+  return step === 'week' || !lockedNight;
 }
 
 /**
