@@ -1644,7 +1644,13 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     const run = practiceEngine.seasonEndRun.current;
     if (!run || !bootstrap || !isSeasonCompleteNotice(message) || !seasonOver(bootstrap)) return;
     practiceEngine.seasonEndRun.current = null;
-    const text = seasonEndAfterRun(seasonSpanText(run, bootstrap), message as string);
+    // A whole season played from its opening eve says only its final score:
+    // the span would repeat it, and the fees paid before the first night
+    // could round the two apart ("Final score +$5.50M … your score rose
+    // $5.51M"). Moves or refusals inside the run are still told with it.
+    const wholeSeason = practiceProgress(mockSeasonStart(), spanStart(run).game.lastSettledDate).day === 0
+      && !(run.moves?.length) && !(run.refusals?.length);
+    const text = wholeSeason ? (message as string) : seasonEndAfterRun(seasonSpanText(run, bootstrap), message as string);
     composedRun.current = text;
     notify(text, { spoken: '', tone: run.refusals?.length ? 'problem' : 'success' });
     speakNotice();

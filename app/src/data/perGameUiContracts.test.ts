@@ -361,3 +361,9 @@ test('notices only grow: landed adds group after a refusal, and a refusal joins 
   assert.match(context, /const base = fresh && written && coversGames\(written, fresh\) && !coversGames\(fresh, written\) \? written : fresh;/);
   assert.match(context, /shownWritten\.current = joins \? null : text;/);
 });
+
+test('a whole season played from its opening eve ends on its final score alone (walk 18 lead)', () => {
+  // The span would repeat the final score, and fees paid before the first night could round the two apart.
+  assert.match(simBar, /const wholeSeason = practiceProgress\(mockSeasonStart\(\), spanStart\(run\)\.game\.lastSettledDate\)\.day === 0\s+&& !\(run\.moves\?\.length\) && !\(run\.refusals\?\.length\);/);
+  assert.match(simBar, /const text = wholeSeason \? \(message as string\) : seasonEndAfterRun\(seasonSpanText\(run, bootstrap\), message as string\);/);
+});
