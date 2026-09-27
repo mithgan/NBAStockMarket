@@ -473,8 +473,14 @@ export function PerGamePnlChart({
               style={[
                 styles.tickLabel,
                 styles.lowInside,
-                // Clear of the end dot (r 3.5) when the low is the latest point.
-                { left: place.left, textAlign: place.align, top: Math.min(yOf(values[lowInside]) + 4, plotHeight - 15) },
+                // Clear of the end dot (r 3.5) when the low is the latest point;
+                // a box squeezed narrower than its words takes two lines.
+                {
+                  left: place.left,
+                  width: place.width,
+                  textAlign: place.align,
+                  top: Math.min(yOf(values[lowInside]) + 4, plotHeight - (place.width < LOW_INSIDE_BOX ? 29 : 15)),
+                },
               ]}
             >
               {valueMark('low', values[lowInside])}

@@ -85,7 +85,9 @@ test('walk 17 T4 idea 6: a low that crowds $0 is named inside the plot, under it
   assert.equal(lowInsideIndex([0, 10_000, 50_000], ticks.filter((tick) => tick.kind !== 'low')), null);
   assert.equal(lowInsideIndex([], []), null);
   // Its words sit centred under the dip, or hang from the plot's edge near one.
-  assert.deepEqual(lowInsidePlace(200, 96, 52, 354), { left: 152, align: 'center' });
-  assert.deepEqual(lowInsidePlace(70, 96, 52, 354), { left: 52, align: 'left' });
-  assert.deepEqual(lowInsidePlace(340, 96, 52, 354), { left: 258, align: 'right' });
+  assert.deepEqual(lowInsidePlace(200, 96, 52, 354), { left: 152, align: 'center', width: 96 });
+  assert.deepEqual(lowInsidePlace(70, 96, 52, 354), { left: 52, align: 'left', width: 96 });
+  assert.deepEqual(lowInsidePlace(340, 96, 52, 354), { left: 258, align: 'right', width: 96 });
+  // At 200% zoom a 161px plot with an 82px gutter has 73px: the box shrinks to it, never past the edge.
+  assert.deepEqual(lowInsidePlace(108.5, 96, 82, 155), { left: 82, align: 'left', width: 73 });
 });

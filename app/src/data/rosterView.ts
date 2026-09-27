@@ -1644,11 +1644,15 @@ export function lowInsideIndex(values: readonly number[], ticks: readonly ValueT
  * between the gutter and the plot's right edge; at an edge its words hang
  * from that edge, so they still start (or end) under the dip.
  */
-export function lowInsidePlace(x: number, boxWidth: number, gutter: number, right: number): { left: number; align: 'left' | 'center' | 'right' } {
-  const centred = x - boxWidth / 2;
-  if (centred <= gutter) return { left: gutter, align: 'left' };
-  if (centred + boxWidth >= right) return { left: Math.max(gutter, right - boxWidth), align: 'right' };
-  return { left: centred, align: 'center' };
+export function lowInsidePlace(x: number, boxWidth: number, gutter: number, right: number): { left: number; align: 'left' | 'center' | 'right'; width: number } {
+  // Never wider than the room between the gutter and the plot's edge: at 200%
+  // zoom the plot left 73px for a 96px box, which ran past the plot's edge
+  // (walk 17 lead, the audit's cut text). A squeezed box takes two lines.
+  const width = Math.max(0, Math.min(boxWidth, right - gutter));
+  const centred = x - width / 2;
+  if (centred <= gutter) return { left: gutter, align: 'left', width };
+  if (centred + width >= right) return { left: Math.max(gutter, right - width), align: 'right', width };
+  return { left: centred, align: 'center', width };
 }
 
 /** Clear air above the score chart's heading when a tap brings it into view. */
