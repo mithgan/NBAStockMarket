@@ -89,6 +89,13 @@ export function refreshHasNews(previous: PerGameBootstrap | null, next: PerGameB
  * account is current. The next game date already sits in the status bar, so it
  * is only repeated when there is nothing else to say.
  */
+/** How the season's last games are announced; the Roster's result card says the same. */
+export const SEASON_COMPLETE_NOTICE_START = 'Season complete. Final score ';
+
+export function isSeasonCompleteNotice(message: string | null | undefined): boolean {
+  return Boolean(message && message.startsWith(SEASON_COMPLETE_NOTICE_START));
+}
+
 export function refreshNotice(
   previous: PerGameBootstrap | null,
   next: PerGameBootstrap,
@@ -98,7 +105,7 @@ export function refreshNotice(
   if (reconciled) return 'Your account is back in sync. You can make roster moves again.';
   const complete = options.seasonComplete;
   if (complete && complete(next) && !(previous && complete(previous))) {
-    return `Season complete. Final score ${signedMoneyFine(next.account.cumulativePnl)}${standing(next)}.`;
+    return `${SEASON_COMPLETE_NOTICE_START}${signedMoneyFine(next.account.cumulativePnl)}${standing(next)}.`;
   }
   const before = previous?.game.lastSettledDate ?? null;
   const after = next.game.lastSettledDate;

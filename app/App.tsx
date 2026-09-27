@@ -39,6 +39,7 @@ import {
 import { ThemeProvider, useDesignVariant } from './src/theme/ThemeProvider';
 import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
 import { useKeepNotices } from './src/state/noticePreference';
+import { isSeasonCompleteNotice } from './src/state/perGameNotices';
 import { reduceMotionChosen } from './src/state/motionPreference';
 import { brandFontReady, installGlobalWebStyles } from './src/web/globalStyles';
 import { applyVariant } from './src/theme/applyVariant';
@@ -1042,9 +1043,14 @@ function AppBody() {
   // behind it: the brand bar keeps its logo and Settings its place meanwhile
   // (walk 6 T4-08, T1-04: the bar went blank and Settings slid left).
   const sheetOpen = useSyncExternalStore(subscribeSheets, sheetIsOpen, () => false);
+  // At season end the Roster's result card says what this notice says (the
+  // season is complete, the final score, the place) and holds the next step,
+  // so in a short window the strip only repeated it under the card, taking
+  // its room (walk 13 T2-09). It is still spoken, and kept in Recent notices.
+  const cardSaysIt = noticePlacement === 'dock' && activeTab === 'portfolio' && isSeasonCompleteNotice(message);
   const notice = authError && clearAuthMessage ? (
     <NoticeToast message={authError} onDismiss={clearAuthMessage} placement={noticePlacement} seq={-2} tone="problem" />
-  ) : message && (noticeTone === 'problem' || !sheetOpen) ? (
+  ) : message && !cardSaysIt && (noticeTone === 'problem' || !sheetOpen) ? (
     <NoticeToast message={message} onDismiss={dismissNotice} placement={noticePlacement} seq={noticeSeq} tone={noticeTone} />
   ) : null;
   barNoticeRef.current = Boolean(notice) && noticePlacement !== 'dock';

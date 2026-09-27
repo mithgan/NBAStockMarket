@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameBootstrap, PerGameLedgerEntry, PerGamePosition } from '../api/contracts';
-import { refreshHasNews, refreshNotice } from './perGameNotices';
+import { isSeasonCompleteNotice, refreshHasNews, refreshNotice } from './perGameNotices';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 function short(positionId: string, playerName: string, status: 'active' | 'closed', cumulativePnl: number) {
   return { positionId, playerName, side: 'short', status, cumulativePnl } as PerGamePosition;
@@ -139,6 +141,20 @@ test('the last night of the season announces the final result', () => {
   } as unknown as PerGameBootstrap;
   const complete = (b: PerGameBootstrap) => b.game.nextGameDate === null;
   assert.equal(refreshNotice(before, after, false, { seasonComplete: complete }), 'Season complete. Final score +$1.06M, #2\u00a0of\u00a03.');
+});
+
+test('in a short window the Roster\'s result card stands in for the season-end strip, which is still spoken (walk 14 lead, walk 13 T2-09)', () => {
+  const before = snapshot('2026-04-11', '2026-04-12', 900_000);
+  const after = snapshot('2026-04-12', null, 1_062_500);
+  const complete = (b: PerGameBootstrap) => b.game.nextGameDate === null;
+  assert.equal(isSeasonCompleteNotice(refreshNotice(before, after, false, { seasonComplete: complete })), true);
+  assert.equal(isSeasonCompleteNotice('Oct 21 games: your score rose $194.5K.'), false);
+  assert.equal(isSeasonCompleteNotice(null), false);
+  const app = readFileSync(resolve(__dirname, '../../App.tsx'), 'utf8');
+  assert.match(app, /const cardSaysIt = noticePlacement === 'dock' && activeTab === 'portfolio' && isSeasonCompleteNotice\(message\);/);
+  assert.match(app, /message && !cardSaysIt && \(noticeTone === 'problem' \|\| !sheetOpen\)/);
+  // The live region still speaks the message itself.
+  assert.match(app, /spoken\(authError \?\? \(message \? noticeSpoken \?\? message : null\)/);
 });
 
 test('nights played with nobody on the roster say so (walk 4 T2-16)', () => {
