@@ -99,7 +99,7 @@ import {
   seasonEndControl,
   resultSpan,
   mergeRefusals,
-  runNotice,
+  runNoticeText,
   seasonEndAfterRun,
   mergeMoves,
   runMoves,
@@ -1361,11 +1361,24 @@ interface PracticeRun {
 /** How soon after a run's last step a refused move still belongs to that run. */
 const RUN_REFUSAL_JOIN_MS = 3000;
 
-/** A run's notice: its games, any queued presses it cancelled, and any moves it refused. */
+/**
+ * A run's notice: its games, any queued presses it cancelled, and any moves
+ * it refused. One that played the season out leads with the season's result,
+ * then its whole span, as Play to the end inside a run does (walk 17 T4-06).
+ */
 function runText(run: PracticeRun, now: PerGameBootstrap): string {
-  const games = withCancelledNote(runNotice(run.steps, refreshNotice(run.start, now, false, { seasonComplete: seasonOver })), run.note ?? null);
-  return withRefusals(withMoves(games, run.moves ?? []), run.refusals ?? []);
+  return runNoticeText({
+    steps: run.steps,
+    games: refreshNotice(run.start, now, false),
+    seasonEnd: runEndedSeason(run, now) ? refreshNotice(run.start, now, false, { seasonComplete: seasonOver }) : null,
+    note: run.note ?? null,
+    moves: run.moves ?? [],
+    refusals: run.refusals ?? [],
+  });
 }
+
+/** The run's last step played the season out: nothing is left to continue it. */
+const runEndedSeason = (run: PracticeRun, now: PerGameBootstrap) => seasonOver(now) && !seasonOver(run.start);
 
 /**
  * A run's games from its first step to the season's end, one headline
@@ -1498,6 +1511,26 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   useLayoutEffect(() => {
     if (!holdStepNotice.current) return;
     holdStepNotice.current = false;
+    // The step played the season out with presses still waiting behind it
+    // (+1 night passes nights without games, so queued nights can outlast
+    // the season; Play to the end may wait too): nothing is left to play
+    // them, so the run ends here, with the season's result and the run's
+    // whole span, heard once it settles as any run is. Neither the queue's
+    // line nor the season's result alone stands in for it (walk 17 T4-06).
+    const endedRun = runRef.current ?? practiceEngine.endRun.current;
+    if (endedRun && bootstrap && runEndedSeason(endedRun, bootstrap)) {
+      runRef.current = null;
+      practiceEngine.endRun.current = null;
+      const text = runText(endedRun, bootstrap);
+      composedRun.current = text;
+      notify(text, { spoken: '', tone: endedRun.refusals?.length ? 'problem' : 'success' });
+      stopSpeakRun();
+      speakRun.current = setTimeout(() => {
+        speakRun.current = null;
+        speakNotice();
+      }, RUN_CONTINUE_MS);
+      return;
+    }
     // While the rest of the season is queued, that stays on screen (heard
     // once) instead of the step's news: it flashed for one week (walk 10 T4-02).
     if (queueFullSaid.current && queuedSteps.current.length > 0) {

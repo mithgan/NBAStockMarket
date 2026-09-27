@@ -894,6 +894,30 @@ export function seasonEndAfterRun(runSpan: string, seasonEnd: string): string {
   return span ? `${seasonEnd} ${span}` : seasonEnd;
 }
 
+/**
+ * A run's notice (+1 night / +1 week presses played back to back): its games
+ * with the steps it took ("Oct 21–Nov 3 games (2 weeks): …"), any queued
+ * presses it cancelled, the moves that landed in it and the ones it refused.
+ * `games`: the run's games from its first step to now, `seasonEnd`: the
+ * season's result when the run played the season out, else null. A run that
+ * played the season out ends as Play to the end does inside a run, the
+ * season's result, then the run's whole span: "Season complete. Final score
+ * +$4.13M, #2 of 5. Oct 21–Apr 12 games: your score rose $4.13M." (walk 17
+ * T4-06: 34 quick +1 week taps ended on the season's result alone, the run's
+ * span and figure gone).
+ */
+export function runNoticeText({ steps, games, seasonEnd, note, moves, refusals }: {
+  steps: readonly ('night' | 'week')[];
+  games: string;
+  seasonEnd: string | null;
+  note: string | null;
+  moves: readonly string[];
+  refusals: readonly string[];
+}): string {
+  if (seasonEnd) return withCancelledNote(seasonEndAfterRun(withRefusals(withMoves(games, moves), refusals), seasonEnd), note);
+  return withRefusals(withMoves(withCancelledNote(runNotice(steps, games), note), moves), refusals);
+}
+
 /** Whether any of your players played after `after`, through `through` (games, not fees). */
 export function playedBetween(
   ledger: readonly { gameId: string | null; gameDate: string | null }[] | undefined,
