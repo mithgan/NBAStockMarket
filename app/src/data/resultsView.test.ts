@@ -27,6 +27,7 @@ import {
   newestPlace,
   NEWEST_CORNER_RESERVE,
   monthAnchors,
+  monthChipRows,
   nightSummaryWrapped,
   settlementLines,
   valuePair,
@@ -915,4 +916,25 @@ test('pinned night headers under the top one never show below it', () => {
   assert.deepEqual(pinnedNightClips([56.4, 56]), [0, 0]);
   assert.deepEqual(pinnedNightClips([73.3, 56]), [18, 0]);
   assert.deepEqual(pinnedNightClips([]), []);
+});
+
+test('walk 11 T4-10: month buttons never leave one alone on a row', () => {
+  // A full season (7 months) where 6 fit (320px): 4 + 3, not 6 + 1.
+  assert.deepEqual(monthChipRows(7, 6), [4, 3]);
+  // All fit: one row; not measured yet: one row.
+  assert.deepEqual(monthChipRows(7, 7), [7]);
+  assert.deepEqual(monthChipRows(7, 0), [7]);
+  // Narrower (200% zoom, 3 fit): 3 + 2 + 2, never 3 + 3 + 1.
+  assert.deepEqual(monthChipRows(7, 3), [3, 2, 2]);
+  assert.deepEqual(monthChipRows(2, 1), [1, 1]);
+  assert.deepEqual(monthChipRows(0, 6), []);
+  // Wherever three or more fit, the last row always has company.
+  for (let count = 2; count <= 12; count += 1) {
+    for (let fit = 3; fit <= 8; fit += 1) {
+      const rows = monthChipRows(count, fit);
+      assert.equal(rows.reduce((sum, row) => sum + row, 0), count);
+      assert.ok(rows.every((row) => row <= fit && row >= 1));
+      if (rows.length > 1) assert.ok(rows[rows.length - 1] >= 2 || count < 2, `${count}/${fit}: ${rows}`);
+    }
+  }
 });

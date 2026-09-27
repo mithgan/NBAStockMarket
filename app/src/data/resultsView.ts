@@ -330,6 +330,22 @@ export function monthAnchors(items: readonly ResultsFeedItem[]): MonthAnchor[] {
 }
 
 /**
+ * "Jump to"'s month buttons split into rows (walk 11 T4-10): as many rows as
+ * the width needs, filled as evenly as possible, the longer rows first, so no
+ * month sits alone on a row of its own (7 where 6 fit: 4 + 3; where 3 fit:
+ * 3 + 2 + 2). `fit` is how many fit on one row; 0 or less (not measured yet)
+ * keeps them on one row.
+ */
+export function monthChipRows(count: number, fit: number): number[] {
+  if (count <= 0) return [];
+  if (fit <= 0 || count <= fit) return [count];
+  const rows = Math.ceil(count / fit);
+  const base = Math.floor(count / rows);
+  const extra = count % rows;
+  return Array.from({ length: rows }, (_, index) => base + (index < extra ? 1 : 0));
+}
+
+/**
  * The month "Jump to" marks as the one you are reading, on every screen size
  * (walk 7 T1-07: phones marked none). It is the month at the top of the
  * feed; until the list has said what is on screen (first paint, a new

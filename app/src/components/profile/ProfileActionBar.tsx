@@ -283,12 +283,17 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
   // it was, so nothing under a finger moves).
   const saving = pending ? savingWords('open', side, player.name) : null;
   const word = saving ? saving.word : rosterLocked ? 'Locked' : row.isFull ? 'Full' : openVerb(side);
+  // The main button is heard with the terms it agrees to, on either side and
+  // right after Short instead / Add instead (walk 11 T3-09): "Locks his price
+  // at $339.5K a game for 7 days (ends Oct 27 by itself) · $250 fee".
+  const termsId = reason === null && !saving ? `${BAR_TERMS_ID}-${player.playerId}` : undefined;
   return (
-    <Bar below={saving && instead ? <View /> : instead} note={saving ? saving.note : note} warn={reason !== null && !saving}>
+    <Bar below={saving && instead ? <View /> : instead} note={saving ? saving.note : note} noteId={termsId} warn={reason !== null && !saving}>
       <Button
         ref={openRef}
         accessibilityHint={saving ? undefined : reason ?? undefined}
         accessibilityLabel={saving ? saving.name : actionName('open', side, player.name, player.currentGameCost)}
+        describedBy={termsId}
         disabled={disabled}
         focusableWhenDisabled
         label={word}
@@ -360,13 +365,17 @@ function leaveForRoster(
  * buttons share the row under it, the main one on the right (walk 7 T1-04:
  * the switch hung under the note like a caption).
  */
-function Bar({ note, warn = false, below, children }: {
+/** The open bar's terms line, the main button's description (aria-describedby). */
+const BAR_TERMS_ID = 'profile-bar-terms';
+
+function Bar({ note, noteId, warn = false, below, children }: {
   note: string;
+  noteId?: string;
   warn?: boolean;
   below?: ReactNode;
   children?: ReactNode;
 }) {
-  const text = <Text maxFontSizeMultiplier={1.4} style={[styles.note, warn && styles.noteWarn]}>{note}</Text>;
+  const text = <Text maxFontSizeMultiplier={1.4} nativeID={noteId} style={[styles.note, warn && styles.noteWarn]}>{note}</Text>;
   if (below) {
     return (
       <View style={[styles.bar, styles.barStacked]}>

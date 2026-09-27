@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameLeaderboardRow } from '../api/contracts';
-import { boardLag, boardList, closeCallNotes, feesOnly, lagLine, leaderStanding, levelOrder, ordinalWords, sortBoard, spokenLagLine, spokenPlace, spokenRanks, standingLines, standingPlace, type Standing } from './leadersView';
+import { money } from '../copy/terms';
+import { boardLag, boardList, closeCallNotes, feesOnly, lagLine, leaderStanding, levelOrder, ordinalWords, shownDollars, shownGap, sortBoard, spokenLagLine, spokenPlace, spokenRanks, standingLines, standingPlace, type Standing } from './leadersView';
 
 function board(scores: Array<[string, number, boolean?]>): PerGameLeaderboardRow[] {
   return scores.map(([displayName, cumulativePnl, isCurrentUser], index) => ({
@@ -373,8 +374,19 @@ test('the season that just finished joins "Your seasons this visit" at once, mar
   assert.deepEqual(lines.map((line) => [line.label, line.note]), [['Season 2', 'This season'], ['Season 1', null]]);
   assert.equal(lines[0].spoken, 'Season 2, this season: +$783.8K, third of 5');
   assert.equal(lines[0].place, '#3 of 5');
-  // The first season alone: the final standing already says it, no list.
-  assert.deepEqual(pastSeasonLines([], now), []);
+  // The first season alone is listed at once too (walk 11 T1-12, T2-02, T3-14).
+  assert.deepEqual(pastSeasonLines([], now).map((line) => [line.label, line.note, line.spoken]), [['Season 1', 'This season', 'Season 1, this season: +$783.8K, third of 5']]);
   // Not over yet: the list as before.
   assert.deepEqual(pastSeasonLines([first], null).map((line) => line.label), ['Season 1']);
+});
+
+test('walk 11 T4-01: the gap adds up with the two figures shown beside it', () => {
+  // "+$453.8K" and "+$340.2K" on the board: the standing says $113.6K, not the exact $113.5K.
+  assert.equal(shownDollars(453_779), 453_800);
+  assert.equal(shownDollars(-9_400), -9_400);
+  assert.equal(shownGap(340_246, 453_779), 113_600);
+  assert.equal(money(shownGap(340_246, 453_779)), '$113.6K');
+  // Under $1K the gap is said to the dollar (a fee), and never "$0".
+  assert.equal(shownGap(-395_250, -395_500), 250);
+  assert.equal(shownGap(453_760, 453_779), 19);
 });

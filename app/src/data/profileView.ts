@@ -25,6 +25,7 @@ import type {
 } from '../api/contracts';
 import { gamesCount, humanDate, money, moneyFine, perGame, signedMoneyFine } from '../copy/terms';
 import { shownEdge } from './marketView';
+import { PRICE_EXPLAINER } from './perGameRules';
 import { currentResults, entryDay, lastYearEdge, type ValueSummary } from './perGameMetrics';
 import {
   selectHighLowPoints,
@@ -1072,6 +1073,16 @@ export function priceChartHeight(nights: readonly ProfileNight[], fullHeight: nu
  * Why a Price chart looks flat (walk 9 T2-03): "Within 1.3% of your price in
  * these games." Null for a real move, or a single game.
  */
+/**
+ * The Price view's word on what moves a price (walk 11 T2-01), in the Rules'
+ * own words (their first sentence): a player's price fell after a +$194.5K
+ * night and read as the numbers being wrong.
+ */
+export function priceMovesNote(): string {
+  const end = PRICE_EXPLAINER.indexOf('. ');
+  return end > 0 ? PRICE_EXPLAINER.slice(0, end + 1) : PRICE_EXPLAINER;
+}
+
 export function priceDriftCaption(nights: readonly ProfileNight[]): string | null {
   const frame = priceFrame(nights);
   if (!frame || !frame.small || nights.length < 2) return null;

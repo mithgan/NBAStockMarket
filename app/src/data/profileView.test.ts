@@ -1115,3 +1115,13 @@ test('the Price caption matches its plotted line, not today\'s price (walk 10 T1
   assert.equal(priceMoveLine(luka, 418_200, '2025-10-21'), 'Market price down 1.2% from his first game with you to his latest.');
   assert.equal(priceMoveLine(luka.slice(1), 418_200, '2025-10-21'), 'Market price down 0.6% from his Oct 23 game to his latest.');
 });
+
+test('walk 11 T2-01: the Price view says one game rarely decides a price, in the Rules\' words', async () => {
+  const { priceMovesNote } = await import('./profileView');
+  const { PRICE_EXPLAINER } = await import('./perGameRules');
+  assert.equal(
+    priceMovesNote(),
+    "A player's price moves as people add and drop him and as his games add up: one game rarely decides it, so a price can dip after a great night.",
+  );
+  assert.ok(PRICE_EXPLAINER.startsWith(priceMovesNote()));
+});

@@ -224,7 +224,7 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
     ? 'level at $0'
     : `${scoreText}${closeCalls.map((note) => `, ${spokenRanks(note)}`).join('')}${boardScore === null ? '' : `. The board still has you at ${scoreWords(boardScore)}`}`;
   return (
-    <View role="row" style={[styles.item, you && styles.currentRow, styles.row, compact && styles.rowCompact]}>
+    <View role="row" style={[styles.item, styles.row, compact && styles.rowCompact, you && styles.currentRow]}>
       <View role="cell" style={compact ? styles.rankCellCompact : null}>
         <Spoken>{rankSpoken}</Spoken>
         <Seen>
@@ -236,7 +236,7 @@ function BoardRow({ compact, entry, level }: { compact: boolean; entry: BoardEnt
       <View role="rowheader" style={[styles.nameCell, compact && styles.nameCompact]}>
         <Spoken>{who}</Spoken>
         <Seen style={styles.nameSeen}>
-          <Text style={styles.name}>{row.displayName}</Text>
+          <Text style={[styles.name, you && styles.nameYou]}>{row.displayName}</Text>
           {tagged ? <Tag tone="gold">You</Tag> : null}
         </Seen>
       </View>
@@ -599,8 +599,17 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
   },
   // You: a flat tint and a YOU tag. No coloured side stripe.
+  // Your row at a glance (walk 11 T1-03): a gold rule on its left, the
+  // active tab's accent, and your name in bold, in every look.
   currentRow: {
     backgroundColor: colors.surfaceRaised,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.gold,
+    // The rule takes its width from the padding, so the columns stay aligned.
+    paddingLeft: space.lg - 3,
+  },
+  nameYou: {
+    fontWeight: '800',
   },
   rank: {
     width: RANK_WIDTH - space.sm,

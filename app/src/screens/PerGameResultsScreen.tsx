@@ -47,6 +47,7 @@ import {
   nightSummaryLine,
   nightSummaryWrapped,
   nightTotalPending,
+  monthChipRows,
   readingMonth,
   resultRowModel,
   resumeNight,
@@ -516,15 +517,17 @@ function clipPinnedNights(scroller: HTMLElement, clipped: Set<HTMLElement>): voi
  * moves before your first games) is just the date, so its moves line sits
  * right under it instead of below an empty band.
  */
-function NightHeader({ night, layout }: { night: NightSummary; layout: Layout }) {
+function NightHeader({ night, layout, his = false }: { night: NightSummary; layout: Layout; his?: boolean }) {
   const summary = nightSummaryWrapped(night);
   const spokenSummary = nightSummaryLine(night).replace(/ · /g, ', ');
   const pending = nightTotalPending(night);
   const played = night.results > 0;
   const title = night.date ? humanDay(night.date) : 'Undated fees';
+  // One player's games (from his profile): the night's figure is his game's,
+  // so it says so, never the whole night's "Games" (walk 11 T1-07, T2-04).
   const totalWords = !played ? '' : pending
-    ? ' games not settled yet.'
-    : ` your players made ${netWords(night.total)}.`;
+    ? his ? ' his game is not settled yet.' : ' games not settled yet.'
+    : his ? ` his game made ${netWords(night.total)}.` : ` your players made ${netWords(night.total)}.`;
   const edge = edges(layout);
   const bare = !played && !summary;
   return (
@@ -550,7 +553,7 @@ function NightHeader({ night, layout }: { night: NightSummary; layout: Layout })
       </View>
       {played ? (
         <View style={[styles.groupTotal, layout.compact && styles.groupTotalCompact]}>
-          <Text style={styles.groupTotalLabel}>Games</Text>
+          <Text style={styles.groupTotalLabel}>{his ? 'His game' : 'Games'}</Text>
           {pending ? (
             <Text style={styles.netUnavailable}>—</Text>
           ) : (
@@ -716,6 +719,64 @@ function settleOnDay(
   setTimeout(() => settleOnDay(list, id, current, { missing, done }, tries - 1, held), held > 0 ? 50 : 40);
 }
 
+/** How long a landed jump keeps its night at the top while the feed still changes height. */
+const JUMP_STEADY_MS = 300;
+const JUMP_HOLD_MAX_MS = 2500;
+
+/**
+ * Web: the second half of a month jump (walk 11 T2-07). Once the day holds
+ * and the feed shows, rows still being drawn above it can change the feed's
+ * height (by hundreds of pixels at the feed's end), which left the view below
+ * the night, blank, then a week late. So every change in the feed's height
+ * puts the day back at the top before the frame is painted (a
+ * ResizeObserver), until the height has not changed for JUMP_STEADY_MS. Any
+ * scroll, tap or key of your own ends it at once, as does a newer navigation
+ * (`current()`). Returns the way to end it early.
+ */
+function holdOnDay(
+  list: { getScrollableNode?: () => unknown } | null,
+  id: string,
+  current: () => boolean,
+): () => void {
+  const scroller = list?.getScrollableNode?.() as HTMLElement | null | undefined;
+  const content = scroller?.firstElementChild ?? null;
+  if (typeof document === 'undefined' || typeof ResizeObserver === 'undefined' || !scroller || !content) {
+    return () => undefined;
+  }
+  const yours = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const;
+  let quiet: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    observer.disconnect();
+    clearTimeout(quiet);
+    clearTimeout(cap);
+    yours.forEach((type) => scroller.removeEventListener(type, stop));
+  };
+  const pin = () => {
+    if (stopped) return;
+    if (!current()) {
+      stop();
+      return;
+    }
+    const node = document.getElementById(id);
+    if (node) {
+      const off = naturalTop(node, scroller) - scroller.getBoundingClientRect().top;
+      const below = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
+      if (!(Math.abs(off) <= 1 || (off > 0 && below <= 1))) scroller.scrollTop += off;
+    }
+    clearTimeout(quiet);
+    quiet = setTimeout(stop, JUMP_STEADY_MS);
+  };
+  const observer = new ResizeObserver(pin);
+  const cap = setTimeout(stop, JUMP_HOLD_MAX_MS);
+  yours.forEach((type) => scroller.addEventListener(type, stop, { passive: true }));
+  observer.observe(content);
+  quiet = setTimeout(stop, JUMP_STEADY_MS);
+  return stop;
+}
+
 /**
  * Move focus to an element by id once it has rendered (web only), unless
  * `current()` says another navigation has taken over since (a Back to newest
@@ -748,25 +809,50 @@ function MonthJump({
   current: string | null;
   onJump: (anchor: MonthAnchor) => void;
 }) {
+  // The months split into even rows, so none sits alone on a second row at
+  // 320px (walk 11 T4-10): measured once drawn (the row's width and the
+  // widest button), one wrapping row until then.
+  const [box, setBox] = useState({ width: 0, chip: 0 });
+  const fit = box.width > 0 && box.chip > 0 ? Math.floor((box.width + space.xs) / (box.chip + space.xs)) : 0;
+  let start = 0;
+  const rows = monthChipRows(anchors.length, fit).map((size) => {
+    const part = anchors.slice(start, start + size);
+    start += size;
+    return part;
+  });
   return (
     <View accessibilityLabel="Jump to a month" role="group" style={styles.jump}>
       <Text style={styles.jumpLabel}>Jump to</Text>
-      <View style={styles.jumpChips}>
-        {anchors.map((anchor) => {
-          const here = anchor.key === current;
-          return (
-            <Pressable
-              key={anchor.key}
-              accessibilityLabel={anchor.name}
-              accessibilityRole="button"
-              aria-current={here ? 'true' : undefined}
-              onPress={() => onJump(anchor)}
-              style={({ pressed }) => [styles.chip, here && styles.chipHere, pressed && styles.rowOpen]}
-            >
-              <Text style={[styles.chipText, here && styles.chipTextHere]}>{anchor.label}</Text>
-            </Pressable>
-          );
-        })}
+      <View
+        onLayout={(event) => {
+          const width = Math.floor(event.nativeEvent.layout.width);
+          setBox((was) => (was.width === width ? was : { ...was, width }));
+        }}
+        style={styles.jumpRows}
+      >
+        {rows.map((part) => (
+          <View key={part[0]?.key ?? 'none'} style={styles.jumpChips}>
+            {part.map((anchor) => {
+              const here = anchor.key === current;
+              return (
+                <Pressable
+                  key={anchor.key}
+                  accessibilityLabel={anchor.name}
+                  accessibilityRole="button"
+                  aria-current={here ? 'true' : undefined}
+                  onLayout={(event) => {
+                    const chip = Math.ceil(event.nativeEvent.layout.width);
+                    setBox((was) => (chip > was.chip ? { ...was, chip } : was));
+                  }}
+                  onPress={() => onJump(anchor)}
+                  style={({ pressed }) => [styles.chip, here && styles.chipHere, pressed && styles.rowOpen]}
+                >
+                  <Text style={[styles.chipText, here && styles.chipTextHere]}>{anchor.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -822,6 +908,7 @@ export function PerGameResultsScreen() {
   // A new filter (or none) starts at the newest night.
   useEffect(() => {
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    setJumpWindow(false);
   }, [onlyId]);
   // Back to every player's games; focus goes to the title, as the button leaves.
   const showAll = useMemo(() => repeatSafe(() => {
@@ -937,11 +1024,29 @@ export function PerGameResultsScreen() {
   // (a short fade; none under reduced motion): the months in between never
   // stream past (walk 5 T4-14).
   const [landing, setLanding] = useState(false);
+  // Every row up to the month is drawn while the jump walks there, and stays
+  // drawn until the feed goes back to its newest night (walk 11 T2-07).
+  const [jumpWindow, setJumpWindow] = useState(false);
+  // The month a jump is landing on: "Jump to" marks it until the feed shows,
+  // never a month the hidden view passes on its way (walk 11 T2-07).
+  const landingMonth = useRef<string | null>(null);
+  // Ends the last jump's hold on its night (holdOnDay).
+  const releaseHold = useRef<(() => void) | null>(null);
+  useEffect(() => () => releaseHold.current?.(), []);
+  // Back up near the newest night, the list may window its rows again: all
+  // the rows above you are drawn there, so nothing on screen moves, and
+  // opening a row's math stays quick.
+  useEffect(() => {
+    if (!far) setJumpWindow(false);
+  }, [far]);
   const backToNewest = useCallback(() => {
     // Any new navigation wins over a jump still settling (walk 5 T4-14).
     jumpSeq.current += 1;
     jumpTarget.current = null;
+    landingMonth.current = null;
+    releaseHold.current?.();
     setLanding(false);
+    setJumpWindow(false);
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
     setFar(false);
     focusWhenReady(TITLE_ID);
@@ -959,17 +1064,30 @@ export function PerGameResultsScreen() {
     const id = nightAnchorId(anchor.date);
     const current = () => jumpSeq.current === seq;
     jumpTarget.current = { seq, index: anchor.index, id };
+    landingMonth.current = anchor.date.slice(0, 7);
+    setCurrentMonth(landingMonth.current);
     setLanding(true);
+    setJumpWindow(true);
     listRef.current?.scrollToIndex({ index: anchor.index, animated: false, viewPosition: 0 });
-    // The month's first day at the top of the feed, not a row or two below it.
+    const missing = () => {
+      if (!current() || jumpRetries.current >= 40) return;
+      jumpRetries.current += 1;
+      listRef.current?.scrollToIndex({ index: anchor.index, animated: false, viewPosition: 0 });
+    };
+    // The month's first day at the top of the feed, not a row or two below
+    // it; once it holds the feed shows, and the day stays at the top while
+    // the feed still changes height (walk 11 T2-07). The rows drawn for the
+    // jump stay drawn until Back to newest: narrowing the window swapped them
+    // for the list's own estimate of their height, short by hundreds of
+    // pixels, and left the view blank, then a week late.
     settleOnDay(listRef.current, id, current, {
-      missing: () => {
-        if (!current() || jumpRetries.current >= 40) return;
-        jumpRetries.current += 1;
-        listRef.current?.scrollToIndex({ index: anchor.index, animated: false, viewPosition: 0 });
-      },
+      missing,
       done: () => {
-        if (current()) setLanding(false);
+        if (!current()) return;
+        landingMonth.current = null;
+        setLanding(false);
+        releaseHold.current?.();
+        releaseHold.current = holdOnDay(listRef.current, id, current);
       },
     });
     // Coming back to your place by tab (T2-N6) leaves focus with the screen.
@@ -1068,6 +1186,56 @@ export function PerGameResultsScreen() {
       node?.removeEventListener('focusin', onFocus);
     };
   }, [far, place]);
+  // 400% zoom (walk 11 T3-11): the "↑ Newest" corner button steps out of the
+  // way while it would sit over an opened row's math or the row the keyboard
+  // is on (its ring included); the math's title says where you are, and the
+  // button comes back as soon as the rows under it are plain ones again.
+  const cornerRef = useRef<View>(null);
+  const [cornerCovers, setCornerCovers] = useState(false);
+  useEffect(() => {
+    if (!far || place !== 'corner' || typeof document === 'undefined') {
+      setCornerCovers(false);
+      return undefined;
+    }
+    const node = (listRef.current as unknown as { getScrollableNode?: () => unknown } | null)
+      ?.getScrollableNode?.() as HTMLElement | null | undefined;
+    const corner = cornerRef.current as unknown as HTMLElement | null;
+    if (!node || !corner || typeof corner.getBoundingClientRect !== 'function') return undefined;
+    let frame = 0;
+    const look = () => {
+      const button = corner.getBoundingClientRect();
+      const under = (box: DOMRect, ring = 0) => box.left - ring < button.right && box.right + ring > button.left
+        && box.top - ring < button.bottom && box.bottom + ring > button.top;
+      let covers = false;
+      node.querySelectorAll<HTMLElement>('[aria-expanded="true"]').forEach((opened) => {
+        const row = opened.parentElement;
+        if (row && under(row.getBoundingClientRect())) covers = true;
+      });
+      const active = document.activeElement as HTMLElement | null;
+      if (!covers && active && active !== node && node.contains(active)
+        && (typeof active.matches !== 'function' || active.matches(':focus-visible'))
+        && under(active.getBoundingClientRect(), 4)) covers = true;
+      setCornerCovers(covers);
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(look);
+    };
+    schedule();
+    node.addEventListener('scroll', schedule, { passive: true });
+    node.addEventListener('focusin', schedule);
+    node.addEventListener('focusout', schedule);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
+    const content = node.firstElementChild;
+    if (observer && content) observer.observe(content);
+    return () => {
+      cancelAnimationFrame(frame);
+      node.removeEventListener('scroll', schedule);
+      node.removeEventListener('focusin', schedule);
+      node.removeEventListener('focusout', schedule);
+      observer?.disconnect();
+    };
+  }, [far, place, expanded, openFees]);
   // A row the keyboard lands on is never left under the pinned night header:
   // Shift+Tab up the feed scrolls it into the clear below the header.
   const sticky = stickyIndices !== undefined;
@@ -1128,7 +1296,7 @@ export function PerGameResultsScreen() {
     const token = viewableItems.find((each) => each.isViewable);
     const top = token?.item as ResultsFeedItem | undefined;
     const date = !top ? null : top.type === 'night' ? top.night.date : top.date;
-    setCurrentMonth(date ? date.slice(0, 7) : null);
+    setCurrentMonth(landingMonth.current ?? (date ? date.slice(0, 7) : null));
     // Keep the night you are reading (its heading, at or above the top row)
     // for a return by tab; none at the newest night or on one player's games.
     const { visible: items, filtered, lastSettled } = placeNow.current;
@@ -1166,7 +1334,7 @@ export function PerGameResultsScreen() {
     : Boolean(lastSettled));
 
   const renderItem: ListRenderItem<ResultsFeedItem> = ({ item }) => {
-    if (item.type === 'night') return <NightHeader layout={layout} night={item.night} />;
+    if (item.type === 'night') return <NightHeader his={only !== null} layout={layout} night={item.night} />;
     if (item.type === 'fees') {
       const open = openFees.has(item.date);
       return (
@@ -1242,21 +1410,25 @@ export function PerGameResultsScreen() {
         </Text>
       ) : null}
       {only ? (
-        <View style={styles.only}>
+        // The way back to his profile first, then the way out to every
+        // player's games: two outlined buttons flush with the line above
+        // (walk 11 T1-07, T2-04: a borderless Back read like a caption).
+        <View style={styles.onlyBlock}>
           <Text style={styles.onlyText}>{unbrokenName(only.playerName)}'s games only.</Text>
-          <Button
-            accessibilityLabel={`Show all players' games, not only ${only.playerName}'s`}
-            label="Show all players"
-            onPress={showAll}
-          />
-          {only.from ? (
+          <View style={styles.only}>
+            {only.from ? (
+              <Button
+                accessibilityLabel={`Back to ${only.playerName}'s profile`}
+                label={`Back to ${only.playerName}`}
+                onPress={backToProfile}
+              />
+            ) : null}
             <Button
-              accessibilityLabel={`Back to ${only.playerName}'s profile`}
-              label={`Back to ${only.playerName}`}
-              onPress={backToProfile}
-              variant="quiet"
+              accessibilityLabel={`Show all players' games, not only ${only.playerName}'s`}
+              label="Show all players"
+              onPress={showAll}
             />
-          ) : null}
+          </View>
         </View>
       ) : null}
       {quietLastNight && lastSettled && !only ? (
@@ -1309,7 +1481,7 @@ export function PerGameResultsScreen() {
       // A month jump renders every row up to the month in one pass while the
       // feed is hidden: rows are measured only once rendered, so the list
       // could otherwise reach a far month only a batch at a time.
-      maxToRenderPerBatch={landing ? JUMP_BATCH : 16}
+      maxToRenderPerBatch={jumpWindow ? JUMP_BATCH : 16}
       onLayout={(event) => {
         listHeight.current = event.nativeEvent.layout.height;
       }}
@@ -1321,7 +1493,7 @@ export function PerGameResultsScreen() {
       stickyHeaderIndices={stickyIndices}
       style={[styles.list, landing ? styles.listLanding : styles.listLanded]}
       viewabilityConfig={viewabilityConfig}
-      windowSize={landing ? JUMP_BATCH : 9}
+      windowSize={jumpWindow ? JUMP_BATCH : 9}
     />
   );
 
@@ -1386,7 +1558,10 @@ export function PerGameResultsScreen() {
       <View style={styles.screen}>
         {list}
         {far ? (
-          <View style={[styles.corner, { right: edges(layout).right }]}>
+          <View
+            ref={cornerRef}
+            style={[styles.corner, { right: edges(layout).right }, cornerCovers && styles.cornerAside]}
+          >
             <Button
               accessibilityLabel="Back to the newest night"
               label="↑ Newest"
@@ -1461,6 +1636,9 @@ const styles = StyleSheet.create({
     ...labelStyle,
     marginBottom: space.xs,
   },
+  jumpRows: {
+    rowGap: space.xs,
+  },
   jumpChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1506,6 +1684,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: NEWEST_CORNER_RESERVE - 44,
   },
+  // Out of sight and out of the pointer's way; still in the Tab order, and
+  // shown again the moment it takes focus (no row is focused then).
+  cornerAside: {
+    opacity: 0,
+    pointerEvents: 'none',
+  },
   // Phone: over the list's bottom padding, clear of the last row.
   dock: {
     flexDirection: 'row',
@@ -1538,8 +1722,11 @@ const styles = StyleSheet.create({
   empty: {
     backgroundColor: colors.background,
   },
-  only: {
+  onlyBlock: {
     marginTop: space.sm,
+    rowGap: space.sm,
+  },
+  only: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',

@@ -83,8 +83,36 @@ export function levelOrder(rows: readonly PerGameLeaderboardRow[]): PerGameLeade
   ));
 }
 
+/**
+ * The dollars a figure shows once formatted ("+$453.8K" → 453,800), so a gap
+ * can be worked out from what is on screen. Null when it does not parse.
+ */
+export function shownDollars(value: number): number | null {
+  const match = /^\$([\d,]+(?:\.\d+)?)([KMB]?)$/.exec(money(Math.abs(value)));
+  if (!match) return null;
+  const scale = match[2] === 'K' ? 1e3 : match[2] === 'M' ? 1e6 : match[2] === 'B' ? 1e9 : 1;
+  const amount = Math.round(Number(match[1].replace(/,/g, '')) * scale);
+  return value < 0 ? -amount : amount;
+}
+
+/**
+ * The gap between two scores as the board shows them (walk 11 T4-01): "+$453.8K"
+ * and "+$340.2K" are "$113.6K" apart on screen, even when the exact figures
+ * are $113.5K apart. A gap under $1K is said to the dollar ("$250 behind #4",
+ * a fee), finer than the figures, so it stays exact; two figures that read
+ * the same keep their exact gap too, so a gap never reads "$0".
+ */
+export function shownGap(theirs: number, yours: number): number {
+  const exact = Math.abs(theirs - yours);
+  if (exact < 1000) return exact;
+  const a = shownDollars(theirs);
+  const b = shownDollars(yours);
+  const onScreen = a === null || b === null ? null : Math.abs(a - b);
+  return onScreen ? onScreen : exact;
+}
+
 function gapTo(row: PerGameLeaderboardRow, score: number, rank = row.rank): BoardGap {
-  return { rank, name: row.displayName, gap: Math.abs(row.cumulativePnl - score) };
+  return { rank, name: row.displayName, gap: shownGap(row.cumulativePnl, score) };
 }
 
 export interface BoardEntry {
@@ -366,7 +394,8 @@ export function readPastSeasons(session: unknown): PastSeason[] {
  * joins only a list that already has a season.
  */
 export function pastSeasonLines(seasons: readonly PastSeason[], finishedNow: PastSeason | null = null): PastSeasonLine[] {
-  const all = finishedNow && seasons.length > 0 ? [...seasons, finishedNow] : seasons;
+  // From the first finished season on (walk 11 T1-12): the record starts at once.
+  const all = finishedNow ? [...seasons, finishedNow] : seasons;
   return all
     .map((season, index) => ({ season, number: index + 1, now: season === finishedNow }))
     .sort((left, right) => right.season.finishedOn.localeCompare(left.season.finishedOn) || right.number - left.number)

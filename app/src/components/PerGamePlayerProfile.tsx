@@ -60,6 +60,7 @@ import {
   positionOpenedDay,
   priceCompare,
   priceDriftCaption,
+  priceMovesNote,
   priceMoveLine,
   priceSourceCaption,
   priceStory,
@@ -562,6 +563,10 @@ export function PerGamePlayerProfile({
               <ProfileChart height={wide ? 200 : 176} metric={metric} nights={shown} side={viewSide} />
               {metric === 'price' && priceCaption ? (
                 <Text maxFontSizeMultiplier={1.4} style={styles.chartCaption}>{priceCaption}</Text>
+              ) : null}
+              {/* What moves a price, in the Rules' words (walk 11 T2-01). */}
+              {metric === 'price' ? (
+                <Text maxFontSizeMultiplier={1.4} style={styles.chartCaption}>{priceMovesNote()}</Text>
               ) : null}
             </>
           ) : (
