@@ -164,6 +164,9 @@ export function ProfileActionBar({ player, position, side, onSwitchSide, onLeave
             total: position.cumulativePnl,
             endsFreeAfter: position.expiresOn,
             priceNow: player.currentGameCost,
+            // The comeback price as the Closed row shows it right after, as
+            // the Roster and the Market ask (walk 11 T1-05).
+            dropImpactBps: bootstrap.ruleset.quoteDropImpactBps,
           })}
           onCancel={cancel}
           onConfirm={() => {

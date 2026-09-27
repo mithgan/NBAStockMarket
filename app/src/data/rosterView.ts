@@ -1002,32 +1002,16 @@ export function closedSpoken(row: Pick<ClosedRow, 'name' | 'how' | 'games'>, mon
   return `${row.name}, ${when}${more}: ${money}${back ? `. ${back}` : ''}`;
 }
 
-/**
- * His price a game right after you drop him (or close your short on him):
- * the move itself nudges his quote by the ruleset's drop impact, down for a
- * drop and up for a closed short, as the backend moves it (walk 11 T1-05).
- */
-export function priceAfterClose(side: PerGamePositionSide, priceNow: number, dropImpactBps: number): number {
-  const step = Math.round((priceNow * Math.max(0, dropImpactBps)) / 10_000);
-  return side === 'long' ? Math.max(0, priceNow - step) : priceNow + step;
-}
+/** His price right after a drop or a closed short (lives with the question in copy/terms). */
+export { priceAfterClose } from '../copy/terms';
 
 /**
- * The Roster's Drop / Close question (`confirmCloseMessage`) with the
- * comeback price the Closed row shows seconds later, in its format: "His
- * price right after this drop: about $261.4K a game." beside "Add again ·
- * $261.4K", never "today about $262K" (walk 11 T1-05). "About": nights move
- * prices too.
+ * The Roster's Drop / Close question: the shared `confirmCloseMessage` with
+ * the comeback price the Closed row shows seconds later (walk 11 T1-05; the
+ * Market and the profile ask the same way).
  */
-export function closeQuestion({ priceNow = null, dropImpactBps = 0, ...question }: Parameters<typeof confirmCloseMessage>[0] & {
-  /** The ruleset's `quoteDropImpactBps`. */
-  dropImpactBps?: number;
-}): string {
-  const base = confirmCloseMessage({ ...question, priceNow: null });
-  if (priceNow === null || priceNow <= 0) return base;
-  const after = moneyCompact(priceAfterClose(question.side, priceNow, dropImpactBps));
-  const when = dropImpactBps <= 0 ? 'today' : question.side === 'long' ? 'right after this drop' : 'right after this close';
-  return `${base} His price ${when}: about ${after} a game.`;
+export function closeQuestion({ dropImpactBps = 0, ...question }: Parameters<typeof confirmCloseMessage>[0]): string {
+  return confirmCloseMessage({ ...question, dropImpactBps: dropImpactBps ?? 0 });
 }
 
 /** A Closed row with every stint it stands for. */

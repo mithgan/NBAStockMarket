@@ -296,6 +296,7 @@ export function confirmCloseMessage({
   total,
   endsFreeAfter = null,
   priceNow = null,
+  dropImpactBps = null,
 }: {
   side: PerGamePositionSide;
   playerName: string;
@@ -309,6 +310,13 @@ export function confirmCloseMessage({
   endsFreeAfter?: string | null;
   /** His price a game in the market today: what re-opening would lock. */
   priceNow?: number | null;
+  /**
+   * The ruleset's `quoteDropImpactBps`: with it the question quotes his price
+   * right after this move, as the Closed row shows it seconds later ("His
+   * price right after this drop: about $261.4K a game."), never "today about
+   * $262K" (walk 11 T1-05). Without it, today's price.
+   */
+  dropImpactBps?: number | null;
 }): string {
   const fee = feeDollars > 0 ? exactMoney(feeDollars) : null;
   const forFee = fee ? ` for a ${fee} fee` : '';
@@ -333,12 +341,34 @@ export function confirmCloseMessage({
     sentences.push(`Left alone, it ends by itself after ${humanDate(endsFreeAfter)}, at no cost.`);
   }
   const another = fee ? `, plus another ${fee} fee` : '';
+  if (dropImpactBps !== null) {
+    // The price the Closed row's Add again / Short again shows right after
+    // this move, in its format. "About": nights move prices too.
+    sentences.push(side === 'long'
+      ? `Adding him back later costs his price at that time${another}.`
+      : `Shorting him again later sets a new price${another}.`);
+    if (priceNow !== null && priceNow > 0) {
+      const when = dropImpactBps <= 0 ? 'today' : side === 'long' ? 'right after this drop' : 'right after this close';
+      sentences.push(`His price ${when}: about ${moneyCompact(priceAfterClose(side, priceNow, dropImpactBps))} a game.`);
+    }
+    return sentences.join(' ');
+  }
   // "About": today's quote can include your own position's pull on it.
   const today = priceNow !== null && priceNow > 0 ? ` (today about ${perGame(priceNow)})` : '';
   sentences.push(side === 'long'
     ? `Adding him back later costs his price at that time${today}${another}.`
     : `Shorting him again later sets a new price${today}${another}.`);
   return sentences.join(' ');
+}
+
+/**
+ * His price a game right after you drop him (or close your short on him):
+ * the move itself nudges his quote by the ruleset's drop impact, down for a
+ * drop and up for a closed short, as the backend moves it (walk 11 T1-05).
+ */
+export function priceAfterClose(side: PerGamePositionSide, priceNow: number, dropImpactBps: number): number {
+  const step = Math.round((priceNow * Math.max(0, dropImpactBps)) / 10_000);
+  return side === 'long' ? Math.max(0, priceNow - step) : priceNow + step;
 }
 
 /** Why a roster lock exists, in one breath. */
