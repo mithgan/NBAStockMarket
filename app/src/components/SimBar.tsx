@@ -2105,7 +2105,7 @@ export function SimBar() {
   // Desktop and short windows carry the controls in the status row, so this
   // bar is just the frame's bottom edge there. The season's progress sits
   // beside "Day 16 of 174" in the status row, where the words label it.
-  const inStatusRow = layout.merged || chromeFolded(height) || spacingFolded;
+  const inStatusRow = layout.merged || chromeFolded(height, width) || spacingFolded;
 
   return (
     <View nativeID="practice-bar" style={styles.bar}>

@@ -618,7 +618,7 @@ export function PerGameRosterScreen({
   const { bootstrap, closePosition, notify, openPosition, pendingActions } = usePerGame();
   const { width, height, fontScale } = useWindowDimensions();
   // A phone on its side: the folded frame already says when moves reopen.
-  const shortWindow = chromeFolded(height);
+  const shortWindow = chromeFolded(height, width);
   // Sent from a full Market to make room for a player: a slim banner keeps
   // the errand in view and offers him the moment there is room (walk 3 T2-07).
   const [making, setMaking] = useState<{ side: PerGamePosition['side']; playerId: string; playerName: string } | null>(null);

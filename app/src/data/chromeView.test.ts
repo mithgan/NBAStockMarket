@@ -865,3 +865,17 @@ test('walk 11: Play to the end on a lock eve offers the night, one order for eve
   assert.equal(lockBesideDay(900, true), false);
   assert.equal(lockBesideDay(600, false), false);
 });
+
+test('a wide short window folds the frame too, a portrait phone keeps the height rule (walk 11 T3-13)', async () => {
+  const { chromeFolded } = await import('./chromeView');
+  // Laptops at 150% zoom: 1280x800 and 1366x768.
+  assert.equal(chromeFolded(533, 853), true);
+  assert.equal(chromeFolded(512, 911), true);
+  // A short laptop window that still has room, and a phone in Safari.
+  assert.equal(chromeFolded(600, 960), false);
+  assert.equal(chromeFolded(553, 375), false);
+  assert.equal(chromeFolded(568, 320), false);
+  // The height rule alone, as before (a phone on its side, 200% zoom).
+  assert.equal(chromeFolded(390, 844), true);
+  assert.equal(chromeFolded(422, 195), true);
+});

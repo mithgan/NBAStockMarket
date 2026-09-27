@@ -137,7 +137,7 @@ export function PerGameStatusStrip() {
   const layout = chromeLayout(width, fontScale);
   // A short window hides the brand bar (App), so this row carries Settings;
   // in practice it also folds the practice bar into this one row.
-  const short = chromeFolded(height);
+  const short = chromeFolded(height, width);
   const folded = practice && (short || spacingFolded) && !layout.merged;
   const foldedFacts = folded && width >= CHROME_FOLDED_FACTS_MIN_WIDTH;
   // Folded, narrow and very short (a phone at 400% zoom): one 44px line, the
@@ -717,7 +717,7 @@ function RulesSheet({
           status row starts (under the brand bar; at the top of a short
           window), so no line of the frame is cut in half behind the scrim
           (walk 4 T1-01). Scrolls inside. */}
-      <View style={[styles.sheet, floats && styles.sheetFloating, chromeFolded(height) && styles.sheetShort, sheetTop !== null && { marginTop: sheetTop }]}>
+      <View style={[styles.sheet, floats && styles.sheetFloating, chromeFolded(height, width) && styles.sheetShort, sheetTop !== null && { marginTop: sheetTop }]}>
         <View style={[styles.sheetHead, narrow && styles.sheetHeadNarrow]}>
           <Text accessibilityRole="header" {...headingLevel(2)} style={styles.sheetTitle}>Game rules</Text>
           <Pressable

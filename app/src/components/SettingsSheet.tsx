@@ -215,7 +215,7 @@ export function SettingsSheet({
       {/* A short window keeps the settings, not the gap above them (as Rules).
           The sheet starts where the status row starts, so no line of the
           frame is cut in half behind the scrim (walk 4 T1-01). */}
-      <View style={[styles.sheet, floating && styles.sheetFloating, chromeFolded(height) && styles.sheetShort, sheetTop !== null && { marginTop: sheetTop }]}>
+      <View style={[styles.sheet, floating && styles.sheetFloating, chromeFolded(height, width) && styles.sheetShort, sheetTop !== null && { marginTop: sheetTop }]}>
         <View style={[styles.sheetHead, narrow && styles.sheetHeadNarrow]}>
           <Text accessibilityRole="header" {...headingLevel(2)} style={styles.sheetTitle}>Settings</Text>
           <Pressable

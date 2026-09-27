@@ -29,7 +29,7 @@ import { registerSettingsOpener, registerTabOpener, settingsReturnStep } from '.
 import { sheetIsOpen, subscribeSheets } from './src/web/appHistory';
 import { pressedByPointer, settleTaps, tapsSettling } from './src/web/tapSettle';
 import { consumeArrivedByKeyboard, consumeLastSeasonResult, consumePracticeRestarted, goToPractice, leftPractice, noteFinishedSeason, setPracticeProgress } from './src/web/practiceSession';
-import { practiceProgress } from './src/data/chromeView';
+import { chromeFolded, practiceProgress } from './src/data/chromeView';
 import { rankLine } from './src/data/rosterView';
 import {
   PerGameProvider as PortfolioProvider,
@@ -496,13 +496,6 @@ function focusLatestNotice(): void {
  * on a phone.
  */
 const WIDE_LAYOUT_MIN_WIDTH = 900;
-/**
- * Below this height (a phone on its side, a laptop at 400% zoom) the frame
- * folds: the brand bar hides (the status row carries Settings instead) and
- * the tab bar loses its extra padding, so the game keeps most of the screen.
- */
-const SHORT_LAYOUT_MAX_HEIGHT = 500;
-
 function treatmentsRequested(): boolean {
   if (typeof window === 'undefined') return false;
   return new URLSearchParams(window.location.search).has('treatments');
@@ -546,7 +539,10 @@ function AppBody() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const wide = width >= WIDE_LAYOUT_MIN_WIDTH;
-  const short = height < SHORT_LAYOUT_MAX_HEIGHT;
+  // A short window (a phone on its side, a laptop at 150-400% zoom) folds the
+  // frame: the brand bar hides (the status row carries Settings instead) and
+  // the tab bar loses its extra padding, so the game keeps most of the screen.
+  const short = chromeFolded(height, width);
   // In the brand bar while there is one; in a short window (landscape, 200%
   // zoom) the bar is folded away, so the notice docks above the tab bar.
   const noticePlacement: NoticePlacement = short ? 'dock' : width < NOTICE_BAR_WIDE_MIN_WIDTH ? 'bar' : 'barWide';

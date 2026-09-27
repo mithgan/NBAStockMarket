@@ -608,8 +608,8 @@ export function dividendText(basis: DividendBasis, dollarsPerNetPoint: number): 
 }
 
 /**
- * Below this window height the frame folds, as App's SHORT_LAYOUT_MAX_HEIGHT
- * does: the brand bar hides, and the status row and practice bar become one
+ * Below this window height the frame folds (App, the status row, the practice
+ * bar and the sheets all use `chromeFolded`): the brand bar hides, and the status row and practice bar become one
  * row (day, +1 night, +1 week, More, Settings) so the game keeps the screen.
  */
 export const CHROME_SHORT_MAX_HEIGHT = 500;
@@ -626,8 +626,18 @@ export function lockBesideDay(height: number, wideRow: boolean): boolean {
   return wideRow && height < CHROME_SHORT_LAPTOP_MAX_HEIGHT;
 }
 
-export function chromeFolded(height: number): boolean {
-  return height < CHROME_SHORT_MAX_HEIGHT;
+/**
+ * A wide window folds a little taller: a laptop at 150% zoom (1280x800 is
+ * 853x533, 1366x768 is 911x512) kept two players under a stacked brand bar,
+ * status row, practice row and hint (walk 11 T3-13). Portrait phones keep the
+ * height rule alone (an iPhone SE in Safari is about 375x553).
+ */
+export const CHROME_SHORT_WIDE_MIN_WIDTH = 600;
+export const CHROME_SHORT_WIDE_MAX_HEIGHT = 560;
+
+export function chromeFolded(height: number, width = 0): boolean {
+  return height < CHROME_SHORT_MAX_HEIGHT
+    || (width >= CHROME_SHORT_WIDE_MIN_WIDTH && height < CHROME_SHORT_WIDE_MAX_HEIGHT);
 }
 
 /** From this width the folded row has room for the facts beside its controls. */
@@ -702,7 +712,7 @@ export const SHEET_FLOATING_MIN_WIDTH = 720;
 export const SHEET_FLOAT_GAP = 16;
 
 export function sheetFloats(width: number, height: number): boolean {
-  return width >= SHEET_FLOATING_MIN_WIDTH && !chromeFolded(height);
+  return width >= SHEET_FLOATING_MIN_WIDTH && !chromeFolded(height, width);
 }
 
 /** The floating panel's top: under the frame's bottom edge, with the gap. */
