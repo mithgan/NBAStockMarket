@@ -1290,6 +1290,9 @@ const styles = StyleSheet.create({
   },
   contentsLink: {
     minHeight: 44,
+    // "Fees" alone measured 42px wide: every link is at least 44 (audit).
+    minWidth: 44,
+    alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
