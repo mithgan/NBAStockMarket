@@ -698,32 +698,83 @@ export function runRefusals(text: string): string[] {
   return out;
 }
 
-/** Who a refusal names, what was not done, and why in kind (a lock's date, or a moved price). */
-function refusalParts(line: string): { names: string[]; verb: string; why: string } {
-  const match = /^(.*?) (?:was|were) not (\w+)(?:: (.*))?\.$/.exec(line);
-  if (!match) return { names: [line], verb: '', why: line };
-  const names = match[1].split(/, and | and |, /).map((name) => name.trim()).filter(Boolean);
-  const reason = match[3] ?? '';
-  const why = /price/.test(reason) ? 'price' : reason;
-  return { names, verb: match[2], why };
-}
+type RefusedMove = { name: string; verb: string };
 
 /**
- * A run's refusals with fresh ones added: a refusal said again with more
- * names ("Devin Booker" then "Devin Booker and Jalen Duren", the same lock
- * or a moved price) replaces the one it covers; others are kept.
+ * Who a refusal names and what was not done for each ("Jalen Duren was not
+ * added, and Luka Doncic was not dropped"), its reason as said, and why in
+ * kind (a lock's date, or a moved price).
+ */
+function refusalParts(line: string): { moves: RefusedMove[]; reason: string; why: string } {
+  const colon = line.indexOf(': ');
+  const head = colon >= 0 ? line.slice(0, colon) : line.replace(/\.$/, '');
+  const reason = colon >= 0 ? line.slice(colon + 2) : '';
+  const moves: RefusedMove[] = [];
+  const clause = /(.+?) (?:was|were) not (\w+)(?:, and |$)/g;
+  for (let match = clause.exec(head); match; match = clause.exec(head)) {
+    match[1].split(/, and | and |, /).map((name) => name.trim()).filter(Boolean)
+      .forEach((name) => moves.push({ name, verb: match![2] }));
+  }
+  if (moves.length === 0) return { moves: [{ name: line, verb: '' }], reason: line, why: line };
+  return { moves, reason, why: /price/.test(reason) ? 'price' : reason };
+}
+
+/** "Luka Doncic", "Luka Doncic and Scottie Barnes", "A, B and C" (as the notices name players). */
+function refusalNames(names: readonly string[]): string {
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** One sentence for refused moves that share a reason, each verb once, in order. */
+function refusalSentence(moves: readonly RefusedMove[], reason: string): string {
+  const verbs = [...new Set(moves.map((move) => move.verb))];
+  const who = verbs.map((verb) => {
+    const names = moves.filter((move) => move.verb === verb).map((move) => move.name);
+    return `${refusalNames(names)} ${names.length === 1 ? 'was' : 'were'} not ${verb}`;
+  }).join(', and ');
+  return reason ? `${who}: ${reason}` : `${who}.`;
+}
+
+const sameMove = (a: RefusedMove, b: RefusedMove) => a.name === b.name && a.verb === b.verb;
+
+/**
+ * A run's refusals with fresh ones added, one refusal per move: moves
+ * refused by the same lock are said in one sentence, each once ("Devin
+ * Booker" then "Devin Booker and Jalen Duren", or "Jalen Duren was not added,
+ * and Luka Doncic was not dropped"; walk 16 lead note: Jalen Duren's add was
+ * named twice). A moved price said again with more names replaces the one it
+ * covers; other moved prices keep their own figures.
  */
 export function mergeRefusals(known: readonly string[], fresh: readonly string[]): string[] {
   let out = [...known];
   for (const line of fresh) {
     const next = refusalParts(line);
-    out = out.filter((entry) => {
-      const old = refusalParts(entry);
-      return !(old.verb === next.verb && old.why === next.why && old.names.every((name) => next.names.includes(name)));
-    });
+    // A moved price said again with more names replaces the one it covers.
+    if (next.why === 'price') {
+      out = out.filter((entry) => {
+        const old = refusalParts(entry);
+        return !(old.why === 'price' && old.moves.every((move) => next.moves.some((named) => sameMove(named, move))));
+      });
+    }
     out.push(line);
   }
-  return out;
+  // One sentence per lock, each move once, where it was first said:
+  // "Jalen Duren was not added, and Luka Doncic was not dropped: moves paused for the Oct 28 games."
+  const merged: string[] = [];
+  const byLock = new Map<string, number>();
+  for (const entry of out) {
+    const parts = refusalParts(entry);
+    const lock = parts.why !== 'price' && parts.moves[0]?.verb !== '';
+    const at = lock ? byLock.get(parts.why) : undefined;
+    if (at === undefined) {
+      if (lock) byLock.set(parts.why, merged.length);
+      merged.push(entry);
+      continue;
+    }
+    const prior = refusalParts(merged[at]);
+    const added = parts.moves.filter((move) => !prior.moves.some((had) => sameMove(had, move)));
+    if (added.length > 0) merged[at] = refusalSentence([...prior.moves, ...added], prior.reason);
+  }
+  return merged;
 }
 
 /**
@@ -757,6 +808,90 @@ export function runNotice(steps: readonly ('night' | 'week')[], notice: string):
   const marker = ' games: ';
   const at = notice.indexOf(marker);
   return at < 0 ? notice : `${notice.slice(0, at)} games (${label}): ${notice.slice(at + marker.length)}`;
+}
+
+/** A notice's sentences; a figure's point ("$261.4K") never ends one. */
+function noticeSentences(message: string): string[] {
+  return message.split(/(?<=[.!?])\s+(?=[A-Z$\d#])/).map((part) => part.trim()).filter(Boolean);
+}
+
+/** A sentence saying a move went through ("Luka Doncic dropped.", "Shorted Luka Doncic at $402.4K a game, locked in."). */
+const LANDED_MOVE = /^(?:Shorted .+ at .+, locked in|Short on .+ closed|\d+ players (?:added|dropped|shorted|closed), the last .+|.+ (?:added|dropped|shorted|closed)(?: at .+, locked in)?)\.$/;
+/** What goes with a landed move's sentence: its fee, and room it made. */
+const MOVE_TAIL = /^(?:\$[\d.,]+[KM]?\s(?:fee|in fees)\.|Room made for .+\.)$/;
+
+/**
+ * The moves a notice says went through, each with its fee ("Luka Doncic
+ * dropped. $250 fee."), for the notice of the run they landed in: the next
+ * week's notice replaced them (walk 16 lead note). Games, ended shorts,
+ * locks and refused moves are not moves.
+ */
+export function runMoves(message: string): string[] {
+  const out: string[] = [];
+  let open = false;
+  for (const sentence of noticeSentences(message)) {
+    if (open && MOVE_TAIL.test(sentence)) {
+      out[out.length - 1] = `${out[out.length - 1]} ${sentence}`;
+      continue;
+    }
+    open = LANDED_MOVE.test(sentence) && !/\bnot (?:added|dropped|shorted|closed)\b/.test(sentence) && !/ games\b/.test(sentence);
+    if (open) out.push(sentence);
+  }
+  return out;
+}
+
+/** Who a landed move names and what was done ("all": the count form, "4 players added, the last …"). */
+function movedParts(line: string): { names: string[]; verb: string; all: boolean } {
+  const shorted = /^Shorted (.+?) at /.exec(line);
+  if (shorted) return { names: [shorted[1]], verb: 'shorted', all: false };
+  const closed = /^Short on (.+?) closed\./.exec(line);
+  if (closed) return { names: [closed[1]], verb: 'closed', all: false };
+  const count = /^\d+ players (\w+), the last /.exec(line);
+  if (count) return { names: [], verb: count[1], all: true };
+  const named = /^(.+?) (added|dropped|shorted|closed)\b/.exec(line);
+  if (!named) return { names: [line], verb: '', all: false };
+  return { names: named[1].split(/, and | and |, /).map((name) => name.trim()).filter(Boolean), verb: named[2], all: false };
+}
+
+/**
+ * A run's landed moves with fresh ones added: quick moves of one kind that
+ * grew into one notice ("Luka Doncic and Scottie Barnes dropped. $500 in
+ * fees.") replace the lines they cover; others are kept, in order.
+ */
+export function mergeMoves(known: readonly string[], fresh: readonly string[]): string[] {
+  let out = [...known];
+  for (const line of fresh) {
+    if (out.includes(line)) continue;
+    const next = movedParts(line);
+    out = out.filter((entry) => {
+      const old = movedParts(entry);
+      return !(old.verb === next.verb && (next.all || old.names.every((name) => next.names.includes(name))));
+    });
+    out.push(line);
+  }
+  return out;
+}
+
+/** A run's games notice with the moves that landed in it, before any lock sentence it ends with. */
+export function withMoves(games: string, moves: readonly string[]): string {
+  if (moves.length === 0) return games;
+  const lock = /\s(Moves pause for (?:the [^.]+ games|the next games)\.)$/.exec(games);
+  const head = lock ? games.slice(0, lock.index) : games;
+  return [head, ...moves, ...(lock ? [lock[1]] : [])].join(' ');
+}
+
+/**
+ * The season's end after the run a Play to the end continued, as one notice:
+ * the season's result first, then what the run did over its whole span
+ * ("Season complete. Final score +$3.75M, #2 of 5. Oct 21–Apr 12 games: your
+ * score rose $3.75M."). The run's last night led before it and read as if
+ * the rest of the season made $74.5K (walk 16 T2-01). Led by the season's
+ * result, a short window's Roster still leaves it to the result card, as
+ * after a pause. A finished season has no lock ahead: no lock sentence.
+ */
+export function seasonEndAfterRun(runSpan: string, seasonEnd: string): string {
+  const span = runSpan.replace(/\s*Moves pause for (?:the [^.]+ games|the next games)\.\s*$/, '').trim();
+  return span ? `${seasonEnd} ${span}` : seasonEnd;
 }
 
 /** Whether any of your players played after `after`, through `through` (games, not fees). */
@@ -911,6 +1046,17 @@ export const CHROME_FOLDED_ONE_LINE_MIN_WIDTH = 340;
  */
 export const CHROME_TINY_MAX_HEIGHT = 300;
 
+/**
+ * A two-line folded frame (a 320px phone) at season end on the Roster puts
+ * More beside Settings on the status row's line: the result card holds the
+ * way on (Play another season), and the second line held More alone, a 45px
+ * band of nothing at 320x568 (walk 16 T4-06). Other tabs keep "New season
+ * is in More" and More on the second line.
+ */
+export function moreBesideSettings(foldTwoLines: boolean, seasonComplete: boolean, screen: string | null): boolean {
+  return foldTwoLines && seasonComplete && screen === 'Roster';
+}
+
 export function chromeTiny(width: number, height: number): boolean {
   return chromeFolded(height) && height < CHROME_TINY_MAX_HEIGHT && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
 }
@@ -983,6 +1129,17 @@ export function sheetTopFor(statusRowTop: number | null | undefined): number | n
 export const SHEET_FLOATING_MIN_WIDTH = 720;
 /** The floating panel's gap under the frame. */
 export const SHEET_FLOAT_GAP = 16;
+
+/**
+ * Whether the Rules pin their section links under the sheet's title bar
+ * (walk 16 T2-N2): after "Locks", "Fees" is one press away, not a scroll
+ * back to the top. A narrow sheet (a phone at 400% zoom) and a short window
+ * keep them at the top of the text: there the line wraps to several rows
+ * and would take most of the little room the rules have.
+ */
+export function rulesContentsPinned(width: number, height: number): boolean {
+  return !sheetNarrow(width) && !chromeFolded(height, width);
+}
 
 export function sheetFloats(width: number, height: number): boolean {
   return width >= SHEET_FLOATING_MIN_WIDTH && !chromeFolded(height, width);
@@ -1660,6 +1817,13 @@ export function queueLastLine(step: 'night' | 'week', seasonEnd: string | null |
 
 /** Cancel's own answer to a press with nothing queued, on the button (walk 11 T1-14). */
 export const NOTHING_TO_CANCEL = 'Nothing to cancel';
+/**
+ * The answer as drawn: one short line the width of "Cancel queued", centred
+ * where the button was ("Nothing to / cancel" broke onto two left-hugging
+ * lines in a phone's slot; walk 16 T1-10). Its name says both.
+ */
+export const NOTHING_QUEUED = 'Nothing queued';
+export const NOTHING_QUEUED_NAME = `${NOTHING_QUEUED}: ${NOTHING_TO_CANCEL.toLowerCase()}`;
 /** How long Cancel shows it. */
 export const NOTHING_TO_CANCEL_MS = 2000;
 
@@ -1786,6 +1950,31 @@ export function advanceTap(
 }
 
 /**
+ * Both advance buttons after a tap on one (walk 16 T4-07): a run may mix
+ * +1 week and +1 night, so its rhythm is judged across the two (week, night,
+ * night at 198 and 183 ms played one night, the second taken for a double
+ * tap). The tapped button is steady when the last tap on either came within
+ * ADVANCE_RHYTHM_MS, and the other button's next quick tap is no double tap
+ * (the finger moved between them). A quick pair on one button is still held
+ * as a double tap when it began after a pause on both; a bounce
+ * (ADVANCE_BOUNCE_MS on one button) changes nothing and never counts.
+ * `before`/`after`: the tapped button's state around advanceTap.
+ */
+export function advanceTapsAcross(
+  before: AdvanceTapState,
+  after: AdvanceTapState,
+  other: AdvanceTapState,
+): { own: AdvanceTapState; other: AdvanceTapState } {
+  const now = after.lastAt;
+  if (after === before || now === null) return { own: after, other };
+  const recent = other.lastAt !== null && other.lastAt <= now && now - other.lastAt < ADVANCE_RHYTHM_MS;
+  return {
+    own: after.held || !recent ? after : { ...after, steady: true },
+    other: other.lastAt === null ? other : { ...other, held: false, steady: true },
+  };
+}
+
+/**
  * A press that arrives this soon after the last step landed continues that
  * step's run, as a queued press does: one notice for the whole run, and the
  * status row names all of it. Without a network delay each night finished
@@ -1817,12 +2006,14 @@ export function playToEndQueuedLine(playing: string | null): string {
 /**
  * The queued button's label, where sighted players see it (the queue lived
  * only in a hidden live region): "+1 week" over "queued", no wider than the
- * button's own label, so nothing beside it moves; "Next" over "queued" in a
- * stacked row (195px), where the button is 55px wide.
+ * button's own label, so nothing beside it moves. A stacked row (195px, a
+ * 55px button) keeps the name first with the count under it ("+1 week" over
+ * "×2"): "×2 queued" and "Next queued" alone left no word saying which
+ * button adds weeks (walk 16 T4-08).
  */
 export function queuedLabel(step: 'night' | 'week', stacked: boolean, count = 1): string {
-  if (count > 1) return stacked ? `×${count}\nqueued` : `+1 ${step}\n×${count} queued`;
-  return stacked ? 'Next\nqueued' : `+1 ${step}\nqueued`;
+  if (count > 1) return stacked ? `+1 ${step}\n×${count}` : `+1 ${step}\n×${count} queued`;
+  return `+1 ${step}\nqueued`;
 }
 
 /**

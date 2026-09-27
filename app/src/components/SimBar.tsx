@@ -12,6 +12,7 @@ import {
 import {
   ADVANCE_DOUBLE_TAP_MS,
   advanceTap,
+  advanceTapsAcross,
   type AdvanceTapState,
   advanceQuiet,
   asksBeforeEmptyNight,
@@ -90,6 +91,8 @@ import {
   queueFullLine,
   queueLastLine,
   QUEUE_LINE_PAUSE_MS,
+  NOTHING_QUEUED,
+  NOTHING_QUEUED_NAME,
   NOTHING_TO_CANCEL,
   NOTHING_TO_CANCEL_MS,
   queueHasRoom,
@@ -97,7 +100,11 @@ import {
   resultSpan,
   mergeRefusals,
   runNotice,
+  seasonEndAfterRun,
+  mergeMoves,
+  runMoves,
   runRefusals,
+  withMoves,
   withRefusals,
   SEASON_TOTAL_DAYS,
   weekSpanLabel,
@@ -106,7 +113,7 @@ import type { PracticeRulesContext } from '../data/perGameRules';
 import { humanDate, rosterReopensLine, seasonResultLine, spokenRanks } from '../copy/terms';
 import { rankLine } from '../data/rosterView';
 import { usePerGame } from '../state/PerGameContext';
-import { refreshNotice } from '../state/perGameNotices';
+import { isSeasonCompleteNotice, refreshNotice } from '../state/perGameNotices';
 import { setPracticePlaying, usePracticePlaying } from '../state/practicePlaying';
 import { openTab } from '../state/uiActions';
 import { SEASON_RESULT_HEADING_ID } from '../ui/domMarkers';
@@ -203,8 +210,13 @@ const pressAdvance = (step: 'night' | 'week', run: () => void, guardSpot = false
     run();
     return;
   }
+  const before = advanceTaps[step];
   const tap = advanceTap(advanceTaps[step], pressDownAt(Date.now()));
-  advanceTaps[step] = tap.state;
+  // A run can mix the two buttons: its rhythm counts taps on either (walk 16 T4-07).
+  const otherStep = step === 'night' ? 'week' : 'night';
+  const across = advanceTapsAcross(before, tap.state, advanceTaps[otherStep]);
+  advanceTaps[step] = across.own;
+  advanceTaps[otherStep] = across.other;
   for (let press = 0; press < tap.plays; press += 1) run();
 };
 
@@ -665,6 +677,10 @@ const practiceEngine = {
   landedRun: shared<{ run: PracticeRun; at: number } | null>(null),
   /** A step landed while another press waited: its own notice comes down. */
   holdStepNotice: shared(false),
+  /** The run a queued Play to the end waited behind (walk 16 T2-01). */
+  endRun: shared<PracticeRun | null>(null),
+  /** The run a playing Play to the end continues: the season's end names its whole span. */
+  seasonEndRun: shared<PracticeRun | null>(null),
   /** A cancel that landed while a single step played, said with its result. */
   cancelNote: shared<string | null>(null),
   speakRun: shared<Timer>(null),
@@ -719,7 +735,7 @@ function readScreenName(): string | null {
   return document.getElementById('app-screen')?.getAttribute('aria-label') ?? null;
 }
 
-function useScreenName(): string | null {
+export function useScreenName(): string | null {
   const [name, setName] = useState<string | null>(readScreenName);
   useEffect(() => {
     if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return undefined;
@@ -1338,6 +1354,8 @@ interface PracticeRun {
   note?: string | null;
   /** Moves refused while it played, carried in its notice (walk 15 T4-04, T4-08). */
   refusals?: string[];
+  /** Moves that went through while it played ("Luka Doncic dropped. $250 fee."), kept in its notice too. */
+  moves?: string[];
 }
 
 /** How soon after a run's last step a refused move still belongs to that run. */
@@ -1346,7 +1364,15 @@ const RUN_REFUSAL_JOIN_MS = 3000;
 /** A run's notice: its games, any queued presses it cancelled, and any moves it refused. */
 function runText(run: PracticeRun, now: PerGameBootstrap): string {
   const games = withCancelledNote(runNotice(run.steps, refreshNotice(run.start, now, false, { seasonComplete: seasonOver })), run.note ?? null);
-  return withRefusals(games, run.refusals ?? []);
+  return withRefusals(withMoves(games, run.moves ?? []), run.refusals ?? []);
+}
+
+/**
+ * A run's games from its first step to the season's end, one headline
+ * ("Oct 21–Apr 12 games: your score rose $3.75M."), with what it refused.
+ */
+function seasonSpanText(run: PracticeRun, end: PerGameBootstrap): string {
+  return withRefusals(withMoves(refreshNotice(run.start, end, false), run.moves ?? []), run.refusals ?? []);
 }
 
 /** The practice season is over (its last day has settled), as the notices judge it. */
@@ -1384,10 +1410,15 @@ function playPracticeWeek(): void {
  * at high zoom, Restart and Exit move behind a More control so the row still
  * fits and the screen keeps its room.
  */
-export function PracticeControls({ inline = false, folded = false, tiny = false, onRules, onSettings }: {
+export function PracticeControls({ inline = false, folded = false, tiny = false, endBeside = false, onRules, onSettings }: {
   inline?: boolean;
   /** The short-window row: +1 night, +1 week and More (Rules, Restart, Exit). */
   folded?: boolean;
+  /**
+   * The season is over and More sits beside Settings on the status row's
+   * line (a 320px phone's Roster): no blank slot before it (walk 16 T4-06).
+   */
+  endBeside?: boolean;
   /** A folded row at 400% zoom: More alone, holding every control (walk 2 T3-11). */
   tiny?: boolean;
   /** Opens the rules; folded rows list Rules under More. */
@@ -1515,6 +1546,20 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     composedRun.current = text;
     notify(text, { tone: 'problem' });
   }, [message, noticeTone]);
+  // A move that goes through while a run plays (a Drop confirmed during its
+  // first week) is kept for the run's notice, as a refused one is: the next
+  // week's notice replaced "…Luka Doncic dropped. $250 fee." (walk 16 lead
+  // note). One soon after the run landed joins its notice on screen already,
+  // and is kept in case a press continues the run.
+  useLayoutEffect(() => {
+    if (noticeTone !== 'success' || !message || message === composedRun.current) return;
+    const landed = landedRun.current;
+    const run = runRef.current ?? (landed && Date.now() - landed.at < RUN_REFUSAL_JOIN_MS ? landed.run : null);
+    if (!run) return;
+    const known = run.moves ?? [];
+    const fresh = runMoves(message).filter((line) => !known.includes(line));
+    if (fresh.length > 0) run.moves = mergeMoves(known, fresh);
+  }, [message, noticeTone]);
   // In the render that shows the run's last nights, before it paints, so the
   // last step's own notice never shows on its own.
   useLayoutEffect(() => {
@@ -1527,6 +1572,18 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     composedRun.current = text;
     notify(text, { spoken: '', tone: runOver.refusals?.length ? 'problem' : 'success' });
   }, [runOver, bootstrap, notify]);
+  // The season's end after a run it continued (Play to the end within the
+  // run's moment): the run's whole span, then the season's result, shown
+  // and heard once, before it paints (walk 16 T2-01).
+  useLayoutEffect(() => {
+    const run = practiceEngine.seasonEndRun.current;
+    if (!run || !bootstrap || !isSeasonCompleteNotice(message) || !seasonOver(bootstrap)) return;
+    practiceEngine.seasonEndRun.current = null;
+    const text = seasonEndAfterRun(seasonSpanText(run, bootstrap), message as string);
+    composedRun.current = text;
+    notify(text, { spoken: '', tone: run.refusals?.length ? 'problem' : 'success' });
+    speakNotice();
+  }, [noticeSeq, bootstrap]);
   // A cancel that landed while a single step played: its words join the
   // step's result, which replaced them at once (walk 9 T1-15).
   const cancelNote = practiceEngine.cancelNote;
@@ -1961,10 +2018,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     <Button
       ref={placement === 'menu' ? undefined : cancelNodeRef}
       accessibilityLabel={queued.length > 0 ? queuedCancelControlName(queued)
-        : nothingToCancel ? NOTHING_TO_CANCEL : `${QUEUED_CANCEL_LABEL}: nothing is queued now`}
+        : nothingToCancel ? NOTHING_QUEUED_NAME : `${QUEUED_CANCEL_LABEL}: nothing is queued now`}
       disabled={queued.length === 0}
       focusableWhenDisabled
-      label={queued.length === 0 && nothingToCancel ? NOTHING_TO_CANCEL : placement === 'fold' ? foldedCancelLabel(queued) : queuedCancelLabel(queued)}
+      label={queued.length === 0 && nothingToCancel ? NOTHING_QUEUED : placement === 'fold' ? foldedCancelLabel(queued) : queuedCancelLabel(queued)}
       onDisabledPress={() => {
         // On the button, never over the notice: a late tap replaced a run's
         // result with "Nothing is queued." (walk 11 T1-14).
@@ -1975,7 +2032,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
       }}
       onPress={cancelQueued}
       style={[styles.quiet, placement !== 'menu' && styles.quietEdge, placement === 'line' && styles.cancelLine, placement === 'slot' && styles.cancelSlot, placement === 'row' && styles.cancelRow, placement === 'fold' && styles.cancelFold]}
-      textStyle={placement === 'fold' ? [styles.cancelLineText, styles.cancelFoldText] : placement !== 'menu' ? styles.cancelLineText : queued.length > 0 ? styles.menuItemText : undefined}
+      textStyle={[
+        placement === 'fold' ? [styles.cancelLineText, styles.cancelFoldText] : placement !== 'menu' ? styles.cancelLineText : queued.length > 0 ? styles.menuItemText : undefined,
+        queued.length === 0 && nothingToCancel && placement !== 'menu' && styles.cancelNothingText,
+      ]}
       variant="quiet"
     />
   ));
@@ -2095,7 +2155,11 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         // Another press waits: this step's own notice never shows, the
         // run's does once it is all in (Play to the end says its own).
         if (stepIn) holdStepNotice.current = true;
-        if (endQueuedRef.current) runRef.current = null;
+        if (endQueuedRef.current) {
+          // Play to the end waits behind it: its notice covers this run too.
+          practiceEngine.endRun.current = run;
+          runRef.current = null;
+        }
       }
     }
   };
@@ -2116,9 +2180,14 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     }
     const end = practiceSeasonEnd(mockSeasonStart());
     const from = bootstrap.game.lastSettledDate ?? null;
-    // The last step's result not heard yet goes with the season's end, as
-    // drawn: without "Moves pause for the Oct 28 games", which the rest of
-    // the season is about to play (walk 14 T4-02).
+    // Inside a run (its last step not heard yet, or the step this waited
+    // behind), the season's end names the run's whole span, never the last
+    // night's headline alone (walk 16 T2-01: "Oct 21 games: your score rose
+    // $74.5K. Season complete…"). The step's own notice stays, silent, until
+    // the season's end replaces it; neither lock is said (walk 14 T4-02).
+    const continued = speakRun.current ? landedRun.current?.run ?? null : practiceEngine.endRun.current;
+    practiceEngine.endRun.current = null;
+    practiceEngine.seasonEndRun.current = continued;
     if (speakRun.current) {
       stopSpeakRun();
       if (isGamesNotice(message)) notify(message as string, { spoken: '' });
@@ -2140,9 +2209,19 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         advanceMockDays(7, end);
         await wait(0);
       }
+      // Continuing a run, the season's end comes in silent and is heard as
+      // the run's notice (in the render that shows it, below).
+      let landedEnd = false;
       for (let attempt = 0; attempt < ADVANCE_REFRESH_ATTEMPTS; attempt += 1) {
-        if (await refreshData()) break;
+        if (await refreshData({ silent: continued !== null })) {
+          landedEnd = true;
+          break;
+        }
         await wait(ADVANCE_RETRY_MS);
+      }
+      if (!landedEnd && continued) {
+        practiceEngine.seasonEndRun.current = null;
+        speakNotice();
       }
     } finally {
       advancingRef.current = false;
@@ -2473,7 +2552,7 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     return (
       <View style={[styles.foldedControls, foldFill && styles.foldedFill]}>
         {cancelInRow ? cancelButton('fold') : null}
-        {progress.complete ? (
+        {progress.complete && endBeside ? null : progress.complete ? (
           <View style={[styles.seasonDone, foldFill ? styles.advanceFill : styles.seasonDoneFixed]}>
             {/* On the Roster the result card's gold Play another season sits
                 right below: the frame pointed to More over it (walk 15
@@ -3078,8 +3157,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minHeight: 44,
   },
+  // Centred, so a label that wraps (a narrow slot) never hugs the left edge.
   cancelLineText: {
     fontSize: type.caption,
+    textAlign: 'center',
+  },
+  // "NOTHING QUEUED" keeps to the one line "CANCEL QUEUED" had (107px set
+  // tight; 118px at the buttons' spacing wrapped in a 390px phone's slot).
+  cancelNothingText: {
+    letterSpacing: 0,
   },
   // The practice questions (PracticeChoices), drawn as ConfirmDialog is.
   questionLayer: {

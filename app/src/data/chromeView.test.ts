@@ -438,7 +438,7 @@ test('a press while a week plays is queued once and says so (walk 5 T3-11, T4-06
   assert.equal(queuedLine('night', null), 'Next night queued. It plays in a moment.');
   // On the button, where sighted players see it; the stacked 55px button keeps two short words.
   assert.equal(queuedLabel('week', false), '+1 week\nqueued');
-  assert.equal(queuedLabel('night', true), 'Next\nqueued');
+  assert.equal(queuedLabel('night', true), '+1 night\nqueued');
 });
 
 test('with nobody on the roster the status row says so, as the notice does (walk 5 T1-17)', async () => {
@@ -606,7 +606,7 @@ test('quick presses form one run, with or without a delay; a queued button count
   assert.equal(queuedLine('week', 'Oct 21–27', 1), 'Next week queued. It plays once Oct 21–27 is in.');
   assert.equal(queuedLine('week', 'Oct 21–27', 2), '2 weeks queued. They play once Oct 21–27 is in.');
   assert.equal(queuedLabel('week', false, 2), '+1 week\n×2 queued');
-  assert.equal(queuedLabel('night', true, 3), '×3\nqueued');
+  assert.equal(queuedLabel('night', true, 3), '+1 night\n×3');
   assert.equal(queuedLabel('week', false, 1), '+1 week\nqueued');
   // Play to the end confirmed mid-night waits its turn and says so (walk 7 T2-04).
   assert.equal(playToEndQueuedLine('Oct 21'), 'Play to the end queued. It plays once Oct 21 is in.');

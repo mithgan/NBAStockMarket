@@ -98,6 +98,9 @@ function Section({ title, narrow = false, children }: { title: string; narrow?: 
 const KEEP_NOTICES_NOTE_ID = 'keep-notices-note';
 /** The Reduce motion switch's explanation (its aria-describedby). */
 const REDUCE_MOTION_NOTE_ID = 'reduce-motion-note';
+/** Reduce motion while the device reduces motion and the switch is off: drawn ("On" over this), and in its name. */
+const MOTION_BY_DEVICE_WORD = 'your device';
+const MOTION_BY_DEVICE_NAME = 'Reduce motion: on by your device';
 
 export function SettingsSheet({
   onClose,
@@ -195,6 +198,11 @@ export function SettingsSheet({
   };
   // "Reduce motion", on top of the device's own setting (walk 5 T3 NYI-4).
   const motionReduced = useReduceMotionChoice();
+  // The device already reduces motion and this switch is off: motion is
+  // reduced now, so the switch says so before "off" (walk 16 T3-07: "Reduce
+  // motion, switch, off" contradicted what the app was doing). Its checked
+  // state stays this switch's own, which a press turns on for any device.
+  const motionByDevice = reducedMotion && !motionReduced;
   const onMotionKey = (event: { key: string; repeat?: boolean; preventDefault: () => void }) => {
     if (event.key !== ' ' && event.key !== 'Spacebar') return;
     event.preventDefault();
@@ -382,7 +390,7 @@ export function SettingsSheet({
           <Section narrow={narrow} title="Motion">
             <View {...({ onKeyDown: onMotionKey } as object)}>
               <Pressable
-                accessibilityLabel="Reduce motion"
+                accessibilityLabel={motionByDevice ? MOTION_BY_DEVICE_NAME : 'Reduce motion'}
                 accessibilityRole="switch"
                 accessibilityState={{ checked: motionReduced }}
                 // react-native-web drops accessibilityState.checked.
@@ -398,7 +406,7 @@ export function SettingsSheet({
                     {/* A device that already asks for less motion is said
                         here, so "Off" never reads as motion being on (walk 11
                         T3-10). */}
-                    {reducedMotion && !motionReduced
+                    {motionByDevice
                       ? 'Reduced now by your device\'s own setting: sheets and figures appear at once. Turn this on to keep it so on any device.'
                       : 'Sheets and figures appear at once, without fades or counting up. Your device\'s own setting still applies.'}
                   </Text>
@@ -406,7 +414,15 @@ export function SettingsSheet({
                 {/* The state in a word too: forced colours drop the track's
                     fill, and a pill alone can be read either way (walk 9
                     T3-07, T3-N4). The switch itself says checked. */}
-                <Text aria-hidden style={[styles.switchWord, motionReduced && styles.switchWordOn]}>{motionReduced ? 'On' : 'Off'}</Text>
+                {motionByDevice ? (
+                  // "On" for the device, said small under it at every width.
+                  <View aria-hidden style={styles.switchWordStack}>
+                    <Text style={[styles.switchWord, styles.switchWordOn]}>On</Text>
+                    <Text style={styles.switchWordBy}>{MOTION_BY_DEVICE_WORD}</Text>
+                  </View>
+                ) : (
+                  <Text aria-hidden style={[styles.switchWord, motionReduced && styles.switchWordOn]}>{motionReduced ? 'On' : 'Off'}</Text>
+                )}
                 <View style={[styles.switchTrack, motionReduced && styles.switchTrackOn]}>
                   <View style={[styles.switchKnob, motionReduced && styles.switchKnobOn]} />
                 </View>
@@ -764,6 +780,15 @@ const styles = StyleSheet.create({
   },
   switchWordOn: {
     color: colors.goldInk,
+  },
+  switchWordStack: {
+    alignItems: 'flex-end',
+  },
+  switchWordBy: {
+    color: colors.goldInk,
+    fontFamily: fonts.body,
+    fontSize: type.caption,
+    fontWeight: weight.bold,
   },
   check: {
     ...numeric,

@@ -17,11 +17,13 @@ import { exactMoney, humanDate, PRACTICE_LABEL, rosterReopensLine } from '../cop
 import { pastSeasonCount } from '../web/practiceSession';
 import {
   cancelPlace,
+  rulesContentsPinned,
   rulesInFoldedRow,
   CHROME_FOLDED_FACTS_MIN_WIDTH,
   FOLDED_LOCK_WORDS_MIN_WIDTH,
   FOLDED_LOCK_WORDS_MIN_WIDTH_NOBODY,
   CHROME_FOLDED_ONE_LINE_MIN_WIDTH,
+  moreBesideSettings,
   chromeFolded,
   chromeLayout,
   chromeTiny,
@@ -66,7 +68,7 @@ import { useSheetHistory, useSheetShown } from '../web/appHistory';
 import { ChromeButton, type ChromeButtonPlacement } from './chrome/ChromeButton';
 import { LockIcon, PracticeIcon, RefreshIcon, RulesIcon, SettingsIcon } from './chrome/ChromeIcons';
 import { measuredFloatTop, measuredSheetTop } from './chrome/sheetTop';
-import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, useQueuedCancelShows, useQueuedThrough, usePracticeRulesContext, useReaderSpacing, useRecentAdvances, useSpacingFold } from './SimBar';
+import { PRACTICE_HINT_ID, PracticeControls, usePracticeHint, useQueuedCancelShows, useQueuedThrough, usePracticeRulesContext, useReaderSpacing, useRecentAdvances, useScreenName, useSpacingFold } from './SimBar';
 import { unlessSettling } from '../web/tapSettle';
 
 /**
@@ -140,6 +142,8 @@ export function PerGameStatusStrip() {
   // T3-08); the brand bar then stays, and Settings with it.
   const spacingFolded = useSpacingFold();
   const readerSpacing = useReaderSpacing();
+  // The screen on show: at season end the Roster's frame keeps to one line (endBeside).
+  const screenName = useScreenName();
   // The tallest the facts have been at this window width (phone rows): the
   // block keeps it, so a week landing never moves the screen under it
   // ("Season opens Tue, Oct 21" took two lines at 320px, "Next Tue, Oct 28"
@@ -542,6 +546,9 @@ export function PerGameStatusStrip() {
   // Folded below ~340px the row takes two lines: the day beside Settings,
   // then +1 night, +1 week and More edge to edge.
   const foldTwoLines = folded && !tiny && width < CHROME_FOLDED_ONE_LINE_MIN_WIDTH;
+  // At season end the Roster's second line held More alone (walk 16 T4-06):
+  // More joins "Season complete" and Settings instead.
+  const endBeside = moreBesideSettings(foldTwoLines, progress?.complete === true, screenName);
   const holdFacts = practice && !layout.wide && !folded && !reconciliationRequired;
 
   return (
@@ -593,11 +600,12 @@ export function PerGameStatusStrip() {
         >
           {facts}
         </View>
-        {foldTwoLines ? settingsControl : null}
-        <View style={[styles.actions, foldTwoLines && styles.actionsFull]}>
+        {foldTwoLines && !endBeside ? settingsControl : null}
+        <View style={[styles.actions, foldTwoLines && !endBeside && styles.actionsFull]}>
           {practice && layout.merged ? <PracticeControls inline /> : null}
           {folded ? (
             <PracticeControls
+              endBeside={endBeside}
               folded
               // Rules joins More only where the row has no room for it.
               onRules={rulesInRow ? undefined : () => setRulesOpen(true)}
@@ -626,7 +634,7 @@ export function PerGameStatusStrip() {
               placement={folded ? 'stacked' : placement}
             />
           )}
-          {foldTwoLines ? null : settingsControl}
+          {foldTwoLines && !endBeside ? null : settingsControl}
         </View>
       </View>
       <RulesSheet
@@ -776,6 +784,27 @@ function RulesSheet({
   const foldKeys = Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.matchMedia === 'function'
     && rulesFoldKeyboard(window.matchMedia('(pointer: coarse)').matches, window.matchMedia('(hover: hover)').matches);
   if (!shown) return null;
+  // One line of contents: each jumps to its heading (walk 15 T1-N1). Pinned
+  // under the title bar where the sheet has room, so the links stay in view
+  // while the rules scroll (walk 16 T2-N2).
+  const pinContents = rulesContentsPinned(width, height);
+  const contents = (
+    <View aria-label="Rules contents" role="navigation" style={[styles.contents, pinContents && styles.contentsPinned]}>
+      {RULES_CONTENTS.map((entry, index) => (
+        <View key={entry.heading} style={styles.contentsEntry}>
+          {index > 0 ? <Text aria-hidden style={styles.contentsDot}>·</Text> : null}
+          <Pressable
+            accessibilityLabel={`${entry.label}: go to the section`}
+            accessibilityRole="button"
+            onPress={() => jumpTo(entry.heading)}
+            style={({ pressed }) => [styles.contentsLink, pressed && styles.pressed]}
+          >
+            <Text style={styles.contentsText}>{entry.label}</Text>
+          </Pressable>
+        </View>
+      ))}
+    </View>
+  );
   const presentation = perGameRulesPresentation(rules, practiceRules);
   const startingScore = presentation.facts.find((fact) => fact.label === 'Starting score')?.value;
   const fee = exactMoney(rules.transactionFeeDollars);
@@ -824,6 +853,7 @@ function RulesSheet({
             <Text style={styles.doneText}>Done</Text>
           </Pressable>
         </View>
+        {pinContents ? contents : null}
         {/* The text scrolls on its own, so the keyboard can reach and scroll
             it: a named region with the app's 2px ring (the global
             [tabindex]:focus-visible rule), not an unnamed stop with the
@@ -836,22 +866,7 @@ function RulesSheet({
           style={styles.sheetBody}
           tabIndex={0}
         >
-          {/* One line of contents: each jumps to its heading (walk 15 T1-N1). */}
-          <View aria-label="Rules contents" role="navigation" style={styles.contents}>
-            {RULES_CONTENTS.map((entry, index) => (
-              <View key={entry.heading} style={styles.contentsEntry}>
-                {index > 0 ? <Text aria-hidden style={styles.contentsDot}>·</Text> : null}
-                <Pressable
-                  accessibilityLabel={`${entry.label}: go to the section`}
-                  accessibilityRole="button"
-                  onPress={() => jumpTo(entry.heading)}
-                  style={({ pressed }) => [styles.contentsLink, pressed && styles.pressed]}
-                >
-                  <Text style={styles.contentsText}>{entry.label}</Text>
-                </Pressable>
-              </View>
-            ))}
-          </View>
+          {pinContents ? null : contents}
           {/* In steps, each under a short heading to jump by: Goal, Scoring,
               Shorts, Fees, Prices, Locks (walk 5 T1-09, T3-13). */}
           <View style={styles.explanation}>
@@ -1284,6 +1299,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: -space.sm,
     marginBottom: -space.xs,
+  },
+  // Under the title bar: the links' words line up with the text's edge
+  // (each link pads 6px), a rule under them as under the title.
+  contentsPinned: {
+    marginTop: 0,
+    marginBottom: 0,
+    paddingHorizontal: space.lg - 6,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
   },
   contentsEntry: {
     flexDirection: 'row',
