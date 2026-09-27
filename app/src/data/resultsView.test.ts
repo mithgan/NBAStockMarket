@@ -1018,3 +1018,20 @@ test('where night headers are not pinned, each row starts with its night (walk 1
   // The same height rule as the pinned headers.
   assert.equal(stickyNightIndices([{ type: 'night', key: 'night:2025-10-21', night: { date: '2025-10-21' } } as never], 499), undefined);
 });
+
+test('Results\' move rows say what happened, never "Open fee" for an add (walk 17 T1-02)', async () => {
+  const { feeExplanation, feeTitle, moveWords } = await import('./resultsView');
+  const row = (kind: 'open_fee' | 'drop_fee', side: 'long' | 'short') => `${feeTitle({ kind }, side)} · ${feeExplanation({ kind }, side)}`;
+  assert.equal(row('open_fee', 'long'), 'Add fee · Added');
+  assert.equal(row('drop_fee', 'long'), 'Drop fee · Dropped');
+  assert.equal(row('open_fee', 'short'), 'Short fee · Opened a short');
+  assert.equal(row('drop_fee', 'short'), 'Close fee · Closed a short');
+  // Heard with his name first, as the row draws it.
+  assert.equal(moveWords('Luka Doncic', feeExplanation({ kind: 'open_fee' }, 'long'), -250), 'Luka Doncic, added, fee $250');
+  assert.equal(moveWords('Dyson Daniels', feeExplanation({ kind: 'drop_fee' }, 'short'), -250), 'Dyson Daniels, closed a short, fee $250');
+  // A penalty and an account fee keep their names.
+  assert.equal(`${feeTitle({ kind: 'penalty' }, null)} · ${feeExplanation({ kind: 'penalty' }, null)}`, 'Penalty · Rules penalty');
+  for (const side of ['long', 'short', null] as const) {
+    assert.notEqual(feeTitle({ kind: 'open_fee' }, side), 'Open fee');
+  }
+});

@@ -273,6 +273,29 @@ export function hisFeed(items: readonly ResultsFeedItem[]): ResultsFeedItem[] {
 }
 
 /**
+ * A move row's fee, named for the move you made (walk 17 T1-02: "Open fee" read
+ * as jargon for an add): "Add fee", "Drop fee", "Short fee", "Close fee".
+ */
+export function feeTitle(entry: Pick<PerGameLedgerEntry, 'kind'>, side: PerGamePositionSide | null): string {
+  if (entry.kind === 'open_fee') return side === 'long' ? 'Add fee' : side === 'short' ? 'Short fee' : 'Fee';
+  if (entry.kind === 'drop_fee') return side === 'long' ? 'Drop fee' : side === 'short' ? 'Close fee' : 'Fee';
+  if (entry.kind === 'penalty') return 'Penalty';
+  return 'Fee';
+}
+
+/**
+ * What happened, after the fee's name on a move row: "Add fee · Added", "Drop
+ * fee · Dropped", "Short fee · Opened a short", "Close fee · Closed a short"
+ * (walk 17 T1-02). Heard as "Luka Doncic, added, fee $250" (moveWords).
+ */
+export function feeExplanation(entry: Pick<PerGameLedgerEntry, 'kind'>, side: PerGamePositionSide | null): string {
+  if (entry.kind === 'open_fee') return side === 'long' ? 'Added' : side === 'short' ? 'Opened a short' : 'Opened a position';
+  if (entry.kind === 'drop_fee') return side === 'long' ? 'Dropped' : side === 'short' ? 'Closed a short' : 'Closed a position';
+  if (entry.kind === 'penalty') return 'Rules penalty';
+  return 'Account fee';
+}
+
+/**
  * What one of his moves was, in a line (walk 14 T1-07): "Added Luka Doncic ·
  * $250 fee", "Dropped Luka Doncic · $250 fee", "Shorted Luka Doncic · $250
  * fee", "Closed your short on Luka Doncic · $250 fee". A refund says so.

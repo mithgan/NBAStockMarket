@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
+import { Modal, Platform, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type {
@@ -11,7 +11,7 @@ import type {
 } from '../api/contracts';
 import { isMockActive, mockPlayerTrends } from '../api/mockPerGameClient';
 import { chromeFolded } from '../data/chromeView';
-import { panelDockRight, type ProfileMetric, type ProfileRange } from '../data/profileView';
+import { fittedSheetTop, panelDockRight, type ProfileMetric, type ProfileRange } from '../data/profileView';
 import type { TrendPoint } from '../data/trendPresentation';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
@@ -32,6 +32,20 @@ const SHEET_MAX_WIDTH = 640;
  * closing by tap. Where the frame is drawn the sheet starts at its status row.
  */
 const SHEET_TOP_GAP = 44;
+
+/**
+ * The frame's rows under the brand bar, as the sheet opens: the status row,
+ * and the practice bar when it sits right under it (fittedSheetTop). null off
+ * the web or before the frame is drawn.
+ */
+function measuredFrameRows(): { top: number; bottom: number } | null {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return null;
+  const strip = document.getElementById('status-strip')?.getBoundingClientRect();
+  if (!strip || strip.height <= 0) return null;
+  const bar = document.getElementById('practice-bar')?.getBoundingClientRect();
+  const joined = bar && bar.height > 0 && Math.abs(bar.top - strip.bottom) <= 2;
+  return { top: strip.top, bottom: joined ? Math.max(strip.bottom, bar.bottom) : strip.bottom };
+}
 
 /**
  * Keyboard focus goes back to whatever opened the profile once it closes
@@ -234,9 +248,9 @@ function ProfileSheet({
   // behind it) and kept while it is open, so a notice that grows the bar
   // never moves the sheet under your finger; a new player or size reads again.
   const openKey = `${player?.playerId ?? ''}|${width}|${height}`;
-  const frameTop = useRef<{ key: string; top: number | null } | null>(null);
+  const frameTop = useRef<{ key: string; top: number | null; rows: { top: number; bottom: number } | null } | null>(null);
   if (!visible || !player) frameTop.current = null;
-  else if (frameTop.current?.key !== openKey) frameTop.current = { key: openKey, top: measuredSheetTop() };
+  else if (frameTop.current?.key !== openKey) frameTop.current = { key: openKey, top: measuredSheetTop(), rows: measuredFrameRows() };
   if (!player) return null;
   const panel = width >= PANEL_MIN_WIDTH;
   // Docked to the app column's right edge, not the window's (walk 8 T2-03).
@@ -256,7 +270,10 @@ function ProfileSheet({
   const onSheetLayout = (event: LayoutChangeEvent) => {
     if (!fits || fittedTop !== null) return;
     const sheetHeight = event.nativeEvent.layout.height;
-    if (sheetHeight > 0) setFitted({ key: fitKey, top: Math.max(topGap, Math.floor(height - sheetHeight)) });
+    // Never on a line through the status row (walk 17 T1-01; fittedSheetTop).
+    if (sheetHeight > 0) {
+      setFitted({ key: fitKey, top: fittedSheetTop(Math.max(topGap, Math.floor(height - sheetHeight)), topGap, frameTop.current?.rows ?? null) });
+    }
   };
 
   return (

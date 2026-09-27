@@ -58,6 +58,9 @@ import {
   nowLabel,
   pastStintLead,
   pastStints,
+  heldStints,
+  figureSpoken,
+  fittedSheetTop,
   type PastStint,
   positionOpenedDay,
   stakeLine,
@@ -1349,4 +1352,67 @@ test('the profile says the net points that beat his price, on raw net points onl
   // Nothing when the dividend is not his raw net points, or without a rate.
   assert.equal(breakEvenLine(417_500, 40_000, 'surprise_vs_projection', 'long'), null);
   assert.equal(breakEvenLine(417_500, 0, 'raw_net_points', 'long'), null);
+});
+
+test('a re-added player\'s header counts every stint on his side, as the Roster does (walk 17 T4-10)', () => {
+  // Two games in his first stint (dropped), one since the re-add.
+  const results = [
+    result({ positionId: 'l1', playerId: 'luka', gameDate: '2025-10-21', lockedGameCost: 417_500, dividendDollars: 530_000 }),
+    result({ positionId: 'l1', playerId: 'luka', gameDate: '2025-10-22', lockedGameCost: 417_500, dividendDollars: 510_000 }),
+    result({ positionId: 'l2', playerId: 'luka', gameDate: '2025-10-24', lockedGameCost: 415_700, dividendDollars: 612_000 }),
+    // His short earlier, and another player's games, never join the count.
+    result({ positionId: 's1', playerId: 'luka', side: 'short', gameDate: '2025-10-20', lockedGameCost: 400_000, dividendDollars: 300_000 }),
+    result({ positionId: 'x1', playerId: 'other', gameDate: '2025-10-24' }),
+  ];
+  const held = { positionId: 'l2', playerId: 'luka', side: 'long' as const };
+  const stints: PastStint[] = [
+    { positionId: 'l1', side: 'long', from: '2025-10-20', to: '2025-10-23' },
+    { positionId: 's1', side: 'short', from: '2025-10-19', to: '2025-10-20' },
+  ];
+  const all = heldStints(results, held, stints);
+  assert.deepEqual(all, { count: 2, games: 3, total: 112_500 + 92_500 + 196_300 });
+  const now = positionValue(results, 'l2');
+  const line = stakeLine(now, true, 'long', { stints: all });
+  assert.equal(line?.lead, 'Your result:');
+  assert.equal(line?.total, '+$196.3K over 1 game this stint');
+  assert.deepEqual(line?.all, { text: '+$401.3K over 3 games in 2 stints', tone: 'gain' });
+  // A stint dropped before he played counts too (the Roster's "3 stints").
+  assert.equal(heldStints(results, held, [...stints, { positionId: 'l0', side: 'long', from: '2025-10-19', to: '2025-10-19' }])?.count, 3);
+  // A short re-opened reads in shorts.
+  const shortLine = stakeLine({ games: 1, total: -20_000 }, true, 'short', { stints: { count: 2, games: 4, total: 55_000 } });
+  assert.equal(shortLine?.total, '-$20K over 1 game this short');
+  assert.equal(shortLine?.all?.text, '+$55K over 4 games in 2 shorts');
+  // First stint, or earlier stints with no games: the one figure, as before.
+  assert.equal(heldStints(results.filter((row) => row.positionId !== 'l1'), held, []), null);
+  assert.equal(heldStints(results.filter((row) => row.positionId !== 'l1'), held, stints.slice(0, 1)), null);
+  assert.deepEqual(stakeLine(now, true, 'long', { stints: null }), { lead: 'Your result:', total: '+$196.3K over 1 game', tone: 'gain' });
+  // Not held: the past-stints lead keeps its own single figure.
+  assert.equal(stakeLine({ games: 3, total: 401_300 }, false, 'long', { stints: all })?.all, undefined);
+});
+
+test('the Game by game figures are heard as the screen shows them, with their labels (walk 17 T3-04)', () => {
+  assert.equal(figureSpoken('Dividend', moneyFine(337_600), { average: true }), 'Average dividend $337.6K a game');
+  assert.equal(figureSpoken('Price', moneyFine(335_950), { average: true, caption: 'your price' }), 'Average price $336K a game, your price');
+  assert.equal(figureSpoken('Profit', '+$1.65K', { average: true, caption: 'dividend − price' }), 'Average profit +$1.65K a game, dividend − price');
+  assert.equal(figureSpoken('Best game', '+$123.8K', { date: '2025-10-24', caption: 'dividend $612K' }), 'Best game +$123.8K, Oct 24, dividend $612K');
+  assert.equal(figureSpoken('Worst game', '-$120.8K', { date: '2025-10-27' }), 'Worst game -$120.8K, Oct 27');
+  // Never a finer figure than the one drawn.
+  assert.doesNotMatch(figureSpoken('Price', moneyFine(335_950), { average: true }), /335,950/);
+});
+
+test('a short profile sheet never starts on a line through the status row (walk 17 T1-01)', () => {
+  // 360x780: the brand bar ends at 53, the status row runs to 97, the practice bar to 146.
+  const frame = { top: 53, bottom: 146 };
+  // Its content-sized top, 67, cut "Practice · Oct 20": it starts where the tall sheet does.
+  assert.equal(fittedSheetTop(67, 53, frame), 53);
+  // In the practice bar's buttons too.
+  assert.equal(fittedSheetTop(117, 53, frame), 53);
+  // Under the frame's rows, or on the tall line already: as it was.
+  assert.equal(fittedSheetTop(205, 53, frame), 205);
+  assert.equal(fittedSheetTop(146, 53, frame), 146);
+  assert.equal(fittedSheetTop(53, 53, frame), 53);
+  // Not measured (off the web): as it was.
+  assert.equal(fittedSheetTop(67, 53, null), 67);
+  // A window with no brand bar, its rows at the top under a 44px gap: under the rows instead.
+  assert.equal(fittedSheetTop(60, 44, { top: 0, bottom: 88 }), 88);
 });

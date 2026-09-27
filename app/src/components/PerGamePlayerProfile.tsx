@@ -11,6 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,8 +32,6 @@ import type {
   PerGameSettledResult,
 } from '../api/contracts';
 import {
-  exactMoney,
-  exactSignedMoney,
   gamesCount,
   humanDate,
   moneyFine,
@@ -47,7 +46,9 @@ import { splitPlayerName } from '../data/playerName';
 import {
   buildProfileNights,
   firstGamePreview,
+  figureSpoken,
   formVerdict,
+  heldStints,
   headerPrice,
   holdingStatus,
   defaultRange,
@@ -108,6 +109,28 @@ const LOG_SLACK = 2;
 const PIN_BAR_MIN_HEIGHT = 500;
 
 /**
+ * Web: the details region's focus ring is drawn on a layer above the scroll
+ * area (walk 17 T2-07). Chrome paints a scroll container's own outline under
+ * its scrolling contents, so the pinned Add / Short band cut the inset ring
+ * where it sat; the region keeps no outline of its own and the ring after it
+ * shows while it has keyboard focus.
+ */
+const DETAILS_RING_ID = 'profile-details-ring';
+function useDetailsRing() {
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined' || document.getElementById(DETAILS_RING_ID)) return;
+    const style = document.createElement('style');
+    style.id = DETAILS_RING_ID;
+    style.textContent = [
+      '[data-profile-details][tabindex]:focus-visible { outline: none !important; }',
+      '[data-profile-ring] { display: none !important; }',
+      '[data-profile-details]:focus-visible + [data-profile-ring] { display: flex !important; }',
+    ].join('\n');
+    document.head.appendChild(style);
+  }, []);
+}
+
+/**
  * Below this window width the game log's four columns would break figures and
  * header words ("$327." / "6K" at 200% zoom, walk 5 T3-04): each game is a
  * stacked row instead. Measured: the table reads whole from 320px up.
@@ -128,25 +151,41 @@ const TONE_COLOR: Record<StakeTone, string> = {
  * One figure in the profile's grid: label, value, caption. The kit's Stat, with
  * tighter label tracking so "Dividend a game" fits a third of a phone.
  */
-function Figure({ label, value, caption, style }: {
+function Figure({ label, value, caption, spoken, style }: {
   label: string;
   value: ReactNode;
   caption?: string;
+  /**
+   * The figure as one sentence, in the words and the figure shown
+   * (figureSpoken; walk 17 T3-04): heard instead of its drawn parts, from a
+   * clear layer over the figure, so touch finds it too.
+   */
+  spoken?: string;
   style?: StyleProp<ViewStyle>;
 }) {
+  const drawn = spoken ? { 'aria-hidden': true } : {};
   return (
     <View style={[styles.figure, style]}>
-      <Label style={styles.figureLabel}>{label}</Label>
-      <View style={styles.figureValue}>{value}</View>
-      {caption ? <Text maxFontSizeMultiplier={1.4} style={styles.figureCaption}>{caption}</Text> : null}
+      <View {...drawn}>
+        <Label style={styles.figureLabel}>{label}</Label>
+      </View>
+      <View style={styles.figureValue} {...drawn}>{value}</View>
+      {caption ? <Text maxFontSizeMultiplier={1.4} style={styles.figureCaption} {...drawn}>{caption}</Text> : null}
+      {spoken ? <Text style={styles.figureSpoken}>{spoken}</Text> : null}
     </View>
   );
+}
+
+/** A figure at the Roster's precision, as drawn and as heard. */
+function fineText(value: number, signed = true): string {
+  return signed ? signedMoneyFine(value) : moneyFine(value);
 }
 
 /**
  * Money at the Roster's precision ("$112.5K", "+$1.63M"), so a figure reads
  * the same on the profile as on the row it came from. Signed amounts are
- * coloured gain or loss; the screen-reader label is the exact amount.
+ * coloured gain or loss. Heard as shown, like the kit's Money (walk 17 T3-04:
+ * "$335,950" was read for a drawn "$336K").
  */
 function FineMoney({ value, signed = true, size = type.value, style }: {
   value: number;
@@ -156,13 +195,17 @@ function FineMoney({ value, signed = true, size = type.value, style }: {
 }) {
   return (
     <Text
-      accessibilityLabel={signed ? exactSignedMoney(value) : exactMoney(value)}
       maxFontSizeMultiplier={1.4}
       style={[styles.fineMoney, { fontSize: size, color: signed ? moneyColor(value) : colors.text }, style]}
     >
-      {signed ? signedMoneyFine(value) : moneyFine(value)}
+      {fineText(value, signed)}
     </Text>
   );
+}
+
+/** A best, worst or only game as heard: "Best game +$123.8K, Oct 24, dividend $612K". */
+function gameSpoken(label: string, game: { date: string; net: number; dividend: number } | null | undefined): string {
+  return figureSpoken(label, fineText(game?.net ?? 0), game ? { date: game.date, caption: `dividend ${moneyFine(game.dividend)}` } : {});
 }
 
 export interface PerGamePlayerProfileProps {
@@ -207,6 +250,9 @@ export function PerGamePlayerProfile({
   const [metric, setMetric] = useState<ProfileMetric>(initialView?.metric ?? 'dividends');
   const [showAllGames, setShowAllGames] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  // Where the details region starts under the top bar: its ring's top edge.
+  const [detailsTop, setDetailsTop] = useState(0);
+  useDetailsRing();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   // A short window (a phone at 200% zoom, a phone on its side) keeps the
   // action bar with his name instead of pinning it: pinned under the top bar
@@ -284,6 +330,8 @@ export function PerGamePlayerProfile({
     since: positionOpenedDay(ledger ?? [], position.positionId),
     readd: results.some((row) => row.playerId === player.playerId && row.side === position.side
       && row.positionId !== position.positionId && row.status === 'settled'),
+    // Re-added: the header counts every stint on this side, as the Roster does (walk 17 T4-10).
+    stints: heldStints(results, position, pastStints(positions ?? [], ledger ?? [], player.playerId)),
   } : {
     // Not held: name the side and dates of your past stints with him, counted as the Roster counts them.
     past: pastStintLead(
@@ -413,6 +461,7 @@ export function PerGamePlayerProfile({
 
       <ScrollView
         contentContainerStyle={styles.body}
+        onLayout={(event) => setDetailsTop(event.nativeEvent.layout.y)}
         onScroll={onScroll}
         scrollEventThrottle={32}
         // The action bar (child 1) sits under his name and your status, then
@@ -422,7 +471,7 @@ export function PerGamePlayerProfile({
         style={styles.scroll}
         // A named, focusable scroll region, so a keyboard can reach and scroll
         // the last season and game log below the chart (walk 3 T3-10).
-        {...({ tabIndex: 0, role: 'region', 'aria-label': `${player.name}: profile details` } as object)}
+        {...({ tabIndex: 0, role: 'region', 'aria-label': `${player.name}: profile details`, dataSet: { profileDetails: '' } } as object)}
       >
         <View>
         <View style={[styles.identity, inset]}>
@@ -454,6 +503,12 @@ export function PerGamePlayerProfile({
               {stake.total ? (
                 <Text maxFontSizeMultiplier={1.4} style={[styles.stakeHeadTotal, { color: TONE_COLOR[stake.tone] }]}>
                   {stake.total}
+                </Text>
+              ) : null}
+              {stake.all ? (
+                <Text maxFontSizeMultiplier={1.4} style={[styles.stakeHeadTotal, { color: TONE_COLOR[stake.all.tone] }]}>
+                  <Text aria-hidden style={styles.stakeHeadJoin}>{'· '}</Text>
+                  {stake.all.text}
                 </Text>
               ) : null}
             </View>
@@ -521,22 +576,26 @@ export function PerGamePlayerProfile({
               {/* The first three figures are averages over the games shown, so
                   his average price never reads as his price now. One-word
                   labels keep the three values on one line at 360px. */}
-              <Text maxFontSizeMultiplier={1.4} style={styles.gridCaption}>Average a game</Text>
+              {/* Each figure below is heard with "Average" and its label (figureSpoken). */}
+              <Text aria-hidden maxFontSizeMultiplier={1.4} style={styles.gridCaption}>Average a game</Text>
               <View style={[styles.grid, styles.gridTight]}>
                 <Figure
                   label="Dividend"
+                  spoken={figureSpoken('Dividend', fineText(summary.avgDividend ?? 0, false), { average: true })}
                   style={cell}
                   value={<FineMoney signed={false} size={type.title} value={summary.avgDividend ?? 0} />}
                 />
                 <Figure
                   caption={priceSourceCaption(summary, viewSide)}
                   label={words.price}
+                  spoken={figureSpoken(words.price, fineText(summary.avgPrice ?? 0, false), { average: true, caption: priceSourceCaption(summary, viewSide) })}
                   style={cell}
                   value={<FineMoney signed={false} size={type.title} value={summary.avgPrice ?? 0} />}
                 />
                 <Figure
                   caption={words.netCaption}
                   label="Profit"
+                  spoken={figureSpoken('Profit', fineText(summary.avgNet ?? 0), { average: true, caption: words.netCaption })}
                   style={cell}
                   value={<FineMoney size={type.title} value={summary.avgNet ?? 0} />}
                 />
@@ -558,6 +617,7 @@ export function PerGamePlayerProfile({
                   <Figure
                     caption={summary.best ? `${humanDate(summary.best.date)}\ndividend ${moneyFine(summary.best.dividend)}` : undefined}
                     label="Only game"
+                    spoken={gameSpoken('Only game', summary.best)}
                     style={cell}
                     value={<FineMoney value={summary.best?.net ?? 0} />}
                   />
@@ -566,12 +626,14 @@ export function PerGamePlayerProfile({
                     <Figure
                       caption={summary.best ? `${humanDate(summary.best.date)}\ndividend ${moneyFine(summary.best.dividend)}` : undefined}
                       label="Best game"
+                      spoken={gameSpoken('Best game', summary.best)}
                       style={cell}
                       value={<FineMoney value={summary.best?.net ?? 0} />}
                     />
                     <Figure
                       caption={summary.worst ? `${humanDate(summary.worst.date)}\ndividend ${moneyFine(summary.worst.dividend)}` : undefined}
                       label="Worst game"
+                      spoken={gameSpoken('Worst game', summary.worst)}
                       style={cell}
                       value={<FineMoney value={summary.worst?.net ?? 0} />}
                     />
@@ -696,6 +758,10 @@ export function PerGamePlayerProfile({
           </>
         ) : null}
       </ScrollView>
+      {/* The details region's focus ring, above the pinned band (see useDetailsRing). */}
+      {Platform.OS === 'web' ? (
+        <View aria-hidden style={[styles.detailsRing, { top: detailsTop + 1 }]} {...({ dataSet: { profileRing: '' } } as object)} />
+      ) : null}
     </View>
   );
 }
@@ -805,6 +871,17 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
+  // Drawn where the kit's inset ring sat (2px, 1px in from the region's edges).
+  detailsRing: {
+    position: 'absolute',
+    left: 1,
+    right: 1,
+    bottom: 1,
+    borderWidth: 2,
+    borderColor: colors.focus,
+    borderRadius: 4,
+    pointerEvents: 'none',
+  },
   body: {
     paddingBottom: space.xxl,
   },
@@ -882,6 +959,10 @@ const styles = StyleSheet.create({
     fontSize: type.value,
     fontWeight: weight.heavy,
     fontVariant: ['tabular-nums'],
+  },
+  // The dot between this stint's figure and every stint's: drawn, not read.
+  stakeHeadJoin: {
+    color: colors.muted,
   },
   stakeTotal: {
     fontFamily: fonts.display,
@@ -979,6 +1060,16 @@ const styles = StyleSheet.create({
   },
   figureValue: {
     marginTop: 3,
+  },
+  // A clear layer over the whole figure: its sentence, for screen readers and touch.
+  figureSpoken: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    opacity: 0,
   },
   figureCaption: {
     marginTop: 2,

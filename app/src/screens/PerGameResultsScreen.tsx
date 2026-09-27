@@ -47,6 +47,8 @@ import {
   hisFeed,
   seasonSoFar,
   type SeasonSoFar,
+  feeExplanation,
+  feeTitle,
   hisMoveLine,
   mathGroupName,
   monthAnchors,
@@ -432,29 +434,6 @@ function ResultRow({
   );
 }
 
-function feeTitle(entry: PerGameLedgerEntry): string {
-  if (entry.kind === 'open_fee') return 'Open fee';
-  if (entry.kind === 'drop_fee') return 'Drop fee';
-  if (entry.kind === 'penalty') return 'Penalty';
-  return 'Fee';
-}
-
-/** What the fee was for, in the words the rest of the app uses for the move. */
-function feeExplanation(entry: PerGameLedgerEntry, side: PerGamePositionSide | null): string {
-  if (entry.kind === 'open_fee') {
-    if (side === 'long') return 'Added to your roster';
-    if (side === 'short') return 'Short opened';
-    return 'Position opened';
-  }
-  if (entry.kind === 'drop_fee') {
-    if (side === 'long') return 'Dropped from your roster';
-    if (side === 'short') return 'Short closed';
-    return 'Position closed';
-  }
-  if (entry.kind === 'penalty') return 'Rules penalty';
-  return 'Account fee';
-}
-
 function FeeActivityRow({
   entry,
   layout,
@@ -467,7 +446,7 @@ function FeeActivityRow({
   side: PerGamePositionSide | null;
 }) {
   const { columns, compact, tight } = layout;
-  // Heard as one line that names him once, "Dyson Daniels, short opened, fee
+  // Heard as one line that names him once, "Dyson Daniels, opened a short, fee
   // $250"; the headshot and the words drawn beside it are not read again
   // (walk 3 T3-32).
   const spoken = moveWords(playerName, feeExplanation(entry, side), entry.amountDollars, entry.kind === 'penalty' ? 'penalty' : 'fee');
@@ -494,7 +473,7 @@ function FeeActivityRow({
         {/* The kind of fee leads the line under the name, so a long name
             never pushes a chip onto a line of its own: every fee row is the
             same height. */}
-        <Text style={styles.detail}>{feeTitle(entry)} · {feeExplanation(entry, side)}</Text>
+        <Text style={styles.detail}>{feeTitle(entry, side)} · {feeExplanation(entry, side)}</Text>
       </View>
       {compact ? null : <DisclosureSpace />}
     </View>

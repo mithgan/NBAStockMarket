@@ -27,7 +27,7 @@ import type {
 import { gamesCount, humanDate, humanDaySpan, money, moneyFine, perGame, signedMoneyFine } from '../copy/terms';
 import { shownEdge } from './marketView';
 import { PRICE_EXPLAINER } from './perGameRules';
-import { currentResults, entryDay, lastYearEdge, type ValueSummary } from './perGameMetrics';
+import { currentResults, entryDay, lastYearEdge, playerValue, positionValue, type ValueSummary } from './perGameMetrics';
 import {
   selectHighLowPoints,
   selectSettledTrendPoints,
@@ -311,6 +311,22 @@ export function sideWords(side: PerGamePositionSide): {
         legendBad: 'Over his price',
         legendLine: 'Price a game',
       };
+}
+
+/**
+ * A Game by game figure as heard (walk 17 T3-04): its label and the figure as
+ * the screen shows it, then its day and caption, never a finer figure (the
+ * grid was read "$335,950" for a drawn "$336K"). Averages say so, "Average
+ * dividend $337.6K a game"; a game names its day, "Best game +$123.8K,
+ * Oct 24, dividend $612K".
+ */
+export function figureSpoken(
+  label: string,
+  shown: string,
+  { average = false, date = null, caption = null }: { average?: boolean; date?: string | null; caption?: string | null } = {},
+): string {
+  const lead = average ? `Average ${label.charAt(0).toLowerCase()}${label.slice(1)} ${shown} a game` : `${label} ${shown}`;
+  return [lead, date ? humanDate(date) : null, caption].filter((part): part is string => Boolean(part)).join(', ');
 }
 
 /**
@@ -794,6 +810,21 @@ export function priceMoveLine(nights: readonly ProfileNight[], now: number, firs
 export const APP_COLUMN_MAX_WIDTH = 1200;
 
 /**
+ * Where a phone profile sized to its content starts (walk 17 T1-01). It sits
+ * on the window's bottom, `natural` from the top; the tall sheet's line is
+ * `gap` (the status row's top, under the brand bar). A top that would land
+ * inside the frame's rows under the brand bar (`frame`: the status row, and
+ * the practice bar right under it) sliced "Practice · Oct 20" through its
+ * letters: it starts on the tall sheet's line instead, the sheet a little
+ * taller than its content. Where that line is itself inside the rows (a short
+ * window with no brand bar), it starts under them, and the rest scrolls.
+ */
+export function fittedSheetTop(natural: number, gap: number, frame: { top: number; bottom: number } | null): number {
+  if (!frame || natural <= gap || natural < frame.top || natural >= frame.bottom) return natural;
+  return gap <= frame.top ? gap : Math.ceil(frame.bottom);
+}
+
+/**
  * Where the desktop profile panel docks, from the window's right edge: the
  * app column's right edge, so on a monitor wider than the column it opens
  * over the app, not out in the empty margin (walk 8 T2-03).
@@ -908,6 +939,30 @@ export function pastStintLead(
 }
 
 /**
+ * Every stint on the side you hold him now, this one included, counted as the
+ * Roster's Closed group counts them (a stint dropped before he played counts
+ * too), with their games and money (walk 17 T4-10: a re-added player's header
+ * said "+$196.3K over 1 game" over a verdict of "all 3 of his games"). Null
+ * unless an earlier stint on this side had games.
+ */
+export function heldStints(
+  results: readonly PerGameSettledResult[],
+  position: Pick<PerGamePosition, 'positionId' | 'playerId' | 'side'>,
+  stints: readonly PastStint[] = [],
+): { count: number; games: number; total: number } | null {
+  const all = playerValue(results, position.playerId, position.side);
+  if (all.games <= positionValue(results, position.positionId).games) return null;
+  const ids = new Set([
+    position.positionId,
+    ...currentResults(results)
+      .filter((row) => row.playerId === position.playerId && row.side === position.side)
+      .map((row) => row.positionId),
+    ...stints.filter((stint) => stint.side === position.side).map((stint) => stint.positionId),
+  ]);
+  return { count: ids.size, games: all.games, total: all.total };
+}
+
+/**
  * Your money with him in one line: the current position when you hold him
  * (the same numbers as its Roster row), otherwise every past stint, named by
  * side and dates (`past`, from pastStintLead).
@@ -920,13 +975,21 @@ export function stakeLine(
   summary: Pick<ValueSummary, 'games' | 'total'>,
   held: boolean,
   side: PerGamePositionSide = 'long',
-  opened: { since?: string | null; readd?: boolean; past?: string | null } = {},
+  opened: {
+    since?: string | null;
+    readd?: boolean;
+    past?: string | null;
+    /** Held after earlier stints on this side (heldStints): the header counts every one. */
+    stints?: { count: number; games: number; total: number } | null;
+  } = {},
   /** The season is over: the figure is your season with him (walk 12 T1-09). */
   seasonOver = false,
 ): {
   lead: string;
   total: string | null;
   tone: StakeTone;
+  /** Every stint on this side, after this one's figure: "+$401.3K over 3 games in 2 stints". */
+  all?: { text: string; tone: StakeTone } | null;
 } | null {
   if (summary.games === 0) {
     if (!held) return null;
@@ -943,7 +1006,19 @@ export function stakeLine(
   const lead = !held ? opened.past ?? 'Before, with you:'
     : seasonOver ? 'Your season with him:'
       : side === 'long' ? 'Your result:' : 'Your short:';
-  return { lead, total: `${signedMoneyFine(summary.total)} over ${gamesCount(summary.games)}`, tone };
+  const total = `${signedMoneyFine(summary.total)} over ${gamesCount(summary.games)}`;
+  const stints = held ? opened.stints : null;
+  if (!stints || stints.count < 2 || stints.games <= summary.games) return { lead, total, tone };
+  // Re-added (walk 17 T4-10): this stint, then every stint on this side, in
+  // the Roster's words ("2 stints", "2 shorts").
+  const allTone: StakeTone = Math.abs(stints.total) < EVEN_BAND ? 'even' : stints.total > 0 ? 'gain' : 'loss';
+  const word = side === 'long' ? 'stint' : 'short';
+  return {
+    lead,
+    total: `${total} this ${word}`,
+    tone,
+    all: { text: `${signedMoneyFine(stints.total)} over ${gamesCount(stints.games)} in ${stints.count} ${word}s`, tone: allTone },
+  };
 }
 
 /** Last season, and what one game at today's price would have made then from this side. */
