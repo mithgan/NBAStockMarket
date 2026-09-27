@@ -1869,6 +1869,12 @@ export function PerGameMarketScreen({
     setQuery('');
     setWatchedOnly(false);
   }, []);
+  // The empty search's "Clear search" goes away with the search: a key
+  // press on it puts focus back in the box (walk 18 T2-16).
+  const clearSearchFromEmpty = useCallback(() => {
+    setQuery('');
+    focusAfterKeyPress(['input[aria-label="Search players"]']);
+  }, []);
   // One always-mounted live region; clearing it first makes a repeat announce again.
   const announceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const announce = useCallback((message: string) => {
@@ -2755,7 +2761,7 @@ export function PerGameMarketScreen({
     // "🏀", "'" or "-" alone: say what search needs instead of listing
     // everyone as if nothing were typed (walk 3 T4-05).
     <EmptyState
-      action={<Button ref={emptyAction} label="Clear search" onPress={() => setQuery('')} variant="secondary" />}
+      action={<Button ref={emptyAction} label="Clear search" onPress={clearSearchFromEmpty} variant="secondary" />}
       level={2}
       title={SEARCH_NEEDS_LETTERS}
     />
@@ -2768,7 +2774,7 @@ export function PerGameMarketScreen({
           {suggestions.map((entry, index) => (
             <Button key={entry.query} ref={index === 0 ? emptyAction : undefined} label={`Search ${entry.label}`} onPress={() => takeSuggestion(entry)} />
           ))}
-          <Button ref={suggestions.length === 0 ? emptyAction : undefined} label="Clear search" onPress={() => setQuery('')} variant="secondary" />
+          <Button ref={suggestions.length === 0 ? emptyAction : undefined} label="Clear search" onPress={clearSearchFromEmpty} variant="secondary" />
           {watchedOnly ? <Button label="Show everyone" onPress={clearFilters} variant="quiet" /> : null}
         </View>
       )}

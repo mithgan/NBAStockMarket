@@ -188,7 +188,7 @@ test('a Drop or Close asked while games play says it waits for them, and what a 
   );
   assert.equal(
     confirmCloseMessage({ side: 'short', playerName: 'Cade Cunningham', feeDollars: 250, total: 67_900, endsFreeAfter: '2025-10-27', priceNow: 300_000, dropImpactBps: 25, playing: 'Oct 22' }),
-    "Close your short on Cade Cunningham after the Oct 22 games for a $250 fee? Its games in them still count, and if moves pause after them, it stays open. This short's +$67.9K so far stays in your score. Shorting him again later sets a new price, plus another $250 fee.",
+    "Close your short on Cade Cunningham after the Oct 22 games for a $250 fee? Left alone, it ends by itself after Oct 27, at no cost. Its games in them still count, and if moves pause after them, it stays open. This short's +$67.9K so far stays in your score. Shorting him again later sets a new price, plus another $250 fee.",
   );
   // Nothing playing: the question is unchanged.
   assert.doesNotMatch(confirmCloseMessage({ side: 'long', playerName: 'Luka Doncic', feeDollars: 250, total: 0, playing: null }), /after the/);

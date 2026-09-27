@@ -354,7 +354,7 @@ export function confirmCloseMessage({
       : '';
     return side === 'long'
       ? `Drop ${playerName} ${after}${forFee}? His games in them still count, and if moves pause after them, he stays on your roster.${kept} Adding him back later costs his price at that time${another}.`
-      : `Close your short on ${playerName} ${after}${forFee}? Its games in them still count, and if moves pause after them, it stays open.${kept} Shorting him again later sets a new price${another}.`;
+      : `Close your short on ${playerName} ${after}${forFee}?${endsFreeAfter ? ` Left alone, it ends by itself after ${humanDate(endsFreeAfter)}, at no cost.` : ''} Its games in them still count, and if moves pause after them, it stays open.${kept} Shorting him again later sets a new price${another}.`;
   }
   // Closing a short early is asked in two sentences, not five, on every
   // screen that quotes the price after the move (walk 13 T1-13): the choice

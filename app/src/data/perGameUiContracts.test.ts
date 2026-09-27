@@ -341,3 +341,12 @@ test('"Back to <player>" in Results does what the browser\'s Back does (walk 18 
   assert.match(results, /setProfileReopen\(reopenHere\);/);
   assert.match(results, /const backToProfile = useMemo\(\(\) => repeatSafe\(\(\) => \{\s+reopenHere\(\);\s+if \(returnsElsewhere\) setProfileReopen\(null\);/);
 });
+
+test('a Drop or Close that waited for games which already ended it is told calmly with them (walk 18 T4-09)', () => {
+  assert.match(context, /outcome\.error\.code === 'position_not_found';\s+if \(failedMove && gone && \(failedMove\.verb === 'closed' \|\| failedMove\.verb === 'dropped'\)\) \{\s+sayWaitedMove\(\{ verb: failedMove\.verb, name: failedMove\.name, locked: false, cost: null, gone: true \}\);/);
+  assert.match(context, /`Closing \$\{goneShorts\[0\]\}'s short was not needed: it had ended\. No fee\.`/);
+  // Only nothing-to-do moves: a calm notice, not a problem.
+  assert.match(context, /say\(parts\.join\(' '\), gone\.length === done\.moves\.length \? 'success' : 'problem'\);/);
+  // The empty search's Clear, by key, puts focus back in the box (walk 18 T2-16).
+  assert.match(market, /const clearSearchFromEmpty = useCallback\(\(\) => \{\s+setQuery\(''\);\s+focusAfterKeyPress\(\['input\[aria-label="Search players"\]'\]\);/);
+});

@@ -475,7 +475,9 @@ export function PerGameProvider({
   // their prices moved to $261.4K and $336.1K a game. Add them again if you
   // still want them."
   // `lockDate`: the lock that refused it (null: its price moved).
-  type WaitedMove = { verb: string; name: string; locked: boolean; cost: number | null; lockDate?: string | null };
+  // `gone`: a Drop or Close that waited for games which ended the short (or
+  // took the player off the roster) had nothing left to do (walk 18 T4-09).
+  type WaitedMove = { verb: string; name: string; locked: boolean; cost: number | null; lockDate?: string | null; gone?: boolean };
   const waitedMoves = useRef<{ moves: WaitedMove[]; base: string | null } | null>(null);
   // The last waiting moves told, so a refusal a moment later is told with
   // them, not over them (walk 12 T4-07: a second add refused as the week
@@ -525,7 +527,7 @@ export function PerGameProvider({
         parts.push(base);
       }
       for (const verb of verbs) {
-        const moved = done.moves.filter((entry) => !entry.locked && entry.verb === verb);
+        const moved = done.moves.filter((entry) => !entry.locked && !entry.gone && entry.verb === verb);
         if (moved.length === 0) continue;
         const one = moved.length === 1;
         const prices = moved.map((entry) => (entry.cost === null ? null : moneyCompact(entry.cost)));
@@ -536,9 +538,26 @@ export function PerGameProvider({
         const again = known ? '' : ` ${verb === 'shorted' ? 'Short' : 'Add'} ${one ? 'him' : 'them'} again at the new price if you still want ${one ? 'him' : 'them'}.`;
         parts.push(`${nameList(moved.map((entry) => entry.name))} ${one ? 'was' : 'were'} not ${verb}: ${one ? 'his price' : 'their prices'} moved${known ? ` to ${nameList(prices as string[])} a game` : ''}.${again}`);
       }
+      // Nothing left to do: calm words after the games' result, never a
+      // failure ("That position is not open", walk 18 T4-09).
+      const gone = done.moves.filter((entry) => entry.gone && !entry.locked);
+      // A close is named "Your short on <player>" for its own notices.
+      const player = (name: string) => name.replace(/^Your short on /, '');
+      const goneShorts = gone.filter((entry) => entry.verb === 'closed').map((entry) => player(entry.name));
+      const goneHeld = gone.filter((entry) => entry.verb !== 'closed').map((entry) => entry.name);
+      if (goneShorts.length > 0) {
+        parts.push(goneShorts.length === 1
+          ? `Closing ${goneShorts[0]}'s short was not needed: it had ended. No fee.`
+          : `Closing the shorts on ${nameList(goneShorts)} was not needed: they had ended. No fees.`);
+      }
+      if (goneHeld.length > 0) {
+        parts.push(goneHeld.length === 1
+          ? `Dropping ${goneHeld[0]} was not needed: he was already off your roster. No fee.`
+          : `Dropping ${nameList(goneHeld)} was not needed: they were already off your roster. No fees.`);
+      }
       // The games' own notice is inside this one: it is not said again.
       silentNotice.current = null;
-      say(parts.join(' '));
+      say(parts.join(' '), gone.length === done.moves.length ? 'success' : 'problem');
       lastWaited.current = { moves: done.moves, base: done.base, at: Date.now() };
     }, 0);
   }, [say]);
@@ -638,6 +657,13 @@ export function PerGameProvider({
         const grouped = shown !== text;
         lastMoveEntry.current = say(shown, 'success', grouped ? text : undefined, grouped ? { text: shown, replaces: lastMoveEntry.current } : undefined);
         return true;
+      }
+      // A Drop or Close that waited for games which ended the short or took
+      // him off the roster: nothing left to do, told with the games' result.
+      const gone = outcome.error instanceof PerGameApiError && !outcome.reconciliationReason && outcome.error.code === 'position_not_found';
+      if (failedMove && gone && (failedMove.verb === 'closed' || failedMove.verb === 'dropped')) {
+        sayWaitedMove({ verb: failedMove.verb, name: failedMove.name, locked: false, cost: null, gone: true });
+        return false;
       }
       const suffix = outcome.reconciliationReason === 'ambiguous'
         ? ' The result is uncertain. Reconcile before making another roster change.'
