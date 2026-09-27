@@ -228,3 +228,9 @@ test('ambient web layers use style-based pointer events without deprecated View 
   assert.doesNotMatch(app, /<View[^>]*pointerEvents=/);
   assert.match(app, /pointerEvents: 'none'/);
 });
+
+test('at season end the Roster says "The season is over" once: its empty sections add nothing to it (walk 15 lead)', () => {
+  assert.match(roster, /seasonOver \? 'The season is over\. Your roster is final\.'/);
+  assert.equal((roster.match(/The season is over/g) ?? []).length, 1, 'only the roster line says it');
+  assert.match(roster, /title=\{hadShorts \? 'No open shorts' : seasonOver \? 'No shorts this season'/);
+});

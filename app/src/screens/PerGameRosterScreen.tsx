@@ -1314,8 +1314,11 @@ export function PerGameRosterScreen({
                 variant="primary"
               />
             )}
+            // Once the season is over the section's own line says so ("The
+            // season is over. Your roster is final."); the card under it
+            // said it again.
             copy={seasonOver
-              ? 'The season is over. There are no more players to add.'
+              ? undefined
               // Beside the welcome the list's note (or the folded frame)
               // already says when moves reopen, and the welcome explains.
               : welcomeMarket ? undefined
@@ -1354,7 +1357,9 @@ export function PerGameRosterScreen({
         {shorts.length > 0 ? tableOf('short', rows(shorts)) : (
           <EmptyState
             // Once the season is over the market takes no new shorts, so the
-            // empty section says so instead of sending you somewhere idle.
+            // empty section offers none; its title says so, and the roster's
+            // line above already says the season is over (on a desktop table
+            // both lines showed at once).
             // While moves are locked it says when shorts reopen and offers a
             // look at the market rather than a dead end.
             action={seasonOver ? undefined : (
@@ -1365,7 +1370,7 @@ export function PerGameRosterScreen({
               />
             )}
             copy={seasonOver
-              ? 'The season is over, so there are no more shorts to open.'
+              ? undefined
               : lockLine ? `${lockLine} ${SHORT_EXPLAINER}` : SHORT_EXPLAINER}
             style={styles.empty}
             title={hadShorts ? 'No open shorts' : seasonOver ? 'No shorts this season' : 'No shorts yet'}
