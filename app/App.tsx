@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -372,6 +372,15 @@ function NoticeToast({
   // alone closed the notice when tapped (walk 10 T3-01).
   const [expanded, setExpanded] = useState(false);
   useEffect(() => setExpanded(false), [message, seq]);
+  // A clamped text keeps its full height as its scroll height: whether the
+  // rest waits behind "more ▾", clamped or not.
+  const noticeTextRef = useRef<Text | null>(null);
+  useLayoutEffect(() => {
+    if (clampLines < 2) return;
+    const node = noticeTextRef.current as unknown as HTMLElement | null;
+    if (!node || typeof node.scrollHeight !== 'number') return;
+    setOverflowing(node.scrollHeight > TINY_NOTICE_LINE * clampLines + 2);
+  }, [clampLines, expanded, shown, width]);
   useEffect(() => {
     // Held only at 400%, where a keyboard user could not reach it in time,
     // and once opened with "more ▾": the player is reading it (walk 16 T1-15:
@@ -479,11 +488,25 @@ function NoticeToast({
   const words = placement === 'dock' || clampLines > 0 ? (
     <View style={styles.noticeWords}>
       <ScrollView
-        onContentSizeChange={(_contentWidth, contentHeight) => setOverflowing(clampLines > 0 && contentHeight > TINY_NOTICE_LINE * clampLines + 2)}
+        // The one-line strip at 400% scrolls its rest with the arrow keys:
+        // measured by its content. Two clamped lines are measured by the
+        // text's own full height (below).
+        onContentSizeChange={(_contentWidth, contentHeight) => {
+          if (clampLines < 2) setOverflowing(clampLines > 0 && contentHeight > TINY_NOTICE_LINE * clampLines + 2);
+        }}
         style={[styles.noticeScroll, { maxHeight: dockText }]}
         {...readable}
       >
-        <Text style={styles.noticeText}>{shown}</Text>
+        <Text
+          ref={noticeTextRef}
+          // Two lines end on "…" when the rest waits behind "more ▾": cut
+          // mid-phrase, "…paused for the Nov 5" read as the sentence's end
+          // (walk 17 T4-02).
+          numberOfLines={clampLines >= 2 && !expanded ? clampLines : undefined}
+          style={styles.noticeText}
+        >
+          {shown}
+        </Text>
       </ScrollView>
       {clampLines > 0 && overflowing ? (
         <Pressable

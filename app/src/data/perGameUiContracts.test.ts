@@ -290,3 +290,10 @@ test('loading is one look: the app draws the page shell\'s lockup, value for val
   assert.equal(cssValue('#shell-loading .shell-note', 'font-size'), '14px');
   assert.match(app, /loadingNote: \{[\s\S]*?fontSize: 14,/);
 });
+
+test('two clamped notice lines end on "…" before "more ▾", and still know the rest is there (walk 17 T4-02)', () => {
+  assert.match(app, /numberOfLines=\{clampLines >= 2 && !expanded \? clampLines : undefined\}/);
+  // Overflow is read from the text's full (scroll) height, clamped or not; the 400% line keeps its scroll.
+  assert.match(app, /setOverflowing\(node\.scrollHeight > TINY_NOTICE_LINE \* clampLines \+ 2\);/);
+  assert.match(app, /if \(clampLines < 2\) setOverflowing\(clampLines > 0 && contentHeight > TINY_NOTICE_LINE \* clampLines \+ 2\);/);
+});
