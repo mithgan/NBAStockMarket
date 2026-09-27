@@ -497,6 +497,17 @@ export const WELL_KNOWN_PLAYERS: readonly string[] = [
   'Victor Wembanyama', 'Jalen Brunson', 'Donovan Mitchell', 'Devin Booker', 'Kawhi Leonard', 'Jaylen Brown',
 ];
 
+/**
+ * A search that is only a name's suffix ("jr", "Jr.", "sr", "ii", "iii"),
+ * which many players share: it names nobody (walk 17 T4-05: "jr" said
+ * "Jaren Jackson Jr. is not in this practice season's 30 players", and a fan
+ * after Michael Porter Jr. was told about someone else).
+ */
+export function bareNameSuffix(query: string): boolean {
+  const words = searchKey(query).split(/[\s-]+/).filter(Boolean);
+  return words.length > 0 && words.every((word) => NAME_SUFFIXES.has(word));
+}
+
 /** The name parts a search word can be exactly: first name, surname, any run of parts ("gilgeousalexander"). */
 function nameTargets(name: string): Set<string> {
   const parts = searchKey(name).split(/[\s-]+/).filter(Boolean);
@@ -536,6 +547,7 @@ function exactNameHits(query: string, names: readonly string[]): string[] {
 export function unlistedSearch(query: string, listed: readonly string[]): { star: string | null; guess: string | null; retired: boolean } {
   const none = { star: null, guess: null, retired: false };
   if (!searchHasLetters(query)) return none;
+  if (bareNameSuffix(query)) return none;
   const listedKeys = new Set(listed.map((name) => searchKey(name)));
   const unlisted = WELL_KNOWN_PLAYERS.filter((name) => !listedKeys.has(searchKey(name)));
   const key = searchKey(query).replace(/[\s-]+/g, ' ');
@@ -894,6 +906,17 @@ export function valueDefinition(side: PerGamePositionSide, narrow = false): stri
  * reads as this season's result (walk 10 T2-12).
  */
 export const HELD_VALUE_CAPTION = 'last season at\u00A0your\u00A0price';
+
+/**
+ * The held Value caption where the column is narrow (the tables under
+ * 1100px, which have no Your profit column): "at your price", one line
+ * right under its figure (walk 17 T2-01: "last season / at your price"
+ * wrapped from the column's left edge and grew every held row a line).
+ * The column's header already says the figure is from last season.
+ */
+export function heldValueCaption(narrowTable: boolean): string {
+  return narrowTable ? 'at\u00A0your\u00A0price' : HELD_VALUE_CAPTION;
+}
 
 /**
  * A held phone row's price keeps its "/game" (walk 10 T1-02: "yours $417.5K"
@@ -1518,6 +1541,17 @@ export interface MarketColumnSet {
  * Column widths for the table. A tablet or small laptop gets narrower columns
  * and no "Your net a game" column, so the player column keeps room for a name.
  */
+/**
+ * A laptop table's one-row toolbar gives way to two rows between 960 and
+ * 1100px (walk 17 T2-06: at 1024x768 the search box shrank to 148px, its
+ * placeholder cut to "Search", and the slot's lock wrapped to three lines):
+ * the side, the slot and the search share the first row, the search taking
+ * the room; the sort and Watching go beside the order line under it.
+ */
+export function toolbarSplits(width: number, table: boolean, rowToolbar: boolean): boolean {
+  return table && rowToolbar && width >= 960 && width < 1100;
+}
+
 export function marketColumns(width: number): MarketColumnSet {
   // Each sortable label keeps a 24px sort mark to its left: "PRICE A GAME"
   // fits one line from 1100px; "DIVIDEND" / "LAST SEASON" takes two.
@@ -1591,10 +1625,28 @@ export function rowHeaderName({
   return [name, spokenTier(tier), tag ? `${tag[0].toLowerCase()}${tag.slice(1)}` : ''].filter(Boolean).join(', ');
 }
 
-/** What a screen reader hears when typing pauses: "7 players match "le"". */
-export function searchResultLine(query: string, count: number): string {
+/** The most matches a search's spoken result names (walk 17 T3-05). */
+export const SPOKEN_MATCH_NAMES_MAX = 3;
+
+/** Names in a sentence: "Jalen Brunson and Jalen Duren", "A, B and C". */
+function namesInWords(names: readonly string[]): string {
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/**
+ * What a screen reader hears when typing pauses: "7 players match "le"".
+ * Three matches or fewer are named, in list order, so a listener typing
+ * initials hears who was found (walk 17 T3-05): "1 player: Shai
+ * Gilgeous-Alexander.", "2 players: Jalen Brunson and Jalen Duren.". `names`
+ * are the matches counted; they are named only when they are all of them.
+ */
+export function searchResultLine(query: string, count: number, names: readonly string[] = []): string {
   if (!query) return `Showing all ${count} ${count === 1 ? 'player' : 'players'}.`;
   if (count === 0) return `No players match "${query}".`;
+  if (count <= SPOKEN_MATCH_NAMES_MAX && names.length === count) {
+    return `${count} ${count === 1 ? 'player' : 'players'}: ${namesInWords(names)}.`;
+  }
   return `${count} ${count === 1 ? 'player matches' : 'players match'} "${query}".`;
 }
 
@@ -1614,6 +1666,7 @@ export function listCountLine({
   watchedOnly,
   cleared = false,
   listed = count,
+  names = [],
 }: {
   query: string;
   count: number;
@@ -1624,10 +1677,12 @@ export function listCountLine({
   cleared?: boolean;
   /** Rows on screen, kept (unwatched, dimmed) rows too; defaults to `count`. */
   listed?: number;
+  /** The counted matches' names, in list order: three or fewer are named. */
+  names?: readonly string[];
 }): string {
   const players = (n: number) => `${n} ${n === 1 ? 'player' : 'players'}`;
   if (query && !searchHasLetters(query)) return `${SEARCH_NEEDS_LETTERS}.`;
-  if (query) return searchResultLine(query, count);
+  if (query) return searchResultLine(query, count, names);
   // Says the list is whole again, in the words the list uses (walk 6 T3-N4).
   if (cleared) return watchedOnly ? `Search cleared. Watching: ${players(count)}.` : `Search cleared. Showing all ${players(count)}.`;
   if (watchedOnly) {
@@ -2118,6 +2173,16 @@ export function endedShortTag(side: PerGamePositionSide, seasonOver: boolean, he
 }
 
 /**
+ * The second value line of a phone row tagged as an ended short at season
+ * end (walk 17 T1-11): under "Shorted this season · +$128.6K over 4 games",
+ * last season's figure for a short, said as history ("Last season +$67.9K
+ * for a short"), so it never reads as part of his result.
+ */
+export function endedShortSecondLine(signal: Pick<ValueSignal, 'lead' | 'text'>): string {
+  return signal.lead === null ? 'No last season' : `Last season ${signal.text}`;
+}
+
+/**
  * The lock line keeps "after Oct 28" whole, so where it wraps the date never
  * sits alone on a line (walk 16 T2-08: "Moves reopen after" / "Oct 28" at
  * 1024 and 768): it breaks as "Moves reopen" / "after Oct 28".
@@ -2205,14 +2270,15 @@ export function heldOrderLine(
   // A phone's line swaps its words in place, one line with Re-sort at every
   // phone width (walk 16 T1-02: the two-line wording kept an empty line
   // under "Sorted by value, highest first." from the first view on); the
-  // button names the games.
-  if (shape === 'short' || shape === 'phone') return `${moved}; order kept`;
+  // button names the games. It says why the order stayed, as the tables do
+  // (walk 17 T1-05: "Values moved; order kept" gave no reason).
+  if (shape === 'short' || shape === 'phone') return 'Order kept so rows stay put';
   return `${moved} in the ${gamesSince(previousNight, night)} games; order kept so rows stay put.`;
 }
 
 /**
- * The phone forms' boundary (walk 13): both now say "Values moved; order
- * kept", about 150px with Re-sort's 61px, one line from 320px (walk 16 T1-02).
+ * The phone forms' boundary (walk 13): both now say "Order kept so rows stay
+ * put" (walk 17 T1-05), one line with Re-sort from 320px (walk 16 T1-02).
  */
 export const ORDER_LINE_LONG_MIN_WIDTH = 390;
 

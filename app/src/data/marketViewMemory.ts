@@ -82,6 +82,23 @@ export function rememberTierAfterSurname(key: string): void {
 }
 
 /**
+ * Sizes where a given name, its tier already after the surname, still did
+ * not fit beside a price box that says "yours" (walk 17 T1-03: "KARL-ANTHONY"
+ * at 360 and 375; T3-03: "SCOTTIE" at 320 with a reader's text spacing): the
+ * whole list then leaves "yours" out, so every row keeps one height and no
+ * given name is cut. Remembered for the visit, as the tier's place is.
+ */
+const heldYoursDroppedAt = new Set<string>();
+
+export function heldYoursDroppedKnown(key: string): boolean {
+  return heldYoursDroppedAt.has(key);
+}
+
+export function rememberHeldYoursDropped(key: string): void {
+  heldYoursDroppedAt.add(key);
+}
+
+/**
  * Coming back to the Market restores your place in the list, unless the list
  * was re-sorted for you meanwhile: the season ended since you left (walk 16
  * T1-07: you came back mid-list on re-sorted rows, the side toggle and the

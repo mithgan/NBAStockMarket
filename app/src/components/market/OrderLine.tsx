@@ -9,7 +9,7 @@
  */
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, fonts, space, type, weight } from '../../theme';
+import { colors, fonts, radius, space, type, weight } from '../../theme';
 
 export function OrderLine({
   text,
@@ -38,10 +38,15 @@ export function OrderLine({
   centred?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
-  // A phone's line is one text line either way (walk 16 T1-02): Re-sort's
-  // 44px target reaches 8px up into the gap over it (never the sort buttons)
-  // and down under the line, so it takes the line's own 17px.
-  const actionStyle = centred ? [styles.action, styles.actionFlat] : styles.action;
+  // Re-sort is the app's outlined button at every size (walk 17 T2-02: an
+  // underlined link at 853x533, a bordered RE-SORT elsewhere), compact in a
+  // one-line strip: a 26px box centred on the line's words (T1-05: it sat
+  // half a line low), its 44px target reaching 9px above and below it.
+  const box = (hovered: boolean, pressed: boolean) => (
+    <View style={[styles.actionBox, hovered && styles.actionHover, pressed && styles.pressed]}>
+      <Text maxFontSizeMultiplier={1.4} style={styles.actionText}>Re-sort</Text>
+    </View>
+  );
   const words = (shown: string, action: boolean, ghost: boolean) => (
     <View style={styles.line}>
       <Text maxFontSizeMultiplier={1.4} style={[styles.text, !ghost && tone === 'flipped' && styles.flipped, !ghost && tone === 'stale' && styles.stale]}>
@@ -49,17 +54,15 @@ export function OrderLine({
       </Text>
       {action ? (
         ghost ? (
-          <View style={actionStyle}>
-            <Text maxFontSizeMultiplier={1.4} style={styles.actionText}>Re-sort</Text>
-          </View>
+          <View style={styles.action}>{box(false, false)}</View>
         ) : (
           <Pressable
             accessibilityLabel={resort?.name}
             accessibilityRole="button"
             onPress={resort?.onPress}
-            style={(state) => [actionStyle, (state as { hovered?: boolean }).hovered === true && styles.actionHover, state.pressed && styles.pressed]}
+            style={styles.action}
           >
-            <Text maxFontSizeMultiplier={1.4} style={styles.actionText}>Re-sort</Text>
+            {(state) => box((state as { hovered?: boolean }).hovered === true, state.pressed)}
           </Pressable>
         )
       ) : null}
@@ -129,17 +132,21 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   action: {
-    // A text button in the line, underlined, as an inline link: a full 44px
-    // target that reaches into the space above and below, so the line keeps
-    // its 28px (the audit found a 53x28 target).
+    // A full 44px target that reaches 9px into the space above and below
+    // the 26px box, so the line is the box's height (the audit's 44px floor).
     minHeight: 44,
-    marginVertical: -8,
+    marginVertical: -9,
+    justifyContent: 'center',
+  },
+  actionBox: {
+    // The kit's secondary button (outlined, raised, caps), compact.
+    minHeight: 26,
     justifyContent: 'center',
     paddingHorizontal: space.sm,
-  },
-  actionFlat: {
-    marginTop: -8,
-    marginBottom: -19,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.controlBorder,
+    backgroundColor: colors.surfaceRaised,
   },
   actionHover: {
     backgroundColor: colors.surfaceHigh,
@@ -147,9 +154,10 @@ const styles = StyleSheet.create({
   actionText: {
     color: colors.text,
     fontFamily: fonts.display,
-    fontSize: type.caption,
-    fontWeight: weight.heavy,
-    textDecorationLine: 'underline',
+    fontSize: type.label,
+    fontWeight: weight.black,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
   pressed: {
     opacity: 0.72,
