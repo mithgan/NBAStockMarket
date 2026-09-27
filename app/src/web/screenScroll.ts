@@ -28,7 +28,13 @@ const BACK_TO_CONTROLS = 'Back to the practice controls';
 
 const STOPS = 'a[href], button, input, select, textarea, [role="button"], [role="link"], [tabindex="0"]';
 
-/** A screen's first Tab stop, and the "Back to the practice controls" link it ends with. */
+/**
+ * A screen's first control that leaves Home and End to the page, and the
+ * "Back to the practice controls" link it ends with. The first control is
+ * never one that uses the keys itself (the Market's side tabs): Home landed
+ * there, and the End after it switched the list to the Short side instead of
+ * reaching the end (walk 15 T3-12).
+ */
 function screenEnds(screen: HTMLElement): { first: HTMLElement | null; back: HTMLElement | null } {
   const stops = Array.from(screen.querySelectorAll<HTMLElement>(STOPS)).filter((node) => (
     !node.closest('[hidden], [aria-hidden="true"], [inert]')
@@ -37,7 +43,8 @@ function screenEnds(screen: HTMLElement): { first: HTMLElement | null; back: HTM
     && node.getClientRects().length > 0
   ));
   const back = stops.filter((node) => (node.getAttribute('aria-label') ?? node.textContent ?? '').trim() === BACK_TO_CONTROLS).pop() ?? null;
-  return { first: stops[0] ?? null, back };
+  const first = stops.find((node) => !node.matches(USES_HOME_END)) ?? null;
+  return { first, back };
 }
 
 function scrollsVertically(node: Element): node is HTMLElement {
