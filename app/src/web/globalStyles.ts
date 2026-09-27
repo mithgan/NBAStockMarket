@@ -245,7 +245,10 @@ input:focus-visible,
 }
 
 /* A focus ring drawn inside where the box would clip it: the More menu's
-   items and rows that span the screen (their 2px ring fell off the edges). */
+   items and rows that span the screen (their 2px ring fell off the edges),
+   and the notice's buttons, which sit on the tab bar at 400% zoom (walk 18
+   T3-05: "less ▴" lost its ring's bottom edge under the bar). */
+#latest-notice [role="button"]:focus-visible,
 #practice-more [role="button"]:focus-visible,
 [role="button"][aria-label$="View profile"]:focus-visible,
 [data-row="full"]:focus-visible,
