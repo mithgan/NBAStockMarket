@@ -123,6 +123,53 @@ function VariantTexture() {
   return <View nativeID={`variant-texture-${variant.texture}`} style={styles.texture} />;
 }
 
+/** The page shell's face (public/index.html), so the lockup reads the same before and after the app loads. */
+const SHELL_FACE = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+/** The shell's lockup mark: its radius derived, never a card corner. */
+const LOADING_MARK_SIZE = 32;
+/** A colour the page shell set for the player's look (its CSS variable), else the theme's. */
+function shellColor(name: 'gold' | 'word' | 'muted', fallback: string): string {
+  return typeof document === 'undefined' ? fallback : `var(--shell-${name}, ${fallback})`;
+}
+
+/**
+ * The page until the season and the brand face are ready: the lockup and the
+ * quiet line the page shell (public/index.html) draws before the app loads,
+ * in the same place, size, face and colours (its CSS variables), so loading
+ * is one look (walk 17 T1-12: the shell's centred lockup, then a frame with an
+ * empty brand bar and a spinner, then the app). A polite status to readers.
+ */
+function LoadingLook({ title, copy, actionLabel, onAction }: {
+  title: string;
+  copy: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  useEffect(() => {
+    if (typeof document !== 'undefined') document.title = `${title} · NBA Stock Market`;
+  }, [title]);
+  return (
+    <View role="status" style={styles.loadingLook}>
+      <View accessibilityElementsHidden aria-hidden importantForAccessibility="no-hide-descendants" style={styles.loadingBrand}>
+        <View style={styles.loadingMark}>
+          <Text maxFontSizeMultiplier={1} style={styles.loadingMarkText}>d</Text>
+        </View>
+        <Text maxFontSizeMultiplier={1} style={styles.loadingWord}>databallr</Text>
+        <View style={styles.loadingRule} />
+        <Text maxFontSizeMultiplier={1} style={styles.loadingProduct}>STOCK MARKET</Text>
+      </View>
+      <Text accessibilityRole="header" maxFontSizeMultiplier={1.5} style={styles.loadingNote}>{title}</Text>
+      {/* Heard with the status; shown only when the start is slow, with its way on. */}
+      <Text maxFontSizeMultiplier={1.5} style={actionLabel ? styles.loadingNote : visuallyHidden}>{copy}</Text>
+      {actionLabel && onAction ? (
+        <View style={styles.stateAction}>
+          <Button label={actionLabel} onPress={onAction} variant="primary" />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function CenteredState({
   title,
   heading,
@@ -906,33 +953,6 @@ function AppBody() {
   ), [marketSide, activeTab, switchScreen]);
 
   const body = (() => {
-    if (isLoading || !fontReady) {
-      // Practice builds its season in this browser; there is no account or
-      // server to load from (walk 7 T4-05). A start that takes long says so
-      // and offers a way on (walk 9 T4-N4).
-      const reload = slowStart ? () => window.location.reload() : undefined;
-      return isMockActive() ? (
-        <CenteredState
-          actionLabel={reload ? 'Reload' : undefined}
-          busy
-          copy={slowStart
-            ? 'Still setting up your practice season. If nothing changes in a moment, reload the page.'
-            : 'Setting up a practice season in this browser.'}
-          onAction={reload}
-          title="Starting practice"
-        />
-      ) : (
-        <CenteredState
-          actionLabel={reload ? 'Reload' : undefined}
-          busy
-          copy={slowStart
-            ? 'Still loading your account. Check your connection; you can reload the page.'
-            : 'Loading your roster, per-game market, and P&L from the server.'}
-          onAction={reload}
-          title="Loading your account"
-        />
-      );
-    }
     if (transitionRequired) {
       const failed = Boolean(transitionError) && !legacySavePresent;
       return (
@@ -1115,6 +1135,34 @@ function AppBody() {
     />
   ) : null;
   barNoticeRef.current = Boolean(notice) && noticePlacement !== 'dock';
+
+  // Until the season and the brand face are ready the page is the shell's
+  // look (LoadingLook), never the frame with an empty brand bar. Practice
+  // builds its season in this browser; there is no account or server to load
+  // from (walk 7 T4-05). A start that takes long says so and offers a way on
+  // (walk 9 T4-N4).
+  if (isLoading || !fontReady) {
+    const reload = slowStart ? () => window.location.reload() : undefined;
+    return isMockActive() ? (
+      <LoadingLook
+        actionLabel={reload ? 'Reload' : undefined}
+        copy={slowStart
+          ? 'Still setting up your practice season. If nothing changes in a moment, reload the page.'
+          : 'Setting up a practice season in this browser.'}
+        onAction={reload}
+        title="Starting practice"
+      />
+    ) : (
+      <LoadingLook
+        actionLabel={reload ? 'Reload' : undefined}
+        copy={slowStart
+          ? 'Still loading your account. Check your connection; you can reload the page.'
+          : 'Loading your roster, per-game market, and P&L from the server.'}
+        onAction={reload}
+        title="Loading your account"
+      />
+    );
+  }
 
   return (
     <View nativeID="app-root" style={styles.app}>
@@ -1402,6 +1450,59 @@ const styles = StyleSheet.create({
   },
   waitingForFont: {
     opacity: 0,
+  },
+  // LoadingLook: public/index.html's #shell-loading, value for value.
+  loadingLook: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+    padding: 24,
+  },
+  loadingBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  loadingMark: {
+    width: LOADING_MARK_SIZE,
+    height: LOADING_MARK_SIZE,
+    borderRadius: LOADING_MARK_SIZE / 2,
+    backgroundColor: shellColor('gold', colors.gold),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingMarkText: {
+    fontFamily: SHELL_FACE,
+    color: colors.onGold,
+    fontSize: 19,
+    fontWeight: '800',
+    lineHeight: 32,
+  },
+  loadingWord: {
+    fontFamily: SHELL_FACE,
+    color: shellColor('word', colors.goldInk),
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  loadingRule: {
+    width: 1,
+    height: 20,
+    backgroundColor: shellColor('muted', colors.muted),
+    opacity: 0.5,
+  },
+  loadingProduct: {
+    fontFamily: SHELL_FACE,
+    color: shellColor('muted', colors.muted),
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.68,
+  },
+  loadingNote: {
+    fontFamily: SHELL_FACE,
+    color: shellColor('muted', colors.muted),
+    fontSize: 14,
+    textAlign: 'center',
   },
   header: {
     minHeight: 52,

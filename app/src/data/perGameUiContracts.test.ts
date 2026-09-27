@@ -270,3 +270,23 @@ test('loading draws its spinner silently, and the frame waits for its face befor
   assert.match(app, /<View style=\{!fontReady && styles\.waitingForFont\}>\s+<SettingsButton/);
   assert.match(app, /stateTitle: \{\s+fontFamily: fonts\.display,/);
 });
+
+test('loading is one look: the app draws the page shell\'s lockup, value for value, until it is ready (walk 17 T1-12)', () => {
+  const shell = readFileSync(resolve(import.meta.dirname, '../../public/index.html'), 'utf8');
+  const cssValue = (selector: string, property: string) => {
+    const block = shell.slice(shell.indexOf(selector), shell.indexOf('}', shell.indexOf(selector)));
+    return new RegExp(`${property}:\\s*([^;]+);`).exec(block)?.[1]?.trim();
+  };
+  // The early return, before the frame, while the season or the brand face loads.
+  assert.match(app, /if \(isLoading \|\| !fontReady\) \{\s+const reload = slowStart/);
+  assert.match(app, /return isMockActive\(\) \? \(\s+<LoadingLook/);
+  // Sizes kept in step with the shell's CSS.
+  assert.equal(cssValue('#shell-loading .shell-word', 'font-size'), '22px');
+  assert.match(app, /loadingWord: \{[\s\S]*?fontSize: 22,/);
+  assert.equal(cssValue('#shell-loading .shell-product', 'font-size'), '12px');
+  assert.match(app, /loadingProduct: \{[\s\S]*?fontSize: 12,/);
+  assert.equal(cssValue('#shell-loading .shell-mark', 'width'), '32px');
+  assert.match(app, /const LOADING_MARK_SIZE = 32;/);
+  assert.equal(cssValue('#shell-loading .shell-note', 'font-size'), '14px');
+  assert.match(app, /loadingNote: \{[\s\S]*?fontSize: 14,/);
+});
