@@ -22,6 +22,7 @@ import {
   playToEndOffersMarket,
   playToEndOffersNight,
   questionAnswerOrder,
+  questionTight,
   playToEndShortsOnlyLines,
   queuedCancelControlName,
   queuedCancelHint,
@@ -43,6 +44,8 @@ import {
   nightButtonName,
   PHONE_SLOT_MIN_WIDTH,
   NIGHT_DATE_STACKED_MIN_WIDTH,
+  stackedWeekLabel,
+  WEEK_ONE_LINE_STACKED_MIN_WIDTH,
   PLAY_TO_END_LABEL,
   playToEndQuestion,
   playToEndQueuedLine,
@@ -56,6 +59,7 @@ import {
   practiceSeasonEnd,
   practiceStakes,
   practiceWeekHint,
+  savingHint,
   restartHasNothingToDo,
   QUEUED_CANCEL_LABEL,
   queuedCancelledNotice,
@@ -65,7 +69,10 @@ import {
   queuedWaitLine,
   queuedThrough,
   queuedLineThrough,
-  questionPlayingLine,
+  nightAfterQueue,
+  questionFlightLine,
+  movesInFlight,
+  type MoveInFlight,
   queueFullLine,
   queueLastLine,
   QUEUE_LINE_PAUSE_MS,
@@ -178,6 +185,12 @@ function usePlayedWithoutRoster(): boolean {
   return useSyncExternalStore(subscribePlayed, () => playedWithoutRoster, () => false);
 }
 
+/** Adds and shorts still saving (walk 12 T2-08): they count as held for the frame. */
+function savingHolds(pendingActions: ReadonlySet<string>, bootstrap: PerGameBootstrap): MoveInFlight[] {
+  return movesInFlight(pendingActions, bootstrap.positions, new Map())
+    .filter((move) => move.verb === 'add' || move.verb === 'short');
+}
+
 /**
  * The practice hint beside +1 night / +1 week: "Add a player first…" while
  * the roster is empty (or the nights-without-you line once the player chose
@@ -188,13 +201,19 @@ function usePlayedWithoutRoster(): boolean {
  * for rows with no line to spare ("Add a player first", walk 4 T1-09).
  */
 export function usePracticeHint(short = false): string | null {
-  const { bootstrap } = usePerGame();
+  const { bootstrap, pendingActions } = usePerGame();
   const played = usePlayedWithoutRoster();
   const playingNow = usePracticePlaying();
   if (!bootstrap || !isMockActive()) return null;
   const settledOn = bootstrap.game.lastSettledDate ?? '';
   const emptyRoster = !bootstrap.positions.some((position) => position.status === 'active');
   if (emptyRoster) rosterEmptyOn = settledOn;
+  // The first adds still saving count as held: "Add a player first" sat
+  // beside rows reading "ADDED ✓" (walk 12 T2-08).
+  const saving = emptyRoster && !playingNow ? savingHolds(pendingActions, bootstrap) : [];
+  if (saving.length > 0 && !practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete) {
+    return keepControlNames(savingHint(saving, short));
+  }
   const input = {
     complete: practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).complete,
     emptyRoster,
@@ -600,6 +619,7 @@ function PracticeChoices({ title, lines, onSafe, onRisky, riskyLabel, safeLabel 
   onRecommended?: () => void;
 }) {
   const { width } = useWindowDimensions();
+  const [linesHeight, setLinesHeight] = useState(0);
   const openedAt = useRef(Date.now());
   const guard = (fn: () => void, ms = QUESTION_TAP_GUARD_MS) => () => {
     if (Date.now() - openedAt.current < ms) return;
@@ -613,6 +633,9 @@ function PracticeChoices({ title, lines, onSafe, onRisky, riskyLabel, safeLabel 
     (safeRef.current as unknown as { focus?: () => void } | null)?.focus?.();
   }, []);
   const stacked = width < EMPTY_QUESTION_ROW_MIN_WIDTH;
+  // A phone at 400% zoom (98px): the margins and padding left a 53px column
+  // that broke words ("scor / e", "won' / t"; walk 12 T4-15).
+  const tight = questionTight(width);
   const recommended = recommendedLabel && onRecommended ? (
     <Button key="recommended" label={recommendedLabel} onPress={guard(onRecommended)} steady variant="primary" />
   ) : null;
@@ -631,18 +654,32 @@ function PracticeChoices({ title, lines, onSafe, onRisky, riskyLabel, safeLabel 
   };
   return (
     <Modal accessibilityLabel={[title, ...lines].join(' ')} animationType="none" onRequestClose={onSafe} transparent visible>
-      <View style={styles.questionLayer}>
+      <View style={[styles.questionLayer, tight && styles.questionLayerTight]}>
         <View onResponderRelease={guard(onSafe)} onStartShouldSetResponder={() => true} style={styles.questionScrim} />
-        <View style={styles.questionPanel}>
-          <Text accessibilityRole="header" {...headingLevel(2)} style={styles.questionTitle}>{title}</Text>
-          {/* Spoken once, in the dialog's name. */}
-          {lines.map((line) => (
-            <Text key={line} accessibilityElementsHidden aria-hidden importantForAccessibility="no" style={styles.questionLine}>{keepControlNames(line)}</Text>
-          ))}
+        {/* Taller than the window (400% zoom), the panel scrolls from its
+            title: centred, its top was cut off out of reach (walk 12 T4-15). */}
+        <ScrollView contentContainerStyle={styles.questionScrollContent} style={styles.questionScroll}>
+        <View style={[styles.questionPanel, tight && styles.questionPanelTight]}>
+          <Text accessibilityRole="header" {...headingLevel(2)} style={[styles.questionTitle, tight && styles.questionTitleTight]}>{title}</Text>
+          {/* Spoken once, in the dialog's name. The lines never get shorter
+              while it is open (a line that updates once something in flight
+              lands), so the answers under them stay put (walk 12 T4-01). */}
+          <View
+            onLayout={(event) => {
+              const next = Math.round(event.nativeEvent.layout.height);
+              setLinesHeight((current) => Math.max(current, next));
+            }}
+            style={[styles.questionLines, { minHeight: linesHeight }]}
+          >
+            {lines.map((line) => (
+              <Text key={line} accessibilityElementsHidden aria-hidden importantForAccessibility="no" style={styles.questionLine}>{keepControlNames(line)}</Text>
+            ))}
+          </View>
           <View style={[styles.questionButtons, stacked ? styles.questionButtonsStacked : styles.questionButtonsRow]}>
             {questionAnswerOrder(recommended !== null).order.map((answer) => answers[answer])}
           </View>
         </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -656,7 +693,7 @@ function PracticeQuestionHost() {
   const asked = useSyncExternalStore(subscribeQuestion, () => askedQuestion, () => null);
   const queued = useSyncExternalStore(subscribeQueued, () => queuedPresses, () => NO_QUEUE);
   const playingDates = useSyncExternalStore(subscribeQueued, () => playingNow, () => null);
-  const { bootstrap } = usePerGame();
+  const { bootstrap, isRefreshing, pendingActions } = usePerGame();
   // Keep playing (or Escape, Back, a tap outside): the question closes and
   // focus returns to the control that asked it.
   const close = () => {
@@ -665,46 +702,94 @@ function PracticeQuestionHost() {
     if (was) focusAsker(was);
   };
   useSheetHistory(asked !== null, close);
-  // The question holds the figures it opened with: they rewrote themselves
-  // under the finger as the week playing landed (walk 11 T4-02). One line
-  // of its own says that week finishes first, then what it left.
-  const openedWith = useRef<{ asked: AskedQuestion; bootstrap: PerGameBootstrap; playing: string | null } | null>(null);
+  // The question holds the figures it opened with while anything is in
+  // flight (the step playing, adds still saving): they rewrote themselves
+  // under the finger (walk 11 T4-02). One line says what they wait for; once
+  // all of it is in, the figures update once, in place, and that line says
+  // why, so two different "what you'd lose" figures never sit side by side
+  // (walk 12 T4-01, T4-04).
+  const openedWith = useRef<{
+    asked: AskedQuestion;
+    bootstrap: PerGameBootstrap;
+    playing: string | null;
+    moves: MoveInFlight[];
+    landed: PerGameBootstrap | null;
+  } | null>(null);
   if (!asked || !bootstrap) {
     openedWith.current = null;
     return null;
   }
-  if (openedWith.current?.asked !== asked) openedWith.current = { asked, bootstrap, playing: playingDates };
-  const liveBootstrap = bootstrap;
-  const stakesOf = (view: PerGameBootstrap) => {
+  const names = new Map(bootstrap.market.map((row) => [row.playerId, row.name] as const));
+  bootstrap.positions.forEach((position) => {
+    if (!names.has(position.playerId)) names.set(position.playerId, position.playerName);
+  });
+  const movesNow = movesInFlight(pendingActions, bootstrap.positions, names);
+  if (openedWith.current?.asked !== asked) {
+    openedWith.current = { asked, bootstrap, playing: playingDates, moves: movesNow, landed: null };
+  }
+  const opened = openedWith.current;
+  const hadFlight = opened.playing !== null || opened.moves.length > 0;
+  if (hadFlight && !opened.landed && playingDates === null && movesNow.length === 0 && !isRefreshing) {
+    opened.landed = bootstrap;
+  }
+  const shown = opened.landed ?? opened.bootstrap;
+  const stakesOf = (view: PerGameBootstrap, saving: readonly MoveInFlight[]) => {
     const held = view.positions.filter((position) => position.status === 'active');
+    const savingPlayers = saving.filter((move) => move.verb === 'add').length;
+    const savingShorts = saving.filter((move) => move.verb === 'short').length;
     return practiceStakes({
       progress: practiceProgress(mockSeasonStart(), view.game.lastSettledDate),
-      players: held.filter((position) => position.side === 'long').length,
-      shorts: held.filter((position) => position.side === 'short').length,
+      players: held.filter((position) => position.side === 'long').length + savingPlayers,
+      shorts: held.filter((position) => position.side === 'short').length + savingShorts,
       score: view.account.cumulativePnl,
+      savingPlayers,
+      savingShorts,
     });
   };
-  const playingLine = questionPlayingLine(openedWith.current.playing, playingDates, stakesOf(liveBootstrap));
-  return <PracticeQuestionView asked={asked} bootstrap={openedWith.current.bootstrap} close={close} playingLine={playingLine} queued={queued} stakes={stakesOf(openedWith.current.bootstrap)} />;
+  const outcomes = opened.landed
+    ? opened.moves.map((move) => {
+      const holds = opened.landed?.positions.some((position) => position.playerId === move.id
+        && position.side === move.side && position.status === 'active') ?? false;
+      return move.verb === 'add' || move.verb === 'short' ? holds : !holds;
+    })
+    : null;
+  const flightLine = questionFlightLine({ playing: opened.playing, moves: opened.moves, outcomes });
+  return (
+    <PracticeQuestionView
+      asked={asked}
+      bootstrap={shown}
+      close={close}
+      playingLine={flightLine}
+      queued={queued}
+      saving={opened.landed ? [] : opened.moves}
+      stakes={stakesOf(shown, opened.landed ? [] : opened.moves)}
+    />
+  );
 }
 
 /** The practice question as it opened (PracticeQuestionHost). */
-function PracticeQuestionView({ asked, bootstrap, close, playingLine, queued, stakes }: {
+function PracticeQuestionView({ asked, bootstrap, close, playingLine, queued, saving, stakes }: {
   asked: AskedQuestion;
   bootstrap: PerGameBootstrap;
   close: () => void;
   playingLine: string | null;
   queued: QueuedPresses;
+  /** Moves still saving that the figures wait for (walk 12 T4-04). */
+  saving: readonly MoveInFlight[];
   stakes: string;
 }) {
   const progress = practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate);
   const open = bootstrap.positions.filter((position) => position.status === 'active');
+  // Adds still saving count as players: the question does not offer the
+  // Market to a roster that is filling (walk 12 T2-08).
+  const savingAdds = saving.filter((move) => move.verb === 'add').length;
+  const savingShorts = saving.filter((move) => move.verb === 'short').length;
   // "Play to the end" says what it plays and what stays (walk 6 T2-N1, T4-N3).
-  const rosterPlayers = open.filter((position) => position.side === 'long').length;
+  const rosterPlayers = open.filter((position) => position.side === 'long').length + savingAdds;
   const shortEnds = open.filter((position) => position.side === 'short').map((position) => position.expiresOn);
   const lockedNow = bootstrap.ruleset.rosterMutationsLocked;
   const endPrompt = asked.kind === 'play-to-end'
-    ? playToEndQuestion(SEASON_TOTAL_DAYS - progress.day, open.length === 0, shortEnds)
+    ? playToEndQuestion(SEASON_TOTAL_DAYS - progress.day, open.length + savingAdds + savingShorts === 0, shortEnds)
     : null;
   // Only shorts: after the last one ends nobody plays for you (walk 9 T4-12).
   const shortsOnly = endPrompt && rosterPlayers === 0 && shortEnds.length > 0 ? playToEndShortsOnlyLines(shortEnds) : null;
@@ -1449,9 +1534,13 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     // Nothing to lose (the opening eve with no moves, or a finished season):
     // Restart just restarts, Exit just leaves, and Play another season
     // starts the next one, as the result card's button does (walk 4 T1-13).
+    // An add still saving, a step playing or a press queued counts: the
+    // season is about to hold it (walk 12 T1-07).
     const held = bootstrap ? {
       day: practiceProgress(mockSeasonStart(), bootstrap.game.lastSettledDate).day,
       moves: bootstrap.ledger.items.length,
+      inFlight: advancingRef.current || queuedSteps.current.length > 0 || endQueuedRef.current
+        || movesInFlight(pendingActions, bootstrap.positions, new Map()).length > 0,
     } : null;
     // Restart with nothing to restart: say so (a reload into the same screen
     // looked like a dead button; walk 7 T1-09, T2-08).
@@ -1544,7 +1633,9 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
   // adding a player), ask before playing, and a line under them says what
   // they do. Once the player has said "Play anyway" this season they just
   // play, and look it (walk 3 T1-19, T2-14).
-  const emptyRoster = open.length === 0 && !progress.complete;
+  // Adds still saving count: the buttons light at once and a press waits
+  // for the saves, as moves wait for nights (walk 12 T2-08).
+  const emptyRoster = open.length === 0 && savingHolds(pendingActions, bootstrap).length === 0 && !progress.complete;
   // +1 night on a locked night with nobody held just plays (walk 9 T4-03);
   // +1 week there always asks, "+1 night instead" first (walk 10 T2-14).
   const lockedNight = bootstrap.ruleset.rosterMutationsLocked && !progress.complete;
@@ -1792,14 +1883,20 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
     if (count === 0) return name;
     return `${name}${/[.…]$/.test(name) ? '' : '.'} ${count === 1 ? `Next ${step} queued.` : `${count} ${step}s queued.`}`;
   };
+  // While weeks play or wait, +1 night plays after them: no date the queue
+  // will already play (walk 12 T4-08).
+  const afterQueue = nightsQueued > 0 || playingNight ? null
+    : nightAfterQueue(lastSettledNow, playing?.step === 'week' ? 'week' : null, queued, practiceSeasonEnd(mockSeasonStart()));
   const nightLabel = nightsQueued > 0 ? queuedLabel('night', stackLabels, nightsQueued)
     : playingNight ? busyLabel(true)
-      : stackedDate ? `+1 night\n${nightDate}` : stackLabels ? '+1\nnight' : nightDate ? `+1 night\n${nightDate}` : '+1 night';
+      : afterQueue ? (stackLabels ? '+1\nnight' : '+1 night')
+        : stackedDate ? `+1 night\n${nightDate}` : stackLabels ? '+1\nnight' : nightDate ? `+1 night\n${nightDate}` : '+1 night';
   // Its visible words first ("+1 night Oct 21: play the Oct 21 games"), so a
   // voice command matches what it shows (walk 10 T3-05).
   const nightName = queuedName('night', playingNight
     ? `+1 night: advance one night. ${playingText}`
-    : nightButtonName(nightDate, stackedDate || (!stackLabels && nightDate !== null)));
+    : afterQueue ? afterQueue.name
+      : nightButtonName(nightDate, stackedDate || (!stackLabels && nightDate !== null)));
   const advanceButtons = (
     <>
       <Button
@@ -1811,7 +1908,10 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         onDisabledPress={pressAdvance('night', () => pressWhileBusy('night'), nearEnd)}
         steady
         onPress={pressAdvance('night', () => pressRef.current?.('night'), nearEnd || asksNight)}
-        style={[styles.advance, narrow && styles.advanceNarrow, compact && !slotRow && styles.advanceCompact, slotRow && styles.advancePhone, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, stackedDate && styles.advanceDated, asksNight && styles.advanceQuiet, inkNight && styles.advancePlaying]}
+        // In a folded row (a phone on its side) +1 night keeps +1 week's
+        // width, so the two read as a pair: it was 64px on two lines beside
+        // a 104px +1 week (walk 12 T1-03).
+        style={[styles.advance, narrow && styles.advanceNarrow, compact && !slotRow && styles.advanceCompact, slotRow && styles.advancePhone, folded && styles.advanceFolded, folded && !stackLabels && !foldFill && styles.advanceWeekReserve, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, stackedDate && styles.advanceDated, asksNight && styles.advanceQuiet, inkNight && styles.advancePlaying]}
         textStyle={[asksNight ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkNight && styles.advanceTextBusyStacked]}
         variant="secondary"
       />
@@ -1821,11 +1921,11 @@ export function PracticeControls({ inline = false, folded = false, tiny = false,
         accessibilityLabel={queuedName('week', playingWeek ? `+1 week: advance one week. ${playingText}` : '+1 week: advance one week')}
         disabled={advanceBusy || progress.complete}
         focusableWhenDisabled={!progress.complete}
-        label={weeksQueued > 0 ? queuedLabel('week', stackLabels, weeksQueued) : playingWeek ? busyLabel(false) : stackLabels ? '+1\nweek' : '+1 week'}
+        label={weeksQueued > 0 ? queuedLabel('week', stackLabels, weeksQueued) : playingWeek ? busyLabel(false) : stackLabels ? stackedWeekLabel(width) : '+1 week'}
         onDisabledPress={pressAdvance('week', () => pressWhileBusy('week'), nearEnd)}
         steady
         onPress={pressAdvance('week', () => pressRef.current?.('week'), nearEnd || asksFirst)}
-        style={[styles.advance, narrow && styles.advanceNarrow, compact && !slotRow && styles.advanceCompact, slotRow && styles.advancePhone, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, !stackLabels && !slotRow && !foldFill && styles.advanceWeekReserve, asksFirst && styles.advanceQuiet, inkWeek && styles.advancePlaying]}
+        style={[styles.advance, narrow && styles.advanceNarrow, compact && !slotRow && styles.advanceCompact, slotRow && styles.advancePhone, folded && styles.advanceFolded, foldFill && styles.advanceFill, stackLabels && styles.advanceStacked, stackLabels && width >= WEEK_ONE_LINE_STACKED_MIN_WIDTH && styles.advanceWeekOneLine, !stackLabels && !slotRow && !foldFill && styles.advanceWeekReserve, asksFirst && styles.advanceQuiet, inkWeek && styles.advancePlaying]}
         textStyle={[asksFirst ? styles.advanceTextQuiet : styles.advanceText, stackLabels && inkWeek && styles.advanceTextBusyStacked]}
         variant="secondary"
       />
@@ -2269,6 +2369,10 @@ const styles = StyleSheet.create({
   advanceWeekReserve: {
     minWidth: 104,
   },
+  // "+1 WEEK" on one line in a stacked row (50px of words, 2px padding).
+  advanceWeekOneLine: {
+    minWidth: 58,
+  },
   advance: {
     minWidth: 76,
     paddingHorizontal: space.md,
@@ -2409,6 +2513,27 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
+  questionLayerTight: {
+    padding: space.xs,
+  },
+  questionScroll: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '100%',
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  questionScrollContent: {
+    flexGrow: 0,
+  },
+  questionPanelTight: {
+    gap: space.sm,
+    padding: space.sm,
+  },
+  // Words wrap at spaces, never inside one, in the narrowest column.
+  questionTitleTight: {
+    fontSize: type.value,
+  },
   questionPanel: {
     width: '100%',
     maxWidth: 420,
@@ -2422,6 +2547,9 @@ const styles = StyleSheet.create({
   questionTitle: {
     ...headingStyle,
     letterSpacing: 0,
+  },
+  questionLines: {
+    gap: space.md,
   },
   questionLine: {
     color: colors.text,

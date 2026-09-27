@@ -123,3 +123,13 @@ test('Scoring says a bad game can push a dividend below zero, and a roster spot 
   assert.ok(scoring?.includes('below zero, and you pay that too'));
   assert.equal(rulesParagraphs(view.explanation).join(' '), view.explanation);
 });
+
+test('the rules list the keys in plain words (walk 12 T3-N1)', async () => {
+  const { KEYBOARD_KEYS } = await import('./perGameRules');
+  const keys = KEYBOARD_KEYS.map((entry) => entry.keys);
+  assert.deepEqual(keys, ['Tab', 'Enter or Space', 'Arrow keys', 'Score chart', 'Escape', 'Market list']);
+  const all = KEYBOARD_KEYS.map((entry) => entry.does).join(' ');
+  assert.match(all, /Skip to content/);
+  assert.match(all, /Page Up and Page Down a week/);
+  assert.doesNotMatch(all, /—|—/);
+});

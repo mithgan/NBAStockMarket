@@ -22,6 +22,7 @@ import {
   chromeLayout,
   chromeTiny,
   dividendText,
+  frameLocked,
   keepTogether,
   lastNightFigure,
   LOCK_REASON,
@@ -49,7 +50,7 @@ import {
   statusSummary,
 } from '../data/chromeView';
 import { earningsBetween } from '../data/perGameMetrics';
-import { EXAMPLE_LEAD, perGameRulesPresentation, positionSlotHint, rulesSections, type ScoringParts } from '../data/perGameRules';
+import { EXAMPLE_LEAD, KEYBOARD_KEYS, perGameRulesPresentation, positionSlotHint, rulesSections, type ScoringParts } from '../data/perGameRules';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { usePerGame } from '../state/PerGameContext';
 import { openSettings, registerRulesOpener } from '../state/uiActions';
@@ -162,8 +163,10 @@ export function PerGameStatusStrip() {
   );
 
   // A lock covers one game date and lifts once that date's games are
-  // settled, so the copy promises "after", and says it.
-  const locked = rules.rosterMutationsLocked;
+  // settled, so the copy promises "after", and says it. A finished season
+  // has no night left to lock: a lock the last night left for the day after
+  // ("Moves reopen after Apr 13") is never shown or said (walk 12 T4-12).
+  const locked = frameLocked(rules.rosterMutationsLocked, progress);
   const lockDate = rules.rosterLockGameDate;
   const lockSentence = locked
     ? (rules.rosterLockGameDate
@@ -181,6 +184,7 @@ export function PerGameStatusStrip() {
     lockSentence,
     resultLabel: span?.label ?? null,
     finalScore: progress?.complete ? bootstrap.account.cumulativePnl : null,
+    season: seasonNumber,
   });
 
   const arrangement: FactsArrangement = layout.wide || foldedFacts
@@ -233,7 +237,7 @@ export function PerGameStatusStrip() {
   // the date to it.
   const named = lastNight !== null;
   // "games" keeps to its date (a no-break space), as the figure's words do.
-  const nightWords = noGames ? noGamesWords(span?.nobody ?? false).replace(/^ /, '\u00a0') : ' games ';
+  const nightWords = noGames ? noGamesWords(span?.nobody ?? false, arrangement === 'pair').replace(/^ /, '\u00a0') : ' games ';
 
   // First line. Practice: the mode, plus the day on a wide screen or the
   // latest night on a phone. Signed in: how far the results go, until a night
@@ -788,6 +792,20 @@ function RulesSheet({
               ))}
             </View>
           </View>
+          {/* The keys, for anyone playing without a mouse (walk 12 T3-N1). */}
+          {Platform.OS === 'web' ? (
+            <View style={styles.glossary}>
+              <Text accessibilityRole="header" {...headingLevel(3)} style={styles.glossaryTitle}>Keyboard</Text>
+              <View aria-label="Keyboard" role="list" style={styles.glossaryList}>
+                {KEYBOARD_KEYS.map((entry) => (
+                  <View key={entry.keys} role="listitem" style={styles.glossaryRow}>
+                    <Text role="term" style={styles.glossaryTerm}>{entry.keys}</Text>
+                    <Text role="definition" style={styles.glossaryMeaning}>{entry.does}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
           {/* Read to the end on a phone, the way out is here, not back at the
               top corner (Done stays there too; walk 5 T1-09). */}
           <Button accessibilityLabel="Got it, close the game rules" label="Got it" onPress={onClose} style={styles.gotIt} />

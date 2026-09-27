@@ -145,6 +145,6 @@ test('nights played with nobody on the roster say so (walk 4 T2-16)', () => {
   const before = snapshot('2025-10-20', '2025-10-21', 0, []);
   assert.equal(
     refreshNotice(before, snapshot('2025-10-21', '2025-10-22', 0, []), false),
-    'Oct 21 games: nobody was on your roster, so your score did not move.',
+    'Oct 21 games: nobody on your roster, so your score held.',
   );
 });

@@ -111,19 +111,110 @@ export function practiceDayShort(progress: PracticeProgress): string {
  * What a practice season holds, for the Restart and Exit questions:
  * "Day 16 of 174, 8 players, 2 shorts, score +$120K".
  */
-export function practiceStakes({ progress, players, shorts, score }: {
+export function practiceStakes({ progress, players, shorts, score, savingPlayers = 0, savingShorts = 0 }: {
   progress: PracticeProgress;
+  /** Held on the roster, counting adds still saving (`savingPlayers` of them). */
   players: number;
   shorts: number;
   score: number;
+  /** Adds (and shorts) pressed and still saving: counted, and said (walk 12 T4-04). */
+  savingPlayers?: number;
+  savingShorts?: number;
 }): string {
+  const saving = (count: number, total: number) => (count <= 0 ? '' : total === 1 ? ', still saving' : `, ${count} still saving`);
   const parts = [
     progress.complete ? 'a finished season' : `Day ${progress.day} of ${progress.total}`,
-    players === 0 ? 'no players' : `${players} ${players === 1 ? 'player' : 'players'}`,
+    players === 0 ? 'no players' : `${players} ${players === 1 ? 'player' : 'players'}${saving(savingPlayers, players)}`,
   ];
-  if (shorts > 0) parts.push(`${shorts} ${shorts === 1 ? 'short' : 'shorts'}`);
+  if (shorts > 0) parts.push(`${shorts} ${shorts === 1 ? 'short' : 'shorts'}${saving(savingShorts, shorts)}`);
   parts.push(`score ${signedMoney(score)}`);
   return parts.join(', ');
+}
+
+/** A move still saving while a practice question is open (walk 12 T1-07, T4-04). */
+export type FlightVerb = 'add' | 'short' | 'drop' | 'close';
+export interface MoveInFlight {
+  id: string;
+  side: 'long' | 'short';
+  name: string;
+  verb: FlightVerb;
+}
+
+/**
+ * The moves still saving, oldest first, from the context's pendingActions
+ * keys (`position:<side>:<id>` while a move runs, `queued:position:<side>:<id>`
+ * while it waits its turn): an Add or a Short for a player not held on that
+ * side, a Drop or a short's close for one who is.
+ */
+export function movesInFlight(
+  keys: Iterable<string>,
+  positions: ReadonlyArray<{ playerId: string; side: string; status: string }>,
+  names: ReadonlyMap<string, string>,
+): MoveInFlight[] {
+  const moves: MoveInFlight[] = [];
+  for (const key of keys) {
+    const bare = key.startsWith('queued:') ? key.slice('queued:'.length) : key;
+    const match = /^position:(long|short):(.+)$/.exec(bare);
+    if (!match) continue;
+    const side = match[1] as 'long' | 'short';
+    const id = match[2];
+    if (moves.some((move) => move.id === id && move.side === side)) continue;
+    const held = positions.some((position) => position.playerId === id && position.side === side && position.status === 'active');
+    const verb: FlightVerb = side === 'long' ? (held ? 'drop' : 'add') : (held ? 'close' : 'short');
+    moves.push({ id, side, name: names.get(id) ?? 'another player', verb });
+  }
+  return moves;
+}
+
+function listWords(items: readonly string[]): string {
+  return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/** "your add of Luka Doncic", "your adds of A and B and your drop of C". */
+function flightWords(moves: readonly MoveInFlight[]): string {
+  const verbs = [...new Set(moves.map((move) => move.verb))];
+  return listWords(verbs.map((verb) => {
+    const names = moves.filter((move) => move.verb === verb).map((move) => move.name);
+    const one = names.length === 1;
+    if (verb === 'close') return `closing your ${one ? 'short' : 'shorts'} on ${listWords(names)}`;
+    return `your ${verb}${one ? '' : 's'} of ${listWords(names)}`;
+  }));
+}
+
+const capitalFirst = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/**
+ * The line a practice question (Restart, Exit, Play to the end) gives what
+ * was in flight when it opened: the step playing and the moves still saving
+ * (walk 12 T1-07, T4-04). While any is in flight, its figures wait for them,
+ * and it says so; once all are in, the figures update once, in place, and
+ * this line says why, so the question never shows two different "what you'd
+ * lose" figures (walk 12 T4-01). `outcomes`: null while in flight, then for
+ * each move whether it went through. null when nothing was in flight.
+ */
+export function questionFlightLine({ playing, moves, outcomes }: {
+  playing: string | null;
+  moves: readonly MoveInFlight[];
+  outcomes: readonly boolean[] | null;
+}): string | null {
+  if (!playing && moves.length === 0) return null;
+  if (outcomes === null) {
+    // What the figures wait for, never a promise about the answer: Start over
+    // and Leave practice do not wait for a saving move (walk 12 fix 12 note).
+    if (playing && moves.length > 0) {
+      return `${playing} is still playing and ${flightWords(moves)} ${moves.length === 1 ? 'is' : 'are'} still saving: the figures above update when they are in.`;
+    }
+    if (playing) return `${playing} is still playing: the figures above update when it is in.`;
+    const one = moves.length === 1;
+    return `${capitalFirst(flightWords(moves))} ${one ? 'is' : 'are'} still saving: the figures above update when ${one ? 'it lands' : 'they land'}.`;
+  }
+  const done = moves.filter((_, index) => outcomes[index] !== false);
+  const failed = moves.filter((_, index) => outcomes[index] === false);
+  const inParts = [...(playing ? [playing] : []), ...(done.length > 0 ? [flightWords(done)] : [])];
+  const inCount = (playing ? 1 : 0) + done.length;
+  const said = inParts.length > 0 ? `${listWords(inParts)} ${inCount === 1 ? 'is' : 'are'} in` : null;
+  const refused = failed.length > 0 ? `${flightWords(failed)} did not go through` : null;
+  return `Updated: ${[said, refused].filter(Boolean).join('; ')}.`;
 }
 
 /**
@@ -146,10 +237,20 @@ export function practiceOffersExit(liveConfig: { config: unknown } | null | unde
  */
 export function practiceAsksFirst(
   kind: 'restart' | 'play-again' | 'exit',
-  { day, moves }: { day: number; moves: number },
+  { day, moves, inFlight = false }: {
+    day: number;
+    moves: number;
+    /**
+     * A move still saving, a step playing or a press queued: the season is
+     * about to hold something, so Restart asks, and its question says what
+     * is in flight (walk 12 T1-07: it said "nothing to restart" under the
+     * closing menu, the add landed over it and the queued week played).
+     */
+    inFlight?: boolean;
+  },
 ): boolean {
   if (kind === 'play-again') return false;
-  return day > 0 || moves > 0;
+  return day > 0 || moves > 0 || inFlight;
 }
 
 /**
@@ -206,8 +307,18 @@ export function practiceQuestion(
  */
 export const FRESH_SEASON_NOTICE = "This season hasn't started yet, so there's nothing to restart.";
 
-export function restartHasNothingToDo({ day, moves }: { day: number; moves: number }): boolean {
-  return !practiceAsksFirst('restart', { day, moves });
+export function restartHasNothingToDo({ day, moves, inFlight = false }: { day: number; moves: number; inFlight?: boolean }): boolean {
+  return !practiceAsksFirst('restart', { day, moves, inFlight });
+}
+
+/**
+ * Whether the frame shows (and says) the roster lock. A finished practice
+ * season has no night left to lock, so a lock the last night left for the
+ * day after ("Moves reopen after Apr 13") is never shown or said (walk 12
+ * T4-12; seeds 3 and 11). The live market has no season end here.
+ */
+export function frameLocked(locked: boolean, progress: Pick<PracticeProgress, 'complete'> | null | undefined): boolean {
+  return locked && !progress?.complete;
 }
 
 /** The practice control that plays the rest of the season (walk 6 T2-N1, T4-N3). */
@@ -397,6 +508,11 @@ export interface StatusSummaryInput {
   resultLabel?: string | null;
   /** Practice, once the season is complete: the final score. */
   finalScore?: number | null;
+  /**
+   * Practice: this visit's season number. From the second it is spoken, as
+   * the row shows it ("Practice, Season 2, …"; walk 12 T3-07).
+   */
+  season?: number | null;
 }
 
 /**
@@ -459,8 +575,12 @@ export interface ResultSpan {
  */
 export const NOBODY_ON_ROSTER = 'nobody on your roster';
 
-export function noGamesWords(nobody: boolean): string {
-  return nobody ? ` games: ${NOBODY_ON_ROSTER}` : `: ${NO_PLAYERS_PLAYED}`;
+export function noGamesWords(nobody: boolean, short = false): string {
+  // A phone's lead line leaves out "games", as "Oct 22: none of your players
+  // played" does: "Practice · Oct 22–28 games: nobody on your roster" wrapped
+  // at 375px and the whole frame grew (walk 12 T1-02).
+  if (nobody) return short ? `: ${NOBODY_ON_ROSTER}` : ` games: ${NOBODY_ON_ROSTER}`;
+  return `: ${NO_PLAYERS_PLAYED}`;
 }
 
 /**
@@ -548,6 +668,7 @@ export function statusSummary({
   lockSentence,
   resultLabel = null,
   finalScore = null,
+  season = null,
 }: StatusSummaryInput): string {
   const parts: string[] = [];
   const named = lastNight !== null;
@@ -557,7 +678,8 @@ export function statusSummary({
       ? (progress.complete ? 'season complete' : `day ${progress.day} of ${progress.total}`)
       : null;
     const date = lastSettledDate && !named ? `, ${humanDate(lastSettledDate)}` : '';
-    parts.push(`Practice${date}${clock ? `, ${clock}` : ''}.`);
+    const which = season !== null && season >= 2 ? `, Season ${season}` : '';
+    parts.push(`Practice${which}${date}${clock ? `, ${clock}` : ''}.`);
   } else if (!named) {
     parts.push(lastSettledDate ? `Games through ${humanDate(lastSettledDate)}.` : 'No games settled yet.');
   }
@@ -635,9 +757,20 @@ export function lockBesideDay(height: number, wideRow: boolean): boolean {
 export const CHROME_SHORT_WIDE_MIN_WIDTH = 600;
 export const CHROME_SHORT_WIDE_MAX_HEIGHT = 560;
 
+/**
+ * The smallest phones fold a little taller too: a 320x568 phone (an iPhone
+ * SE of the first kind) left 58% of its height to the Roster, one row at a
+ * time, under a brand bar, a two-line status and the practice row (walk 12
+ * T4-10). Folded, the brand bar goes and notices sit in the strip above the
+ * tabs. Wider phones keep the height rule (a 375x553 SE in Safari).
+ */
+export const CHROME_SHORT_NARROW_MAX_WIDTH = 340;
+export const CHROME_SHORT_NARROW_MAX_HEIGHT = 600;
+
 export function chromeFolded(height: number, width = 0): boolean {
   return height < CHROME_SHORT_MAX_HEIGHT
-    || (width >= CHROME_SHORT_WIDE_MIN_WIDTH && height < CHROME_SHORT_WIDE_MAX_HEIGHT);
+    || (width >= CHROME_SHORT_WIDE_MIN_WIDTH && height < CHROME_SHORT_WIDE_MAX_HEIGHT)
+    || (width > 0 && width < CHROME_SHORT_NARROW_MAX_WIDTH && height < CHROME_SHORT_NARROW_MAX_HEIGHT);
 }
 
 /** From this width the folded row has room for the facts beside its controls. */
@@ -942,6 +1075,19 @@ export function playingHint(playing: string, short: boolean): string {
   return playing.endsWith("'s") ? 'Playing the rest…' : `Playing ${playing}…`;
 }
 
+/**
+ * The hint while the first adds are still saving (walk 12 T2-08): "Add a
+ * player first" sat beside rows reading "ADDED ✓". A press of +1 night now
+ * waits for them, as moves wait for nights. `moves`: the adds (or shorts)
+ * saving, from movesInFlight.
+ */
+export function savingHint(moves: readonly Pick<MoveInFlight, 'verb'>[], short: boolean): string {
+  const adds = moves.filter((move) => move.verb === 'add').length;
+  const kind = adds === moves.length ? 'add' : adds === 0 ? 'short' : 'move';
+  const what = moves.length === 1 ? `your ${kind}` : `${moves.length} ${kind}s`;
+  return short ? `Saving ${what}…` : `Saving ${what}… then +1 night plays the next night's games.`;
+}
+
 export const EMPTY_ROSTER_HINT_SHORT = 'Add a player first';
 export const NOBODY_HELD_HINT_SHORT = 'Add or short someone';
 export const EMPTY_ROSTER_PLAYING_HINT_SHORT = 'No players yet';
@@ -954,11 +1100,20 @@ export const READY_HINT_SHORT = 'Ready for +1 night';
  */
 export function practiceWeekHint(hint: string | null, weekSpan: string | null): string | null {
   if (hint === null) return null;
-  if (isLockedEmptyHint(hint)) return hint;
+  // The hint arrives with its control names kept together ("+1\u00a0night",
+  // keepControlNames): compared as drawn, the empty roster's line matched
+  // nothing and +1 week said "Ready" with nobody held (walk 12 T3-02).
+  const plain = hint.replace(/\u00a0/g, ' ');
+  if (isLockedEmptyHint(plain)) return hint;
+  // While a night or week plays, both buttons say what the screen says.
+  if (/^Playing /.test(plain)) return hint;
   const plays = weekSpan ? `+1 week plays the ${weekSpan} games.` : '+1 week plays the next seven days.';
-  if (hint === EMPTY_ROSTER_HINT) return `Add a player first. ${plays}`;
-  if (hint === NOBODY_HELD_HINT) return 'Nobody on your roster or shorts now: add or short someone before the next week.';
-  if (hint === EMPTY_ROSTER_PLAYING_HINT) return 'Nobody on your roster: the week plays without you.';
+  // The first adds still saving (savingHint): the week waits for them too.
+  if (/^Saving /.test(plain)) return plain.replace(/\+1 night plays the next night's games\./, plays);
+  // Spoken only (a description), so plain spaces.
+  if (plain === EMPTY_ROSTER_HINT) return `Add a player first. ${plays}`;
+  if (plain === NOBODY_HELD_HINT) return 'Nobody on your roster or shorts now: add or short someone before the next week.';
+  if (plain === EMPTY_ROSTER_PLAYING_HINT) return 'Nobody on your roster: the week plays without you.';
   return `Ready. ${plays}`;
 }
 
@@ -1019,6 +1174,18 @@ export function deviceChoiceName(onScreen: string | null): string {
 export const NIGHT_DATE_STACKED_MIN_WIDTH = 180;
 
 /**
+ * From this width a stacked row keeps "+1 week" on one line ("+1 WEEK" is
+ * 50px of words; the night keeps its 54px "+1 NIGHT" over "OCT 21"): at
+ * 195px (a phone at 200% zoom) "+1" over "WEEK" read as two labels (walk 12
+ * T3-03, T4-09). Narrower, the words stack as before.
+ */
+export const WEEK_ONE_LINE_STACKED_MIN_WIDTH = 192;
+
+export function stackedWeekLabel(width: number): string {
+  return width >= WEEK_ONE_LINE_STACKED_MIN_WIDTH ? '+1\u00a0week' : '+1\nweek';
+}
+
+/**
  * The days a +1 week pressed on settled date `from` plays: the next seven
  * ("Oct 21–27"), never past the season's last day.
  */
@@ -1062,6 +1229,35 @@ export function queuedThrough(
   return seasonEnd && end > seasonEnd ? seasonEnd : end;
 }
 
+/**
+ * +1 night while weeks play or wait (walk 12 T4-08): it named the next game
+ * night ("+1 NIGHT NOV 5") while the week playing covered Nov 4–10 and the
+ * queue ran to Nov 24; pressed, it queued a night after the queue. Its date
+ * goes (the night after a run is not known until the run is in) and its name
+ * says where it plays: after the day the weeks end, or that the season is
+ * already queued. null while no week plays or waits.
+ */
+export function nightAfterQueue(
+  lastSettled: string | null | undefined,
+  playing: QueuedStep | null,
+  queued: readonly QueuedStep[],
+  seasonEnd: string | null | undefined,
+): { name: string; seasonQueued: boolean } | null {
+  const weeks = queued.filter((step) => step === 'week').length + (playing === 'week' ? 1 : 0);
+  if (weeks === 0) return null;
+  const nights = queued.length - queued.filter((step) => step === 'week').length + (playing === 'night' ? 1 : 0);
+  // A night in the run plays the next game night, not a fixed day: then the
+  // day the run ends is not known.
+  const end = lastSettled && nights === 0 ? shiftDay(lastSettled, 7 * weeks) : null;
+  if (end && seasonEnd && end >= seasonEnd) {
+    return { name: `+1 night: the rest of the season is already queued, to the ${humanDate(seasonEnd)} games`, seasonQueued: true };
+  }
+  return {
+    name: end ? `+1 night: plays the next night after ${humanDate(end)}, once the queued weeks are in` : '+1 night: plays the next night once the queued weeks are in',
+    seasonQueued: false,
+  };
+}
+
 /** "12 weeks queued, through Feb 9. They play once Nov 4–10 is in." */
 export function queuedLineThrough(line: string, through: string | null): string {
   return through ? line.replace(/^([^.]*)\./, `$1, through ${humanDate(through)}.`) : line;
@@ -1091,17 +1287,6 @@ export function queuedWaitLine(queued: readonly QueuedStep[], playing: string | 
   if (queued.length === 0) return now;
   const wait = `${queuedPhrase(queued)} still queued: ${queued.length === 1 ? 'it waits' : 'they wait'} until you choose.`;
   return now ? `${now} ${wait}` : wait;
-}
-
-/**
- * The one line of a practice question that moves (walk 11 T4-02): its
- * figures hold what they were when it opened, and this line says the step
- * playing then finishes first, then what the season holds once it is in.
- * null when nothing was playing.
- */
-export function questionPlayingLine(playingAtOpen: string | null, playingNow: string | null, stakesNow: string): string | null {
-  if (!playingAtOpen) return null;
-  return playingNow ? `${playingAtOpen} is still playing: it finishes first.` : `${playingAtOpen} is in: ${stakesNow}.`;
 }
 
 /** The control that drops what is queued and has not started (walk 8 T4-N1). */
@@ -1388,6 +1573,18 @@ export function playToEndLockedLine(lockGameDate: string | null | undefined): st
  * night instead") last, in gold. Left to right in a row, top to bottom when
  * stacked; focus starts on the way out, which changes nothing.
  */
+/**
+ * Below this width a practice question drops its margins and most of its
+ * padding and sets its title a size smaller, so its words wrap at spaces:
+ * a phone at 400% zoom (98px) left a 53px column that broke them in the
+ * middle ("scor / e", "won' / t"; walk 12 T4-15).
+ */
+export const QUESTION_TIGHT_MAX_WIDTH = 240;
+
+export function questionTight(width: number): boolean {
+  return width < QUESTION_TIGHT_MAX_WIDTH;
+}
+
 export type QuestionAnswer = 'safe' | 'risky' | 'recommended';
 
 export function questionAnswerOrder(recommended: boolean): { order: QuestionAnswer[]; focus: QuestionAnswer } {

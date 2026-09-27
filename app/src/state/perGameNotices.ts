@@ -119,7 +119,9 @@ export function refreshNotice(
     // so, rather than suggesting players who sat out (walk 4 T2-16).
     const nobody = !(previous?.positions ?? next.positions).some((position) => position.status === 'active');
     const score = !played
-      ? (nobody ? 'nobody was on your roster, so your score did not move.' : 'none of your players played.')
+      // The status row's own words, short enough that a run of nights keeps
+      // to two lines in a phone's brand bar (walk 12 fix 12 note).
+      ? (nobody ? 'nobody on your roster, so your score held.' : 'none of your players played.')
       : change === 0
         ? 'your players broke even.'
         : `your score ${change > 0 ? 'rose' : 'fell'} ${moneyFine(Math.abs(change))}.`;

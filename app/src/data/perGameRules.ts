@@ -230,3 +230,17 @@ export interface ScoringParts {
   /** Single games are noisy. */
   luck: string;
 }
+
+/**
+ * The Rules' "Keyboard" section (walk 12 T3-N1): each key, then what it
+ * does, in the rules' plain words. The chart said its keys on screen, but
+ * nothing listed the rest (the skip links, the tabs' arrows, Escape).
+ */
+export const KEYBOARD_KEYS: ReadonlyArray<{ keys: string; does: string }> = [
+  { keys: 'Tab', does: 'Moves to the next control, and Shift+Tab to the one before. The first Tab offers Skip to content.' },
+  { keys: 'Enter or Space', does: 'Presses the button in focus, or opens the row in focus.' },
+  { keys: 'Arrow keys', does: "Move along the tabs (Roster, Market, Results, Leaders) and along a row of choices, such as Roster side and Short side or the Market's sort." },
+  { keys: 'Score chart', does: 'Arrow keys move a night, Page Up and Page Down a week, Home and End to the first and last night.' },
+  { keys: 'Escape', does: 'Closes a sheet, a menu or a question, and puts you back where you were.' },
+  { keys: 'Market list', does: 'Skip to the end of the list jumps past every player.' },
+];

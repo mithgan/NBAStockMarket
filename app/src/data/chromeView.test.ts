@@ -836,11 +836,16 @@ test('walk 11: Play to the end on a lock eve offers the night, one order for eve
   // T1-14: Cancel answers on itself; T3-15: the count waits for a pause.
   assert.equal(NOTHING_TO_CANCEL, 'Nothing to cancel');
   assert.equal(QUEUE_LINE_PAUSE_MS, 700);
-  // T4-02: the question's figures hold; one line says the playing week finishes first, then what it left.
-  const { questionPlayingLine } = await import('./chromeView');
-  assert.equal(questionPlayingLine('Oct 28–Nov 3', 'Oct 28–Nov 3', 'x'), 'Oct 28–Nov 3 is still playing: it finishes first.');
-  assert.equal(questionPlayingLine('Oct 28–Nov 3', null, 'Day 14 of 174, 1 player, score +$890.3K'), 'Oct 28–Nov 3 is in: Day 14 of 174, 1 player, score +$890.3K.');
-  assert.equal(questionPlayingLine(null, null, 'x'), null);
+  // T4-02 (walk 11), T4-01 (walk 12): the figures hold while the week plays and update once, in
+  // place; the line says so, and never a second score.
+  const { questionFlightLine } = await import('./chromeView');
+  assert.equal(
+    questionFlightLine({ playing: 'Oct 28–Nov 3', moves: [], outcomes: null }),
+    'Oct 28–Nov 3 is still playing: the figures above update when it is in.',
+  );
+  assert.equal(questionFlightLine({ playing: 'Oct 28–Nov 3', moves: [], outcomes: [] }), 'Updated: Oct 28–Nov 3 is in.');
+  assert.doesNotMatch(questionFlightLine({ playing: 'Oct 28–Nov 3', moves: [], outcomes: [] }) ?? '', /score|\$/);
+  assert.equal(questionFlightLine({ playing: null, moves: [], outcomes: null }), null);
   // T1-08: the hint follows a playing night; T4-04: "+1 night" never splits.
   const { keepControlNames, playingHint } = await import('./chromeView');
   assert.equal(playingHint('Oct 21', false), 'Playing the Oct 21 games…');
@@ -874,8 +879,130 @@ test('a wide short window folds the frame too, a portrait phone keeps the height
   // A short laptop window that still has room, and a phone in Safari.
   assert.equal(chromeFolded(600, 960), false);
   assert.equal(chromeFolded(553, 375), false);
-  assert.equal(chromeFolded(568, 320), false);
+  // Walk 12 T4-10: the smallest phones (320x568) fold too, so content keeps two thirds or more.
+  assert.equal(chromeFolded(568, 320), true);
+  assert.equal(chromeFolded(640, 320), false);
+  assert.equal(chromeFolded(740, 360), false);
   // The height rule alone, as before (a phone on its side, 200% zoom).
   assert.equal(chromeFolded(390, 844), true);
   assert.equal(chromeFolded(422, 195), true);
+});
+
+test('Restart always asks while a move saves or a week waits, and its figures wait for them (walk 12 T1-07, T4-01, T4-04)', async () => {
+  const { movesInFlight, practiceAsksFirst, practiceStakes, questionFlightLine, restartHasNothingToDo } = await import('./chromeView');
+  // T1-07: Day 0, no moves in the ledger yet, but an add saving (or a week queued): ask.
+  assert.equal(restartHasNothingToDo({ day: 0, moves: 0, inFlight: true }), false);
+  assert.equal(practiceAsksFirst('restart', { day: 0, moves: 0, inFlight: true }), true);
+  assert.equal(practiceAsksFirst('play-again', { day: SEASON_TOTAL_DAYS, moves: 3, inFlight: true }), false);
+  assert.equal(restartHasNothingToDo({ day: 0, moves: 0 }), true);
+  // pendingActions keys: a running move, a queued one, a drop of a held player, a refresh.
+  const names = new Map([['luka', 'Luka Doncic'], ['scottie', 'Scottie Barnes'], ['booker', 'Devin Booker']]);
+  const positions = [{ playerId: 'booker', side: 'long', status: 'active' }];
+  const moves = movesInFlight(
+    ['position:long:luka', 'account-refresh', 'queued:position:long:scottie', 'queued:position:long:luka', 'position:long:booker'],
+    positions,
+    names,
+  );
+  assert.deepEqual(moves.map((move) => `${move.verb} ${move.name}`), ['add Luka Doncic', 'add Scottie Barnes', 'drop Devin Booker']);
+  // The line the card asks for, and the figures that wait with it.
+  assert.equal(
+    questionFlightLine({ playing: null, moves: moves.slice(0, 1), outcomes: null }),
+    'Your add of Luka Doncic is still saving: the figures above update when it lands.',
+  );
+  assert.equal(
+    questionFlightLine({ playing: 'Nov 4–10', moves, outcomes: null }),
+    'Nov 4–10 is still playing and your adds of Luka Doncic and Scottie Barnes and your drop of Devin Booker are still saving: the figures above update when they are in.',
+  );
+  assert.equal(
+    questionFlightLine({ playing: null, moves: moves.slice(0, 2), outcomes: [true, false] }),
+    'Updated: your add of Luka Doncic is in; your add of Scottie Barnes did not go through.',
+  );
+  assert.equal(questionFlightLine({ playing: 'Nov 4–10', moves: moves.slice(0, 1), outcomes: [true] }), 'Updated: Nov 4–10 and your add of Luka Doncic are in.');
+  // T4-04: adds still saving are counted, and said.
+  const progress = practiceProgress(OPENING_EVE, '2025-10-21');
+  assert.equal(
+    practiceStakes({ progress, players: 4, shorts: 0, score: 194_300, savingPlayers: 3 }),
+    'Day 1 of 174, 4 players, 3 still saving, score +$194.3K',
+  );
+  assert.equal(
+    practiceStakes({ progress: practiceProgress(OPENING_EVE, OPENING_EVE), players: 1, shorts: 0, score: 0, savingPlayers: 1 }),
+    'Day 0 of 174, 1 player, still saving, score $0',
+  );
+});
+
+test('a finished season never shows or says a lock (walk 12 T4-12)', async () => {
+  const { frameLocked } = await import('./chromeView');
+  assert.equal(frameLocked(true, practiceProgress(OPENING_EVE, '2026-04-12')), false);
+  assert.equal(frameLocked(true, practiceProgress(OPENING_EVE, '2025-10-27')), true);
+  assert.equal(frameLocked(false, practiceProgress(OPENING_EVE, '2025-10-27')), false);
+  // The live market (no practice progress) keeps its lock.
+  assert.equal(frameLocked(true, null), true);
+});
+
+test('at 400% zoom a practice question gives its words room to wrap at spaces (walk 12 T4-15)', async () => {
+  const { questionTight, QUESTION_TIGHT_MAX_WIDTH } = await import('./chromeView');
+  assert.equal(questionTight(98), true);
+  assert.equal(questionTight(195), true);
+  assert.equal(questionTight(320), false);
+  assert.equal(QUESTION_TIGHT_MAX_WIDTH, 240);
+  const bar = readFileSync(resolve(import.meta.dirname, '../components/SimBar.tsx'), 'utf8');
+  // The panel scrolls from its title when taller than the window.
+  assert.match(bar, /<ScrollView contentContainerStyle=\{styles\.questionScrollContent\} style=\{styles\.questionScroll\}>/);
+});
+
+test('+1 week never says "Ready" with nobody held, as the hint reaches it (walk 12 T3-02)', async () => {
+  const { EMPTY_ROSTER_HINT, NOBODY_HELD_HINT, EMPTY_ROSTER_PLAYING_HINT, keepControlNames, practiceWeekHint, playingHint } = await import('./chromeView');
+  // usePracticeHint hands the hint over with "+1 night" kept together.
+  assert.equal(practiceWeekHint(keepControlNames(EMPTY_ROSTER_HINT), 'Oct 21–27'), 'Add a player first. +1 week plays the Oct 21–27 games.');
+  assert.equal(practiceWeekHint(keepControlNames(NOBODY_HELD_HINT), 'Oct 27–Nov 2'), 'Nobody on your roster or shorts now: add or short someone before the next week.');
+  assert.equal(practiceWeekHint(keepControlNames(EMPTY_ROSTER_PLAYING_HINT), 'Oct 21–27'), 'Nobody on your roster: the week plays without you.');
+  // While a night plays, +1 week says what the screen says.
+  assert.equal(practiceWeekHint(playingHint('Oct 21', false), 'Oct 21–27'), 'Playing the Oct 21 games…');
+});
+
+test('adds still saving count for the frame hint (walk 12 T2-08)', async () => {
+  const { savingHint, practiceWeekHint } = await import('./chromeView');
+  const adds = [{ verb: 'add' as const }, { verb: 'add' as const }, { verb: 'add' as const }];
+  assert.equal(savingHint(adds, false), "Saving 3 adds… then +1 night plays the next night's games.");
+  assert.equal(savingHint(adds.slice(0, 1), true), 'Saving your add…');
+  assert.equal(savingHint([{ verb: 'short' }], true), 'Saving your short…');
+  assert.equal(practiceWeekHint(savingHint(adds, false), 'Oct 21–27'), 'Saving 3 adds… then +1 week plays the Oct 21–27 games.');
+});
+
+test('a phone row says an empty week without "games", so it keeps to one line (walk 12 T1-02)', async () => {
+  const { noGamesWords } = await import('./chromeView');
+  assert.equal(noGamesWords(true, true), ': nobody on your roster');
+  assert.equal(noGamesWords(true), ' games: nobody on your roster');
+  assert.equal(noGamesWords(false, true), ': none of your players played');
+});
+
+test('"+1 WEEK" keeps to one line in the 195px stacked row (walk 12 T3-03, T4-09)', async () => {
+  const { stackedWeekLabel, WEEK_ONE_LINE_STACKED_MIN_WIDTH } = await import('./chromeView');
+  assert.equal(stackedWeekLabel(195), '+1 week');
+  assert.equal(stackedWeekLabel(230), '+1 week');
+  assert.equal(stackedWeekLabel(160), '+1\nweek');
+  assert.equal(WEEK_ONE_LINE_STACKED_MIN_WIDTH, 192);
+});
+
+test('the season number is spoken with the status from the second season (walk 12 T3-07)', () => {
+  const base = { mode: 'practice' as const, lastSettledDate: OPENING_EVE, nextGameDate: '2025-10-21', lastNight: null, progress: practiceProgress(OPENING_EVE, OPENING_EVE) };
+  assert.match(statusSummary({ ...base, season: 2 }), /^Practice, Season 2, Oct 20, day 0 of 174\./);
+  assert.match(statusSummary({ ...base, season: 1 }), /^Practice, Oct 20, day 0 of 174\./);
+  assert.match(statusSummary(base), /^Practice, Oct 20, day 0 of 174\./);
+});
+
+test('while weeks play or wait, +1 night never names a night the queue will play (walk 12 T4-08)', async () => {
+  const { nightAfterQueue } = await import('./chromeView');
+  assert.equal(nightAfterQueue('2025-10-27', null, [], '2026-04-12'), null);
+  assert.equal(nightAfterQueue('2025-10-27', 'night', ['night'], '2026-04-12'), null);
+  assert.deepEqual(nightAfterQueue('2025-11-03', 'week', ['week', 'week'], '2026-04-12'), {
+    name: '+1 night: plays the next night after Nov 24, once the queued weeks are in',
+    seasonQueued: false,
+  });
+  assert.equal(nightAfterQueue('2025-11-03', 'week', [], '2026-04-12')?.name, '+1 night: plays the next night after Nov 10, once the queued weeks are in');
+  assert.equal(nightAfterQueue('2025-11-03', 'night', ['week'], '2026-04-12')?.name, '+1 night: plays the next night once the queued weeks are in');
+  assert.deepEqual(nightAfterQueue('2026-03-30', 'week', ['week', 'week'], '2026-04-12'), {
+    name: '+1 night: the rest of the season is already queued, to the Apr 12 games',
+    seasonQueued: true,
+  });
 });
