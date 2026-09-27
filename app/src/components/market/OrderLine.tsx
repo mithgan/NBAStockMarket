@@ -40,8 +40,10 @@ export function OrderLine({
 }) {
   // Re-sort is the app's outlined button at every size (walk 17 T2-02: an
   // underlined link at 853x533, a bordered RE-SORT elsewhere), compact in a
-  // one-line strip: a 26px box centred on the line's words (T1-05: it sat
-  // half a line low), its 44px target reaching 9px above and below it.
+  // one-line strip: a 22px box centred on the line's words (T1-05: it sat
+  // half a line low), its 44px target reaching above and below it. The line
+  // keeps its words' 17px height: a 26px line cost a phone's first view a
+  // player row (walk 17 lead; T1-01 had won it back).
   const box = (hovered: boolean, pressed: boolean) => (
     <View style={[styles.actionBox, hovered && styles.actionHover, pressed && styles.pressed]}>
       <Text maxFontSizeMultiplier={1.4} style={styles.actionText}>Re-sort</Text>
@@ -132,15 +134,15 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   action: {
-    // A full 44px target that reaches 9px into the space above and below
-    // the 26px box, so the line is the box's height (the audit's 44px floor).
+    // A full 44px target (the audit's floor) that takes only the line's 17px:
+    // the 22px box overhangs the space around the line by 2.5px.
     minHeight: 44,
-    marginVertical: -9,
+    marginVertical: -13.5,
     justifyContent: 'center',
   },
   actionBox: {
     // The kit's secondary button (outlined, raised, caps), compact.
-    minHeight: 26,
+    minHeight: 22,
     justifyContent: 'center',
     paddingHorizontal: space.sm,
     borderRadius: radius.sm,
