@@ -12,7 +12,7 @@
  *  - radius stays at or under `radius.lg` (8) and text at or over 11px;
  *  - green means a gain, red a loss, and nothing else is green or red.
  */
-import { forwardRef, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { forwardRef, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 import { useBackFolds } from '../web/appHistory';
 import { quietLift, settleTaps, tapsSettling } from '../web/tapSettle';
@@ -395,6 +395,15 @@ const STRIP_SPOT_MS = 1400;
  * rest for a moment, and a repeat on the same spot for 1.4 s: a hurried
  * "keep, keep" never buys the player below.
  */
+/** The nearest scrolling area around a node (web), or null. */
+function scrollingAncestor(node: HTMLElement): HTMLElement | null {
+  for (let parent = node.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+    const overflow = getComputedStyle(parent).overflowY;
+    if ((overflow === 'auto' || overflow === 'scroll') && parent.scrollHeight > parent.clientHeight + 1) return parent;
+  }
+  return null;
+}
+
 export function ConfirmStrip({
   message,
   confirmLabel,
@@ -435,15 +444,42 @@ export function ConfirmStrip({
   const rest = firstBreak >= 0 ? message.slice(firstBreak + 1) : '';
   const stripRef = useRef<View>(null);
   const keepRef = useRef<View>(null);
-  useEffect(() => {
-    // Bring the question into view before focus lands on Keep. Focusing Keep
-    // alone scrolled just far enough to show the buttons, so at 200% zoom the
-    // fee and what you keep scrolled out of sight above (walk 3 T3-24). A
-    // question taller than the view shows from its first line.
+  const titleRef = useRef<Text>(null);
+  // A question taller than the list's view (200% and 400% zoom) showed only
+  // its answers: focus on Keep scrolled the question and the player's name
+  // out of sight (walk 15 T3-04). There the details fold behind "more ▾"
+  // (still read to a screen reader), and if the question and its answers
+  // still do not fit, it opens at the question, focused; the answers are the
+  // next Tab.
+  const [folded, setFolded] = useState(false);
+  const [opened, setOpened] = useState(false);
+  const placed = useRef(false);
+  useLayoutEffect(() => {
+    if (placed.current || typeof document === 'undefined') return;
     const strip = stripRef.current as unknown as HTMLElement | null;
-    strip?.scrollIntoView?.({ block: 'nearest' });
     const keep = keepRef.current as unknown as { focus?: (options?: object) => void } | null;
-    keep?.focus?.({ preventScroll: true });
+    if (!strip?.getBoundingClientRect) return;
+    const scroller = scrollingAncestor(strip);
+    const room = (scroller ? scroller.clientHeight : window.innerHeight) - 8;
+    const tall = strip.getBoundingClientRect().height > room;
+    if (tall && !folded && rest.trim()) {
+      setFolded(true);
+      return;
+    }
+    placed.current = true;
+    if (!tall) {
+      // Bring the question into view before focus lands on Keep. Focusing
+      // Keep alone scrolled just far enough to show the buttons, so at 200%
+      // zoom the fee and what you keep scrolled out of sight above (walk 3
+      // T3-24).
+      strip.scrollIntoView?.({ block: 'nearest' });
+      keep?.focus?.({ preventScroll: true });
+      return;
+    }
+    if (scroller) scroller.scrollTop += strip.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    (titleRef.current as unknown as { focus?: (options?: object) => void } | null)?.focus?.({ preventScroll: true });
+  }, [folded, rest]);
+  useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     // Turning the phone reflows the list: bring the open question back into
     // view rather than leaving it below the fold (walk 4 T4-08).
@@ -491,9 +527,20 @@ export function ConfirmStrip({
       style={[styles.confirmStrip, style]}
     >
       <Text nativeID={questionId} style={styles.confirmText}>
-        <Text nativeID={titleId}>{title}</Text>
-        {rest}
+        <Text ref={titleRef} nativeID={titleId} {...({ tabIndex: -1 } as object)}>{title}</Text>
+        <Text style={folded && !opened ? visuallyHidden : undefined}>{rest}</Text>
       </Text>
+      {folded ? (
+        <Pressable
+          accessibilityLabel={opened ? 'Less of the question' : 'More of the question'}
+          accessibilityRole="button"
+          aria-expanded={opened}
+          onPress={() => setOpened((open) => !open)}
+          style={({ pressed }) => [styles.confirmMore, pressed && styles.pressed]}
+        >
+          <Text style={styles.confirmMoreText}>{opened ? 'less ▴' : 'more ▾'}</Text>
+        </Pressable>
+      ) : null}
       <View style={styles.confirmButtons}>
         <Button
           accessibilityLabel={confirmAccessibilityLabel}
@@ -866,6 +913,18 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: type.body,
     lineHeight: 19,
+  },
+  confirmMore: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
+    marginVertical: -space.sm,
+  },
+  confirmMoreText: {
+    color: colors.muted,
+    fontSize: type.label,
+    fontWeight: weight.bold,
   },
   confirmButtons: {
     flexDirection: 'row',
