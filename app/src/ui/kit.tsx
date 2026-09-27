@@ -453,6 +453,11 @@ export function ConfirmStrip({
   // next Tab.
   const [folded, setFolded] = useState(false);
   const [opened, setOpened] = useState(false);
+  // Opened at the question, the answers come in the dialogs' order, the way
+  // out first: Tab, Tab, Enter from the title reached "Drop for $250" before
+  // Keep (walk 16 T3-08). A question that fits keeps Keep where the pressed
+  // button was, focused, so a double tap never pays.
+  const [atTitle, setAtTitle] = useState(false);
   const placed = useRef(false);
   useLayoutEffect(() => {
     if (placed.current || typeof document === 'undefined') return;
@@ -478,6 +483,7 @@ export function ConfirmStrip({
     }
     if (scroller) scroller.scrollTop += strip.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
     (titleRef.current as unknown as { focus?: (options?: object) => void } | null)?.focus?.({ preventScroll: true });
+    setAtTitle(true);
   }, [folded, rest]);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -494,6 +500,32 @@ export function ConfirmStrip({
       if (timer) clearTimeout(timer);
     };
   }, []);
+  const confirmButton = (
+    <Button
+      key="confirm"
+      accessibilityLabel={confirmAccessibilityLabel}
+      describedBy={questionId}
+      label={confirmLabel}
+      onPress={aimed(() => {
+        settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list');
+        onConfirm();
+      })}
+      variant={confirmVariant}
+    />
+  );
+  const keepButton = (
+    <Button
+      key="keep"
+      ref={keepRef}
+      describedBy={questionId}
+      label={cancelLabel}
+      onPress={guard(() => {
+        settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list');
+        onCancel();
+      })}
+      variant="secondary"
+    />
+  );
   useBackFolds(true, onCancel);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -542,26 +574,7 @@ export function ConfirmStrip({
         </Pressable>
       ) : null}
       <View style={styles.confirmButtons}>
-        <Button
-          accessibilityLabel={confirmAccessibilityLabel}
-          describedBy={questionId}
-          label={confirmLabel}
-          onPress={aimed(() => {
-            settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list');
-            onConfirm();
-          })}
-          variant={confirmVariant}
-        />
-        <Button
-          ref={keepRef}
-          describedBy={questionId}
-          label={cancelLabel}
-          onPress={guard(() => {
-            settleTaps(STRIP_SETTLE_MS, STRIP_SPOT_MS, 'list');
-            onCancel();
-          })}
-          variant="secondary"
-        />
+        {atTitle ? [keepButton, confirmButton] : [confirmButton, keepButton]}
       </View>
     </View>
   );
