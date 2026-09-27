@@ -244,6 +244,8 @@ export function PerGameProvider({
     tone: NoticeTone = 'problem',
     spoken?: string,
     recent?: { text: string; replaces: number | null },
+    /** The words this notice grows from, when they already ended a joined notice (a burst's last). */
+    replacesTail: string | null = null,
   ): number => {
     const lock = tone === 'success' ? text.match(LOCK_SENTENCE) : null;
     const visible = lock && lock.index !== undefined && lock.index > 0 ? text.slice(0, lock.index) + text.slice(lock.index + lock[0].length) : text;
@@ -259,7 +261,14 @@ export function PerGameProvider({
       && shownTone.current === 'problem' && Date.now() - shownAt.current < PROBLEM_JOIN_MS);
     shownAt.current = Date.now();
     setNoticeTone(joins && !joinsGames ? 'problem' : joinsGames ? shownTone.current : tone);
-    setMessage(joins ? `${shownMessage.current} ${visible}` : visible);
+    // A burst that joined a refused move's notice grows in place: "Amen
+    // Thompson and Derrick White added. $500 in fees." takes the place of
+    // "Amen Thompson added at …" at the end, never beside it (walk 18 T2-18).
+    const shownNow = shownMessage.current;
+    const joinedTo = joins && shownNow !== null && replacesTail && shownNow.endsWith(` ${replacesTail}`)
+      ? shownNow.slice(0, shownNow.length - replacesTail.length - 1)
+      : shownNow;
+    setMessage(joins ? `${joinedTo} ${visible}` : visible);
     setNoticeSpoken(spoken ?? (lock || joins ? text : null));
     setNoticeSeq((seq) => seq + 1);
     noticeIds.current += 1;
@@ -446,8 +455,9 @@ export function PerGameProvider({
   const burstNotice = useCallback((move: { name: string; verb: string }, text: string): string => {
     const now = Date.now();
     const last = recentMoves.current;
+    const shownNow = shownMessage.current;
     const names = last && last.verb === move.verb && now - last.at < MOVE_BURST_MS
-      && shownMessage.current === last.shown && !last.names.includes(move.name)
+      && (shownNow === last.shown || (shownNow?.endsWith(` ${last.shown}`) ?? false)) && !last.names.includes(move.name)
       ? [...last.names, move.name]
       : [move.name];
     const fee = bootstrapRef.current?.ruleset.transactionFeeDollars ?? 0;
@@ -498,7 +508,15 @@ export function PerGameProvider({
       waitedMoves.current = { moves: [...moves, move], base: last.base };
     } else {
       const recent = lastRefreshNotice.current;
-      waitedMoves.current = { moves: [move], base: recent && Date.now() - recent.at < 6000 ? recent.text : null };
+      // A run's notice on screen that covers those games is the base: the
+      // refusal joins the run's words as they stand, so the span and figure
+      // never fall back to the last week alone (walk 18 T1-11: "$890.5K in
+      // the Oct 21–Nov 3 games (2 weeks)" became "$436.5K in the Oct 28–Nov 3
+      // games" for a moment).
+      const shown = shownMessage.current;
+      const fresh = recent && Date.now() - recent.at < 6000 ? recent.text : null;
+      const base = fresh && shown && coversGames(shown, fresh) ? shown : fresh;
+      waitedMoves.current = { moves: [move], base };
     }
     setTimeout(() => {
       const done = waitedMoves.current;
@@ -653,9 +671,10 @@ export function PerGameProvider({
           return false;
         }
         const text = typeof successMessage === 'function' ? successMessage(outcome.result) : successMessage;
+        const before = recentMoves.current?.shown ?? null;
         const shown = failedMove?.folds ? burstNotice(failedMove, text) : text;
         const grouped = shown !== text;
-        lastMoveEntry.current = say(shown, 'success', grouped ? text : undefined, grouped ? { text: shown, replaces: lastMoveEntry.current } : undefined);
+        lastMoveEntry.current = say(shown, 'success', grouped ? text : undefined, grouped ? { text: shown, replaces: lastMoveEntry.current } : undefined, grouped ? before : null);
         return true;
       }
       // A Drop or Close that waited for games which ended the short or took

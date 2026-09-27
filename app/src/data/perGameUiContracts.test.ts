@@ -350,3 +350,11 @@ test('a Drop or Close that waited for games which already ended it is told calml
   // The empty search's Clear, by key, puts focus back in the box (walk 18 T2-16).
   assert.match(market, /const clearSearchFromEmpty = useCallback\(\(\) => \{\s+setQuery\(''\);\s+focusAfterKeyPress\(\['input\[aria-label="Search players"\]'\]\);/);
 });
+
+test('notices only grow: landed adds group after a refusal, and a refusal joins a run as it stands (walk 18 T2-18, T1-11)', () => {
+  // A burst whose words end a joined notice grows in place.
+  assert.match(context, /\(shownNow === last\.shown \|\| \(shownNow\?\.endsWith\(` \$\{last\.shown\}`\) \?\? false\)\)/);
+  assert.match(context, /grouped \? \{ text: shown, replaces: lastMoveEntry\.current \} : undefined, grouped \? before : null\);/);
+  // The run's notice on screen, when it covers the games, is a refusal's base.
+  assert.match(context, /const base = fresh && shown && coversGames\(shown, fresh\) \? shown : fresh;/);
+});
