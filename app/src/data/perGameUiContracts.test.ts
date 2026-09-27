@@ -263,3 +263,10 @@ test('the notice strip waits for a tapping finger, holds once opened, and its sk
   assert.match(app, /\(words \?\? first \?\? box\)\.focus\?\.\(\);/);
   assert.match(app, /nativeID: LATEST_NOTICE_WORDS_ID,\s+tabIndex: tinyDock \? 0 : -1,/);
 });
+
+test('loading draws its spinner silently, and the frame waits for its face before drawing the lockup (walk 16 T3-06, T1-03, T2-07)', () => {
+  assert.match(app, /<View accessibilityElementsHidden aria-hidden importantForAccessibility="no-hide-descendants">\s+\{reducedMotion/);
+  assert.match(app, /style=\{\[styles\.product, !fontReady && styles\.waitingForFont\]\}>STOCK MARKET</);
+  assert.match(app, /<View style=\{!fontReady && styles\.waitingForFont\}>\s+<SettingsButton/);
+  assert.match(app, /stateTitle: \{\s+fontFamily: fonts\.display,/);
+});

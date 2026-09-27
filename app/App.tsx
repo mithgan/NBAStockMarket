@@ -184,9 +184,14 @@ function CenteredState({
         </View>
       ) : null}
       {busy ? (
-        reducedMotion
-          ? <Text style={styles.stateBusy}>WORKING…</Text>
-          : <ActivityIndicator color={colors.gold} size="large" />
+        // The status says what is happening ("Starting practice"): the
+        // spinner is only drawn, never read as a nameless progress bar (walk
+        // 16 T3-06).
+        <View accessibilityElementsHidden aria-hidden importantForAccessibility="no-hide-descendants">
+          {reducedMotion
+            ? <Text style={styles.stateBusy}>WORKING…</Text>
+            : <ActivityIndicator color={colors.gold} size="large" />}
+        </View>
       ) : null}
       <Text accessibilityRole="header" style={styles.stateTitle}>{heading ?? title}</Text>
       <Text style={styles.stateCopy}>{copy}</Text>
@@ -1136,24 +1141,30 @@ function AppBody() {
             Settings stays where the thumb expects it (walk 5 T1-06). */}
         {notice && noticePlacement === 'bar' ? notice : (
           <>
-            <View style={styles.mark}>
+            <View style={[styles.mark, !fontReady && styles.waitingForFont]}>
               <Text accessibilityElementsHidden aria-hidden importantForAccessibility="no" maxFontSizeMultiplier={1.2} style={styles.markText}>d</Text>
             </View>
-            <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.brand}>databallr</Text>
+            <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[styles.brand, !fontReady && styles.waitingForFont]}>databallr</Text>
             {/* On a very narrow screen the wordmark keeps the room; the product
                 name is also the page title, so nothing is lost. */}
             {brandOnly ? <View style={styles.brandCopy} /> : (
               <>
                 <View style={styles.brandDivider} />
                 <View style={[styles.brandCopy, notice ? styles.brandCopyBeside : null]}>
-                  <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.product}>STOCK MARKET</Text>
+                  <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[styles.product, !fontReady && styles.waitingForFont]}>STOCK MARKET</Text>
                 </View>
               </>
             )}
             {notice && noticePlacement === 'barWide' ? notice : null}
           </>
         )}
-        <SettingsButton onPress={() => setSettingsOpen(true)} />
+        {/* Until the brand face can draw (at most FONT_WAIT_MS), the lockup and
+            Settings keep their room but are not drawn: in the fallback face
+            STOCK MARKET ran 5px wider and Settings sat lower, so the bar
+            twitched when the app appeared (walk 16 T1-03). */}
+        <View style={!fontReady && styles.waitingForFont}>
+          <SettingsButton onPress={() => setSettingsOpen(true)} />
+        </View>
       </View>
       )}
       {ready && wide ? renderTabBar('top') : null}
@@ -1387,6 +1398,9 @@ const styles = StyleSheet.create({
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderRightWidth: StyleSheet.hairlineWidth,
   },
+  waitingForFont: {
+    opacity: 0,
+  },
   header: {
     minHeight: 52,
     flexDirection: 'row',
@@ -1546,6 +1560,7 @@ const styles = StyleSheet.create({
   stateDetails: {
     maxWidth: 420,
     marginTop: space.lg,
+    fontFamily: fonts.body,
     color: colors.faint,
     fontSize: type.caption,
     lineHeight: 17,
@@ -1628,12 +1643,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   stateBusy: {
+    fontFamily: fonts.display,
     color: colors.goldInk,
     fontSize: type.label,
     fontWeight: '900',
     letterSpacing: 1,
   },
+  // The app's faces on the loading and "not open yet" screens too: the
+  // heading and its paragraph fell back to the system font (walk 16 T2-07).
   stateTitle: {
+    fontFamily: fonts.display,
     color: colors.text,
     fontSize: 20,
     fontWeight: '900',
@@ -1641,6 +1660,7 @@ const styles = StyleSheet.create({
     marginTop: space.md,
   },
   stateCopy: {
+    fontFamily: fonts.body,
     color: colors.muted,
     fontSize: type.body,
     lineHeight: 20,
