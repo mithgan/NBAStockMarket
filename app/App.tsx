@@ -39,7 +39,7 @@ import {
 import { ThemeProvider, useDesignVariant } from './src/theme/ThemeProvider';
 import { colors, fonts, labelStyle, radius, space, type } from './src/theme';
 import { useKeepNotices } from './src/state/noticePreference';
-import { isSeasonCompleteNotice } from './src/state/perGameNotices';
+import { isSeasonCompleteNotice, outcomeFirst } from './src/state/perGameNotices';
 import { reduceMotionChosen } from './src/state/motionPreference';
 import { brandFontReady, installGlobalWebStyles } from './src/web/globalStyles';
 import { applyVariant } from './src/theme/applyVariant';
@@ -235,6 +235,9 @@ type NoticePlacement = 'bar' | 'barWide' | 'dock';
 const NOTICE_BAR_WIDE_MIN_WIDTH = 720;
 /** Below this height the docked notice keeps to one line (400% zoom). */
 const TINY_DOCK_MAX_HEIGHT = 260;
+// Narrower than this (a phone at 200% zoom) a notice's two lines hold about
+// 22 letters each: a games notice leads with its news (outcomeFirst).
+const NOTICE_OUTCOME_FIRST_MAX_WIDTH = 300;
 /**
  * Below this height the docked notice keeps to two lines, with "more ▾" for
  * the rest (200% zoom, a phone on its side): three lines left half a 195x422
@@ -281,6 +284,7 @@ function NoticeToast({
   // Under about 260px of height (400% zoom) the strip keeps to one line, so a
   // player row still fits above it; the rest scrolls inside (walk 7 T3-05).
   const tinyDock = placement === 'dock' && height < TINY_DOCK_MAX_HEIGHT;
+  const shown = width < NOTICE_OUTCOME_FIRST_MAX_WIDTH ? outcomeFirst(message) : message;
   // How many lines the strip shows before "more ▾" (0: all of it).
   // In the brand bar too: a long combined notice took 5-7 lines there and
   // pushed the practice controls down 100px (walk 13 T4-05).
@@ -389,7 +393,7 @@ function NoticeToast({
   const readable = tinyDock
     ? ({
       tabIndex: 0,
-      'aria-label': `Notice: ${message}`,
+      'aria-label': `Notice: ${shown}`,
       onFocus: () => setHeld(true),
       onBlur: () => setHeld(false),
     } as object)
@@ -401,7 +405,7 @@ function NoticeToast({
         style={[styles.noticeScroll, { maxHeight: dockText }]}
         {...readable}
       >
-        <Text style={styles.noticeText}>{message}</Text>
+        <Text style={styles.noticeText}>{shown}</Text>
       </ScrollView>
       {clampLines > 0 && overflowing ? (
         <Pressable
@@ -419,7 +423,7 @@ function NoticeToast({
       ) : null}
     </View>
   ) : (
-    <Text style={styles.noticeText}>{message}</Text>
+    <Text style={styles.noticeText}>{shown}</Text>
   );
   if (!problem && !keep) {
     // A success reads like a snackbar: tapping it dismisses it. Screen

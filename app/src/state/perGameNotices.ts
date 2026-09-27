@@ -89,6 +89,21 @@ export function refreshHasNews(previous: PerGameBootstrap | null, next: PerGameB
  * account is current. The next game date already sits in the status bar, so it
  * is only repeated when there is nothing else to say.
  */
+/**
+ * A games notice with its news first, for a strip too narrow to reach it in
+ * two lines: "Oct 21–Nov 17 games (4 weeks): your score rose $1.20M." showed
+ * only "Oct 21–Nov 17 / games" and "more ▾" at 195px (walk 14 T4-07); it
+ * reads "Your score rose $1.20M in the Oct 21–Nov 17 games (4 weeks)." Any
+ * sentence after it is kept; other notices are left as they are. Screen
+ * readers hear the notice as written.
+ */
+export function outcomeFirst(message: string): string {
+  const match = /^(\S.*? games(?: \([^)]*\))?): your score (rose|fell) (\$[\d,]+(?:\.\d+)?[KM]?)\.(\s[\s\S]*)?$/.exec(message);
+  if (!match) return message;
+  const [, span, verb, amount, rest = ''] = match;
+  return `Your score ${verb} ${amount} in the ${span}.${rest}`;
+}
+
 /** How the season's last games are announced; the Roster's result card says the same. */
 export const SEASON_COMPLETE_NOTICE_START = 'Season complete. Final score ';
 

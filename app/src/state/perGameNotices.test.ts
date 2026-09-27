@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PerGameBootstrap, PerGameLedgerEntry, PerGamePosition } from '../api/contracts';
-import { isSeasonCompleteNotice, refreshHasNews, refreshNotice } from './perGameNotices';
+import { isSeasonCompleteNotice, outcomeFirst, refreshHasNews, refreshNotice } from './perGameNotices';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -163,4 +163,24 @@ test('nights played with nobody on the roster say so (walk 4 T2-16)', () => {
     refreshNotice(before, snapshot('2025-10-21', '2025-10-22', 0, []), false),
     'Oct 21 games: nobody on your roster, so your score held.',
   );
+});
+
+test('a narrow strip leads a games notice with its news, and leaves other notices alone (walk 14 T4-07)', () => {
+  assert.equal(outcomeFirst('Oct 21–Nov 17 games (4 weeks): your score rose $1.20M.'), 'Your score rose $1.20M in the Oct 21–Nov 17 games (4 weeks).');
+  assert.equal(
+    outcomeFirst('Oct 21 games: your score fell $120.5K. Moves pause for the Oct 28 games.'),
+    'Your score fell $120.5K in the Oct 21 games. Moves pause for the Oct 28 games.',
+  );
+  assert.equal(
+    outcomeFirst('Oct 21–23 games (3 nights): your score rose $205K. 2 queued weeks cancelled.'),
+    'Your score rose $205K in the Oct 21–23 games (3 nights). 2 queued weeks cancelled.',
+  );
+  // A millions figure keeps its decimal point.
+  assert.equal(outcomeFirst('Oct 21–Apr 12 games (25 weeks): your score rose $4.95M.'), 'Your score rose $4.95M in the Oct 21–Apr 12 games (25 weeks).');
+  for (const unchanged of [
+    'Oct 21–27 games: nobody on your roster, so your score held.',
+    'Oct 21 games: none of your players played.',
+    'Luka Doncic added at $417.5K a game, locked in. $250 fee.',
+    'Season complete. Final score +$4.95M, #1 of 5.',
+  ]) assert.equal(outcomeFirst(unchanged), unchanged);
 });
