@@ -1073,12 +1073,19 @@ function AppBody() {
       <VariantTexture />
       <SkipLink />
       {notice && noticePlacement === 'dock' ? <SkipLink label="Skip to the latest notice" onJump={focusLatestNotice} /> : null}
+      {/* The page's one banner at every width: the brand bar, the top tabs and
+          the season and practice controls. With the brand bar folded away the
+          controls row had become the banner inside its own region, so a
+          reader's landmarks changed shape with the zoom (walk 14 T3-03). No
+          role here ever changes with the width: react-native-web makes the
+          element from the role, and a switch would rebuild the frame. */}
+      <View role="banner">
       {/* Databallr brand bar: gold wordmark, a rule, then the product name.
           In a short window it folds away; the status row carries Settings. */}
       {short ? null : (
       <View
+        nativeID="brand-bar"
         onLayout={holdBar}
-        role="banner"
         style={[styles.header, { paddingTop: insets.top + 4 }, barHold > 0 && { minHeight: barHold }]}
       >
         {/* On a phone a notice takes the logo's place for its few seconds;
@@ -1115,6 +1122,7 @@ function AppBody() {
       >
         {ready ? <SeasonControl /> : null}
         {ready ? <SimBar /> : null}
+      </View>
       </View>
       <View style={styles.stage}>
         {/* nativeID lets the QA harness measure how much chrome sits above the

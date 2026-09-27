@@ -106,7 +106,11 @@ test('the folded phone row names the season from the second, keeps "Settings" an
   assert.ok(320 >= CHROME_FOLDED_SETTINGS_WORD_MIN_WIDTH && 320 < CHROME_FOLDED_ONE_LINE_MIN_WIDTH);
   assert.ok(195 < CHROME_FOLDED_SETTINGS_WORD_MIN_WIDTH);
   const strip = readFileSync(resolve(import.meta.dirname, '../components/PerGameStatusStrip.tsx'), 'utf8');
-  assert.match(strip, /role=\{short \? 'banner' : undefined\}/);
+  // One banner at every width wraps the frame (App, walk 14 T3-03): the row takes no role of its own,
+  // never a role that switches at the fold (react-native-web would rebuild it).
+  assert.doesNotMatch(strip, /role=\{short \? 'banner'/);
+  const app = readFileSync(resolve(import.meta.dirname, '../../App.tsx'), 'utf8');
+  assert.match(app, /<View role="banner">/);
 });
 
 test('every practice screen but the Market ends with "Back to the practice controls" (walk 13 T3-N1)', () => {

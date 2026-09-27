@@ -519,9 +519,8 @@ export function PerGameStatusStrip() {
   return (
     <View
       nativeID="status-strip"
-      // With the brand bar folded away (App), this row is the page's banner
-      // landmark (walk 13 T1-11: a 320px phone had none).
-      role={short ? 'banner' : undefined}
+      // The page's banner wraps the frame at every width (App; walk 14
+      // T3-03), so this row takes no role of its own.
       style={[
         styles.strip,
         !practice && styles.stripLive,
