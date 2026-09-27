@@ -249,3 +249,17 @@ test('a landscape phone keeps its folded status to two lines on a locked night (
   assert.match(status, /!\(foldedFacts && noGames && span\?\.nobody\)/);
   assert.match(status, /lockCompact \|\| lockShortInRow\) \? \(/);
 });
+
+test('the notice strip waits for a tapping finger, holds once opened, and its skip link lands on its words (walk 16 T1-11, T1-15, T3-09)', () => {
+  assert.match(app, /const DOCK_TAP_PAUSE_MS = 1500;/);
+  assert.match(app, /const dockWaits = useTapPause\(noticePlacement === 'dock' && Boolean\(message\), noticeSeq, DOCK_TAP_PAUSE_MS\);/);
+  assert.match(app, /!\(noticePlacement === 'dock' && dockWaits\)/);
+  assert.match(app, /installScreenTaps\(\);/);
+  // Opened with "more ▾", a success waits for the player; "less ▴" lets the bar fold back.
+  assert.match(app, /if \(tone !== 'success' \|\| held \|\| keep \|\| expanded \|\| \(tinyDock && overflowing\)\) return undefined;/);
+  assert.match(app, /if \(expanded\) onFold\?\.\(\);/);
+  assert.match(app, /const foldBar = useCallback\(\(\) => setBarHold\(0\), \[\]\);/);
+  // The skip link reads the notice itself.
+  assert.match(app, /\(words \?\? first \?\? box\)\.focus\?\.\(\);/);
+  assert.match(app, /nativeID: LATEST_NOTICE_WORDS_ID,\s+tabIndex: tinyDock \? 0 : -1,/);
+});

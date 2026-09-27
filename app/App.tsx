@@ -48,6 +48,7 @@ import { installDialogTabWrap } from './src/web/dialogTabWrap';
 import { installFocusInView } from './src/web/focusInView';
 import { focusWhenDrawn } from './src/web/focusWhenDrawn';
 import { installScreenScroll } from './src/web/screenScroll';
+import { installScreenTaps, useTapPause } from './src/web/screenTaps';
 import { ignoreHeldKeys } from './src/web/keyRepeat';
 import { treatmentNavigation } from './src/web/treatmentNavigation';
 
@@ -58,6 +59,7 @@ ignoreHeldKeys();
 installFocusInView();
 installScreenScroll();
 installDialogTabWrap();
+installScreenTaps();
 
 /** Circular databallr mark; radius is derived so it is never a card corner. */
 const BRAND_MARK_SIZE = 24;
@@ -248,6 +250,14 @@ const TINY_DOCK_MAX_HEIGHT = 260;
 const SHORT_DOCK_MAX_HEIGHT = 480;
 /** Below this width (400% zoom) × goes under the words, which keep the width. */
 const NOTICE_STACKED_MAX_WIDTH = 200;
+/**
+ * A strip above the tab bar takes room from the list's foot: while the
+ * finger taps on the screen it waits until the taps have paused this long,
+ * so the next tap lands on the row it was aimed at, not on the strip (walk
+ * 16 T1-11: Adds 0.3-1.3 s apart were lost). The rows' own ticks show each
+ * move meanwhile, and screen readers hear the notice at once.
+ */
+const DOCK_TAP_PAUSE_MS = 1500;
 
 function successNoticeMs(message: string): number {
   return Math.min(SUCCESS_NOTICE_MAX_MS, SUCCESS_NOTICE_MS + Math.max(0, message.length - 60) * 60);
@@ -261,18 +271,23 @@ function successNoticeMs(message: string): number {
  * Screen readers hear every notice through the always-mounted live region in
  * AppBody, not through this view.
  */
-/** The notice strip's element, the second skip link's landing. */
+/** The notice strip's element. */
 const LATEST_NOTICE_ID = 'latest-notice';
+/** Its words: the second skip link's landing, read as the notice. */
+const LATEST_NOTICE_WORDS_ID = 'latest-notice-words';
 
 function NoticeToast({
   message,
   onDismiss,
+  onFold,
   tone,
   placement,
   seq,
 }: {
   message: string;
   onDismiss: () => void;
+  /** "less ▴" folded it: the bar may go back to the notice's own height. */
+  onFold?: () => void;
   tone: NoticeTone;
   placement: NoticePlacement;
   /** Changes with every notice, even one that repeats the last word for word. */
@@ -305,11 +320,13 @@ function NoticeToast({
   const [expanded, setExpanded] = useState(false);
   useEffect(() => setExpanded(false), [message, seq]);
   useEffect(() => {
-    // Held only at 400%, where a keyboard user could not reach it in time.
-    if (tone !== 'success' || held || keep || (tinyDock && overflowing)) return undefined;
+    // Held only at 400%, where a keyboard user could not reach it in time,
+    // and once opened with "more ▾": the player is reading it (walk 16 T1-15:
+    // an opened notice cleared itself 9 s later).
+    if (tone !== 'success' || held || keep || expanded || (tinyDock && overflowing)) return undefined;
     const timer = setTimeout(onDismiss, successNoticeMs(message));
     return () => clearTimeout(timer);
-  }, [held, keep, message, onDismiss, overflowing, seq, tinyDock, tone]);
+  }, [expanded, held, keep, message, onDismiss, overflowing, seq, tinyDock, tone]);
   // Where the keyboard was when the notice came: closing it with × goes back
   // there instead of dropping focus on the page (walk 6 T2-15).
   const returnFocusTo = useRef<HTMLElement | null>(null);
@@ -396,14 +413,16 @@ function NoticeToast({
   // At 400% zoom the one-line strip is a stop on the Tab path: the rest of
   // the notice scrolls with the arrow keys, and it waits while focused
   // (walk 8 T3-01: a keyboard user could never read past the first line).
-  const readable = tinyDock
-    ? ({
-      tabIndex: 0,
-      'aria-label': `Notice: ${shown}`,
-      onFocus: () => setHeld(true),
-      onBlur: () => setHeld(false),
-    } as object)
-    : null;
+  // Elsewhere the words are focusable by the skip link, which lands on them
+  // and reads the notice, with "more ▾" the next Tab (walk 16 T3-09: it
+  // landed on "more ▾", heard as "More of the notice, button, collapsed").
+  const readable = {
+    nativeID: LATEST_NOTICE_WORDS_ID,
+    tabIndex: tinyDock ? 0 : -1,
+    'aria-label': `Notice: ${shown}`,
+    onFocus: () => setHeld(true),
+    onBlur: () => setHeld(false),
+  } as object;
   const words = placement === 'dock' || clampLines > 0 ? (
     <View style={styles.noticeWords}>
       <ScrollView
@@ -421,7 +440,10 @@ function NoticeToast({
           accessibilityRole="button"
           accessibilityState={{ expanded }}
           aria-expanded={expanded}
-          onPress={() => setExpanded((open) => !open)}
+          onPress={() => {
+            if (expanded) onFold?.();
+            setExpanded(!expanded);
+          }}
           style={({ pressed }) => [styles.noticeMoreButton, pressed && styles.pressed]}
         >
           <Text maxFontSizeMultiplier={1} style={styles.noticeMore}>{expanded ? 'less ▴' : 'more ▾'}</Text>
@@ -544,13 +566,15 @@ function focusScreen(): void {
  * The notice strip above the tab bar (short windows, 200-400% zoom) comes
  * after the whole screen in Tab order: at 400% its "more ▾" was the 59th stop
  * (walk 11 T3-05). A second skip link, there only while the strip is, lands
- * on its first control (its words, "more ▾" or ×), else on the strip itself.
+ * on its words (read as the notice; walk 16 T3-09), else on its first
+ * control, else on the strip itself.
  */
 function focusLatestNotice(): void {
   const box = document.getElementById(LATEST_NOTICE_ID);
   if (!box) return;
+  const words = document.getElementById(LATEST_NOTICE_WORDS_ID);
   const first = box.querySelector<HTMLElement>('[tabindex="0"], button, [role="button"]');
-  (first ?? box).focus?.();
+  (words ?? first ?? box).focus?.();
 }
 
 /**
@@ -624,6 +648,10 @@ function AppBody() {
     if (barHoldRef.current && !barNoticeRef.current) setBarHold(0);
   }, []);
   useEffect(releaseBar, [activeTab, width, releaseBar]);
+  // "less ▴" folds an opened notice: the bar goes back to the notice's own
+  // height (measured again as it shrinks), not the tallest it has been; the
+  // player's own press moved it (walk 16 T1-15).
+  const foldBar = useCallback(() => setBarHold(0), []);
   // Always set (react-native-web only measures a view that had onLayout when
   // it mounted); it records the bar's height while a notice is in it.
   const holdBar = useCallback((event: LayoutChangeEvent) => {
@@ -1065,10 +1093,20 @@ function AppBody() {
   // so in a short window the strip only repeated it under the card, taking
   // its room (walk 13 T2-09). It is still spoken, and kept in Recent notices.
   const cardSaysIt = noticePlacement === 'dock' && activeTab === 'portfolio' && isSeasonCompleteNotice(message);
+  // The strip above the tab bar waits while a finger taps the screen (see
+  // DOCK_TAP_PAUSE_MS); the live region below speaks it at once.
+  const dockWaits = useTapPause(noticePlacement === 'dock' && Boolean(message), noticeSeq, DOCK_TAP_PAUSE_MS);
   const notice = authError && clearAuthMessage ? (
     <NoticeToast message={authError} onDismiss={clearAuthMessage} placement={noticePlacement} seq={-2} tone="problem" />
-  ) : message && !cardSaysIt && (noticeTone === 'problem' || !sheetOpen) ? (
-    <NoticeToast message={message} onDismiss={dismissNotice} placement={noticePlacement} seq={noticeSeq} tone={noticeTone} />
+  ) : message && !cardSaysIt && !(noticePlacement === 'dock' && dockWaits) && (noticeTone === 'problem' || !sheetOpen) ? (
+    <NoticeToast
+      message={message}
+      onDismiss={dismissNotice}
+      onFold={foldBar}
+      placement={noticePlacement}
+      seq={noticeSeq}
+      tone={noticeTone}
+    />
   ) : null;
   barNoticeRef.current = Boolean(notice) && noticePlacement !== 'dock';
 

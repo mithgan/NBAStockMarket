@@ -152,7 +152,7 @@ test('in a short window the Roster\'s result card stands in for the season-end s
   assert.equal(isSeasonCompleteNotice(null), false);
   const app = readFileSync(resolve(__dirname, '../../App.tsx'), 'utf8');
   assert.match(app, /const cardSaysIt = noticePlacement === 'dock' && activeTab === 'portfolio' && isSeasonCompleteNotice\(message\);/);
-  assert.match(app, /message && !cardSaysIt && \(noticeTone === 'problem' \|\| !sheetOpen\)/);
+  assert.match(app, /message && !cardSaysIt && !\(noticePlacement === 'dock' && dockWaits\) && \(noticeTone === 'problem' \|\| !sheetOpen\)/);
   // The live region still speaks the message itself.
   assert.match(app, /spoken\(authError \?\? \(message \? noticeSpoken \?\? message : null\)/);
 });

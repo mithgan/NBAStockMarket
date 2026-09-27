@@ -432,7 +432,8 @@ test('global server action notices are visible and dismissible', () => {
   // leaves to the screen is the season-complete notice in a short window's
   // strip while the Roster's result card shows the same (walk 14 lead); it is
   // still spoken by the live region.
-  assert.match(appSource, /message && !cardSaysIt && \(noticeTone === 'problem' \|\| !sheetOpen\) \? \(/);
+  // In a short window it also waits while a finger taps the screen (walk 16 T1-11).
+  assert.match(appSource, /message && !cardSaysIt && !\(noticePlacement === 'dock' && dockWaits\) && \(noticeTone === 'problem' \|\| !sheetOpen\) \? \(/);
   assert.match(appSource, /const cardSaysIt = noticePlacement === 'dock' && activeTab === 'portfolio' && isSeasonCompleteNotice\(message\);/);
   assert.match(appSource, /message=\{message\}/);
   assert.match(appSource, /accessibilityLiveRegion="polite"/);
