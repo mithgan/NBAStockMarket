@@ -10,6 +10,17 @@ import { isAppearanceChoice, resolveVariant } from './variantPersistence';
 const html = readFileSync(resolve(__dirname, '../../public/index.html'), 'utf8');
 const script = html.match(/<script id="theme-prepaint">([\s\S]*?)<\/script>/)?.[1] ?? '';
 
+test('the Light loading screen uses the new accents before React mounts', () => {
+  const properties: Record<string, string> = {};
+  runInNewContext(script, {
+    document: { documentElement: { style: { setProperty: (name: string, value: string) => { properties[name] = value; } } } },
+    window: { localStorage: { getItem: () => 'light' } },
+  });
+  assert.equal(properties['--shell-word'], VARIANTS.light.palette.goldInk);
+  assert.equal(properties['--shell-gold'], VARIANTS.light.palette.gold);
+  assert.equal(properties['--shell-on-accent'], VARIANTS.light.palette.onGold);
+});
+
 /** The background the page paints before the app loads. */
 function prepaint({ saved, light = false, moreContrast = false }: { saved?: string | null; light?: boolean; moreContrast?: boolean }): string {
   const documentElement = { style: { backgroundColor: '' } };

@@ -31,6 +31,7 @@ import {
 
 import { exactSignedMoney, exactMoney, money, signedMoney } from '../copy/terms';
 import { colors, control, fonts, headingStyle, labelStyle, radius, space, type, weight } from '../theme';
+import { useDesignVariant } from '../theme/ThemeProvider';
 
 // ---------------------------------------------------------------------------
 // Accessibility helpers
@@ -259,6 +260,8 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
   style,
   textStyle,
 }, ref) {
+  const { variantId } = useDesignVariant();
+  const light = variantId === 'light';
   const name = accessibilityLabel ?? label;
   // A focusable disabled button stays enabled for the browser (it keeps its
   // Tab stop and catches taps, so they never land on the row underneath),
@@ -299,7 +302,7 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
           variant === 'quiet' && styles.buttonQuiet,
           variant === 'danger' && styles.buttonDanger,
           width !== undefined && { width },
-          hovered && !disabled && (variant === 'primary' ? styles.hoverPrimary : styles.hover),
+          hovered && !disabled && (variant === 'primary' ? (light ? styles.hoverPrimaryLight : styles.hoverPrimary) : styles.hover),
           // A reachable disabled button (LOCKED, FULL, "Added ✓") is read and
           // pressed for its reason, so it keeps full-contrast words and shows
           // its state by a dashed edge, not by fading (walk 3 T3-16).
@@ -307,7 +310,7 @@ export const Button = forwardRef<View, ButtonProps>(function Button({
           // A gold fill would read as live: a reachable disabled primary
           // takes the outlined look.
           disabled && focusableWhenDisabled && !done && variant === 'primary' && styles.reachablePrimary,
-          pressed && !disabled && styles.pressed,
+          pressed && !disabled && (light ? styles.pressedLight : styles.pressed),
           style,
         ];
       }}
@@ -429,6 +432,8 @@ export function ConfirmStrip({
   onCancel: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { variantId } = useDesignVariant();
+  const pressedStyle = variantId === 'light' ? styles.pressedLight : styles.pressed;
   // Keep sits where Drop was: the second tap of a double tap lands there
   // and is ignored, so the question stays open. The costly button is aimed.
   const guard = useTapGuard();
@@ -594,7 +599,7 @@ export function ConfirmStrip({
             toggled.current = true;
             setOpened((open) => !open);
           }}
-          style={({ pressed }) => [styles.confirmMore, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.confirmMore, pressed && pressedStyle]}
         >
           <Text style={styles.confirmMoreText}>{opened ? 'less ▴' : 'more ▾'}</Text>
         </Pressable>
@@ -739,6 +744,8 @@ export function Segmented<K extends string>({
    */
   stacked?: boolean;
 }) {
+  const { variantId } = useDesignVariant();
+  const pressedStyle = variantId === 'light' ? styles.pressedLight : styles.pressed;
   const refs = useRef<Array<View | null>>([]);
   const selectedIndex = Math.max(0, options.findIndex((option) => option.key === value));
   const move = (to: number) => {
@@ -786,7 +793,7 @@ export function Segmented<K extends string>({
                 index > 0 && (stacked ? styles.segmentDividerStacked : styles.segmentDivider),
                 selected && styles.segmentSelected,
                 hovered && !selected && styles.hover,
-                state.pressed && !selected && styles.pressed,
+                state.pressed && !selected && pressedStyle,
               ];
             }}
           >
@@ -939,6 +946,9 @@ const styles = StyleSheet.create({
   },
   hoverPrimary: {
     opacity: 0.9,
+  },
+  hoverPrimaryLight: {
+    borderColor: colors.onGold,
   },
   confirmStrip: {
     gap: space.sm,
@@ -1162,5 +1172,9 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.72,
+  },
+  // Fading Light controls also fades their labels and inset focus rings.
+  pressedLight: {
+    transform: [{ translateY: 1 }],
   },
 });

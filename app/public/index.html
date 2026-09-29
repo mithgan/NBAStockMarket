@@ -50,7 +50,7 @@
         height: 32px;
         border-radius: 50%;
         background: var(--shell-gold, #d9a227);
-        color: #1a1408;
+        color: var(--shell-on-accent, #1a1408);
         font-size: 19px;
         font-weight: 800;
         line-height: 32px;
@@ -86,7 +86,7 @@
          keeps this map in step with src/theme/variants.ts. -->
     <script id="theme-prepaint">
       (function () {
-        var backgrounds = {"default":"#0e1218","og":"#1b212c","immersive":"#07090d","tape":"#0c0d10","slab":"#111214","brushed":"#0f1214","grain":"#0e1218","dark":"#040506","light":"#f3ecdf","anvil":"#131211","monochrome":"#0f1114","ambient":"#0a0d14","haze":"#0c0f16","nocturne":"#161d2b","contrast":"#000000"};
+        var backgrounds = {"default":"#0e1218","og":"#1b212c","immersive":"#07090d","tape":"#0c0d10","slab":"#111214","brushed":"#0f1214","grain":"#0e1218","dark":"#040506","light":"#f2f3f4","anvil":"#131211","monochrome":"#0f1114","ambient":"#0a0d14","haze":"#0c0f16","nocturne":"#161d2b","contrast":"#000000"};
         var choice = null;
         try {
           choice = window.localStorage.getItem('nba-stock-market.design-variant');
@@ -103,10 +103,11 @@
         // The loading words under it, in the same look (walk 12 T2-01).
         if (style.setProperty) {
           var light = id === 'light';
-          style.setProperty('--shell-ink', light ? '#231f1a' : '#fafafa');
-          style.setProperty('--shell-muted', light ? '#4c4339' : '#b0b5bf');
-          style.setProperty('--shell-word', id === 'contrast' ? '#ffd21f' : light ? '#6a4e0d' : '#d9a227');
-          style.setProperty('--shell-gold', id === 'contrast' ? '#ffd21f' : '#d9a227');
+          style.setProperty('--shell-ink', light ? '#25282d' : '#fafafa');
+          style.setProperty('--shell-muted', light ? '#4c525c' : '#b0b5bf');
+          style.setProperty('--shell-word', id === 'contrast' ? '#ffd21f' : light ? '#375b7b' : '#d9a227');
+          style.setProperty('--shell-gold', id === 'contrast' ? '#ffd21f' : light ? '#2f343b' : '#d9a227');
+          style.setProperty('--shell-on-accent', light ? '#f7f8fa' : '#1a1408');
         }
       })();
     </script>

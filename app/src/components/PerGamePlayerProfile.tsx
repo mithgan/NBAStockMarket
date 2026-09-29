@@ -46,7 +46,6 @@ import { extremeName } from '../data/resultsView';
 import { splitPlayerName } from '../data/playerName';
 import {
   buildProfileNights,
-  firstGamePreview,
   figureSpoken,
   formVerdict,
   heldStints,
@@ -95,6 +94,9 @@ import { ProfileActionBar } from './profile/ProfileActionBar';
 import { showPlayerGames, tabUnderSheet } from './results/playerGames';
 import { ProfileChart } from './profile/ProfileChart';
 import { ProfileGameLog } from './profile/ProfileGameLog';
+import { HistoricalSeason } from './profile/HistoricalSeason';
+import { usePlayerHistory } from '../hooks/usePlayerHistory';
+import { priorSeason } from '../data/playerHistoryRequest';
 import { unlessSettling } from '../web/tapSettle';
 
 const METRIC_OPTIONS: { key: ProfileMetric; label: string; hint: string }[] = [
@@ -307,6 +309,9 @@ export function PerGamePlayerProfile({
   // No games yet: say since when ("No games since you added him (Oct 20)");
   // "at this price" only when he already played for you at another price.
   const { bootstrap } = usePerGame();
+  const historical = usePlayerHistory(player, bootstrap?.game.seasonId ?? '');
+  const history = historical.history;
+  const priorSeasonLabel = priorSeason(bootstrap?.game.seasonId ?? '')?.id.replace('-', '–');
   // While his move saves, the action bar says so once ("Adding…" and "Saving
   // your add of Luka Doncic…"); the header keeps saying where you stand until
   // it lands (walk 10 T4-09: three lines said one thing).
@@ -381,7 +386,6 @@ export function PerGamePlayerProfile({
     showPlayerGames({ playerId: player.playerId, playerName: player.name, from: { metric, range: picked, side: viewSide }, fromTab });
     closeThen(onClose, () => openTab('plays'));
   };
-  const preview = firstGamePreview(viewSide, live ? 'yours' : 'season');
   const verdict = formVerdict(summary, {
     recent,
     side: viewSide,
@@ -427,6 +431,22 @@ export function PerGamePlayerProfile({
     const next = event.nativeEvent.contentOffset.y > TITLE_AFTER_SCROLL;
     if (next !== scrolled) setScrolled(next);
   };
+
+  const historicalSection = history ? (
+    <HistoricalSeason key={`${history.playerId}:${history.seasonId}`} history={history} wide={wide} />
+  ) : (
+    <>
+      <SectionHeader level={3} style={[styles.sectionHeader, inset]} title={priorSeasonLabel ? `Last season · ${priorSeasonLabel}` : 'Last season'} />
+      <View style={[styles.section, inset]}>
+        <Text accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.4} style={styles.note}>
+          {historical.status === 'loading' ? 'Loading last season’s stats…'
+            : historical.status === 'error' ? 'Couldn’t load last season’s stats. Please try again.'
+              : 'No prior-season NBA game history is available for this player.'}
+        </Text>
+        {historical.status === 'error' ? <Button label="Retry history" onPress={historical.retry} variant="quiet" /> : null}
+      </View>
+    </>
+  );
 
   return (
     <View style={styles.root}>
@@ -555,12 +575,14 @@ export function PerGamePlayerProfile({
           side={viewSide}
         />
 
+        {nights.length === 0 ? historicalSection : null}
+
         <SectionHeader
           level={3}
           right={nights.length > 0 && !tiny ? <Text style={styles.sectionCount}>{gamesCount(nights.length)}</Text> : undefined}
           // The action bar's own rule sits right above: one rule, not two (walk 8 T1-06).
           style={[styles.sectionHeader, styles.sectionAfterBar, inset]}
-          title="Game by game"
+          title={history ? 'This season' : 'Game by game'}
         />
         <View style={[styles.section, inset]}>
           {nights.length > 0 ? (
@@ -695,32 +717,38 @@ export function PerGamePlayerProfile({
               ) : null}
             </>
           ) : (
-            // Say plainly what will fill this once he plays (walk 7 T1-04).
             <View style={styles.preview}>
-              <Text maxFontSizeMultiplier={1.4} style={styles.verdict}>{preview.lead}</Text>
-              <View role="list" style={styles.previewList}>
-                {preview.items.map((item) => (
-                  <View key={item} role="listitem" style={styles.previewItem}>
-                    <Text aria-hidden maxFontSizeMultiplier={1.4} style={styles.previewDot}>•</Text>
-                    <Text maxFontSizeMultiplier={1.4} style={styles.previewText}>{item}</Text>
-                  </View>
-                ))}
-              </View>
+              <Text maxFontSizeMultiplier={1.4} style={styles.note}>
+                {live
+                  ? 'No games with you yet. His results will appear here after he plays for your roster or short.'
+                  : 'No games yet this season. Play a night to see his results here.'}
+              </Text>
             </View>
           )}
         </View>
 
-        <SectionHeader level={3} style={[styles.sectionHeader, inset]} title="Last season" />
+        {nights.length > 0 ? historicalSection : null}
+
+        <SectionHeader level={3} style={[styles.sectionHeader, inset]} title={isMockActive() ? 'Practice value' : 'Game value'} />
         <View style={[styles.section, inset]}>
+          {isMockActive() ? (
+            <Text maxFontSizeMultiplier={1.4} style={styles.note}>
+              {history
+                ? 'These dollar figures are practice estimates. The NBA stats above are historical; practice games are generated.'
+                : 'These dollar figures are practice estimates. Practice games are generated.'}
+            </Text>
+          ) : null}
           {lastSeason.worth === null || lastSeason.edge === null ? (
-            <Text maxFontSizeMultiplier={1.4} style={styles.note}>No last season on record for him.</Text>
+            <Text maxFontSizeMultiplier={1.4} style={styles.note}>
+              No prior-season game value is available.
+            </Text>
           ) : (
             // The Market's names for the same two facts ("Dividend last season
             // $120K a game · $20K over his price"), so a row and its profile agree.
             <View style={styles.grid}>
               <Figure
                 caption="a game"
-                label="Dividend last season"
+                label={isMockActive() ? 'Practice dividend estimate' : 'Dividend last season'}
                 style={half}
                 value={<Money signed={false} size="title" value={lastSeason.worth} />}
               />
@@ -735,7 +763,13 @@ export function PerGamePlayerProfile({
           {/* Before his first game the Market's "Value" is his whole story,
               so say what it means (walk 7 T1-04). */}
           {nights.length === 0 && lastSeason.edge !== null ? (
-            <Text maxFontSizeMultiplier={1.4} style={styles.note}>{valueMeaning(viewSide, held && position?.side === viewSide)}</Text>
+            <Text maxFontSizeMultiplier={1.4} style={styles.note}>
+              {isMockActive()
+                ? viewSide === 'long'
+                  ? 'Practice value is the dividend estimate minus the price shown. It is not money you have earned.'
+                  : 'Practice short value is the price shown minus the dividend estimate. It is not money you have earned.'
+                : valueMeaning(viewSide, held && position?.side === viewSide)}
+            </Text>
           ) : null}
         </View>
 
@@ -1017,24 +1051,6 @@ const styles = StyleSheet.create({
   },
   preview: {
     gap: space.sm,
-  },
-  previewList: {
-    gap: space.xs,
-  },
-  previewItem: {
-    flexDirection: 'row',
-    gap: space.sm,
-  },
-  previewDot: {
-    color: colors.goldInk,
-    fontSize: type.body,
-    lineHeight: 20,
-  },
-  previewText: {
-    flexShrink: 1,
-    color: colors.muted,
-    fontSize: type.body,
-    lineHeight: 20,
   },
   grid: {
     flexDirection: 'row',
