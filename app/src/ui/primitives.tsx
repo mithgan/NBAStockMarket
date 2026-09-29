@@ -15,6 +15,7 @@ import {
   type,
   weight,
 } from '../theme';
+import { useDesignVariant } from '../theme/ThemeProvider';
 
 /**
  * The databallr.com section header: a tight uppercase label, a rule that runs
@@ -135,6 +136,8 @@ export function Button({
   fixedWidth?: number;
   compact?: boolean;
 }) {
+  const { variantId } = useDesignVariant();
+  const pressedStyle = variantId === 'light' ? styles.pressedLight : styles.pressed;
   return (
     <Pressable
       accessibilityHint={accessibilityHint}
@@ -149,13 +152,18 @@ export function Button({
         toneStyles[tone].box,
         fixedWidth !== undefined ? { width: fixedWidth } : null,
         disabled && styles.buttonDisabled,
-        pressed && !disabled && styles.pressed,
+        pressed && !disabled && pressedStyle,
       ]}
     >
       <Text
         maxFontSizeMultiplier={1.6}
         numberOfLines={2}
-        style={[styles.buttonText, toneStyles[tone].text, disabled && styles.buttonTextDisabled]}
+        style={[
+          styles.buttonText,
+          toneStyles[tone].text,
+          tone === 'primary' && variantId !== 'light' && styles.darkOnGold,
+          disabled && styles.buttonTextDisabled,
+        ]}
       >
         {label}
       </Text>
@@ -175,6 +183,8 @@ export function Segmented<T extends string>({
   onChange: (next: T) => void;
   groupLabel: string;
 }) {
+  const { variantId } = useDesignVariant();
+  const pressedStyle = variantId === 'light' ? styles.pressedLight : styles.pressed;
   return (
     <View accessibilityRole="tablist" aria-label={groupLabel} style={styles.segmented}>
       {options.map((option) => {
@@ -190,7 +200,7 @@ export function Segmented<T extends string>({
             style={({ pressed }) => [
               styles.segment,
               selected && styles.segmentSelected,
-              pressed && styles.pressed,
+              pressed && pressedStyle,
             ]}
           >
             <Text
@@ -234,7 +244,7 @@ export function Section({ children, style }: { children: ReactNode; style?: View
 const toneStyles: Record<ButtonTone, { box: ViewStyle; text: { color: string } }> = {
   primary: {
     box: { backgroundColor: colors.gold, borderColor: colors.gold },
-    text: { color: colors.background },
+    text: { color: colors.onGold },
   },
   secondary: {
     box: { backgroundColor: 'transparent', borderColor: colors.goldLine },
@@ -308,6 +318,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   buttonTextDisabled: { color: colors.faint },
+  darkOnGold: { color: colors.background },
 
   segmented: {
     flexDirection: 'row',
@@ -348,6 +359,7 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: space.md },
 
   pressed: { opacity: 0.62 },
+  pressedLight: { transform: [{ translateY: 1 }] },
 });
 
 const tagTones = StyleSheet.create({

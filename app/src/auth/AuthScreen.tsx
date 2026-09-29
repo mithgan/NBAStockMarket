@@ -13,10 +13,14 @@ import {
 
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { colors, type } from '../theme';
+import { useDesignVariant } from '../theme/ThemeProvider';
 import { useAuth } from './AuthContext';
 
 export function AuthScreen() {
   const reducedMotion = useReducedMotion();
+  const { variantId } = useDesignVariant();
+  const pressedStyle = variantId === 'light' ? styles.pressedLight : styles.pressed;
+  const darkOnGoldStyle = variantId === 'light' ? undefined : styles.darkOnGold;
   const {
     clearMessage,
     provider,
@@ -44,7 +48,7 @@ export function AuthScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.mark}><Text style={styles.markText}>DB</Text></View>
+        <View style={styles.mark}><Text style={[styles.markText, darkOnGoldStyle]}>DB</Text></View>
         <Text accessibilityRole="header" style={styles.title}>Your roster, everywhere</Text>
         <Text style={styles.copy}>
           Sign in to manage your roster and track your per-game score across devices.
@@ -69,9 +73,9 @@ export function AuthScreen() {
               accessibilityState={{ disabled: !canSignIn, busy: isSubmitting }}
               disabled={!canSignIn}
               onPress={() => void signInWithDataballr()}
-              style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.primaryButton, pressed && pressedStyle]}
             >
-              <Text style={styles.primaryText}>
+              <Text style={[styles.primaryText, darkOnGoldStyle]}>
                 {isSubmitting ? 'WORKING…' : 'SIGN IN WITH DATABALLR'}
               </Text>
             </Pressable>
@@ -90,7 +94,7 @@ export function AuthScreen() {
                 accessibilityState={{ disabled: isSubmitting }}
                 disabled={isSubmitting}
                 onPress={() => void signInWithGoogle()}
-                style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.googleButton, pressed && pressedStyle]}
               >
                 <Text style={styles.googleMark}>G</Text>
                 <Text style={styles.googleText}>CONTINUE WITH GOOGLE</Text>
@@ -140,22 +144,22 @@ export function AuthScreen() {
             accessibilityState={{ disabled: isSubmitting }}
             disabled={isSubmitting}
             onPress={submitSignIn}
-            style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.primaryButton, pressed && pressedStyle]}
           >
             {isSubmitting
               // isSubmitting is shared with Google and CREATE ACCOUNT, so the
               // copy stays neutral rather than claiming a sign-in is running.
               ? (reducedMotion
-                ? <Text style={styles.primaryText}>WORKING…</Text>
-                : <ActivityIndicator color={colors.background} />)
-              : <Text style={styles.primaryText}>SIGN IN</Text>}
+                ? <Text style={[styles.primaryText, darkOnGoldStyle]}>WORKING…</Text>
+                : <ActivityIndicator color={variantId === 'light' ? colors.onGold : colors.background} />)
+              : <Text style={[styles.primaryText, darkOnGoldStyle]}>SIGN IN</Text>}
           </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ disabled: isSubmitting }}
             disabled={isSubmitting}
             onPress={() => void signUp(email, password)}
-            style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.secondaryButton, pressed && pressedStyle]}
           >
             <Text style={styles.secondaryText}>CREATE ACCOUNT</Text>
           </Pressable>
@@ -167,7 +171,7 @@ export function AuthScreen() {
               onPress={() => {
                 window.location.search = '?mock';
               }}
-              style={({ pressed }) => [styles.sandboxLink, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.sandboxLink, pressed && pressedStyle]}
             >
               <Text style={styles.sandboxText}>NO ACCOUNT? EXPLORE THE SANDBOX SEASON ▸</Text>
             </Pressable>
@@ -180,11 +184,11 @@ export function AuthScreen() {
 
 const styles = StyleSheet.create({
   sandboxLink: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
-  sandboxText: { color: colors.gold, fontSize: 11, fontWeight: '900', letterSpacing: 1 },
+  sandboxText: { color: colors.goldInk, fontSize: 11, fontWeight: '900', letterSpacing: 1 },
   container: { flex: 1, backgroundColor: colors.background },
   content: { flexGrow: 1, justifyContent: 'center', alignSelf: 'center', width: '100%', maxWidth: 480, padding: 24 },
   mark: { width: 44, height: 44, borderRadius: 7, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
-  markText: { color: colors.background, fontSize: 13, fontWeight: '900' },
+  markText: { color: colors.onGold, fontSize: 13, fontWeight: '900' },
   title: { color: colors.text, fontSize: 31, lineHeight: 36, fontWeight: '900', marginTop: 22 },
   copy: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 10 },
   message: { borderWidth: 1, borderRadius: 7, padding: 12, marginTop: 18 },
@@ -209,8 +213,10 @@ const styles = StyleSheet.create({
   label: { color: colors.muted, fontSize: type.label, fontWeight: '900', letterSpacing: 1.1, marginTop: 4 },
   input: { minHeight: 50, color: colors.text, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 7, paddingHorizontal: 14, fontSize: 15 },
   primaryButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold, borderRadius: 7, marginTop: 8 },
-  primaryText: { color: colors.background, fontSize: 12, fontWeight: '900' },
+  primaryText: { color: colors.onGold, fontSize: 12, fontWeight: '900' },
+  darkOnGold: { color: colors.background },
   secondaryButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderColor: colors.border, borderWidth: 1, borderRadius: 7 },
   secondaryText: { color: colors.text, fontSize: 12, fontWeight: '900' },
   pressed: { opacity: 0.68 },
+  pressedLight: { transform: [{ translateY: 1 }] },
 });
