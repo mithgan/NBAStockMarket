@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, ClipPath, Defs, Line, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 
 import { humanDateWithYear } from '../../copy/terms';
 import type { HistoricalGame, HistoricalPlayerSeason } from '../../data/playerHistory';
@@ -21,6 +21,7 @@ export function HistoricalSeason({ history, wide = false }: {
   wide?: boolean;
 }) {
   const [width, setWidth] = useState(0);
+  const chartId = `history-${useId().replace(/:/g, '')}`;
   const [expandedSeason, setExpandedSeason] = useState<string | null>(null);
   const seasonKey = `${history.playerId}:${history.seasonId}`;
   const showingAll = expandedSeason === seasonKey;
@@ -75,6 +76,14 @@ export function HistoricalSeason({ history, wide = false }: {
                 {chart ? (
                   <View accessibilityElementsHidden aria-hidden importantForAccessibility="no-hide-descendants">
                     <Svg height={height} width={width}>
+                      <Defs>
+                        <ClipPath id={`${chartId}-above`}>
+                          <Rect height={chart.averageY} width={width} x={0} y={0} />
+                        </ClipPath>
+                        <ClipPath id={`${chartId}-below`}>
+                          <Rect height={height - chart.averageY} width={width} x={0} y={chart.averageY} />
+                        </ClipPath>
+                      </Defs>
                       {[0, chart.maxPoints / 2, chart.maxPoints].map((value) => {
                         const y = chart.bottom - (value / chart.maxPoints) * (chart.bottom - chart.top);
                         return (
@@ -89,10 +98,20 @@ export function HistoricalSeason({ history, wide = false }: {
                           </SvgText>
                         );
                       })}
+                      {(['above', 'below'] as const).map((side) => (
+                        <Polyline
+                          clipPath={`url(#${chartId}-${side})`}
+                          fill="none"
+                          key={side}
+                          points={chart.points.map(({ x, y }) => `${x},${y}`).join(' ')}
+                          stroke={side === 'above' ? colors.green : colors.red}
+                          strokeLinejoin="round"
+                          strokeWidth={1.75}
+                        />
+                      ))}
                       <Line stroke={colors.goldInk} strokeDasharray="5 4" strokeWidth={1.5} x1={chart.left} x2={chart.right} y1={chart.averageY} y2={chart.averageY} />
-                      <Polyline fill="none" points={chart.points.map(({ x, y }) => `${x},${y}`).join(' ')} stroke={colors.text} strokeLinejoin="round" strokeWidth={1.75} />
                       {chart.points.map(({ game, x, y }) => (
-                        <Circle cx={x} cy={y} fill={colors.text} key={game.gameId} r={chart.points.length === 1 ? 3 : 1.5} />
+                        <Circle cx={x} cy={y} fill={y < chart.averageY ? colors.green : y > chart.averageY ? colors.red : colors.goldInk} key={game.gameId} r={chart.points.length === 1 ? 3 : 1.5} />
                       ))}
                     </Svg>
                   </View>
